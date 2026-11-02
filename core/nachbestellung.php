@@ -62,14 +62,33 @@ function nachbestellung_quelle(int $angebot_id, int $kunde_id): ?array {
 
 // Alle je angebotenen Mengenstaffeln dieses Kunden für dieses Produkt (gesendete + bestätigte Angebote),
 // auf die Packungsgröße (stueck) eingeschränkt, wenn bekannt. Rückgabe: Liste [['menge'=>int,'vk'=>float], …] aufsteigend.
+// Quellen (S-19): (1) Matrix-/Staffel-Angebote (angebot_staffel), (2) ORIGINAL-Positionsangebote über angebot_optionen() – dort steht
+// je Option der vollständige Preis je Packung (Herstellung + Glas + Deckel + Etikett) bei der angebotenen Menge. Die kleinen
+// NACHBESTELL-Angebote (notiz „Nachbestellung #…") zählen NICHT: sie sind Folge, nicht Quelle der Staffel.
 function nachbestellung_staffel(int $kunde_id, int $produkt_id, int $stueck): array {
     if ($kunde_id <= 0 || $produkt_id <= 0) return [];
     $rows = all("SELECT s.menge, s.vk_stueck, s.stueck
                  FROM angebot_staffel s JOIN angebot a ON a.id=s.angebot_id
-                 WHERE a.kunde_id=? AND a.produkt_id=? AND a.status IN ('gesendet','bestaetigt') AND s.vk_stueck>0 AND s.menge>0",
+                 WHERE a.kunde_id=? AND a.produkt_id=? AND a.status IN ('gesendet','bestaetigt') AND s.vk_stueck>0 AND s.menge>0
+                   AND COALESCE(a.notiz,'') NOT LIKE 'Nachbestellung #%'",
                 [$kunde_id, $produkt_id]);
     if ($stueck > 0) { $g = array_values(array_filter($rows, fn($r) => (int)$r['stueck'] === $stueck)); if ($g) $rows = $g; }
     $out = array_map(fn($r) => ['menge' => (int)$r['menge'], 'vk' => (float)$r['vk_stueck']], $rows);
+    // Positionsangebote dieses Kunden, aus denen das Produkt entstanden ist (angebot_produkt) – Preis je Option.
+    if (function_exists('angebot_optionen')) {
+        $opt = [];
+        foreach (all("SELECT DISTINCT ap.angebot_id FROM angebot_produkt ap JOIN angebot a ON a.id=ap.angebot_id
+                      WHERE a.kunde_id=? AND ap.produkt_id=? AND a.status IN ('gesendet','bestaetigt')
+                        AND COALESCE(a.notiz,'') NOT LIKE 'Nachbestellung #%'
+                        AND EXISTS (SELECT 1 FROM angebot_position p WHERE p.angebot_id=a.id)", [$kunde_id, $produkt_id]) as $ang) {
+            foreach ((array)(angebot_optionen((int)$ang['angebot_id'])['optionen'] ?? []) as $o) {
+                if (empty($o['waehlbar']) || (float)$o['pakete'] <= 0 || (float)$o['pro_pkg'] <= 0) continue;
+                if ($stueck > 0 && (int)$o['stueck'] !== $stueck) continue;
+                $opt[] = ['menge' => (int) round((float)$o['pakete']), 'vk' => round((float)$o['pro_pkg'], 4)];
+            }
+        }
+        if ($opt) $out = array_merge($out, $opt);
+    }
     usort($out, fn($a, $b) => $a['menge'] <=> $b['menge']);
     return $out;
 }
