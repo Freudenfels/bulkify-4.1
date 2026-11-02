@@ -31,6 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
         $bx = one("SELECT kunde_id, nummer, status FROM beleg WHERE id=?", [$id]);
         beleg_status_log_add($id, (string)($bx['status'] ?? 'offen'), $frei ? 'Für Kunde freigegeben' : 'Freigabe zurückgezogen', $akteur);
         if ($bx && $bx['kunde_id']) log_aktivitaet('kunde', (int)$bx['kunde_id'], 'team', 'Rechnung ' . $bx['nummer'] . ($frei ? ' für den Kunden freigegeben.' : ' – Freigabe zurückgezogen.'), 'beleg', 'beleg', $id);
+        // Kunde: Rechnung liegt im Portal (Paket Mails). Mailversand über das Dashboard-Mailmodul (nur Mail-Funktionen, keine DB-Kollision).
+        if ($frei && $bx && $bx['kunde_id']) {
+            require_once BX_ROOT . '/core/pdf_beleg.php';        // beleg_firma() (Absendername) – Kopie in der Buchhaltung
+            require_once dirname(BX_ROOT) . '/core/mail.php';
+            if (mail_bereit()) nach_antwort(fn() => mail_kunde_rechnung_freigegeben((int)$id));
+        }
         header('Location: ?p=rechnung&id=' . $id . '&freigabe=' . $frei); exit;
     }
 

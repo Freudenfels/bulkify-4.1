@@ -29,3 +29,6 @@ Weicht die Positionssumme vom Beleg-Netto ab und ist die Rechnung noch ein Entwu
 
 ## Rezeptur verknüpfen (neu)
 Panel „Rezeptur": zeigt die zugeordnete Rezeptur – direkter Override `beleg.rezeptur_id`, sonst über den Auftrag → `produkt.rezeptur_id` aufgelöst – als Link ins Dashboard (`/?p=rezeptur_detail&id=…`). Admin/finance können per Picker (Auswahl aus allen Rezepturen) eine Rezeptur zuordnen/ändern/entfernen (aktion `rezeptur_verknuepfen`, setzt `beleg.rezeptur_id`). Optional-Haken: die Rezeptur zusätzlich am Produkt des Auftrags hinterlegen, falls dort noch keine steht (damit Produktion/Specs sie kennen). Zugriff auf die geteilten Tabellen `rezeptur`/`produkt` nur über core/erp.php (erp_rezepturen/erp_rezeptur/erp_auftrag_rezeptur_id/erp_auftrag_produkt_rezeptur_setzen). Nützlich für importierte/Freitext-Rechnungen ohne eigenen Auftrag.
+
+## Mail bei Freigabe (Paket Mails)
+„Für Kunde freigeben" einer Rechnung schickt dem Kunden `mail_kunde_rechnung_freigegeben()` (Betrag, Fälligkeit, Link auf „Rechnungen"). Dafür lädt die Seite das Dashboard-Mailmodul `core/mail.php` (enthält nur Mail-Funktionen, keine DB-Funktionen → keine Kollision) und `buchhaltung/core/pdf_beleg.php` (`beleg_firma()`).

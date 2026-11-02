@@ -103,3 +103,6 @@ Panel „Interne Stammrezeptur" (Admin): eine Kundenrezeptur kann auf eine ander
 
 ## Stammrezeptur zusammenführen (Requirement 2)
 Das Stamm-Panel verknüpft nicht mehr nur per Pointer: Beim Verknüpfen (`stamm_setzen`, Admin) öffnet ein **Bestätigungs-Pop-up**, das zeigt, was wandert – die Bulk-Chargen und aktiven Reservierungen des EIGENEN Bulk-Artikels dieser Rezeptur sowie die betroffenen Produkte/Kunden (Namen bleiben). Auf Bestätigung: `charge`/`reservierung` wandern per `item_id` auf den Bulk-Artikel der Stammrezeptur (`rezeptur_bulkitem($stamm)` legt ihn bei Bedarf an), der leere Alt-Bulk-Artikel wird `gesperrt=1` + `zusammengefuehrt_in` gesetzt (nicht gelöscht), die Alt-Rezeptur bekommt `rezeptur.zusammengefuehrt_in` (deaktiviert-Marker). „Eigenständig (0)" löst nur den Pointer (ohne Rück-Migration). Idempotent.
+
+## Mail an den Kunden (Paket Mails)
+Wird die Rezeptur (erneut) auf „Vorschlag" gesetzt, bekommt der Kunde `mail_kunde_rezepturvorschlag()`.

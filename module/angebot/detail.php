@@ -139,6 +139,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         q("UPDATE angebot SET preise_kunde=1 WHERE id=?", [(int)$id]);
         $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
         if ($kd) log_aktivitaet('kunde', $kd, 'team', 'Preise fuer Angebot ' . scalar("SELECT nummer FROM angebot WHERE id=?", [(int)$id]) . ' fuer den Kunden freigegeben.', 'angebot', 'angebot', (int)$id);
+        // Kunde: Angebot nach Bearbeitung wieder freigegeben (nur wenn es beim Kunden liegt).
+        if ($kd && mail_bereit() && (string) scalar("SELECT status FROM angebot WHERE id=?", [(int)$id]) === 'gesendet') nach_antwort(fn() => mail_kunde_angebot_aktualisiert((int)$id));
         header('Location: ?p=angebot&id=' . $id . '&preisfrei=1'); exit;
     } elseif ($aktion === 'preise_sperren' && !$neu) {
         // Preise wieder sperren – der Kunde sieht das Angebot dann nicht mehr.

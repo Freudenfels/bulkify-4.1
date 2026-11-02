@@ -189,3 +189,6 @@ Verpackungs-Positionen (quelle='verpackung') tragen eine Checkbox „bedruckt / 
 
 ## Für den Kunden annehmen (Team-Annahme, S-15)
 Bei einem **gesendeten** Produkt-Angebot (nicht Dienstleistung, nicht Jahresvertrag) gibt es unter dem Kopf das aufklappbare Feld „Für den Kunden annehmen" – für Zusagen per Mail/Telefon oder Handelsware. Pflicht: „Zugesagt durch (Name, Kanal, Datum)" + Haken „Der Kunde hat verbindlich zugesagt"; bei mehreren Optionen wird die Option gewählt, bei reinen Staffel-Angeboten die Menge. POST `aktion=team_annehmen` nutzt denselben Weg wie das Portal (`auftrag_aus_positionen()` bzw. `auftrag_aus_angebot()`), speichert die Freigabe als „Team <Name> – <Kanal>", protokolliert und schickt die Auftragsbestätigung an den Kunden. Entsteht kein Auftrag, wird nichts gespeichert (Fehlermeldung).
+
+## Mail bei „Preise freigeben" (Paket Mails)
+Gibt das Team die Preise eines gesendeten Angebots wieder frei (nach Bearbeitung), bekommt der Kunde `mail_kunde_angebot_aktualisiert()`.

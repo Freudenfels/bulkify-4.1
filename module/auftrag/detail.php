@@ -162,7 +162,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id); exit; }
     $rid = (int) scalar("SELECT id FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$id]);
     $r = $rid ? beleg_neu_berechnen($rid) : ['ok'=>false, 'fehler'=>'Keine Rechnung vorhanden.'];
-    if (!empty($r['ok']) && !empty($r['sichtbar'])) q("UPDATE beleg SET kunde_sichtbar=1 WHERE id=?", [$rid]);
+    if (!empty($r['ok']) && !empty($r['sichtbar'])) {
+        $warSichtbar = (int) scalar("SELECT kunde_sichtbar FROM beleg WHERE id=?", [$rid]) === 1;
+        q("UPDATE beleg SET kunde_sichtbar=1 WHERE id=?", [$rid]);
+        if (!$warSichtbar && mail_bereit()) nach_antwort(fn() => mail_kunde_rechnung_freigegeben($rid));   // Kunde: Rechnung liegt im Portal
+    }
     header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&rechneu=1' : '&expressfehler=' . urlencode($r['fehler'] ?? 'Neu berechnen fehlgeschlagen.'))); exit;
 }
 

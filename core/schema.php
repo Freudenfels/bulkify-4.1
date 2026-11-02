@@ -9749,6 +9749,7 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
     $bsku = bsku_ensure($vfitem);   // Brücke zum Shop – ohne sie findet die Kopplung den Artikel nicht
     q("UPDATE auftrag SET status='versendet' WHERE id=?", [$auftrag_id]);
     auftrag_rechnung_bei_lieferung($auftrag_id, true);   // Übergabe ins Fremdlager = Lieferung: Rechnung festschreiben
+    if (function_exists('mail_kunde_fremdlager') && mail_bereit()) nach_antwort(fn() => mail_kunde_fremdlager($auftrag_id));   // Kunde: Ware liegt in seinem Lager
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
         'Auftrag ' . $a['nummer'] . ' ins Fremdlager übernommen (BSKU ' . $bsku . '). Der Bestand bleibt dort, bis der Endkunde bestellt.',
         'auftrag', 'auftrag', $auftrag_id);
@@ -9788,6 +9789,7 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,menge,netto,ust_prozent,ust_betrag,brutto,status,datum)
        VALUES (?,'lieferschein',?,?,?,?,0,0,?,'offen',CURDATE())",
       [naechste_nummer('LS'), $auftrag_id, $a['kunde_id'], $ship, $netto, $netto]);
+    $lsId = (int) insert_id();
     $neuVersendet = $bereits + $ship;
     $voll = $neuVersendet >= $gesamt;
     if ($voll) q("UPDATE auftrag SET versendet_menge=?, status='versendet', status_datum=CURDATE() WHERE id=?", [$neuVersendet, $auftrag_id]);
@@ -9797,6 +9799,8 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
               : ('Teillieferung Auftrag ' . $a['nummer'] . ': ' . number_format($ship,0,',','.') . ' von ' . number_format($gesamt,0,',','.') . ' versendet (gesamt ' . number_format($neuVersendet,0,',','.') . ').'),
         'auftrag', 'auftrag', $auftrag_id);
     auftrag_rechnung_bei_lieferung($auftrag_id, $voll);   // Leistungsdatum + Festschreiben bei Lieferung (St-04)
+    // Kunde: Versand-/Lieferschein-Mail (Teil-/Restlieferung), inkl. Hinweis auf die freigegebene Rechnung (Paket Mails).
+    if (function_exists('mail_kunde_versand') && mail_bereit()) nach_antwort(fn() => mail_kunde_versand($auftrag_id, $lsId, (int)$ship, (bool)$voll));
     bedarf_bump();   // Fertigware ausgebucht
     return ['ok'=>true, 'voll'=>$voll, 'versendet'=>$ship, 'gesamt'=>$gesamt, 'kumuliert'=>$neuVersendet,
             'msg'=>$voll ? 'Versendet.' : ('Teillieferung ' . number_format($ship,0,',','.') . ' versendet – offen bleiben ' . number_format($gesamt - $neuVersendet,0,',','.') . '.')];

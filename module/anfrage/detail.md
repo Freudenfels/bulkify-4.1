@@ -45,3 +45,6 @@ Snapshots werden nur geschrieben, nie geändert/gelöscht. Für Alt-Anfragen ohn
 
 ## Anfrage löschen (nur Admin)
 Im Kopf der Detailseite steht für **Admins** ein roter Knopf **„Anfrage löschen"** (`aktion=anfrage_loeschen`, mit Sicherheitsabfrage). Ruft `rezeptur_anfrage_loeschen($id)` (core/schema.php): entfernt die Rezepturanfrage + ihre Wunsch-Zeilen (`rezeptur_anfrage_wunsch`). Eine **daraus erstellte Rezeptur bleibt bestehen** (nur die Anfrage verschwindet). Danach zurück zur Liste mit Hinweis „Rezepturanfrage gelöscht". Nicht-Admins werden abgewiesen (`loeschfehler`).
+
+## Mail an den Kunden (Paket Mails)
+„Vorschlag erstellen & senden" und „Vorschlag aktualisieren" schicken dem Kunden `mail_kunde_rezepturvorschlag()` (Link direkt auf die Rezeptur im Portal).

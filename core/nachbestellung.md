@@ -39,3 +39,6 @@ Siehe auch: Portal-Box in [../module/portal/_angebot_karte.php](../module/portal
 `nachbestellung_quelle_auftrag()` nimmt als Preis je Packung den GESAMTpreis des Vorauftrags (`auftrag_vk_gesamt`, inkl. Glas/Deckel/Etikett) statt `auftrag.vk_stueck` (nur Herstellung) – S-19.
 
 **Original-Staffel (S-19):** `nachbestellung_staffel()` liest neben `angebot_staffel` (Matrix-Angebote) die ORIGINAL-Positionsangebote des Kunden, aus denen das Produkt entstanden ist (`angebot_produkt`), über `angebot_optionen()`: je wählbare Option Menge = `pakete`, Preis = `pro_pkg` (Herstellung + Glas + Deckel + Etikett). Die kleinen Nachbestell-Angebote (notiz „Nachbestellung #…") fließen nicht mehr in die Staffel ein.
+
+## Mails (Paket Mails)
+`nachbestellung_anlegen*()` → `mail_nachbestellung($id,'eingang')` (Kunde: Eingang; Team: bitte Preis bestätigen), `nachbestellung_preis_anpassen()` → `'preis_neu'`, `nachbestellung_bestaetigen()` / `nachbestellung_kunde_preis_ok()` → `'bestaetigt'` (Auftragsbestätigung mit Nummer). Alle nach der Antwort (`nach_antwort`).

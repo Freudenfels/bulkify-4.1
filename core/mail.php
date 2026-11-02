@@ -703,6 +703,121 @@ function mail_kunde_etikett_freigegeben(int $auftrag_id): string {
         'bestellung&aid=' . $auftrag_id);
 }
 
+// --- Kunden-Mails zu Ablauf-Ereignissen (Paket Mails) -------------------------
+// Alle nutzen mail_kunde_einfach() (Abschaltung je Kunde, Adresse, Anrede, Portal-Link). Produktnamen immer so, wie der
+// Kunde sie kennt (produkt_kundenname). Beträge deutsch formatiert. Rückgabe '' = verschickt, sonst der Grund.
+
+function mail_euro(float $b): string { return number_format($b, 2, ',', '.') . ' €'; }
+function mail_produkt_fuer_kunde(int $auftrag_id): string {
+    $a = one("SELECT produkt_id, kunde_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    return ($a && $a['produkt_id'] && function_exists('produkt_kundenname')) ? produkt_kundenname((int)$a['produkt_id'], (int)$a['kunde_id']) : '';
+}
+
+// Rezepturvorschlag wurde an den Kunden gesendet (Status „vorschlag").
+function mail_kunde_rezepturvorschlag(int $rezeptur_id): string {
+    $r = one("SELECT nummer, name, kunde_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$r || !$r['kunde_id']) return 'Rezeptur ohne Kunde.';
+    return mail_kunde_einfach((int)$r['kunde_id'], 'Ihr Rezepturvorschlag ' . $r['nummer'] . ' liegt bereit',
+        'unser Rezepturvorschlag ' . $r['nummer'] . ' („' . $r['name'] . '") liegt für Sie im Kundenportal bereit.' . "\n"
+        . 'Bitte prüfen Sie Zusammensetzung und Dosierung – Sie können den Vorschlag dort annehmen oder Änderungen wünschen.',
+        'rezeptur&rid=' . $rezeptur_id);
+}
+
+// Versand / Lieferschein (auch Teil- und Restlieferung). $ls_id = Lieferschein-Beleg dieser Lieferung.
+function mail_kunde_versand(int $auftrag_id, int $ls_id, int $menge, bool $voll): string {
+    $a = one("SELECT nummer, kunde_id, menge, COALESCE(versendet_menge,0) AS vers FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a || !$a['kunde_id']) return 'Auftrag ohne Kunde.';
+    $ls = $ls_id ? (string) scalar("SELECT nummer FROM beleg WHERE id=?", [$ls_id]) : '';
+    $pr = mail_produkt_fuer_kunde($auftrag_id);
+    $offen = max(0, (int)$a['menge'] - (int)$a['vers']);
+    $teil  = !$voll ? 'Teillieferung' : ((int)$a['vers'] > $menge ? 'Restlieferung' : 'Lieferung');
+    $re = one("SELECT nummer, brutto FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$auftrag_id]);
+    $kern = 'Ihre ' . $teil . ' zu Auftrag ' . $a['nummer'] . ($pr !== '' ? ' (' . $pr . ')' : '') . ' ist auf dem Weg: '
+          . number_format($menge, 0, ',', '.') . ' Packungen' . ($ls !== '' ? ', Lieferschein ' . $ls : '') . ".\n"
+          . (!$voll ? 'Noch offen: ' . number_format($offen, 0, ',', '.') . " Packungen – wir liefern den Rest nach.\n"
+                    : "Damit ist der Auftrag vollständig geliefert.\n")
+          . ($re ? 'Die Rechnung ' . $re['nummer'] . ' (' . mail_euro((float)$re['brutto']) . ") liegt ebenfalls im Portal.\n" : '');
+    return mail_kunde_einfach((int)$a['kunde_id'], $teil . ' zu Auftrag ' . $a['nummer'] . ($ls !== '' ? ' – ' . $ls : ''), $kern, 'bestellung&aid=' . $auftrag_id);
+}
+
+// Fulfillment: Ware des Auftrags liegt jetzt im Fremdlager (Lager 2) des Kunden.
+function mail_kunde_fremdlager(int $auftrag_id): string {
+    $a = one("SELECT nummer, kunde_id, menge FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a || !$a['kunde_id']) return 'Auftrag ohne Kunde.';
+    $pr = mail_produkt_fuer_kunde($auftrag_id);
+    $re = one("SELECT nummer, brutto FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$auftrag_id]);
+    return mail_kunde_einfach((int)$a['kunde_id'], 'Ware eingelagert – Auftrag ' . $a['nummer'],
+        'Ihre Ware aus Auftrag ' . $a['nummer'] . ($pr !== '' ? ' (' . $pr . ')' : '') . ' – ' . number_format((int)$a['menge'], 0, ',', '.')
+        . " Packungen – liegt jetzt in Ihrem Lager bei uns und wird von dort an Ihre Endkunden versendet.\n"
+        . ($re ? 'Die Rechnung ' . $re['nummer'] . ' (' . mail_euro((float)$re['brutto']) . ") liegt im Portal.\n" : ''),
+        'fremdprodukte');
+}
+
+// Rechnung wurde für den Kunden freigegeben (Buchhaltung oder Neu-Berechnung am Auftrag).
+function mail_kunde_rechnung_freigegeben(int $beleg_id): string {
+    $b = one("SELECT nummer, kunde_id, brutto, faellig, zahlungsziel_tage, typ FROM beleg WHERE id=? AND kunde_sichtbar=1 AND status<>'storniert'", [$beleg_id]);
+    if (!$b || !$b['kunde_id'] || !in_array((string)$b['typ'], ['rechnung'], true)) return 'Keine freigegebene Rechnung.';
+    $ziel = !empty($b['faellig']) ? 'Zahlbar bis ' . date('d.m.Y', strtotime((string)$b['faellig'])) . ' ohne Abzug.'
+          : ((int)($b['zahlungsziel_tage'] ?? 0) > 0 ? 'Zahlbar innerhalb von ' . (int)$b['zahlungsziel_tage'] . ' Tagen ohne Abzug.' : '');
+    return mail_kunde_einfach((int)$b['kunde_id'], 'Ihre Rechnung ' . $b['nummer'],
+        'Ihre Rechnung ' . $b['nummer'] . ' über ' . mail_euro((float)$b['brutto']) . " liegt im Kundenportal zum Download bereit.\n" . $ziel,
+        'rechnungen');
+}
+
+// Nachbestellung: 'eingang' (Kunde hat nachbestellt -> Kunde + Team), 'preis_neu' (neuer Preis zur Freigabe), 'bestaetigt' (Auftrag erzeugt).
+function mail_nachbestellung(int $nb_id, string $ereignis): string {
+    $nb = one("SELECT n.*, k.firma FROM nachbestellung n JOIN kunden k ON k.id=n.kunde_id WHERE n.id=?", [$nb_id]);
+    if (!$nb) return 'Nachbestellung nicht gefunden.';
+    $pr = ($nb['produkt_id'] && function_exists('produkt_kundenname')) ? produkt_kundenname((int)$nb['produkt_id'], (int)$nb['kunde_id']) : '';
+    $mg = number_format((int)$nb['menge'], 0, ',', '.') . ' Packungen' . ($pr !== '' ? ' ' . $pr : '');
+    if ($ereignis === 'eingang') {
+        mail_team('Nachbestellung: ' . $nb['firma'] . ' · ' . number_format((int)$nb['menge'], 0, ',', '.') . ' Pkg',
+            'Der Kunde ' . $nb['firma'] . ' hat ' . $mg . ' nachbestellt (' . mail_euro((float)$nb['vk_stueck']) . " je Packung).\n"
+            . ($nb['grund'] ? 'Hinweis: ' . $nb['grund'] . "\n" : '') . "Bitte Preis bestätigen & freigeben.\n\n" . mail_basis_url() . "/?p=nachbestellungen\n");
+        return mail_kunde_einfach((int)$nb['kunde_id'], 'Ihre Nachbestellung ist eingegangen',
+            'vielen Dank für Ihre Nachbestellung über ' . $mg . ' zu ' . mail_euro((float)$nb['vk_stueck']) . " je Packung.\n"
+            . 'Wir bestätigen den Preis kurz – danach erhalten Sie die Auftragsbestätigung und die Produktion startet.', 'bestellungen');
+    }
+    if ($ereignis === 'preis_neu') {
+        return mail_kunde_einfach((int)$nb['kunde_id'], 'Ihre Nachbestellung: neuer Preis zur Freigabe',
+            'für Ihre Nachbestellung über ' . $mg . ' gilt ein angepasster Preis von ' . mail_euro((float)$nb['vk_neu']) . " je Packung.\n"
+            . ($nb['grund'] ? 'Grund: ' . $nb['grund'] . "\n" : '') . 'Bitte geben Sie den neuen Preis im Portal frei, dann starten wir.', 'bestellungen');
+    }
+    if ($ereignis === 'bestaetigt') {
+        $aufNr = $nb['auftrag_id'] ? (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [(int)$nb['auftrag_id']]) : '';
+        if ($aufNr === '') return 'Kein Auftrag – keine Bestätigung.';
+        return mail_kunde_einfach((int)$nb['kunde_id'], 'Auftragsbestätigung ' . $aufNr . ' (Nachbestellung)',
+            'Ihre Nachbestellung über ' . $mg . ' ist bestätigt (' . mail_euro((float)$nb['vk_stueck']) . " je Packung).\n"
+            . 'Wir führen den Auftrag unter der Nummer ' . $aufNr . '. Verpackung und Etikett sind wie bei der Vorbestellung.',
+            'bestellung&aid=' . (int)$nb['auftrag_id']);
+    }
+    return 'Unbekanntes Ereignis.';
+}
+
+// Angebot nach Bearbeitung wieder freigegeben (Preise für den Kunden freigegeben).
+function mail_kunde_angebot_aktualisiert(int $angebot_id): string {
+    $a = one("SELECT nummer, kunde_id, kategorie, gueltig_bis FROM angebot WHERE id=?", [$angebot_id]);
+    if (!$a || !$a['kunde_id']) return 'Angebot ohne Kunde.';
+    $bis = $a['gueltig_bis'] ? ' Es gilt bis ' . date('d.m.Y', strtotime((string)$a['gueltig_bis'])) . '.' : '';
+    return mail_kunde_einfach((int)$a['kunde_id'], 'Ihr Angebot ' . $a['nummer'] . ' wurde aktualisiert',
+        'wir haben Ihr Angebot ' . $a['nummer'] . ' überarbeitet – es liegt wieder für Sie im Kundenportal bereit.' . $bis . "\n"
+        . 'Dort sehen Sie die aktuellen Varianten und können verbindlich annehmen.',
+        ($a['kategorie'] ?? '') === 'dienstleistung' ? 'meine_anfragen' : 'angebote');
+}
+
+// Kunden-Erstzugang: Link ins Portal per Mail (statt Link kopieren).
+function mail_kunde_zugang(int $kunde_id): string {
+    $k = one("SELECT passwort FROM kunden WHERE id=?", [$kunde_id]);
+    if (!$k) return 'Kunde nicht gefunden.';
+    $eingerichtet = !empty($k['passwort']);
+    return mail_kunde_einfach($kunde_id, $eingerichtet ? 'Ihr Zugang zum Kundenportal' : 'Ihr Zugang zum Kundenportal – bitte einrichten',
+        $eingerichtet
+            ? "über den Link unten gelangen Sie direkt in Ihr Kundenportal. Alternativ melden Sie sich wie gewohnt mit E-Mail und Passwort an."
+            : "für Sie ist ein Zugang zu unserem Kundenportal eingerichtet. Dort sehen Sie Anfragen, Angebote, Bestellungen, Rechnungen und Dokumente.\n"
+              . "Beim ersten Öffnen des Links legen Sie einmalig E-Mail und Passwort fest; danach melden Sie sich damit an.",
+        '');
+}
+
 // Eine Anfrage wurde abgesagt („nicht machbar"): der Kunde erfährt den Grund.
 function mail_kunde_absage(int $anfrage_id): string {
     $p = one("SELECT p.nummer, p.betreff, p.absage_grund, p.kunde_id, k.firma, k.ansprechpartner, k.email

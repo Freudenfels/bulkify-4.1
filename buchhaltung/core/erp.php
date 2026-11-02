@@ -19,6 +19,16 @@ function erp_benutzer(int $id): ?array {
     return $id ? one("SELECT * FROM benutzer WHERE id=? AND aktiv=1", [$id]) : null;
 }
 function erp_dashboard_url(): string { return '/'; }
+// Portal-Token des Kunden (für Mail-Links ins Kundenportal, gleiche Logik wie im Dashboard) – wird von core/mail.php genutzt.
+if (!function_exists('kunde_portal_token')) {
+    function kunde_portal_token(int $kid): string {
+        $t = scalar("SELECT portal_token FROM kunden WHERE id=?", [$kid]);
+        if ($t) return (string)$t;
+        $t = bin2hex(random_bytes(16));
+        q("UPDATE kunden SET portal_token=? WHERE id=?", [$t, $kid]);
+        return $t;
+    }
+}
 
 // ---- app_meta (Einstellungen, geteilt) – verbatim aus dem Dashboard -------------------------------
 function &meta_cache(): array { static $c = []; return $c; }

@@ -133,6 +133,7 @@ function nachbestellung_anlegen(int $kunde_id, int $angebot_id, int $menge): arr
             'Zum zuletzt vereinbarten Preis – bitte Preis bestätigen & freigeben.', '?p=nachbestellungen');
     if (function_exists('log_aktivitaet'))
         log_aktivitaet('kunde', $kunde_id, 'kunde', 'Nachbestellung angelegt: ' . number_format($menge, 0, ',', '.') . ' Pkg (zum zuletzt vereinbarten Preis, wartet auf Preisprüfung).');
+    if (function_exists('mail_nachbestellung') && mail_bereit()) nach_antwort(fn() => mail_nachbestellung($id, 'eingang'));   // Kunde + Team
     return ['id' => $id];
 }
 
@@ -180,6 +181,7 @@ function nachbestellung_anlegen_auftrag(int $kunde_id, int $auftrag_id, int $men
             'Zum zuletzt vereinbarten Preis – bitte Preis bestätigen & freigeben.', '?p=nachbestellungen');
     if (function_exists('log_aktivitaet'))
         log_aktivitaet('kunde', $kunde_id, 'kunde', 'Nachbestellung angelegt (aus Auftrag #' . $auftrag_id . '): ' . number_format($menge, 0, ',', '.') . ' Pkg.');
+    if (function_exists('mail_nachbestellung') && mail_bereit()) nach_antwort(fn() => mail_nachbestellung($id, 'eingang'));   // Kunde + Team
     return ['id' => $id];
 }
 
@@ -233,6 +235,7 @@ function nachbestellung_bestaetigen(int $id): array {
       [$aid, $aid, gmdate('Y-m-d H:i:s'), $id]);
     if (function_exists('log_aktivitaet'))
         log_aktivitaet('kunde', (int)$nb['kunde_id'], 'team', 'Nachbestellung bestätigt & freigegeben – Auftrag erzeugt.', 'auftrag', 'auftrag', $aid);
+    if (function_exists('mail_nachbestellung') && mail_bereit()) nach_antwort(fn() => mail_nachbestellung($id, 'bestaetigt'));   // Kunde: AB
     return ['auftrag_id' => $aid];
 }
 
@@ -248,6 +251,7 @@ function nachbestellung_preis_anpassen(int $id, float $vk_neu, string $grund = '
     if (function_exists('log_aktivitaet'))
         log_aktivitaet('kunde', (int)$nb['kunde_id'], 'team',
             'Nachbestellung: neuer Preis ' . number_format($vk_neu, 2, ',', '.') . ' €/Pkg – wartet auf Freigabe durch den Kunden.');
+    if (function_exists('mail_nachbestellung') && mail_bereit()) nach_antwort(fn() => mail_nachbestellung($id, 'preis_neu'));   // Kunde: neuen Preis freigeben
     return ['ok' => true];
 }
 
@@ -263,6 +267,7 @@ function nachbestellung_kunde_preis_ok(int $id, int $kunde_id): array {
       [$aid, $aid, gmdate('Y-m-d H:i:s'), $id]);
     if (function_exists('log_aktivitaet'))
         log_aktivitaet('kunde', (int)$nb['kunde_id'], 'kunde', 'Neuer Preis freigegeben – Nachbestellung läuft, Auftrag erzeugt.', 'auftrag', 'auftrag', $aid);
+    if (function_exists('mail_nachbestellung') && mail_bereit()) nach_antwort(fn() => mail_nachbestellung($id, 'bestaetigt'));   // Kunde: AB
     return ['auftrag_id' => $aid];
 }
 

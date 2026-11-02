@@ -113,6 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->commit();
             $anr = (string) scalar("SELECT nummer FROM rezeptur_anfrage WHERE id=?", [(int)$id]);
             if ($kunde_id) log_aktivitaet('kunde', $kunde_id, 'team', 'Vorschlag aus Anfrage ' . $anr . ' aktualisiert und an den Kunden gesendet.', 'rezeptur', 'rezeptur', $rid);
+            if (mail_bereit()) nach_antwort(fn() => mail_kunde_rezepturvorschlag((int)$rid));   // Kunde: Vorschlag liegt bereit
             header('Location: ?p=rezeptur_detail&id=' . $rid . '&gesendet=1'); exit;
         }
         // Verbindlich (freigegeben/eingefroren) oder keine Rezeptur -> nur speichern, nicht überschreiben.
@@ -140,6 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         q("UPDATE rezeptur_anfrage SET rezeptur_id=?, status='beantwortet' WHERE id=?", [$rid, (int)$id]);
         if ($kunde_id) log_aktivitaet('kunde', $kunde_id, 'team', 'Vorschlag aus Anfrage ' . $anr . ' erstellt und an den Kunden gesendet.', 'rezeptur', 'rezeptur', $rid);
+        if (mail_bereit()) nach_antwort(fn() => mail_kunde_rezepturvorschlag((int)$rid));   // Kunde: Vorschlag liegt bereit
         header('Location: ?p=rezeptur_detail&id=' . $rid . '&gesendet=1'); exit;
     }
     $anker = preg_replace('/[^a-z0-9_-]/i', '', (string)($_POST['anker'] ?? ''));   // an der Arbeitsstelle bleiben statt oben

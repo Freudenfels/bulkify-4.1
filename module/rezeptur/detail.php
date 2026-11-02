@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $kid = scalar("SELECT kunde_id FROM rezeptur WHERE id=?", [(int)$id]);
             $lbl = ['vorschlag'=>'als Vorschlag gesendet','eingefroren'=>'freigegeben & eingefroren (verbindlich)','freigegeben'=>'freigegeben','entwurf'=>'wieder zur Bearbeitung geöffnet'][$ziel] ?? $ziel;
             if ($kid) log_aktivitaet('kunde', (int)$kid, 'team', 'Rezeptur ' . scalar("SELECT nummer FROM rezeptur WHERE id=?", [(int)$id]) . ' ' . $lbl . '.', 'rezeptur', 'rezeptur', (int)$id);
+            if ($kid && $ziel === 'vorschlag' && mail_bereit()) nach_antwort(fn() => mail_kunde_rezepturvorschlag((int)$id));   // Kunde: Vorschlag liegt bereit
         }
         header('Location: ?p=rezeptur_detail&id=' . $id); exit;
     }

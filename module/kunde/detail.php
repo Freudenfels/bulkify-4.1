@@ -8,6 +8,12 @@ require_once BX_ROOT . '/core/schema.php';
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
+// Erstzugang per Mail an den Kunden senden (statt Link kopieren, Paket Mails).
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zugang_senden') {
+    $fz = mail_bereit() ? mail_kunde_zugang((int)$id) : 'Der E-Mail-Versand ist nicht eingerichtet.';
+    if ($fz === '') log_aktivitaet('kunde', (int)$id, 'team', 'Zugang zum Kundenportal per Mail gesendet.', 'notiz');
+    header('Location: ?p=kunde&id=' . $id . '&tab=portal&' . ($fz === '' ? 'zugangok=1' : 'zugangfehler=' . urlencode($fz))); exit;
+}
 // Kunde KOMPLETT löschen (nur Admin, unwiderruflich, Firmenname muss zur Bestätigung getippt werden).
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'komplett_loeschen') {
     if (!has_role('admin')) { header('Location: ?p=kunde&id=' . (int)$id . '&loeschfehler=' . urlencode('Nur Admins dürfen Kunden löschen.')); exit; }
@@ -213,6 +219,9 @@ if (!$neu) {
     echo '</div>';
 }
 ?>
+<?php if (!$neu): ?><form method="post" id="ezMailForm"><input type="hidden" name="aktion" value="zugang_senden"></form><?php endif; // eigenes Formular, Knopf liegt im Hauptformular (form=…) ?>
+<?php if (isset($_GET['zugangok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Zugang per Mail an den Kunden gesendet.</div><?php endif; ?>
+<?php if (isset($_GET['zugangfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zugang nicht gesendet: <?= h((string)$_GET['zugangfehler']) ?></div><?php endif; ?>
 <form method="post" class="bx-form">
   <input type="hidden" name="tab" id="kundAktivTab" value="<?= h((string)($_GET['tab'] ?? '')) ?>">
   <div class="settabs" id="kundtabs">
@@ -541,6 +550,7 @@ if (!$neu) {
           <input type="text" id="ezLink" readonly value="<?= h($absLink) ?>" style="flex:1;min-width:240px;font-size:12px" onclick="this.select()">
           <button type="button" class="btn btn-ghost btn-sm" onclick="var i=document.getElementById('ezLink');i.select();navigator.clipboard&&navigator.clipboard.writeText(i.value);this.textContent='kopiert';setTimeout(()=>this.textContent='Link kopieren',1500)">Link kopieren</button>
           <a class="btn btn-ghost btn-sm" target="_blank" href="<?= h($portalUrl) ?>">öffnen</a>
+          <button type="submit" form="ezMailForm" class="btn btn-ghost btn-sm" onclick="return confirm('Zugangslink jetzt per E-Mail an <?= h((string)($k['email'] ?? '')) ?> senden?');" <?= trim((string)($k['email'] ?? '')) === '' ? 'disabled title="Keine E-Mail-Adresse hinterlegt"' : '' ?>>Per Mail senden</button>
         </div>
         <div class="muted" style="font-size:12px;margin-top:8px">
           <?php if ($eingerichtet): ?>

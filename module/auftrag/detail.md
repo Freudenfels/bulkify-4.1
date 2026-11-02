@@ -205,3 +205,6 @@ Kennzahl „VK / Packung (gesamt)" = `auftrag_vk_gesamt()` (gesamt_netto / menge
 
 ## Handelsware (S-15)
 Reiter Produktion: Ohne Produktionsauftrag steht statt „Herstellen/Einkaufen" der Kasten **Beschaffung (Handelsware)** – offen, frei im Lager, Quarantäne, bestellt/unterwegs, noch zu beschaffen – mit Sprüngen in Einkaufsliste, Wareneingang und Versand. Hat ein Handelsware-Auftrag (aus einer älteren Annahme) doch einen Produktionsauftrag, sagt der Hinweis das, statt „es wird kein Produktionsauftrag erzeugt".
+
+## Rechnung neu berechnen (Paket Mails)
+Wird die Rechnung dabei erstmals für den Kunden freigegeben, bekommt er `mail_kunde_rechnung_freigegeben()`.

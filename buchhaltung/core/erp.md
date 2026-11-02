@@ -13,3 +13,6 @@ auftrag). EINZIGER Unterschied zur Dashboard-Fassung: `produkt_aus_rezeptur` erz
 importierte Alt-Aufträge genügt das Produkt. Genutzt von module/beleg/auftrag_import.php.
 
 `erp_dl_positionen_gruppieren($positionen)` – Spiegel von `dl_positionen_gruppieren()` des Dashboards: teilt DL-Angebotspositionen in Service-Gruppen (Service + Material). Gebraucht für die DL-Rechnung je Auftrag (`dl_rechnung_aus_auftrag`).
+
+## kunde_portal_token() (Paket Mails)
+Gleiche Logik wie im Dashboard – wird von `core/mail.php` für Portal-Links in Mails aus der Buchhaltung gebraucht (nur definiert, wenn nicht schon vorhanden).

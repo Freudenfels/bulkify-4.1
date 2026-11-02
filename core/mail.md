@@ -67,3 +67,17 @@ E-Mail → „Zusätzliche Benachrichtigungs-Adressen". Beim ersten Start wird d
 - **Auftragsbestätigung:** Vorlage `auftrag` erwähnt die Rechnung nur noch, wenn sie für den Kunden freigegeben ist (Platzhalter `{rechnung_hinweis}`). Ohne entstandenen Auftrag geht **keine** Auftragsbestätigung raus (vorher „Auftragsbestätigung  von …" ohne Nummer).
 - **Annahme-Mail ans Team:** nennt, was wirklich angelegt wurde (Auftrag/DL-Auftrag, Rechnung ggf. als Entwurf, Produktionsauftrag nur wenn vorhanden) und ob das Team für den Kunden angenommen hat; ohne Auftrag „Achtung: Es ist KEIN Auftrag entstanden". Vorher stand pauschal „Rechnung und Produktionsauftrag ebenfalls" (falsch bei DL/Handelsware).
 - Helfer: `mail_kunde_einfach($kunde_id, $betreff, $kern, $ansicht)` (Abschaltung, Adresse, Anrede, Portal-Link, Gruß), `mail_zeit($utc)` (Ortszeit).
+
+## Neue Kunden-Mails (Paket Mails)
+Alle über `mail_kunde_einfach()` (Abschaltung je Kunde, Adresse, Anrede, Portal-Link), Produktnamen wie der Kunde sie kennt, Beträge deutsch:
+| Funktion | Auslöser | Link |
+|---|---|---|
+| `mail_kunde_rezepturvorschlag($rid)` | Vorschlag aus Anfrage erstellt/aktualisiert, Rezeptur auf „Vorschlag" gesetzt | `v=rezeptur&rid=` |
+| `mail_kunde_versand($aid,$ls,$menge,$voll)` | `auftrag_versenden_menge()` – Lieferung/Teil-/Restlieferung mit LS-Nummer, offener Rest, Rechnung (falls freigegeben) | `v=bestellung&aid=` |
+| `mail_kunde_fremdlager($aid)` | `auftrag_ins_fremdlager()` – Ware liegt im Kundenlager | `v=fremdprodukte` |
+| `mail_kunde_rechnung_freigegeben($beleg)` | Buchhaltung „Für Kunde freigeben", Auftrag „Rechnung neu berechnen" (wenn dabei freigegeben) | `v=rechnungen` |
+| `mail_nachbestellung($nb,'eingang'\|'preis_neu'\|'bestaetigt')` | Nachbestellung angelegt (Kunde **und Team**), neuer Preis zur Freigabe, bestätigt (AB mit Nummer) | `v=bestellungen` / `v=bestellung&aid=` |
+| `mail_kunde_angebot_aktualisiert($an)` | Angebot: „Preise freigeben" bei gesendetem Angebot | `v=angebote` / `v=meine_anfragen` (DL) |
+| `mail_kunde_zugang($kid)` | Kundenkonto: Knopf „Per Mail senden" am Erstzugang | Portal |
+| `mail_kunde_etikett_freigegeben($aid)` | Etikett-Freigabe im Portal | `v=bestellung&aid=` |
+Bei Lieferung (`auftrag_rechnung_bei_lieferung`) geht keine eigene Rechnungsmail raus – die Versand-/Fremdlager-Mail nennt die Rechnung mit.

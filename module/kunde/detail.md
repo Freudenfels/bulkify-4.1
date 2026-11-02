@@ -40,3 +40,6 @@ Schalter **„Keine E-Mail-Benachrichtigungen an diesen Kunden"** (`kunden.benac
 
 ## Dublette zusammenführen (Stand 2026-10-08)
 Admin-Abschnitt über der Gefahrenzone: einen doppelten Kunden (Suchfeld-Dropdown über alle anderen Kunden, Firma/Kundennummer) in DIESEN Kunden überführen. POST `aktion=zusammenfuehren` + `quelle_id` → `kunde_zusammenfuehren(quelle, dieser)`. Bestätigung per JS-confirm; danach Flash `merged`/`mergefehler`. Der Quell-Datensatz wird gelöscht, alle Vorgänge wandern hierher.
+
+## Zugang per Mail (Paket Mails)
+Am Erstzugang gibt es neben „Link kopieren" den Knopf **„Per Mail senden"** (eigenes Formular `ezMailForm` außerhalb des Hauptformulars, Knopf über `form=…`): POST `aktion=zugang_senden` → `mail_kunde_zugang()`; Rückmeldung `zugangok` / `zugangfehler`. Ohne E-Mail-Adresse ist der Knopf gesperrt.
