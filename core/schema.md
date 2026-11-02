@@ -279,3 +279,10 @@ Eigene Fertigware (Einlagern aus der Produktion: `produktion_teilmenge_einbuchen
 - `fremdlager_umbuchen()`: nur für Fulfillment-Kunden, Standort Lager 2.
 - Eigener Versand (`auftrag_versenden_menge`, FEFO `fremd_kunde_id IS NULL`) greift damit nie auf Kundenware zu.
 - Übergang: `lager2_bestand()` zählt weiter alle freien Chargen des Artikels (auch Altbestand ohne Besitzer), damit „Mein Lager" für bestehende Kunden nicht einbricht. Altbestand ohne Besitzer bitte per Migration zuordnen (SQL in der Rückmeldung).
+
+## Kette-Nachtrag (Live-Gang Etiketten/Teilproduktion/Fertigware)
+- `auftrag_annahme_etikett_verpackung()` lässt **Handelsware** aus (Ware ist schon etikettiert): kein Kundenetikett, kein bedruckter Behälter.
+- Zukauf „fertig": Verpacken und Etikettieren buchen nichts ab (`produktion_ist_zukauf_fertig()` im Dispatcher `produktion_station_entnahme()`, Spiegel in der Sub-App).
+- Versand-Meldung: liegt die Fertigware des Auftrags noch in Quarantäne, heißt es „Die Fertigware ist noch nicht freigegeben" plus wartende Menge.
+- Rechnung: Teilversand während der Produktion schreibt die Rechnung erst beim Produktionsabschluss als komplett fest (`auftrag_nach_produktion_status()`).
+- Migration Kundenetiketten schreibt ein Protokoll jeder Änderung nach `app_meta migr_kundenetikett_protokoll` (JSON, max. 300 Zeilen).

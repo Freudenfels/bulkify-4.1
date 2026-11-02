@@ -10180,9 +10180,10 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     if ($gebunden) {
         $pf = auftrag_produzierte_fertigware($auftrag_id);
         $verf = $inProd ? min($pf['frei'], max(0.0, $pf['gebucht'] - $bereits)) : $pf['frei'];
-        if ($verf < 1) return ['ok'=>false, 'msg'=>($inProd ? 'Noch keine versandbereite Teilmenge – es wurde noch nichts aus diesem Auftrag eingebucht.'
-                                                             : 'Für diesen Auftrag ist noch keine Fertigware eingebucht (Einlagern aus der Produktion fehlt).')
-                                                   . ($vfitem ? fertigware_qm_hinweis($vfitem) : '')];
+        $qmH = $vfitem ? fertigware_qm_hinweis($vfitem) : '';
+        if ($verf < 1) return ['ok'=>false, 'msg'=>$qmH !== '' ? 'Die Fertigware ist noch nicht freigegeben.' . $qmH
+                                                   : ($inProd ? 'Noch keine versandbereite Teilmenge – es wurde noch nichts aus diesem Auftrag eingebucht.'
+                                                              : 'Für diesen Auftrag ist noch keine Fertigware eingebucht (Einlagern aus der Produktion fehlt).')];
         if ($inProd) $offen = min($offen, (int) floor($verf + 1e-6));
     } else {
         $verf = $vfitem ? item_bestand($vfitem, true) : 0;
@@ -10276,6 +10277,8 @@ function auftrag_name_snapshot(int $auftrag_id): void {
 // $gruppe: gewählte Angebots-Option (Positions-Weg) – nur deren Verpackungs-Position + gruppenlose zählen.
 function auftrag_annahme_etikett_verpackung(int $auftrag_id, int $angebot_id, int $produkt_id, int $kunde_id, int $verp_id, ?string $gruppe = null): int {
     if ($auftrag_id <= 0 || $produkt_id <= 0) return $verp_id;
+    // Handelsware: die zugekaufte Ware ist schon etikettiert/verpackt -> kein Kundenetikett, kein bedruckter Behälter (Kette-Nachtrag).
+    if ((int) scalar("SELECT COALESCE(handelsware,0) FROM produkt WHERE id=?", [$produkt_id]) === 1) return $verp_id;
     $etId = kundenetikett_sicherstellen($produkt_id, $kunde_id ?: null, $verp_id);
     if ($etId > 0) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$etId, $auftrag_id]);
     $grp = ($gruppe !== null && $gruppe !== '') ? " AND (TRIM(COALESCE(gruppe,''))=? OR TRIM(COALESCE(gruppe,''))='')" : '';
