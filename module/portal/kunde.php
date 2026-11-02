@@ -2252,7 +2252,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="muted" style="font-size:13px;margin:4px 0 10px">Erst nach Ihrer Freigabe können wir die Etiketten bestellen und produzieren. Bitte jetzt freigeben.</div>
     <div class="bx-row" style="gap:8px;flex-wrap:wrap">
       <?php foreach ($etikettUnbestListe as $eu): ?>
-        <button type="button" class="btn btn-primary btn-sm" onclick="etFreigabeOeffnen(<?= (int)$eu['id'] ?>, <?= htmlspecialchars(json_encode($eu['datei']), ENT_QUOTES) ?>)">Etikett zu <?= h($eu['nummer']) ?> freigeben</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="etFreigabeOeffnen(<?= (int)$eu['id'] ?>, <?= htmlspecialchars(json_encode($eu['datei']), ENT_QUOTES) ?>)">Etikett zu <?= h($eu['nummer']) ?> ansehen &amp; freigeben</button>
       <?php endforeach; ?>
     </div>
   </div>
@@ -4152,6 +4152,9 @@ portal_head('Kundenportal · ' . $k['firma']);
           · <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)($etQuelle['quell_auftrag_id'] ?? $a['id']) ?>" target="_blank"><?= h($etQuelle['datei_orig'] ?: 'Etikett-Design') ?></a>
           <?php if (!empty($etQuelle['angelegt'])): ?><span class="muted">· <?= h(fmt_zeit($etQuelle['angelegt'], 'd.m.Y')) ?></span><?php endif; ?>
         </p>
+        <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:0 0 10px;background:#fff;max-width:660px">
+          <iframe src="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)($etQuelle['quell_auftrag_id'] ?? $a['id']) ?>" title="Etikett-Vorschau" style="width:100%;height:340px;border:0;display:block"></iframe>
+        </div>
         <p style="margin:0 0 10px;color:var(--danger,#d64545);font-weight:600">Bitte dieses Etikett für die Produktion freigeben. <?= $istAlt ? 'Auch bei einer Nachbestellung brauchen wir Ihre erneute Freigabe des Etiketts.' : '' ?></p>
         <form method="post" style="margin:0 0 8px">
           <input type="hidden" name="aktion" value="etikett_freigeben"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>">
@@ -5244,9 +5247,16 @@ document.getElementById('bxBestOverlay').addEventListener('click', function(e){ 
       if ($darfBestellen):
         $etAutoOpen = !empty($etikettUnbestListe) && ($view === 'start' || isset($_GET['etikett'])); ?>
 <div id="etFreiOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:16px">
-  <div role="dialog" aria-modal="true" class="bx-panel" style="max-width:560px;width:100%;max-height:92vh;overflow:auto;margin:0">
-    <h2 style="margin-top:0">Etikett verbindlich freigeben</h2>
-    <p class="muted" id="etFreiDatei" style="font-size:13px;margin:0 0 10px"></p>
+  <div role="dialog" aria-modal="true" class="bx-panel" style="max-width:780px;width:100%;max-height:94vh;overflow:auto;margin:0">
+    <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <h2 style="margin-top:0">Etikett prüfen &amp; verbindlich freigeben</h2>
+      <a id="etFreiNeu" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">In neuem Tab öffnen</a>
+    </div>
+    <p class="muted" id="etFreiDatei" style="font-size:13px;margin:0 0 6px"></p>
+    <p class="muted" style="font-size:12px;margin:0 0 10px">Bitte prüfen Sie das Etikett genau – Text, Rechtschreibung, Pflichtangaben und Layout. Nach Ihrer Freigabe geht es verbindlich in Druck/Produktion.</p>
+    <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px;background:#fff">
+      <iframe id="etFreiView" src="" title="Etikett-Vorschau" style="width:100%;height:460px;border:0;display:block"></iframe>
+    </div>
     <form method="post">
       <input type="hidden" name="aktion" value="etikett_freigeben">
       <input type="hidden" name="auftrag_id" id="etFreiAid" value="">
@@ -5261,9 +5271,13 @@ document.getElementById('bxBestOverlay').addEventListener('click', function(e){ 
   </div>
 </div>
 <script>
+var etFreiBase = <?= json_encode($portalLink('etikett_datei')) ?>;
 function etFreigabeOeffnen(aid, datei){
   document.getElementById('etFreiAid').value = aid;
   document.getElementById('etFreiDatei').textContent = datei ? ('Design: ' + datei) : '';
+  var url = etFreiBase + '&aid=' + aid;
+  var fr = document.getElementById('etFreiView'); if (fr) fr.src = url;        // Etikett (PDF/Bild) inline zeigen
+  var ln = document.getElementById('etFreiNeu');  if (ln) ln.href = url;        // größer in neuem Tab
   document.getElementById('etFreiOverlay').style.display = 'flex';
 }
 document.getElementById('etFreiOverlay').addEventListener('click', function(e){ if (e.target === this) this.style.display='none'; });
