@@ -306,3 +306,6 @@ Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schl
 
 ## Feld-Änderungsprotokoll (Aufräumen 8)
 Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route, erstellt). `public/index.php` ruft bei jedem POST `aenderung_beobachten($route, $id)` auf: Der Hauptdatensatz der Seite (`aenderung_routen()`: Auftrag, Angebot, Produkt, Rezeptur, Kunde, Lieferant, Bestellung, Artikel, Produktionsauftrag, Kontingent, Dienstleistung, Benutzer) wird vorher gelesen und nach der Antwort (auch nach Redirect) verglichen. Jedes geänderte Feld wird mit alt/neu, Person und Zeit protokolliert (`aenderung_protokollieren()`). Technische und geheime Felder (Zeitstempel, Token, Passwort-Hash, Caches) sind ausgenommen. Anzeige: `?p=protokoll&ansicht=felder`, filterbar nach Bereich, Objekt-ID und Text. Positionen und Untertabellen werden nicht erfasst.
+
+## Nummernvergabe atomar (Aufräumen 16)
+`naechste_nummer()` zählt hoch und liest unter `GET_LOCK(bx_nr_<Präfix>)`. Vorher konnten parallele Aufrufe dieselbe Nummer bekommen: Test mit 3 Prozessen × 40 Nummern ergab 93 von 120 eindeutig, nachher 120 von 120. Gilt für alle Nummernkreise (AN, AB, RE, LS, BE, VP …). Die Kopien in Buchhaltung, Lager und Produktion nutzen dieselbe Sperre.

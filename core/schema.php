@@ -3930,8 +3930,15 @@ function naechste_nummer(string $prefix): string {
     $prefix = strtoupper(trim($prefix));
     // Start bei 2690, dann frei hochzählen (Stellen wachsen mit)
     q("INSERT IGNORE INTO nummernkreis (prefix, naechste, stellen) VALUES (?, 2690, 4)", [$prefix]);
-    q("UPDATE nummernkreis SET naechste = naechste + 1 WHERE prefix = ?", [$prefix]);
-    $r = one("SELECT naechste - 1 AS nr, stellen FROM nummernkreis WHERE prefix = ?", [$prefix]);
+    // Hochzählen + Lesen unter einer DB-Sperre je Präfix (Aufräumen 16): vorher konnten zwei gleichzeitige Aufrufe zwischen
+    // UPDATE und SELECT dieselbe Nummer bekommen (doppelte VP-2713 im Systemtest; gilt ebenso für AN/AB/RE/LS …).
+    $lock = (int) scalar("SELECT GET_LOCK(?, 5)", ['bx_nr_' . $prefix]) === 1;
+    try {
+        q("UPDATE nummernkreis SET naechste = naechste + 1 WHERE prefix = ?", [$prefix]);
+        $r = one("SELECT naechste - 1 AS nr, stellen FROM nummernkreis WHERE prefix = ?", [$prefix]);
+    } finally {
+        if ($lock) scalar("SELECT RELEASE_LOCK(?)", ['bx_nr_' . $prefix]);
+    }
     return $prefix . '-' . str_pad((string)$r['nr'], (int)$r['stellen'], '0', STR_PAD_LEFT);
 }
 

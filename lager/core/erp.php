@@ -632,8 +632,14 @@ function erp_naechste_nummer(string $prefix): string {
     $prefix = strtoupper(trim($prefix));
     if (!tabelle_da('nummernkreis')) return $prefix . '-' . date('ymdHis');
     q("INSERT IGNORE INTO nummernkreis (prefix, naechste, stellen) VALUES (?, 2690, 4)", [$prefix]);
-    q("UPDATE nummernkreis SET naechste = naechste + 1 WHERE prefix = ?", [$prefix]);
-    $r = one("SELECT naechste - 1 AS nr, stellen FROM nummernkreis WHERE prefix = ?", [$prefix]);
+    // Hochzählen + Lesen unter derselben DB-Sperre wie naechste_nummer() im Dashboard (Aufräumen 16): keine Doppelnummern.
+    $nrLock = (int) scalar("SELECT GET_LOCK(?, 5)", ['bx_nr_' . $prefix]) === 1;
+    try {
+        q("UPDATE nummernkreis SET naechste = naechste + 1 WHERE prefix = ?", [$prefix]);
+        $r = one("SELECT naechste - 1 AS nr, stellen FROM nummernkreis WHERE prefix = ?", [$prefix]);
+    } finally {
+        if ($nrLock) scalar("SELECT RELEASE_LOCK(?)", ['bx_nr_' . $prefix]);
+    }
     return $r ? $prefix . '-' . str_pad((string)$r['nr'], (int)$r['stellen'], '0', STR_PAD_LEFT) : $prefix . '-' . date('ymdHis');
 }
 
