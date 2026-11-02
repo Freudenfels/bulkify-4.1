@@ -4554,10 +4554,53 @@ function gel_basis_ek_l(): float { return max(0.0, (float) meta_get('gel_basis_e
 // Der BEHÄLTER kommt separat als eigene Angebotsposition (Dose/Deckel/Etikett kommen extra – EK-Staffel × Verpackungs-Aufschlag).
 // $bestellmenge (Packungen) macht die Mengendegression: die Rohstoffe werden mit der Staffel zur
 // Gesamtmenge gerechnet – so unterscheiden sich die Zeilen der Preismatrix je Bestellmenge.
+// ===== EK aus dem Zukaufpreis (Nacht 2b/3, 13a) =====
+// Liegt für die Rezeptur ein Bulk-/Zukaufpreis eines Lieferanten vor, ist ER der EK der Füllung (nicht die Rohstoff-Summe):
+// Pulver/Granulat/Flüssig/Gel über rezeptur_lief_angebot in €/kg bzw. €/l (z. B. 14,90 €/kg × 300 g = 4,47 €/Pkg), Stück-Formen über
+// den Fremdfertigungspreis je Stück. $stueck = Inhalt je Packung (g/ml/Stück), $packungen = Bestellmenge (Staffel). null = kein Preis.
+function rezeptur_zukauf_ek_packung(int $rid, int $stueck, int $packungen = 0): ?float {
+    if ($rid <= 0 || $stueck <= 0) return null;
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+    if (in_array($form, ['pulver', 'granulat', 'fluessig', 'gel'], true)) {
+        if (!table_exists('rezeptur_lief_angebot')) return null;
+        $bedarf = (float)$stueck / 1000 * max(1, $packungen);   // Gesamtmenge in kg bzw. l
+        $passend = null; $basis = null;
+        foreach (all("SELECT preis, menge, LOWER(TRIM(COALESCE(einheit,''))) AS e FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0", [$rid]) as $r) {
+            $e = (string)$r['e'];
+            if (in_array($e, ['kg', 'kilogramm', 'l', 'liter'], true))      { $pkg = (float)$r['preis'];        $m = (float)$r['menge']; }
+            elseif (in_array($e, ['g', 'gramm', 'ml'], true))              { $pkg = (float)$r['preis'] * 1000; $m = (float)$r['menge'] / 1000; }
+            // Altdaten (vor St-13): Pulver-Fremdpreise standen mit „Stk"/ohne Einheit, gemeint war €/kg (ein Stückpreis ist bei
+            // einer Füllmengen-Form sinnlos) -> als €/kg werten.
+            elseif (in_array($e, ['', 'stk', 'stk.', 'stück', 'stueck'], true)) { $pkg = (float)$r['preis']; $m = (float)$r['menge']; }
+            else continue;
+            if ($basis === null || $pkg < $basis) $basis = $pkg;
+            if ($m > 0 && $m > $bedarf + 1e-9) continue;                    // höhere Staffel gilt noch nicht
+            if ($passend === null || $pkg < $passend) $passend = $pkg;
+        }
+        $p = $passend ?? $basis;
+        return $p !== null ? $p * (float)$stueck / 1000 : null;
+    }
+    $je = rezeptur_fremd_ek_pro_einheit($rid, (float)$stueck * max(1, $packungen));
+    return $je !== null && $je > 0 ? $je * $stueck : null;
+}
+// Woher kommt der EK einer Herstellungs-Position? 'zukauf' = Zukaufpreis des Lieferanten; 'schaetzung' = Ware soll zugekauft werden
+// (Handelsware-Produkt oder offene Preisanfrage an einen Lieferanten), es gibt aber noch KEINEN Zukaufpreis -> der Rohstoff-EK ist nur
+// eine Schätzung und darf nicht als echter EK für den VK-Vorschlag gelten; 'rohstoff' = Eigenproduktion aus Rohstoffen.
+function rezeptur_ek_quelle(int $rid, int $stueck, int $packungen = 0): array {
+    if (rezeptur_zukauf_ek_packung($rid, $stueck, $packungen) !== null) return ['quelle' => 'zukauf', 'text' => 'EK aus dem Zukaufpreis des Lieferanten'];
+    $zukaufGewollt = (int) scalar("SELECT COUNT(*) FROM produkt WHERE rezeptur_id=? AND COALESCE(handelsware,0)=1", [$rid]) > 0;
+    if (!$zukaufGewollt && table_exists('lieferant_anfrage') && column_exists('lieferant_anfrage', 'rezeptur_id'))
+        $zukaufGewollt = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE rezeptur_id=? AND status NOT IN ('abgelehnt','storniert','geschlossen','zurueckgezogen')", [$rid]) > 0;
+    if ($zukaufGewollt) return ['quelle' => 'schaetzung', 'text' => 'EK = Rohstoff-Schätzung, Lieferant-Bulkpreis fehlt – VK erst nach dem Zukaufpreis festlegen'];
+    return ['quelle' => 'rohstoff', 'text' => ''];
+}
 function produkt_variante_ek(int $produkt_id, int $stueck, int $verp_id = 0, int $bestellmenge = 0): float {
     $rid  = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$produkt_id]);
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
     $bm   = max(0, $bestellmenge);
+    // Zukaufpreis vorhanden (Nacht 3, 13a): er ist der EK der Füllung (Kapseln: + Leerkapsel entfällt, sie steckt im Fremdpreis).
+    $zk = rezeptur_zukauf_ek_packung($rid, $stueck, $bm);
+    if ($zk !== null) return $zk;
     if (in_array($form, ['pulver', 'granulat'], true)) {
         // $stueck = Füllgewicht in Gramm; Kosten je Gramm = Portionskosten / Portionsgewicht.
         $portionG = rezeptur_gewicht_mg($rid) / 1000;
@@ -5375,6 +5418,11 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
     $menge = max(1, $menge);
     // EK je Packung aus der zentralen Herstell-Kalkulation (eine Quelle, siehe rezeptur_herstell_ek_pro_packung).
     $ekH = rezeptur_herstell_ek_pro_packung($rid, $stueck, $menge);
+    // Handelsware über eine Rezeptur-Position (Nacht 2b): gibt es zu Rezeptur + Inhalt ein Handelsware-Produkt mit Zukaufpreis je
+    // Packung, ist DAS der EK (die Ware ist schon verpackt) – keine eigenen Verpackungszeilen, wie beim Produkt-Weg.
+    $hwPid = (int) scalar("SELECT id FROM produkt WHERE rezeptur_id=? AND COALESCE(handelsware,0)=1 AND einheiten_pro_packung=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$rid, $stueck, $kid]);
+    $hwZp  = $hwPid ? produkt_lieferant_preise_pkg($hwPid, $menge) : [];
+    if ($hwZp) { $ekH = min($hwZp); $verp_ids = []; }
     $marge = $mo !== null ? $mo : max(marge_typ_prozent($form), marge_min_prozent());
     $vkH = vk_fuer_kunde($ekH * (1 + $marge/100), $kid);
     // Rezeptur-Beschreibung (je Zutat eine Zeile + Zusammenfassung)
@@ -5431,6 +5479,9 @@ function rezeptur_herstell_ek_pro_packung(int $rid, int $stueck, int $menge): fl
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
     if ($form === '') return 0.0;
     $menge  = max(1, $menge);
+    // Zukaufpreis (Bulk €/kg bzw. Fremdfertigung je Stück) geht vor der Rohstoff-Summe (Nacht 3, 13a).
+    $zk = rezeptur_zukauf_ek_packung($rid, $stueck, $menge);
+    if ($zk !== null) return $zk;
     $istKapsel = in_array($form, ['kapsel','softgel'], true);
     if (in_array($form, ['pulver','granulat'], true)) {
         $portionG = rezeptur_gewicht_mg($rid) / 1000;

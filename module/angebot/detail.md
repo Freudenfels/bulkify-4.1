@@ -192,3 +192,8 @@ Bei einem **gesendeten** Produkt-Angebot (nicht Dienstleistung, nicht Jahresvert
 
 ## Mail bei „Preise freigeben" (Paket Mails)
 Gibt das Team die Preise eines gesendeten Angebots wieder frei (nach Bearbeitung), bekommt der Kunde `mail_kunde_angebot_aktualisiert()`.
+
+## EK aus dem Zukaufpreis (Nacht 2b/3, 13a)
+- `rezeptur_zukauf_ek_packung($rid, $stueck, $packungen)`: Liegt ein Bulk-/Zukaufpreis vor, ist er der EK der Füllung. Pulver/Granulat/Flüssig/Gel nehmen `rezeptur_lief_angebot` in €/kg bzw. €/l, z. B. 14,90 €/kg × 300 g = 4,47 €/Pkg (Altdaten mit Einheit „Stk" gelten bei Pulver als €/kg). Stück-Formen nehmen den Fremdfertigungspreis je Stück. Er geht in `produkt_variante_ek()` (Preismatrix) und `rezeptur_herstell_ek_pro_packung()` (Rezeptur-Position) **vor** der Rohstoff-Summe.
+- `rezeptur_ek_quelle()`: „zukauf" = EK aus dem Zukaufpreis. „schaetzung" = die Ware soll zugekauft werden (Handelsware-Produkt zur Rezeptur oder offene Preisanfrage an einen Lieferanten), es gibt aber noch keinen Zukaufpreis: Das Angebot markiert die Position rot „EK = Rohstoff-Schätzung, Lieferant-Bulkpreis fehlt" und zeigt einen Hinweis, den VK erst nach dem Lieferantenpreis festzulegen. „rohstoff" = Eigenproduktion, unverändert.
+- Handelsware über eine Rezeptur-Position (`angebot_rezeptur_zeilen`): Gibt es zu Rezeptur + Inhalt ein Handelsware-Produkt mit Zukaufpreis je Packung, ist das der EK, und es gibt keine eigenen Verpackungszeilen (wie beim Produkt-Weg).

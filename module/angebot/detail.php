@@ -936,6 +936,12 @@ if (!$neu):
               <input type="checkbox" <?= (int)($pp['kundenspezifisch'] ?? 0) ? 'checked' : '' ?> onchange="this.closest('.posrow').querySelector('.p_kspez').value=this.checked?1:0"> bedruckt / kundenspezifisch</label>
             <?php endif; ?>
             <input type="hidden" name="p_ek[]" class="p_ek" value="<?= h(number_format($pp['ek_cent']/100,4,'.','')) ?>">
+            <?php if (($pp['quelle'] ?? '') === 'herstellung' && (int)($pp['rezeptur_id'] ?? 0) > 0 && (int)($pp['stueck'] ?? 0) > 0):
+                $ekQ = rezeptur_ek_quelle((int)$pp['rezeptur_id'], (int)$pp['stueck'], (int) round((float)$pp['menge']));   // Nacht 3 (13a)
+                if ($ekQ['quelle'] === 'schaetzung') $ekSchaetzung = true;
+                if ($ekQ['text'] !== ''): ?>
+            <div style="font-size:11px;margin-top:4px;color:<?= $ekQ['quelle'] === 'schaetzung' ? '#8f231b' : 'var(--muted)' ?>"><?= h($ekQ['text']) ?></div>
+            <?php endif; endif; ?>
           </td>
           <?php $u=$inhaltUnit($pp['rezeptur_id']??0); ?>
           <td><div style="display:flex;align-items:center;gap:4px"><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="<?= h($u) ?>" value="<?= (int)($pp['stueck'] ?? 0) ?: '' ?>" placeholder="&ndash;" style="width:100%;text-align:right"><?php if($u!==''): ?><span class="muted" style="font-size:11px;white-space:nowrap"><?= h($u) ?></span><?php endif; ?></div></td>
@@ -949,6 +955,7 @@ if (!$neu):
         <?php endforeach; ?>
       </tbody>
     </table>
+    <?php if (!empty($ekSchaetzung)): ?><div class="bx-panel" style="margin:10px 0 0;padding:10px 14px;border-left:3px solid #b23b2f;font-size:13px"><strong>Zukaufpreis fehlt:</strong> Mindestens eine Position soll zugekauft werden, es gibt aber noch keinen Bulk-/Zukaufpreis des Lieferanten. Der EK ist nur eine Rohstoff-Schätzung – den VK erst festlegen, wenn der Lieferantenpreis da ist.</div><?php endif; ?>
     <?php if ($istDL): ?>
     <div class="muted" style="font-size:12px;margin-top:6px">Varianten (A/B/C): Positionen mit demselben Buchstaben bilden EINE Variante; der Kunde wählt beim Annehmen genau eine davon. Positionen <strong>ohne</strong> Buchstaben gelten als Basis und sind in jeder Variante enthalten. Keine Buchstaben = ein festes Angebot ohne Auswahl.</div>
     <?php endif; ?>
