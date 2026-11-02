@@ -10,6 +10,9 @@ function db(): PDO {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES   => false,
         ]);
+        // DB-Sitzung auf UTC wie PHP (date_default_timezone_set('UTC')) – sonst schreiben NOW()/CURRENT_TIMESTAMP
+        // Serverzeit (MEZ) und fmt_zeit() verschiebt sie noch einmal um +1/+2 h (St-03).
+        $pdo->exec("SET time_zone = '+00:00'");
     }
     return $pdo;
 }
