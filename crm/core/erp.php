@@ -212,7 +212,7 @@ function erp_dashboard_link(string $route): string {
 // Aktive Benutzer, die keine reinen Lieferanten/Kunden sind. Nur gelesen.
 function erp_mitarbeiter(): array {
     if (!tabelle_da('benutzer')) return [];
-    $alle = all("SELECT id, name, email, rollen FROM benutzer WHERE aktiv=1 ORDER BY name");
+    $alle = all("SELECT id, name, email, rollen FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name");
     $raus = [];
     foreach ($alle as $u) {
         $r = strtolower((string)($u['rollen'] ?? ''));

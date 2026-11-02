@@ -32,7 +32,7 @@ $aufgaben = all("SELECT a.*, u.name AS zuw_name, e.name AS ersteller_name, x.nam
                  WHERE a.status=?
                  ORDER BY a.prio ASC, (a.faellig IS NULL), a.faellig ASC, a.angelegt DESC", [$status]);
 $offenGesamt = (int) scalar("SELECT COUNT(*) FROM aufgabe WHERE status='offen'");
-$mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 ORDER BY name");
+$mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name");
 
 render_header('aufgaben', 'Aufgaben');
 bx_head('Aufgaben', $zeigeErledigt ? 'Erledigte Aufgaben' : $offenGesamt . ' offene Aufgaben',

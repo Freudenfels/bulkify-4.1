@@ -9,7 +9,8 @@ $q = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'name';
 $dir  = $_GET['dir']  ?? 'asc';
 
-$rows = all("SELECT * FROM benutzer");
+// Nur Team-Mitarbeiter – Lieferanten-Zugänge werden in den Einstellungen bzw. am Lieferanten verwaltet (Aufräumen 5).
+$rows = all("SELECT * FROM benutzer WHERE lieferant_id IS NULL");
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, fn($r) => mb_strpos(mb_strtolower($r['name'].' '.$r['email']), $needle) !== false);

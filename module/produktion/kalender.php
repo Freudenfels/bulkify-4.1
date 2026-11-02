@@ -38,7 +38,7 @@ $titel = $MON[substr($monat,5,2)] . ' ' . substr($monat,0,4);
 $kap = max(1, (int) meta_get('prod_kap_tag', '3'));   // Aufträge pro Tag (Kapazität)
 
 // Mitarbeiter (aktive Benutzer) für die Zuteilung.
-$mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 ORDER BY name");
+$mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name");
 $mSelect = function($pid, $sel) use ($mitarbeiter) {
     $s = '<form method="post" class="k-mitform" style="margin:0"><input type="hidden" name="aktion" value="mitarbeiter"><input type="hidden" name="pa_id" value="' . (int)$pid . '">';
     $s .= '<select name="mitarbeiter_id" onchange="this.form.submit()" style="width:100%;font-size:11px;padding:1px 2px"><option value="">– Mitarbeiter –</option>';

@@ -268,7 +268,7 @@ $auftraege = all("SELECT a.id, a.nummer, a.menge, COALESCE(NULLIF(a.produkt_beze
                   FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
                   WHERE a.status<>'storniert' AND COALESCE(a.kategorie,'produkt')<>'dienstleistung'
                   ORDER BY a.angelegt DESC, a.id DESC");
-$mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 ORDER BY name");
+$mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name");
 // Bulkware zur optionalen Auswahl: fertige Bulk-Zwischenprodukte (item.kategorie='fertig').
 $bulkItems = all("SELECT id, name, COALESCE(NULLIF(einheit,''),'kg') AS einheit FROM item WHERE kategorie='fertig' ORDER BY name");
 $letzte = all("SELECT e.*, a.nummer AS auftrag_nr FROM easy_production e LEFT JOIN auftrag a ON a.id=e.auftrag_id ORDER BY e.id DESC LIMIT 12");

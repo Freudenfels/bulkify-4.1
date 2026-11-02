@@ -321,7 +321,7 @@ if ($mahnungen):
 <?php endif; ?>
 
 <?php if (!$istGut && $b['status'] !== 'storniert'):
-    $benutzer = all("SELECT id, name FROM benutzer WHERE aktiv=1 ORDER BY name");
+    $benutzer = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name"   /* ohne Lieferanten-Logins */);
     $curBearb = (int)($b['bearbeiter_id'] ?? 0);
 ?>
 <details class="bx-panel"<?= isset($_GET['kopf']) ? ' open' : '' ?>>
