@@ -62,3 +62,6 @@ Admin-Button „Löschen" im Kopf (nur bestehende Produkte). Aktion `loeschen` �
 
 ## Auswahl „Art des Produkts" (Stand 2026-10-08)
 Oben im Formular eine Auswahl (Radio `extern`): „Eigenes Produkt – Herstellung bei bulkify" (0) vs. „Nur Fulfillment – Kundenware, wir versenden nur" (1). Bei Fulfillment blendet JS alle Fertigungs-/Preis-Bereiche aus (Klasse `.js-mfg`: Rezeptur-Panel inkl. Haltbarkeit/Allergene/Notiz, Stückliste, Standard-Produktionsweg, Kalkulation, Preis-Matrix, Zukauf-Panel, Preise-Reiter) und setzt exklusiv automatisch. Server: `extern` ist jetzt value-basiert (0/1, vorher presence-basiert); bei extern wird `rezeptur_id=NULL` erzwungen und exklusiv=1. `?extern=1` wählt beim Anlegen direkt „Nur Fulfillment" vor.
+
+## Zukaufpreis je Packung (St-24)
+Im Panel „Lieferantenpreise (Zukauf)" wird beim Hinzufügen gewählt, ob der Preis **je Packung (fertige Ware)** oder **je Kapsel/Stück (lose)** gilt; bei Handelsware ist „Packung" vorausgewählt. Die Liste zeigt „/Packung" bzw. „/Kapsel".

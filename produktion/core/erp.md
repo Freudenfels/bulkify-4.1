@@ -60,3 +60,6 @@ Die Dashboard-Tabellen `prod_charge` / `prod_charge_rohstoff` + `charge.standort
 
 ## Zugekaufte Bulkware in g/ml statt Stk (St-13)
 `erp_fertigware_einheit($pa_id)` liefert die Einheit der zugekauften Bulkware nach Darreichungsform der Rezeptur: Pulver/Granulat `g`, Flüssig/Gel `ml`, sonst `Stk`. `erp_schritt_material()` (Station „Fertigware bereitstellen"), `erp_pa_fehlbedarf()` und `erp_fertigware_entnehmen()` nutzen sie statt des festen „Stk"; der Verbrauch (`produktion_verbrauch.einheit`) bekommt die Einheit der Charge. `erp_fertigware_chargen()` liefert dafür zusätzlich `c.einheit`. Spiegel im Dashboard: `produktion_fertigware_einheit()` in `core/schema.php`.
+
+## Zukauf-Art „fertig" (St-24)
+`erp_zukauf_fertig()` / `erp_zukauf_fertig_chargen()`: Bei fertiger Ware zeigt „Fertigware bereitstellen" die verkaufsfertigen Packungen am Auftrag (Soll in Pkg), `erp_fertigware_entnehmen()` prüft nur (kein Verbrauch), `erp_pa_fehlbedarf()` meldet Packungen, „Verpacken" bucht keine Verpackung ab. Eingelagert/zugeordnet wird im Dashboard (Lieferanten-MHD bleibt). Spiegel von `produktion_zukauf_fertig_chargen()`.

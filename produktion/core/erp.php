@@ -338,9 +338,10 @@ function erp_schritt_material(int $pa_id, string $station): array {
             }
             break;
         case 'Fertigware bereitstellen':
-            $soll_menge = (float)$pa['menge'] * erp_stueck_je_packung($pa);
-            $soll_einheit = erp_fertigware_einheit($pa_id);        // Pulver: g (Packungen × g je Packung), sonst Stk
-            $chargen = erp_fertigware_chargen($pa_id, 'frei');   // Auftrag ODER Rezeptur-Bulk
+            $zkFertig = erp_zukauf_fertig($pa_id);                   // fertige Ware: Packungen, nicht lose Einheiten (St-24)
+            $soll_menge = $zkFertig ? (float)$pa['menge'] : (float)$pa['menge'] * erp_stueck_je_packung($pa);
+            $soll_einheit = $zkFertig ? 'Pkg' : erp_fertigware_einheit($pa_id);        // Pulver: g (Packungen × g je Packung), sonst Stk
+            $chargen = $zkFertig ? erp_zukauf_fertig_chargen($pa_id, 'frei') : erp_fertigware_chargen($pa_id, 'frei');   // Auftrag ODER Rezeptur-Bulk
             foreach ($chargen as $c)
                 $zeilen[] = ['name'=>$c['name'], 'detail'=>'Charge ' . $c['charge_nr'], 'menge'=>(float)$c['menge_verfuegbar'],
                              'einheit'=>(string)($c['einheit'] ?? '') ?: $soll_einheit, 'verfuegbar'=>(float)$c['menge_verfuegbar'], 'item_id'=>(int)$c['item_id'], 'charge_id'=>(int)$c['id']];
@@ -565,6 +566,14 @@ function erp_pa_fehlbedarf(int $pa_id): array {
     if (!$pa) return $fehlend;
     // Zukauf erkennen: formaler Zukauf-Weg ODER es liegt schon zugekaufte fertige Bulkware am Auftrag
     // (frei oder Quarantäne) – dann zählt die Fertigware, nicht die Rohstoffe.
+    if (erp_zukauf_fertig($pa_id)) {   // fertige Ware in Packungen (St-24)
+        $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_zukauf_fertig_chargen($pa_id, 'frei')));
+        if ($verf + 0.0001 < (float)$pa['menge']) {
+            $quar = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_zukauf_fertig_chargen($pa_id, 'quarantaene')));
+            $fehlend[] = ['name'=>'Fertige Ware (Packungen)', 'benoetigt'=>(float)$pa['menge'], 'verfuegbar'=>$verf, 'fehlt'=>(float)$pa['menge'] - $verf, 'einheit'=>'Pkg', 'quarantaene'=>$quar];
+        }
+        return $fehlend;
+    }
     $hatFertigware = count(erp_fertigware_chargen($pa_id, 'frei')) > 0 || count(erp_fertigware_chargen($pa_id, 'quarantaene')) > 0;
     if (erp_weg_basis($pa_id) === 'zukauf' || $hatFertigware) {
         $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
@@ -620,7 +629,7 @@ function erp_station_entnahme(int $pa_id, string $station): array {
         'Rohstoffe bereitstellen'  => erp_rohstoffe_entnehmen($pa_id),
         'Verkapselung'             => erp_kapseln_entnehmen($pa_id),
         'Fertigware bereitstellen' => erp_fertigware_entnehmen($pa_id),
-        'Verpacken'                => erp_verpackung_entnehmen($pa_id),
+        'Verpacken'                => erp_zukauf_fertig($pa_id) ? ['ok'=>true, 'fehlt'=>[]] : erp_verpackung_entnehmen($pa_id),   // fertige Ware: Verpackung enthalten (St-24)
         default                    => ['ok'=>true, 'fehlt'=>[]],
     };
 }
@@ -820,6 +829,20 @@ function erp_fertigware_einheit(int $pa_id): string {
     $f = $rid ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) : '';
     return in_array($f, ['pulver', 'granulat'], true) ? 'g' : (in_array($f, ['fluessig', 'gel'], true) ? 'ml' : 'Stk');
 }
+// Zukauf „fertig" (St-24, Spiegel von produktion_zukauf_fertig_chargen): die zugekaufte Ware sind schon verkaufsfertige Packungen
+// am Auftrag. Bereitstellen prüft sie nur (kein Verbrauch); eingelagert/zugeordnet werden sie im Dashboard (Lieferanten-MHD bleibt).
+function erp_zukauf_fertig(int $pa_id): bool {
+    return (string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'fertig';
+}
+function erp_zukauf_fertig_chargen(int $pa_id, string $status = 'frei'): array {
+    $pa = one("SELECT auftrag_id, produkt_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa || !$pa['auftrag_id']) return [];
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.item_id, i.name
+                FROM charge c JOIN item i ON i.id=c.item_id
+                WHERE c.auftrag_id=? AND i.kategorie='verkaufsfertig' AND i.produkt_id=? AND c.fremd_kunde_id IS NULL
+                  AND c.status=? AND c.menge_verfuegbar>0
+                ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id'], (int)$pa['produkt_id'], $status]);
+}
 // Zugekaufte fertige Bulkware eines Auftrags: entweder direkt AM AUFTRAG gebucht oder als Bulk der REZEPTUR
 // (Kunde koppelt die Bulkware an die Rezeptur, nicht zwingend an den einzelnen Auftrag). $status: frei|quarantaene.
 function erp_fertigware_chargen(int $pa_id, string $status = 'frei'): array {
@@ -837,6 +860,12 @@ function erp_fertigware_chargen(int $pa_id, string $status = 'frei'): array {
 function erp_fertigware_entnehmen(int $pa_id): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
+    if (erp_zukauf_fertig($pa_id)) {   // fertige Ware: nur prüfen, nicht verbrauchen (St-24)
+        $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_zukauf_fertig_chargen($pa_id, 'frei')));
+        if ($verf + 0.0001 < (float)$pa['menge'])
+            return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Ware (Packungen)', 'benoetigt'=>(float)$pa['menge'], 'verfuegbar'=>$verf, 'fehlt'=>(float)$pa['menge'] - $verf, 'einheit'=>'Pkg']]];
+        return ['ok'=>true, 'fehlt'=>[]];
+    }
     $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
     if ($benoetigt <= 0) return ['ok'=>true, 'fehlt'=>[]];
     $chargen = erp_fertigware_chargen($pa_id, 'frei');

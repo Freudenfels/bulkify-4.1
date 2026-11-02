@@ -50,8 +50,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zk_pr
     $mab   = (float) str_replace(',', '.', $_POST['zk_menge_ab'] ?? '0');
     $inco  = array_key_exists($_POST['zk_incoterm'] ?? '', incoterm_liste()) ? $_POST['zk_incoterm'] : null;
     $vers  = array_key_exists($_POST['zk_versandart'] ?? '', versandart_liste()) ? $_POST['zk_versandart'] : null;
-    if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand) VALUES (?,?,?,?,?, 'kapsel',?,?, 'EUR', CURDATE())",
-        [(int)$id, $lid, $lname ?: null, $mab, $preis, $inco, $vers]);
+    // Preis je PACKUNG (fertige Ware / Handelsware, St-24) oder je Kapsel/Stück (lose Bulkware).
+    $zkEinh = ($_POST['zk_einheit'] ?? '') === 'packung' ? 'packung' : 'kapsel';
+    if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand) VALUES (?,?,?,?,?,?,?,?, 'EUR', CURDATE())",
+        [(int)$id, $lid, $lname ?: null, $mab, $preis, $zkEinh, $inco, $vers]);
     header('Location: ?p=produkt&id=' . $id . '&zkok=1#zukauf'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zk_preis_del' && is_numeric($id)) {
@@ -541,7 +543,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
       <tr<?= $isb?' style="font-weight:600"':'' ?>>
         <td><?= h($z['firma'] ?: '–') ?> <?= $isb?bx_badge('günstigster','ok'):'' ?></td>
         <td class="bx-num"><?= (float)$z['menge_ab']>0 ? number_format((float)$z['menge_ab'],0,',','.') : '<span class="muted">–</span>' ?></td>
-        <td class="bx-num"><?= number_format((float)$z['preis'], (float)$z['preis']<1?4:2,',','.') ?> €<?= $z['einheit']==='kapsel'?'/Kapsel':'/'.h((string)$z['einheit']) ?></td>
+        <td class="bx-num"><?= number_format((float)$z['preis'], (float)$z['preis']<1?4:2,',','.') ?> €<?= $z['einheit']==='kapsel'?'/Kapsel':($z['einheit']==='packung'?'/Packung':'/'.h((string)$z['einheit'])) ?></td>
         <td><?= $z['groesse']?h($z['groesse']):'<span class="muted">–</span>' ?></td>
         <td><?= $z['incoterm']?h($z['incoterm']):'<span class="muted">–</span>' ?></td>
         <td><?= !empty($z['versandart']) ? h($VERSZ[$z['versandart']]??$z['versandart']) : '<span class="muted">–</span>' ?></td>
@@ -556,7 +558,9 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
       <select name="zk_lieferant"><option value="">– Freitext –</option><?php foreach ($lieferanten as $l): ?><option value="<?= $l['id'] ?>"><?= h($l['firma']) ?></option><?php endforeach; ?></select></div>
     <div class="bx-field" style="margin:0;width:140px"><label>oder frei</label><input type="text" name="zk_lieferant_name" placeholder="z. B. Wellgreen"></div>
     <div class="bx-field" style="margin:0;width:100px"><label>ab Menge</label><input type="number" name="zk_menge_ab" value="0"></div>
-    <div class="bx-field" style="margin:0;width:110px"><label>Preis/Kapsel</label><input type="number" step="0.0001" name="zk_preis" required></div>
+    <div class="bx-field" style="margin:0;width:110px"><label>Preis</label><input type="number" step="0.0001" name="zk_preis" required></div>
+    <?php $zkHw = (int)($p['handelsware'] ?? 0) === 1; ?>
+    <div class="bx-field" style="margin:0;width:150px"><label>je</label><select name="zk_einheit"><option value="packung" <?= $zkHw ? 'selected' : '' ?>>Packung (fertige Ware)</option><option value="kapsel" <?= $zkHw ? '' : 'selected' ?>>Kapsel / Stück (lose)</option></select></div>
     <div class="bx-field" style="margin:0;width:120px"><label>Incoterm</label><select name="zk_incoterm"><option value="">–</option><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($k) ?></option><?php endforeach; ?></select></div>
     <div class="bx-field" style="margin:0;width:120px"><label>Versand</label><select name="zk_versandart"><option value="">–</option><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
     <button class="btn btn-ghost btn-sm" type="submit">Preis hinzufügen</button>
