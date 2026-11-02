@@ -62,7 +62,7 @@ if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="pad
           <td><?= empty($r['art_festgelegt_am'])
                     ? '<span title="Eigen/Fremd noch nicht festgelegt – erst danach geht der Auftrag in die Produktion">' . bx_badge('festlegen', 'err') . '</span>'
                     : (($r['produktionsart'] ?? 'fremd') === 'eigen' ? bx_badge('Eigen', 'ok') : bx_badge('Fremd', 'info')) ?></td>
-          <td class="bx-num"><?= (int)$r['menge'] ?></td>
+          <td class="bx-num"><?= number_format((int)$r['menge'], 0, ',', '.') ?></td>
           <td>
             <input type="date" name="geplant[<?= (int)$r['id'] ?>]" value="<?= h((string)($r['geplant_am'] ?? '')) ?>"
                    style="<?= $ueberfaellig ? 'border-color:#d64545;' : '' ?>">

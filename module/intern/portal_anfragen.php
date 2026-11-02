@@ -132,7 +132,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
           $txt = ($r['produkt_name'] ?: ($r['rezeptur_name'] ?: '–'))
                . ($groesse ? ' · ' . $groesse : '')
                . ($r['verpackung_typ'] ? ' · ' . ($VTYPEN[$r['verpackung_typ']] ?? $r['verpackung_typ']) : '')
-               . ($r['menge'] ? ' · ' . (int)$r['menge'] . ' Pkg' : '')
+               . ($r['menge'] ? ' · ' . number_format((int)$r['menge'], 0, ',', '.') . ' Pkg' : '')
                . (!empty($r['umkarton']) ? ' · Umkarton' : '');
       } else {
           // Dienstleistung (z. B. Laboranalyse): Produktname dranhängen, damit man sofort sieht, zu WELCHEM

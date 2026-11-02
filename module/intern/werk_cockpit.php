@@ -161,7 +161,7 @@ echo '</div>';
             <td><?= h($r['nummer'] ?: ('#' . $r['id'])) ?></td>
             <td><?= kunde_link($r['kunde_id'] ?? null, $r['kunde_firma']) ?></td>
             <td><?= $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>' ?></td>
-            <td class="bx-num"><?= (int)$r['menge'] ?></td>
+            <td class="bx-num"><?= number_format((int)$r['menge'], 0, ',', '.') ?></td>
             <td><?= $r['naechste_station'] ? h($r['naechste_station']) : '<span class="muted">–</span>' ?> <span class="muted">(<?= (int)$r['n_done'] ?>/<?= (int)$r['n_total'] ?>)</span></td>
           </tr>
         <?php endforeach; ?>

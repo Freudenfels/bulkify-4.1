@@ -372,7 +372,7 @@ if (!$neu) {
         echo '<div class="bx-panel"><h2 style="margin-top:0">Wofür wird bestellt</h2>';
         echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Auftrag</th><th>Produkt</th><th>Kunde</th><th class="bx-num">Menge</th><th>Priorität</th><th>Geplant am</th><th>Bereitschaft</th></tr></thead><tbody>';
         foreach ($kontext as $c) {
-            $mengeTxt = (int)$c['menge'] . ' Pkg' . ((int)$c['stueck'] ? ' &times; ' . (int)$c['stueck'] : '');
+            $mengeTxt = number_format((int)$c['menge'], 0, ',', '.') . ' Pkg' . ((int)$c['stueck'] ? ' &times; ' . (int)$c['stueck'] : '');
             $ber  = $c['pa_id'] ? bereitschaft_badge(produktion_bereitschaft((int)$c['pa_id'])['status']) : '<span class="muted">–</span>';
             $ziel = $c['pa_id'] ? '?p=produktionsauftrag&id=' . (int)$c['pa_id'] : '?p=auftrag&id=' . (int)$c['id'];
             echo '<tr onclick="location.href=\'' . $ziel . '\'" style="cursor:pointer">';

@@ -135,7 +135,7 @@ if ($pa):
 
     render_header('produktion_vorbereitung', 'Vor-Produktion');
     bx_head(h($pa['nummer'] ?: ('PR#' . $paId)) . ' · ' . h($info['produkt'] ?? '–'),
-            trim(($info['kunde'] ? h($info['kunde']) . ' · ' : '') . (int)$pa['menge'] . ' Packungen' . ($info['auftrag_nr'] ? ' · ' . h($info['auftrag_nr']) : '')),
+            trim(($info['kunde'] ? h($info['kunde']) . ' · ' : '') . number_format((int)$pa['menge'], 0, ',', '.') . ' Packungen' . ($info['auftrag_nr'] ? ' · ' . h($info['auftrag_nr']) : '')),
             bx_btn('← Zur Übersicht', '?p=produktion_vorbereitung', 'ghost'));
     if (isset($_GET['saved']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
     if (isset($_GET['fehler'])) echo '<div class="bx-panel badge-err" style="padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
@@ -465,7 +465,7 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
         <td><a href="<?= $href ?>"><?= h($r['nummer'] ?: ('PR#' . $paId)) ?></a><?php if ($r['auftrag_nr']): ?><br><a class="muted" style="font-size:12px" href="?p=auftrag&id=<?= (int)$r['auftrag_id'] ?>" onclick="event.stopPropagation()" title="Zum Auftrag"><?= h($r['auftrag_nr']) ?></a><?php endif; ?></td>
         <td><?= $r['kunde'] ? h(firma_kurz($r['kunde'])) : '<span class="muted">–</span>' ?></td>
         <td><?= h($r['produkt'] ?: '–') ?></td>
-        <td class="bx-num"><?= (int)$r['menge'] ?></td>
+        <td class="bx-num"><?= number_format((int)$r['menge'], 0, ',', '.') ?></td>
         <td><?= $glasOk ? $flagOk(true) : '<span style="color:#d64545">fehlt</span>' ?></td>
         <td><?php if (!$brauchtEt): ?><span class="muted">–</span><?php else: ?><?= $etFrei ? $flagOk(true) : '<span style="color:#d64545">fehlt</span>' ?><?php endif; ?></td>
         <td><?= ($r['produktionsart'] ?? 'fremd') === 'eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info') ?></td>

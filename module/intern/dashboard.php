@@ -58,7 +58,7 @@ echo '</div>';
       <?php if (!$versand_liste): ?><tr><td class="muted">Nichts versandbereit.</td></tr><?php endif; ?>
       <?php foreach ($versand_liste as $a): ?>
         <tr style="cursor:pointer" onclick="location.href='?p=versand'">
-          <td><strong><?= h($a['nummer']) ?></strong></td><td><?= kunde_link($a['kunde_id'] ?? null, $a['firma']) ?></td><td class="bx-num"><?= (int)$a['menge'] ?></td>
+          <td><strong><?= h($a['nummer']) ?></strong></td><td><?= kunde_link($a['kunde_id'] ?? null, $a['firma']) ?></td><td class="bx-num"><?= number_format((int)$a['menge'], 0, ',', '.') ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody></table></div>

@@ -1954,7 +1954,7 @@ foreach ($portalAnfragen as $p) {
     // Detail: bei Produkt Menge/Stück/Verpackung, sonst Notiz-Auszug – zeigt, was angefragt wurde.
     $detailParts = [];
     if ($p['typ'] === 'produkt') {
-        if ((int)($p['menge'] ?? 0))  $detailParts[] = (int)$p['menge'] . ' Packungen';
+        if ((int)($p['menge'] ?? 0))  $detailParts[] = number_format((int)$p['menge'], 0, ',', '.') . ' Packungen';
         if ((int)($p['stueck'] ?? 0)) $detailParts[] = (int)$p['stueck'] . ' Stk/Pkg.';
         if (!empty($p['verp_name']))  $detailParts[] = (string)$p['verp_name'];
         if (!empty($p['umkarton']))   $detailParts[] = 'Umkarton';
@@ -4069,7 +4069,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="bx-panel bx-order-row<?= $etMiss ? ' bx-ord-etmiss' : '' ?>" style="display:block">
   <a href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
+      <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= number_format((int)$a['menge'], 0, ',', '.') ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:13px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
         <span class="muted" style="font-size:13px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : (!$trackA ? 'In Bearbeitung' : 'Schritt ' . ($curIdx + 1) . '/' . $totalA . ': ' . h((string)($trackA[$curIdx]['label'] ?? ''))) ?></span>
@@ -4205,7 +4205,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <!-- Status-Kacheln -->
   <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
     <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a) ?><?php if (!empty($a['status_datum']) && !(($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']))): ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
-    <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= (int)$a['menge'] ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= h(inhalt_je_packung_txt(auftrag_darreichungsform($a), (float)$a['stueck'])) ?><?php endif; ?></div></div>
+    <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= number_format((int)$a['menge'], 0, ',', '.') ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= h(inhalt_je_packung_txt(auftrag_darreichungsform($a), (float)$a['stueck'])) ?><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Gesamtbetrag</div><div style="margin-top:6px"><strong><?= $eur($re ? $re['brutto'] : $a['gesamt_netto']) ?></strong><?php if ($re): ?> <span class="muted">brutto</span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?php
         if ($re) { echo $reBadge($zs['status']); if ($zs['status'] === 'teilbezahlt') echo ' <span class="muted" style="font-size:12px">offen ' . $eur($zs['rest']) . '</span>'; }
@@ -4410,7 +4410,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <tbody>
         <tr><td class="muted" style="width:150px">Produkt</td><td><?= h($titelFuer($a)) ?></td></tr>
         <?php if ((int)$a['stueck']): ?><tr><td class="muted">Inhalt je Packung</td><td><?= h(form_groessen_label(auftrag_darreichungsform($a), (float)$a['stueck'])) ?></td></tr><?php endif; ?>
-        <tr><td class="muted">Anzahl Packungen</td><td><?= (int)$a['menge'] ?></td></tr>
+        <tr><td class="muted">Anzahl Packungen</td><td><?= number_format((int)$a['menge'], 0, ',', '.') ?></td></tr>
         <?php $mf = auftrag_mengenfortschritt((int)$a['id']);
               // Dem Kunden erst zeigen, wenn die Produktion laeuft (oder schon etwas fertig ist) – nicht bei frisch bestaetigt.
               $mfZeigen = !empty($mf['hat']) && (int)$mf['ziel'] > 0
@@ -4533,7 +4533,7 @@ portal_head('Kundenportal · ' . $k['firma']);
             $chg = $auftragChargen[(int)$a['id']] ?? [];
             $chgTxt = ''; foreach ($chg as $c) $chgTxt .= ' ' . $c['nr'] . ' ' . ($c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) . ' ' . $c['mhd'] : '');
             if ($hit($a['nummer'] . ' ' . $titelFuer($a) . $chgTxt)) {
-                $sub = kunde_bestell_status_label($a, $k) . ' · ' . (int)$a['menge'] . ' Packungen' . ($chg ? ' · Charge ' . implode(', ', array_map(fn($c) => $c['nr'], $chg)) . (($chg[0]['mhd'] ?? null) ? ' · MHD ' . date('d.m.Y', strtotime((string)$chg[0]['mhd'])) : '') : '');
+                $sub = kunde_bestell_status_label($a, $k) . ' · ' . number_format((int)$a['menge'], 0, ',', '.') . ' Packungen' . ($chg ? ' · Charge ' . implode(', ', array_map(fn($c) => $c['nr'], $chg)) . (($chg[0]['mhd'] ?? null) ? ' · MHD ' . date('d.m.Y', strtotime((string)$chg[0]['mhd'])) : '') : '');
                 $add('Bestellung', $a['nummer'] . ' – ' . $titelFuer($a), $sub, $portalLink('bestellung') . '&aid=' . (int)$a['id'], $a['angelegt'] ?? null, 'info');
             }
         }
@@ -4960,7 +4960,7 @@ portal_head('Kundenportal · ' . $k['firma']);
                WHERE k.kunde_id=? AND k.status='aktiv' ORDER BY k.angelegt DESC", [(int)$k['id']]); ?>
   <h1 style="margin-bottom:4px">Ihre Jahresverträge</h1>
   <p class="bx-sub">Jahresabnahmeverträge zum Festpreis. Nach Abschluss rufen Sie Ihre Mengen nach Bedarf ab – jeder Abruf wird eine Bestellung zum vereinbarten Preis.</p>
-  <?php if (isset($_GET['abgerufen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= (int)$_GET['abgerufen'] ?> Packungen abgerufen – Ihre Bestellung wurde angelegt (siehe „Bestellungen").</div><?php endif; ?>
+  <?php if (isset($_GET['abgerufen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px"><?= number_format((int)$_GET['abgerufen'], 0, ',', '.') ?> Packungen abgerufen – Ihre Bestellung wurde angelegt (siehe „Bestellungen").</div><?php endif; ?>
   <?php if (isset($_GET['jvok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Jahresvertrag abgeschlossen. Bitte laden Sie unten den <strong>unterschriebenen Vertrag</strong> hoch – nach unserer Prüfung wird er aktiv.</div><?php endif; ?>
   <?php if (isset($_GET['jvupload'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – der unterschriebene Vertrag ist eingegangen und wird von uns geprüft.</div><?php endif; ?>
   <?php if (isset($_GET['kfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h((string)$_GET['kfehler']) ?></div><?php endif; ?>

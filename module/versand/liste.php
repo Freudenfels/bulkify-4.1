@@ -76,8 +76,8 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
       <td><?= h($r['nummer']) ?></td>
       <td><?= kunde_link($r['kunde_id'] ?? null, $r['kunde_firma']) ?></td>
       <td><?= $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>' ?></td>
-      <td class="bx-num"><?= $gesamt ?><?php if ($bereits > 0): ?><br><span class="muted" style="font-size:12px"><?= number_format($bereits,0,',','.') ?> versendet<?php if ($offen > 0): ?> · <?= number_format($offen,0,',','.') ?> offen<?php endif; ?></span><?php endif; ?></td>
-      <td class="bx-num"><?= $frei ?></td>
+      <td class="bx-num"><?= number_format($gesamt, 0, ',', '.') ?><?php if ($bereits > 0): ?><br><span class="muted" style="font-size:12px"><?= number_format($bereits,0,',','.') ?> versendet<?php if ($offen > 0): ?> · <?= number_format($offen,0,',','.') ?> offen<?php endif; ?></span><?php endif; ?></td>
+      <td class="bx-num"><?= number_format($frei, 0, ',', '.') ?></td>
       <td><?php
         $ls = array_filter(explode('|', (string)($r['lieferscheine'] ?? '')));
         if (!$ls) { echo '<span class="muted">–</span>'; }

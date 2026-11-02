@@ -1319,7 +1319,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
       <div class="muted" style="font-size:12px;margin-top:6px"><strong>Herstellen</strong> = selbst aus Rohstoffen · <strong>Einkaufen</strong> = fertige Bulkware beim Lieferanten bestellen · <strong>Reservieren</strong> = aus schon bestellter/vorhandener Bulkware des gleichen Produkts (nur wenn welche unterwegs oder vorhanden ist). Herstellen/Einkaufen legen den Produktionsauftrag an.</div>
       <?php elseif ((string)$a['status'] !== 'storniert'): $nachtragLabel = auftrag_ist_fulfillment($id) ? 'Lager 2 (Fremdlager)' : 'Lager 1 (Warenlager)'; ?>
       <div class="muted" style="margin-bottom:6px">Kein Produktionsauftrag – der Auftrag ist bereits <strong><?= h($stText) ?></strong> (Altauftrag, der nie durch die Produktion lief).</div>
-      <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap" onsubmit="return confirm('Fertige Ware (<?= (int)$a['menge'] ?> Packungen) als Charge nachtragen und in <?= h($nachtragLabel) ?> einbuchen?');">
+      <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap" onsubmit="return confirm('Fertige Ware (<?= number_format((int)$a['menge'], 0, ',', '.') ?> Packungen) als Charge nachtragen und in <?= h($nachtragLabel) ?> einbuchen?');">
         <input type="hidden" name="aktion" value="charge_nachtragen_einlagern">
         <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
           <select name="produktionsart" style="max-width:190px">
