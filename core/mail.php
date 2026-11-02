@@ -42,7 +42,8 @@ function nach_antwort(callable $fn): void {
 // Wirft nie – ein fehlgeschlagener Versand darf keinen Vorgang abbrechen.
 // $signatur_html: null = automatisch die Signatur des eingeloggten TEAM-Mitarbeiters anhängen (HTML-Mail);
 // '' = ohne Signatur (reiner Text, z. B. interne Benachrichtigungen); ein String = genau diese Signatur.
-function mail_senden(string $to, string $betreff, string $text, ?string $signatur_html = null): string {
+// $anhaenge (Nacht 4a): [['name'=>'AN-123.pdf', 'daten'=>binär, 'typ'=>'application/pdf'], …] – als echte Mail-Anhänge.
+function mail_senden(string $to, string $betreff, string $text, ?string $signatur_html = null, array $anhaenge = []): string {
     $to = trim($to);
     if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) return 'Keine gültige Empfängeradresse.';
     // Automatik: Signatur des aktuell eingeloggten Teamkontos (nicht im Kundenportal -> dort null, keine Signatur).
@@ -50,14 +51,14 @@ function mail_senden(string $to, string $betreff, string $text, ?string $signatu
         $signatur_html = '';
         if (function_exists('current_user')) { $cu = current_user(); if ($cu && empty($cu['lieferant_id']) && !empty($cu['id'])) $signatur_html = mail_signatur_fuer((int)$cu['id']); }
     }
-    mail_log($to, $betreff, $text . ($signatur_html !== '' ? "\n[+ Signatur]" : ''));
+    mail_log($to, $betreff, $text . ($signatur_html !== '' ? "\n[+ Signatur]" : '') . ($anhaenge ? "\n[+ Anhang: " . implode(', ', array_column($anhaenge, 'name')) . ']' : ''));
 
     $c = mail_config();
     if (!$c['aktiv']) return 'Der E-Mail-Versand ist in den Einstellungen ausgeschaltet.';
     if ($c['host'] === '') return 'Es ist kein SMTP-Server hinterlegt (Einstellungen → E-Mail).';
     if ($c['from'] === '') return 'Es ist keine Absenderadresse hinterlegt (Einstellungen → E-Mail).';
 
-    $fehler = smtp_senden($to, $betreff, $text, $c, $signatur_html);
+    $fehler = smtp_senden($to, $betreff, $text, $c, $signatur_html, $anhaenge);
     if ($fehler !== '') mail_log($to, 'FEHLER: ' . $betreff, $fehler);
     return $fehler;
 }
@@ -69,7 +70,7 @@ function mail_log(string $to, string $betreff, string $text): void {
 
 // Minimaler SMTP-Versand über einen Socket. Unterstützt STARTTLS (587), implizites TLS (465)
 // und AUTH LOGIN. Rückgabe: '' = gesendet, sonst eine Kurzbeschreibung des Schritts, der scheiterte.
-function smtp_senden(string $to, string $betreff, string $text, array $c, string $signatur_html = ''): string {
+function smtp_senden(string $to, string $betreff, string $text, array $c, string $signatur_html = '', array $anhaenge = []): string {
     $port   = $c['port'] ?: 587;
     $secure = in_array($c['secure'], ['tls', 'ssl', ''], true) ? $c['secure'] : 'tls';
     $from   = $c['from'];
@@ -133,6 +134,19 @@ function smtp_senden(string $to, string $betreff, string $text, array $c, string
         } else {
             $body = "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
                   . chunk_split(base64_encode($text));
+        }
+        // Anhänge (Nacht 4a): Text/HTML-Teil + Dateien in ein multipart/mixed packen.
+        $anh = array_values(array_filter($anhaenge, fn($x) => is_array($x) && isset($x['daten']) && (string)$x['daten'] !== ''));
+        if ($anh) {
+            $mix = 'bxm_' . bin2hex(random_bytes(10));
+            $teile = '--' . $mix . "\r\n" . $body;
+            foreach ($anh as $x) {
+                $nm = preg_replace('/[^A-Za-z0-9._ -]/', '_', (string)($x['name'] ?? 'anhang.pdf'));
+                $teile .= '--' . $mix . "\r\nContent-Type: " . (string)($x['typ'] ?? 'application/octet-stream') . '; name="' . $nm . "\"\r\n"
+                        . "Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"" . $nm . "\"\r\n\r\n"
+                        . chunk_split(base64_encode((string)$x['daten']));
+            }
+            $body = 'Content-Type: multipart/mixed; boundary="' . $mix . "\"\r\n\r\n" . $teile . '--' . $mix . "--\r\n";
         }
         fwrite($fp, $headers . $body . "\r\n.\r\n");
         if ($code($lesen()) !== 250) throw new RuntimeException('Server hat die Nachricht nicht angenommen.');
@@ -620,7 +634,14 @@ function mail_kunde_angebot(int $angebot_id): string {
         'link'           => $link,
         'absender'       => $fa['name'],
     ]);
-    return mail_senden((string)$a['email'], $m['betreff'], $m['text']);
+    // Das Angebot als PDF anhängen (Nacht 4a). Klappt das PDF nicht, geht die Mail trotzdem (mit Portal-Link).
+    $anh = [];
+    try {
+        if (!function_exists('angebot_pdf_bauen') && is_file(__DIR__ . '/pdf_angebot.php')) require_once __DIR__ . '/pdf_angebot.php';
+        $pdf = function_exists('angebot_pdf_bauen') ? angebot_pdf_bauen($angebot_id) : null;
+        if (is_string($pdf) && $pdf !== '') $anh[] = ['name' => 'Angebot ' . (string)$a['nummer'] . '.pdf', 'daten' => $pdf, 'typ' => 'application/pdf'];
+    } catch (Throwable $e) { /* ohne Anhang weiter */ }
+    return mail_senden((string)$a['email'], $m['betreff'], $m['text'], null, $anh);
 }
 
 // Endergebnis einer Dienstleistung liegt vor -> Kunde informieren (Link ins Portal, Reiter Bestellungen).

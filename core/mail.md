@@ -96,3 +96,6 @@ Bei Lieferung (`auftrag_rechnung_bei_lieferung`) geht keine eigene Rechnungsmail
 ## Mailflut gebündelt, Preisangebote an Zuständige (Paket Mails)
 - `mail_team_bestellung($id, $was, $mail=true)`: Lieferanten-Updates einer Bestellung gehen nur noch bei **„bestätigt"** und Station **„versendet"** als Mail raus; Stationen dazwischen und „Versand-Pakete gemeldet" nur als Dashboard-Benachrichtigung. Vorher 6 Mails je Bestellung und Empfänger (48 Mails für eine Lieferung mit 4 Bestellungen).
 - `mail_team_preisanfrage()`: beantwortete Preisanfrage geht an die Person, die angefragt hat (`lieferant_anfrage.angelegt_von_id`, neu); ohne Ersteller (Altanfragen) an die Benutzer mit Rolle Einkauf; nur wenn es niemanden gibt, an das Team (Admins + CC). Neuer Helfer `mail_team_an($benutzer_ids, $betreff, $text)`.
+
+## Anhänge + Angebots-PDF (Nacht 4a)
+`mail_senden()` / `smtp_senden()` haben einen optionalen Parameter `$anhaenge` (Liste mit name/daten/typ), der als multipart/mixed verschickt wird. `mail_kunde_angebot()` hängt das Angebot als PDF an (`angebot_pdf_bauen()`, Dateiname „Angebot AN-….pdf"). Schlägt das PDF fehl, geht die Mail trotzdem raus, mit Portal-Link und ohne Anhang. Wareneingang → Lieferant bekommt bewusst **keine** Mail.
