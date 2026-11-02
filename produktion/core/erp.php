@@ -261,10 +261,12 @@ function erp_weg_stationen(int $pa_id, array $f): array {
     $steps = $basis === 'zukauf'
         ? ['Fertigware bereitstellen']
         : ['Rohstoffe bereitstellen', 'Mischen', erp_weg_herstellung($pa_id), 'Zwischenkontrolle'];
-    if (!empty($f['abfuellen']))    $steps[] = 'Verpacken';
-    if (!empty($f['etikettieren'])) $steps[] = 'Etikettieren';
-    if (!empty($f['beipack']))      $steps[] = 'Beipackzettel beilegen';
-    if (!empty($f['karton']))       $steps[] = 'Umkarton';
+    // Zukauf „fertig" (Nacht 2a): die Ware ist schon abgefüllt/etikettiert -> keine Ausbau-Schritte.
+    $fertig = $basis === 'zukauf' && erp_zukauf_fertig($pa_id);
+    if (!$fertig && !empty($f['abfuellen']))    $steps[] = 'Verpacken';
+    if (!$fertig && !empty($f['etikettieren'])) $steps[] = 'Etikettieren';
+    if (!$fertig && !empty($f['beipack']))      $steps[] = 'Beipackzettel beilegen';
+    if (!$fertig && !empty($f['karton']))       $steps[] = 'Umkarton';
     if ($basis !== 'zukauf')        $steps[] = 'Rückstellmuster ziehen';
     return array_merge($steps, ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']);
 }

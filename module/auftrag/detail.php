@@ -43,6 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id); exit; }
     $art = ($_POST['zukauf_art'] ?? '') === 'fertig' ? 'fertig' : 'bulk';
     q("UPDATE produktionsauftrag SET zukauf_art=? WHERE auftrag_id=? AND status<>'storniert'", [$art, $id]);
+    // Nacht 2a: fertige Ware -> kurzer Weg (Bereitstellen -> QS -> Freigaben), Bulk -> mit Abfüllen/Etikettieren.
+    foreach (all("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status NOT IN ('storniert','erledigt')", [$id]) as $zp) produktion_zukauf_weg_anpassen((int)$zp['id']);
     if (function_exists('bedarf_bump')) bedarf_bump();   // Material-/Bedarf-Cache neu rechnen (Verpackung zählt/zählt nicht)
     header('Location: ?p=auftrag&id=' . $id . '&zkartok=1'); exit;
 }

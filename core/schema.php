@@ -7598,7 +7598,7 @@ function produktion_ist_zukauf(int $auftrag_id): bool {
 // Produktionsschritte neu erzeugen (Weg umstellen) – nur solange KEIN Schritt erledigt ist.
 function produktion_schritte_regenerieren(int $pa_id, bool $zukauf): bool {
     if ((int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]) > 0) return false;
-    $pa = one("SELECT produkt_id, rezeptur_id, kunde_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = one("SELECT produkt_id, rezeptur_id, kunde_id, zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return false;
     $istBulk = pa_ist_bulk($pa);
     if ($istBulk) {
@@ -7608,12 +7608,26 @@ function produktion_schritte_regenerieren(int $pa_id, bool $zukauf): bool {
     }
     q("DELETE FROM produktion_schritt WHERE pa_id=?", [$pa_id]);
     $wege = $istBulk ? null : produktion_wege_aufloesen((int)$pa['produkt_id'], (int)($pa['kunde_id'] ?? 0));
+    // Zukauf „fertig" (Nacht 2a): kurzer Weg Bereitstellen -> QS -> Freigaben, ohne Verpacken/Etikettieren/Beipack/Umkarton.
+    if ($zukauf && !$istBulk && (string)($pa['zukauf_art'] ?? '') === 'fertig') $wege = ['abfuellen'=>false, 'etikettieren'=>false, 'beipack'=>false, 'karton'=>false];
     foreach (produktionsschritte_fuer($form, $zukauf && !$istBulk, $istBulk, $wege) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$pa_id, $station, $i]);
     q("UPDATE produktionsauftrag SET status='offen' WHERE id=?", [$pa_id]);
     return true;
 }
 
+// Zukauf-Art geändert (Nacht 2a): Schritte an den Weg anpassen. Noch nichts erledigt -> neu erzeugen (fertig = kurzer Weg).
+// Schon etwas erledigt und jetzt „fertig" -> nur die offenen Ausbau-Schritte (Verpacken/Etikettieren/Beipack/Umkarton) entfernen.
+function produktion_zukauf_weg_anpassen(int $pa_id): void {
+    $pa = one("SELECT produktionsart, zukauf_art, status FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa || (string)$pa['produktionsart'] !== 'fremd') return;
+    if (produktion_schritte_regenerieren($pa_id, true)) {   // setzt status='offen' -> Status (z. B. 'vorbereitung' = Admin-Freigabe) behalten
+        q("UPDATE produktionsauftrag SET status=? WHERE id=?", [(string)$pa['status'], $pa_id]);
+        return;
+    }
+    if ((string)$pa['zukauf_art'] === 'fertig')
+        q("DELETE FROM produktion_schritt WHERE pa_id=? AND erledigt=0 AND station IN ('Verpacken','Etikettieren','Beipackzettel beilegen','Umkarton')", [$pa_id]);
+}
 // Lagerproduktion: einen Produktionsauftrag OHNE Kunde/Auftrag anlegen (Vorrats-/Lagerproduktion).
 // Gibt die neue pa-id zurück (0 bei ungültigem Produkt). Menge = Packungen; Material skaliert über
 // die Einheiten je Packung des Produkts – genau wie bei einem Kundenauftrag.

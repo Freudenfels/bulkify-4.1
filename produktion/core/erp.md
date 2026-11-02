@@ -82,3 +82,6 @@ Eigene Fertigware (Einlagern aus der Produktion: `produktion_teilmenge_einbuchen
 **Restbedarf, Pulver nach Gewicht (St-08):** `erp_materialbedarf()` ist jetzt ein exakter Spiegel von `produktion_materialbedarf()` (Pulver/Granulat nach Füllgewicht/Massenanteil, als Bulk reservierter Teil abgezogen, `entnommen`/`offen`, Rest = Kleineres aus Restpackungen und benötigt−verbraucht). `erp_pa_fehlbedarf()` und `erp_schritt_material()` rechnen mit dem Rest (je Zeile „Menge" = noch abzubuchen, `menge_gesamt` = Soll), `erp_mischer_plan()` mischt nur den Rest (Pulver nach Füllgewicht). Hilfsfunktionen `erp_rest_faktor()`, `erp_auftrag_bulk_reserviert()`.
 
 `erp_teilmenge_einbuchen()` bindet die Fertigcharge zusätzlich an `auftrag_id` (S-09, Spiegel von `produktion_teilmenge_einbuchen`).
+
+## Zukauf „fertig" – kurzer Weg (Nacht 2a)
+Bei Zukauf-Art „fertig" hat der Produktionsauftrag nur noch **Fertigware bereitstellen → Qualitätsprüfung → Produktions-Freigabe → Versand-Freigabe** (kein Verpacken/Etikettieren/Beipack/Umkarton, die Ware ist fertig). `produktion_schritte_regenerieren()` beachtet `zukauf_art`, `produktion_zukauf_weg_anpassen()` passt beim Umstellen der Zukauf-Art die Schritte an (noch nichts erledigt: neu erzeugen, Status bleibt; sonst nur offene Ausbau-Schritte entfernen). Prod-App: `erp_weg_stationen()` ebenso.
