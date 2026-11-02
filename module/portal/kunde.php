@@ -2177,6 +2177,7 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
                 'einheit'      => 'Pkg.',
                 'preis_cent'   => $preisCent,
                 'ust_satz'     => $ustSatz,
+                'mwst_satz'    => $ustSatz,   // build_beleg_pdf liest mwst_satz (S-04)
             ]];
         }
     }

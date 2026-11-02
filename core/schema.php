@@ -5732,7 +5732,7 @@ function beleg_positionen_aus_auftrag(array $auf, float $ustSatz): array {
             $out[] = ['artikelnr'=>(string)($r['artikelnr'] ?? ''),
                       'bezeichnung'=>$bez, 'beschreibung'=>(string)($r['beschreibung'] ?? ''),
                       'menge'=>$menge, 'einheit'=>($r['einheit'] ?: 'Stk.'),
-                      'preis_cent'=>(int)$r['preis_cent'], 'ust_satz'=>$ustSatz];
+                      'preis_cent'=>(int)$r['preis_cent'], 'ust_satz'=>$ustSatz, 'mwst_satz'=>$ustSatz];   // build_beleg_pdf liest mwst_satz (S-04)
         }
         return $out;
     }
