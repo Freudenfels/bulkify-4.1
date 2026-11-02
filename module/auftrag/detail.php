@@ -47,6 +47,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&zkartok=1'); exit;
 }
 
+// Kundenspezifischen Produktnamen direkt am Auftrag setzen (je Produkt+Kunde dieses Auftrags).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'kundenname_setzen') {
+    $au = one("SELECT produkt_id, kunde_id FROM auftrag WHERE id=?", [$id]);
+    if ($au && (int)($au['produkt_id'] ?? 0) > 0 && (int)($au['kunde_id'] ?? 0) > 0)
+        produkt_kundenname_setzen((int)$au['produkt_id'], (int)$au['kunde_id'], trim((string)($_POST['kn_name'] ?? '')));
+    header('Location: ?p=auftrag&id=' . $id . '&knok=1'); exit;
+}
+
 // Auftrag in ein Kontingent (Rahmen/Abruf) umwandeln – nur Admin.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'zu_kontingent') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
@@ -450,10 +458,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Keine Quelle gewählt.')); exit;
 }
 
-$a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, ang.nummer AS angebot_nr
+$a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, pkn.name AS produkt_kundenname, ang.nummer AS angebot_nr
                 FROM auftrag a
                 LEFT JOIN kunden k ON k.id=a.kunde_id
                 LEFT JOIN produkt p ON p.id=a.produkt_id
+                LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=a.kunde_id
                 LEFT JOIN angebot ang ON ang.id=a.angebot_id
                 WHERE a.id=?", [$id]) : null;
 if (!$a) { render_header('auftraege','Auftrag'); bx_head('Auftrag nicht gefunden','', bx_btn('Zurück','?p=auftraege','ghost')); render_footer(); exit; }
@@ -874,7 +883,18 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   <h2>Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
-    <div><div class="k muted">Produkt</div><div><?php if (!empty($a['produkt_id']) && $produktName): ?><a href="?p=produkt&id=<?= (int)$a['produkt_id'] ?>"><?= h($produktName) ?></a><?php elseif ($produktName): ?><?= h($produktName) ?> <span class="muted" style="font-size:12px">(aus v3)</span><?php else: ?>–<?php endif; ?><?php if ($artKey !== 'none'): ?> <span title="<?= h($artHint) ?>"><?= bx_badge($artLabel, $artStil) ?></span><?php endif; ?></div></div>
+    <div><div class="k muted">Produkt <span class="muted" style="font-size:11px">(intern)</span></div><div><?php if (!empty($a['produkt_id']) && $produktName): ?><a href="?p=produkt&id=<?= (int)$a['produkt_id'] ?>"><?= h($produktName) ?></a><?php elseif ($produktName): ?><?= h($produktName) ?> <span class="muted" style="font-size:12px">(aus v3)</span><?php else: ?>–<?php endif; ?><?php if ($artKey !== 'none'): ?> <span title="<?= h($artHint) ?>"><?= bx_badge($artLabel, $artStil) ?></span><?php endif; ?></div></div>
+    <?php // Kundenspezifischer Name: so sieht der Kunde das Produkt (Portal/Belege). Intern beide Namen sichtbar.
+          if (!empty($a['produkt_id']) && !empty($a['kunde_id'])): $effKn = trim((string)($a['produkt_kundenname'] ?? '')); ?>
+    <div><div class="k muted">Name beim Kunden <?= bx_hint('So heißt dieses Produkt bei DIESEM Kunden (Portal, Angebot, AB, Rechnung, Lieferschein, Etikett, PIB). Leer = Standard-/interner Name. Pflege auch am Produkt möglich.') ?></div>
+      <?php if (isset($_GET['knok'])): ?><span class="muted" style="font-size:11px;color:var(--gruen)">gespeichert</span><?php endif; ?>
+      <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:2px 0 0">
+        <input type="hidden" name="aktion" value="kundenname_setzen">
+        <input type="text" name="kn_name" value="<?= h($effKn) ?>" placeholder="<?= h($produktName ?: 'wie intern') ?>" style="min-width:180px">
+        <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+      </form>
+    </div>
+    <?php endif; ?>
     <div><div class="k muted">Rezeptur</div><div>
       <?php if ($rezeptur): ?>
         <a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?>

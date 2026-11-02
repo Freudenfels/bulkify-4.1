@@ -76,6 +76,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kp_de
     q("DELETE FROM produkt_kundenpreis WHERE id=? AND produkt_id=?", [(int)($_POST['kp_id'] ?? 0), (int)$id]);
     header('Location: ?p=produkt&id=' . $id . '#kundenpreise'); exit;
 }
+// Kundenspezifischer Produktname setzen/ändern bzw. entfernen (je Produkt+Kunde).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kn_setzen' && is_numeric($id)) {
+    $knk = (int)($_POST['kn_kunde'] ?? 0);
+    $knn = trim((string)($_POST['kn_name'] ?? ''));
+    if ($knk > 0) {
+        produkt_kundenname_setzen((int)$id, $knk, $knn);
+        log_aktivitaet('produkt', (int)$id, 'team', $knn !== '' ? 'Kundenspezifischer Name gesetzt für Kunde #' . $knk . ': „' . $knn . '".' : 'Kundenspezifischer Name entfernt für Kunde #' . $knk . '.', 'notiz');
+    }
+    header('Location: ?p=produkt&id=' . $id . '&knok=1#kundennamen'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kn_del' && is_numeric($id)) {
+    produkt_kundenname_setzen((int)$id, (int)($_POST['kn_kunde'] ?? 0), '');
+    header('Location: ?p=produkt&id=' . $id . '#kundennamen'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && is_numeric($id)) {
     dokument_freigabe_toggle('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=produkt&id=' . $id . '#dok'); exit;
@@ -302,7 +316,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   <script>(function(){var rs=document.querySelectorAll('input[name=extern]'),hb=document.getElementById('handelswareBox');function upd(){var ext=document.querySelector('input[name=extern]:checked');if(hb)hb.style.display=(ext&&ext.value==='1')?'none':'';}rs.forEach(function(r){r.addEventListener('change',upd);});upd();})();</script>
   <div class="bx-panel"><div class="bx-grid">
     <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
-    <div class="bx-field"><label>Name für den Kunden <?= bx_hint('so heißt es beim Kunden im Portal / auf Belegen, z. B. „Super Zink". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
+    <div class="bx-field"><label>Standard-Name für den Kunden <?= bx_hint('Fallback-Name beim Kunden (Portal/Belege), wenn für einen Kunden KEIN eigener Name hinterlegt ist. Kundenspezifische Namen pflegst du unten im Block „Kundenspezifische Namen". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
     <div class="bx-field" style="grid-column:1/-1"><label>Synonyme / frühere Namen <?= bx_hint('Alternative oder alte Namen (z. B. wenn der Kunde umbenennt). Intern bekannt und überall mitsuchbar; laufende/abgeschlossene Aufträge behalten ihren Namen. Beim Umbenennen wird der alte Name automatisch ergänzt. Eine Zeile oder Komma je Name.') ?></label><textarea name="synonyme" rows="2" placeholder="z. B. alter Produktname"><?= $v('synonyme') ?></textarea></div>
     <div class="bx-field"><label>Kunde <?= bx_hint('nur bei exklusiven Produkten der Besitzer. Ohne Häkchen „exklusiv" bleibt das Produkt ein Katalogprodukt und der Kunde wird beim Speichern entfernt.') ?></label>
       <select name="kunde_id">
@@ -729,6 +743,33 @@ function recalc(){
 recalc();
 </script>
 <?php if (!$neu): ?>
+<?php // Kundenspezifische Produktnamen: dasselbe Produkt heißt bei jedem Kunden anders. Interner Name bleibt.
+      $kundennamen = $neu ? [] : produkt_kundennamen((int)$id); ?>
+<div class="bx-panel js-mfg" id="kundennamen" data-ppanel="preise">
+  <h2 style="margin-top:0">Kundenspezifische Namen <?= bx_hint('Dasselbe Produkt heißt bei verschiedenen Kunden unterschiedlich (z. B. „MagnaVeda" / „Magnesium-Komplex"). Der Kunde sieht ÜBERALL seinen Namen (Angebot, AB, Rechnung, Lieferschein, Etikett, PIB, Portal). Der interne Produktname bleibt unverändert. Kein Eintrag = es gilt der „Standard-Name für den Kunden" bzw. der interne Name.') ?></h2>
+  <?php if (isset($_GET['knok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Kundenname gespeichert.</div><?php endif; ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Kunde</th><th>Name beim Kunden</th><th></th></tr></thead>
+    <tbody>
+      <?php if (!$kundennamen): ?><tr><td colspan="3" class="muted">Noch keine kundenspezifischen Namen. Unten einen Kunden wählen und den gewünschten Namen eintragen.</td></tr><?php endif; ?>
+      <?php foreach ($kundennamen as $kn): ?>
+        <tr>
+          <td><?= h($kn['firma']) ?></td>
+          <td><strong><?= h($kn['name']) ?></strong></td>
+          <td style="text-align:right"><form method="post" style="display:inline" onsubmit="return confirm('Kundennamen entfernen? Danach gilt wieder der Standard-/interne Name.');"><input type="hidden" name="aktion" value="kn_del"><input type="hidden" name="kn_kunde" value="<?= (int)$kn['kunde_id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <form method="post" class="bx-row" style="margin-top:12px;align-items:flex-end;gap:10px;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="kn_setzen">
+    <div class="bx-field" style="margin:0;min-width:240px"><label>Kunde</label>
+      <select name="kn_kunde" class="rscombo" required><option value="">– wählen –</option><?php foreach ($kunden as $kc): ?><option value="<?= (int)$kc['id'] ?>"><?= h($kc['firma']) ?></option><?php endforeach; ?></select></div>
+    <div class="bx-field" style="margin:0;min-width:240px;flex:1"><label>Name beim Kunden</label><input type="text" name="kn_name" placeholder="z. B. MagnaVeda"></div>
+    <button class="btn btn-primary btn-sm" type="submit">Name speichern</button>
+  </form>
+  <p class="muted" style="font-size:12px;margin-top:8px">Leeres Namensfeld bei vorhandenem Kunden = Eintrag entfernen (Fallback greift). Direkt am Auftrag/Angebot lässt sich der Name ebenfalls ändern.</p>
+</div>
 <div class="bx-panel js-mfg" id="kundenpreise" data-ppanel="preise">
   <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Vereinbarter VK je Packung (ohne Verpackung) pro Kunde. Sobald hier ein Preis steht, sieht DIESER Kunde das Produkt in seinem Portal mit „ab xy €" statt „Preis auf Anfrage". Mehrere Zeilen je Kunde möglich – der günstigste Preis ist der „ab"-Preis.') ?></h2>
   <?php if (isset($_GET['kpok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Kundenpreis gespeichert.</div><?php endif; ?>

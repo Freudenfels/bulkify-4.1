@@ -77,10 +77,12 @@ function pib_table(MiniPDF $p, float $y, array $colDefs, array $rows): float {
 }
 
 // Auto-PIB als PDF-Bytes aus den vorhandenen Produktdaten. Null, wenn das Produkt fehlt.
-function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null, ?int $proTagOverride = null): ?string {
+function pib_pdf_bauen(int $produkt_id, ?int $einheitenOverride = null, ?int $proTagOverride = null, ?int $kunde_id = null): ?string {
     $prod = one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige, r.darreichungsform, r.id AS rez_id
                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]);
     if (!$prod) return null;
+    // Kundenspezifischer Name, wenn ein Kunde bekannt ist (PIB ist ein Kundendokument).
+    if ($kunde_id && function_exists('produkt_kundenname')) { $kn = produkt_kundenname($produkt_id, (int)$kunde_id); if ($kn !== '') $prod['anzeige'] = $kn; }
     return pib_pdf_render($prod, $produkt_id, $einheitenOverride, $proTagOverride);
 }
 

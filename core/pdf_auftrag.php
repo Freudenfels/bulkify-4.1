@@ -5,8 +5,9 @@ require_once __DIR__ . '/pdf_beleg.php';
 require_once __DIR__ . '/schema.php';
 
 function auftrag_pdf_bauen(int $auftrag_id): ?string {
-    $a = one("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name, r.darreichungsform
+    $a = one("SELECT a.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt_name, r.darreichungsform
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                     LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=a.kunde_id
               WHERE a.id=?", [$auftrag_id]);
     if (!$a) return null;
     $k = $a['kunde_id'] ? one("SELECT * FROM kunden WHERE id=?", [(int)$a['kunde_id']]) : null;

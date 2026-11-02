@@ -43,6 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 q("UPDATE angebot SET kunde_id=?,produkt_id=?,status=?,gueltig_bis=?,notiz=?,marge_override=?,produktionszeit_wochen=?,jahresvertrag=?,jahresmenge=?,jahres_vk=?,jahres_laufzeit_monate=? WHERE id=?",
                   [$kunde_id, $produkt_id, $status, $gueltig, $f('notiz'), $marge, $pz, $jv, $jm, $jvk, $jlz, (int)$id]);
             }
+            // Kundenspezifischer Produktname (je Produkt+Kunde) – nur setzen, wenn ausgefüllt (leer löscht NICHT,
+            // um ihn nicht versehentlich beim Kopf-Speichern zu verlieren; Entfernen geht am Produkt).
+            if ($produkt_id && $kunde_id && $f('kn_name') !== '') produkt_kundenname_setzen((int)$produkt_id, (int)$kunde_id, $f('kn_name'));
             header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
         }
     } elseif ($aktion === 'ki_pdf' && !$neu) {
@@ -589,8 +592,13 @@ if (!$neu && !$editMode) {
           // damit dieser Bezug beim Speichern nicht verlorengeht, reisen wir ihn unsichtbar mit. ?>
     <input type="hidden" name="produkt_id" value="<?= $pid ?: '' ?>">
     <?php if ($pid): ?>
-    <div class="bx-field"><label>Produkt <?= bx_hint('kommt aus der Produktanfrage – der Kunde wählt im Portal aus der Preismatrix dieses Produkts.') ?></label>
-      <div style="padding:8px 0"><?= h((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$pid]) ?: '–') ?></div>
+    <div class="bx-field"><label>Produkt <span class="muted" style="font-size:11px">(intern)</span> <?= bx_hint('kommt aus der Produktanfrage – der Kunde wählt im Portal aus der Preismatrix dieses Produkts.') ?></label>
+      <div style="padding:8px 0"><?= h((string) scalar("SELECT name FROM produkt WHERE id=?", [$pid]) ?: '–') ?></div>
+    </div>
+    <?php // Kundenspezifischer Name (so sieht der Kunde das Produkt). Teil der Kopf-Speicherung (kein Nested Form).
+          $knEff = ($kid && function_exists('scalar')) ? (string) scalar("SELECT name FROM produkt_kunde_name WHERE produkt_id=? AND kunde_id=?", [$pid, $kid]) : ''; ?>
+    <div class="bx-field"><label>Name beim Kunden <?= bx_hint('So heißt das Produkt bei DIESEM Kunden (Portal/Belege). Leer lassen = Standard-/interner Name. Wird mit „Kopfdaten speichern" übernommen; Entfernen am Produkt.') ?></label>
+      <input type="text" name="kn_name" value="<?= h($knEff) ?>" placeholder="wie intern" <?= $kid ? '' : 'disabled title="erst einen Kunden wählen"' ?>>
     </div>
     <?php endif; ?>
     <?php // Status ist eine ANZEIGE – geändert wird er nur über „An Kunden senden" / „Zurückziehen"

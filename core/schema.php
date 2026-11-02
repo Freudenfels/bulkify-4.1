@@ -2000,6 +2000,36 @@ function init_schema(): void {
         KEY idx_produkt (produkt_id), KEY idx_kunde (kunde_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // produkt_kunde_name: KUNDENSPEZIFISCHER Produktname je (Produkt + Kunde). Interner Produktname bleibt
+    // unverändert; der Kunde sieht überall diesen Namen (Angebot/AB/Rechnung/Lieferschein/Etikett/PIB/Portal).
+    // Fehlt ein Eintrag -> Fallback auf produkt.kundenname (Alt-Feld) -> produkt.name. Resolver: produkt_kundenname().
+    $pdo->exec("CREATE TABLE IF NOT EXISTS produkt_kunde_name (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        produkt_id INT NOT NULL,
+        kunde_id INT NOT NULL,
+        name VARCHAR(190) NOT NULL,
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_pk (produkt_id, kunde_id), KEY idx_kunde (kunde_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    // Einmalige Migration: das bisherige produkt.kundenname als Startwert für die BISHERIGEN Kunden des Produkts
+    // übernehmen (Besitzer + wer es bestellt hat + wer einen Kundenpreis hat). Nichts geht verloren; das Alt-Feld
+    // bleibt als Fallback bestehen. Idempotent über INSERT IGNORE (UNIQUE) + Meta-Flag.
+    if (function_exists('meta_get') && (string) meta_get('migr_produkt_kundenname', '') !== '1') {
+        try {
+            foreach (all("SELECT id, kunde_id, kundenname FROM produkt WHERE kundenname IS NOT NULL AND kundenname<>''") as $pp) {
+                $pid = (int)$pp['id']; $nm = mb_substr(trim((string)$pp['kundenname']), 0, 190);
+                if ($nm === '') continue;
+                $kids = [];
+                if ((int)($pp['kunde_id'] ?? 0) > 0) $kids[(int)$pp['kunde_id']] = true;
+                foreach (all("SELECT DISTINCT kunde_id FROM auftrag WHERE produkt_id=? AND kunde_id IS NOT NULL", [$pid]) as $r) $kids[(int)$r['kunde_id']] = true;
+                foreach (all("SELECT DISTINCT kunde_id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id IS NOT NULL", [$pid]) as $r) $kids[(int)$r['kunde_id']] = true;
+                foreach (array_keys($kids) as $kid) if ($kid > 0)
+                    q("INSERT IGNORE INTO produkt_kunde_name (produkt_id,kunde_id,name) VALUES (?,?,?)", [$pid, $kid, $nm]);
+            }
+            if (function_exists('meta_set')) meta_set('migr_produkt_kundenname', '1');
+        } catch (\Throwable $e) { /* best-effort */ }
+    }
+
     // rezeptur_lief_angebot: Angebote von Lieferanten für die FREMDFERTIGUNG einer Rezeptur
     // (Preis je Einheit, z. B. je Kapsel). Aus v3 übernommen (lieferant_angebot). Anzeige an der Rezeptur.
     $pdo->exec("CREATE TABLE IF NOT EXISTS rezeptur_lief_angebot (
@@ -5703,6 +5733,40 @@ function angebot_hat_positionen(int $angebot_id): bool {
     // Nur echte Positionen zählen – reine Null-Zeilen (v3-Import) gelten nicht als „manuell überschrieben".
     return (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=? AND (menge>0 OR preis_cent>0)", [$angebot_id]) > 0;
 }
+// ===========================================================================================
+// Kundenspezifischer Produktname. Der Kunde sieht ÜBERALL seinen eigenen Namen (je Produkt+Kunde),
+// intern bleibt produkt.name. Kein Eintrag -> Fallback produkt.kundenname (Alt) -> produkt.name.
+// ===========================================================================================
+function produkt_kundenname(int $produkt_id, ?int $kunde_id = null): string {
+    if ($produkt_id <= 0) return '';
+    if ($kunde_id && (int)$kunde_id > 0 && table_exists('produkt_kunde_name')) {
+        $n = scalar("SELECT name FROM produkt_kunde_name WHERE produkt_id=? AND kunde_id=? AND name<>'' LIMIT 1", [$produkt_id, (int)$kunde_id]);
+        if ($n !== null && trim((string)$n) !== '') return (string)$n;
+    }
+    $p = one("SELECT name, kundenname FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$p) return '';
+    $lg = trim((string)($p['kundenname'] ?? ''));
+    return $lg !== '' ? $lg : (string)($p['name'] ?? '');
+}
+// Setzen/ändern (leerer Name = Eintrag löschen -> Fallback greift wieder).
+function produkt_kundenname_setzen(int $produkt_id, int $kunde_id, string $name): void {
+    if ($produkt_id <= 0 || $kunde_id <= 0) return;
+    $name = trim($name);
+    if ($name === '') { q("DELETE FROM produkt_kunde_name WHERE produkt_id=? AND kunde_id=?", [$produkt_id, $kunde_id]); return; }
+    $name = mb_substr($name, 0, 190);
+    if (scalar("SELECT id FROM produkt_kunde_name WHERE produkt_id=? AND kunde_id=?", [$produkt_id, $kunde_id]))
+        q("UPDATE produkt_kunde_name SET name=? WHERE produkt_id=? AND kunde_id=?", [$name, $produkt_id, $kunde_id]);
+    else
+        q("INSERT INTO produkt_kunde_name (produkt_id,kunde_id,name) VALUES (?,?,?)", [$produkt_id, $kunde_id, $name]);
+}
+// Alle hinterlegten kundenspezifischen Namen eines Produkts (für die Pflege-Liste am Produkt).
+function produkt_kundennamen(int $produkt_id): array {
+    if ($produkt_id <= 0 || !table_exists('produkt_kunde_name')) return [];
+    return all("SELECT pkn.kunde_id, pkn.name, COALESCE(NULLIF(k.firma,''), CONCAT('Kunde #', pkn.kunde_id)) AS firma
+                FROM produkt_kunde_name pkn LEFT JOIN kunden k ON k.id=pkn.kunde_id
+                WHERE pkn.produkt_id=? ORDER BY firma", [$produkt_id]);
+}
+
 // VK je Packung = EK × (1 + Marge je Typ), Boden = Mindestmarge. Ohne Kundenrabatt (der kommt beim Angebot).
 function produkt_variante_vk(int $produkt_id, float $ek): float {
     $form = (string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]) ?: 'kapsel';

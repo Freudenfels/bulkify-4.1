@@ -1008,9 +1008,10 @@ if (!function_exists('pt_naehr')) {
     }
 }
 // Angebote (offen zum Bestätigen + bereits bestätigte) – mit Produkt- & Verpackungsinfos wie in v3
-$angebote = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name, p.rezeptur_id, p.einheiten_pro_packung,
+$angebote = all("SELECT a.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt_name, p.rezeptur_id, p.einheiten_pro_packung,
                         p.verpackung_id, p.verschluss_id, p.etikett_id, r.darreichungsform
                  FROM angebot a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                        LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
                  WHERE a.kunde_id=? AND a.kunde_ausgeblendet=0
                    AND a.status <> 'offen'
                    AND a.preise_kunde = 1
@@ -1189,7 +1190,8 @@ $ustP = (meta_get('kleinunternehmer','0') === '1' || $land !== 'DE') ? 0.0 : (fl
 // bei fehlender Verknüpfung (NULL) zu NULL statt FALSE, `NOT(TRUE AND NULL)` ergibt NULL -> die ganze Zeile
 // fällt aus dem Ergebnis (echter DL-Auftrag ohne Service-Verknüpfung wäre im Portal unsichtbar). Ausschluss
 // gilt nur für reine Abrechnungen: Service „ohne Fortschritt" bzw. Fulfillment/Lagerung.
-$auftraege = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+$auftraege = all("SELECT a.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt_name FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+                  LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
                   WHERE a.kunde_id=? AND (a.status <> 'storniert' OR a.kontingent_id IS NOT NULL)
                     AND NOT (a.kategorie='dienstleistung' AND a.dienstleistung_id IS NOT NULL AND a.dienstleistung_id IN
                              (SELECT id FROM dienstleistung WHERE ohne_fortschritt=1 OR baustein='fulfillment' OR kategorie='lagerung'))
@@ -1211,10 +1213,11 @@ if ($auftraege) {
                   WHERE pa.auftrag_id IN ($inA) AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id", $aids) as $cr)
         $auftragChargen[(int)$cr['auftrag_id']][] = ['nr' => (string)$cr['charge_nr'], 'mhd' => $cr['mhd']];
 }
-$rechnungen = all("SELECT b.*, COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt_name
+$rechnungen = all("SELECT b.*, COALESCE(NULLIF(pkn.name,''), NULLIF(a.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt_name
                    FROM beleg b
                    LEFT JOIN auftrag a ON a.id=b.auftrag_id
                    LEFT JOIN produkt p ON p.id=a.produkt_id
+                   LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
                    WHERE b.kunde_id=? AND b.typ='rechnung' AND b.kunde_sichtbar=1 AND b.status<>'storniert'
                    ORDER BY b.angelegt DESC", [$kid]);
 // Produkt je Rechnung: aus dem Auftrag; bei freien Rechnungen (ohne Auftrag) Fallback auf die erste Position.
@@ -1480,10 +1483,11 @@ $q = trim((string)($_GET['q'] ?? ''));
 $qLike = '%' . $q . '%';
 
 // Katalog-Produkte (nicht exklusiv oder exklusiv für diesen Kunden), aktiv
-$katalog = $k['portal_produkte'] ? all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, p.nummer, p.rezeptur_id, p.kunde_id, r.darreichungsform
+$katalog = $k['portal_produkte'] ? all("SELECT p.id, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS name, p.nummer, p.rezeptur_id, p.kunde_id, r.darreichungsform
     FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+           LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
     WHERE p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?)
-      AND (? = '' OR COALESCE(NULLIF(p.kundenname,''), p.name) LIKE ? OR r.name LIKE ? OR p.synonyme LIKE ? OR r.synonyme LIKE ?
+      AND (? = '' OR COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) LIKE ? OR r.name LIKE ? OR p.synonyme LIKE ? OR r.synonyme LIKE ?
            OR EXISTS (SELECT 1 FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                       WHERE z.rezeptur_id=r.id AND (z.bezeichnung LIKE ? OR i.name LIKE ?)))
     ORDER BY name", [$kid, $q, $qLike, $qLike, $qLike, $qLike, $qLike, $qLike]) : [];
@@ -1499,8 +1503,9 @@ if (!empty($k['portal_produkte'])) {
 $meineProdukte = [];
 if ($meineProduktIds) {
     $phMp = implode(',', array_fill(0, count($meineProduktIds), '?'));
-    $meineProdukte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, r.darreichungsform
+    $meineProdukte = all("SELECT p.id, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS name, r.darreichungsform
         FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+               LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
         WHERE p.id IN ($phMp) AND COALESCE(p.status,'aktiv')<>'archiviert' ORDER BY name", array_keys($meineProduktIds));
 }
 $primVerp  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
@@ -1684,8 +1689,9 @@ $pid = (int)($_GET['pid'] ?? 0);
 // Sichtbar ist ein Produkt, wenn der Kunde es (a) im Katalog sehen darf – Produkt-Recht + aktiv + nicht fremd-exklusiv –
 // ODER (b) es bereits BESITZT. Besitz = genau die Quellen der „Eigene"-Liste (produkt.kunde_id, produkt_kundenpreis,
 // auftrag). Sonst tauchen eigene Produkte in der Liste auf, lassen sich aber nicht öffnen („Produkt nicht gefunden").
-$prodDetail = $pid ? one("SELECT p.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS anzeige_name, r.darreichungsform, r.name AS rez_name
+$prodDetail = $pid ? one("SELECT p.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS anzeige_name, r.darreichungsform, r.name AS rez_name
     FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+           LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
     WHERE p.id=? AND (
            (? = 1 AND p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?))
         OR p.kunde_id=?
@@ -2917,9 +2923,10 @@ portal_head('Kundenportal · ' . $k['firma']);
     if ($fehlIds) {
         $ph = implode(',', array_fill(0, count($fehlIds), '?'));
         $args = array_merge($fehlIds, [$q, $qLike, $qLike, $qLike, $qLike]);
-        foreach (all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''),p.name) AS name, p.nummer, p.rezeptur_id, p.kunde_id, r.darreichungsform
+        foreach (all("SELECT p.id, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''),p.name) AS name, p.nummer, p.rezeptur_id, p.kunde_id, r.darreichungsform
                       FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
-                      WHERE p.id IN ($ph) AND (?='' OR COALESCE(NULLIF(p.kundenname,''),p.name) LIKE ? OR r.name LIKE ? OR p.synonyme LIKE ? OR r.synonyme LIKE ?) ORDER BY name", $args) as $p)
+                             LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
+                      WHERE p.id IN ($ph) AND (?='' OR COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''),p.name) LIKE ? OR r.name LIKE ? OR p.synonyme LIKE ? OR r.synonyme LIKE ?) ORDER BY name", $args) as $p)
             $eigeneProd[] = $p;
         usort($eigeneProd, fn($a,$b) => strcasecmp((string)$a['name'], (string)$b['name']));
     }
@@ -3176,7 +3183,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     $paFuell = form_ist_fuellmenge($paForm);
     $anzLbl  = $paFuell ? (form_groessen_einheit($paForm) === 'ml' ? 'Füllmenge pro Verpackung (ml)' : 'Füllmenge pro Verpackung (g)')
                         : ($paForm === 'stick' ? 'Sticks je Verpackung' : 'Anzahl pro Verpackung');
-    $paName  = $pa['produkt_id'] ? (string) scalar("SELECT COALESCE(NULLIF(kundenname,''),name) FROM produkt WHERE id=?", [(int)$pa['produkt_id']])
+    $paName  = $pa['produkt_id'] ? produkt_kundenname((int)$pa['produkt_id'], $kid)
              : ($pa['rezeptur_id'] ? (string) scalar("SELECT name FROM rezeptur WHERE id=?", [(int)$pa['rezeptur_id']]) : 'Produkt');
     $paPos   = all("SELECT stueck, fuellmenge_g, menge FROM portal_anfrage_pos WHERE anfrage_id=? ORDER BY sort, id", [$paf]);
     if (!$paPos) $paPos = [['stueck'=>$pa['stueck'], 'fuellmenge_g'=>$pa['fuellmenge_g'], 'menge'=>$pa['menge']]]; ?>
@@ -3701,7 +3708,8 @@ portal_head('Kundenportal · ' . $k['firma']);
     $meine = array_filter($portalAnfragen, fn($a) => $a['typ'] === 'dienstleistung');
     $vorTyp = array_key_exists($_GET['typ'] ?? '', $DIENST_TYPEN) ? $_GET['typ'] : '';
     // Produkte für den Labortest-Bezug (unabhängig von der Produkt-Freischaltung): eigene + Katalog.
-    $laborProdukte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''),p.name) AS name FROM produkt p
+    $laborProdukte = all("SELECT p.id, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''),p.name) AS name FROM produkt p
+        LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
         WHERE p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?) ORDER BY (p.kunde_id<>?), name", [$kid, $kid]);
     $vorProd = (int)($_GET['pid'] ?? 0); ?>
   <h1 style="margin-bottom:4px">Dienstleistung anfragen</h1>
@@ -4433,9 +4441,10 @@ portal_head('Kundenportal · ' . $k['firma']);
     // mehreren Aufträgen = EIN Etikett) mit der Info, in welchen Aufträgen es genutzt wird/wurde.
     $etDocs = all("SELECT d.id, d.datei, d.datei_orig, d.datei_hash, a.id AS auftrag_id, a.nummer AS auftrag_nr, a.status, a.angelegt,
                           a.stueck, p.einheiten_pro_packung, r.darreichungsform AS form, vi.name AS verp_name,
-                          COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt,
+                          COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt,
                           (SELECT kp.verpackung FROM produkt_kundenpreis kp WHERE kp.produkt_id=a.produkt_id AND kp.kunde_id=a.kunde_id AND COALESCE(kp.verpackung,'')<>'' LIMIT 1) AS kp_verp
                    FROM dokument d JOIN auftrag a ON a.id=d.objekt_id LEFT JOIN produkt p ON p.id=a.produkt_id
+                   LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=a.kunde_id
                    LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                    LEFT JOIN item vi ON vi.id=a.verpackung_id
                    WHERE d.objekt_typ='auftrag' AND d.typ='etikett' AND a.kunde_id=?
@@ -4460,9 +4469,10 @@ portal_head('Kundenportal · ' . $k['firma']);
     // gepflegt; dann würde nichts angezeigt, obwohl Etiketten fehlen.)
     $etFehlt = all("SELECT a.id, a.nummer, a.status, a.produkt_id, a.verpackung_id, a.stueck, p.etikett_id, p.einheiten_pro_packung,
                            p.rezeptur_id, r.darreichungsform AS form, vi.name AS verp_name,
-                           COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt,
+                           COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt,
                            (SELECT kp.verpackung FROM produkt_kundenpreis kp WHERE kp.produkt_id=a.produkt_id AND kp.kunde_id=a.kunde_id AND COALESCE(kp.verpackung,'')<>'' LIMIT 1) AS kp_verp
                     FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+                    LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=a.kunde_id
                     LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                     LEFT JOIN item vi ON vi.id=a.verpackung_id
                     WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
@@ -4792,18 +4802,21 @@ portal_head('Kundenportal · ' . $k['firma']);
   $nf  = fn($x) => number_format((int)$x, 0, ',', '.');
   $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
   // Offene Jahresvertrags-Angebote (noch kein Kontingent) – zum verbindlichen Abschluss.
-  $jvOffers = all("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+  $jvOffers = all("SELECT a.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt
                    FROM angebot a LEFT JOIN produkt p ON p.id=a.produkt_id
+                          LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
                    WHERE a.kunde_id=? AND a.jahresvertrag=1 AND a.status<>'offen' AND a.kunde_ausgeblendet=0
                      AND NOT EXISTS (SELECT 1 FROM kontingent kk WHERE kk.angebot_id=a.id)
                    ORDER BY a.angelegt DESC", [(int)$k['id']]);
   // In Abwicklung: Kontingent existiert, aber noch nicht aktiv (wartet auf Vertrag / Freigabe).
-  $konsPend = all("SELECT k.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt,
+  $konsPend = all("SELECT k.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt,
                           (SELECT id FROM dokument d WHERE d.objekt_typ='kontingent' AND d.objekt_id=k.id AND d.typ='jv_signiert' ORDER BY d.id DESC LIMIT 1) AS sig
                    FROM kontingent k LEFT JOIN produkt p ON p.id=k.produkt_id
+                          LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
                    WHERE k.kunde_id=? AND k.status IN ('wartet_vertrag','wartet_freigabe') ORDER BY k.angelegt DESC", [(int)$k['id']]);
-  $kons = all("SELECT k.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+  $kons = all("SELECT k.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt
                FROM kontingent k LEFT JOIN produkt p ON p.id=k.produkt_id
+                      LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
                WHERE k.kunde_id=? AND k.status='aktiv' ORDER BY k.angelegt DESC", [(int)$k['id']]); ?>
   <h1 style="margin-bottom:4px">Ihre Jahresverträge</h1>
   <p class="bx-sub">Jahresabnahmeverträge zum Festpreis. Nach Abschluss rufen Sie Ihre Mengen nach Bedarf ab – jeder Abruf wird eine Bestellung zum vereinbarten Preis.</p>

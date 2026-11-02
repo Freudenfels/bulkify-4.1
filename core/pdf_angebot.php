@@ -6,9 +6,10 @@ require_once __DIR__ . '/pdf_beleg.php';
 
 // Baut das PDF zu einem Angebot. null = Angebot (oder Kunde) nicht vorhanden.
 function angebot_pdf_bauen(int $angebot_id): ?string {
-    $a = one("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name, p.rezeptur_id,
+    $a = one("SELECT a.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt_name, p.rezeptur_id,
                      p.verpackung_id AS p_verp, p.verschluss_id, p.etikett_id, r.darreichungsform
               FROM angebot a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                     LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=a.kunde_id
               WHERE a.id=?", [$angebot_id]);
     if (!$a) return null;
     $k = $a['kunde_id'] ? one("SELECT * FROM kunden WHERE id=?", [(int)$a['kunde_id']]) : null;

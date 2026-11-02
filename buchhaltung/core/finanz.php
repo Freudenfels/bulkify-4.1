@@ -47,8 +47,19 @@ function rechnung_aus_auftrag(int $auftrag_id, array $opt = []): ?int {
     if (function_exists('beleg_status_log_add')) beleg_status_log_add($bid, 'offen', 'Rechnung aus Auftrag ' . (string)$a['nummer'] . ' erstellt' . ($sicht ? ', für Kunde freigegeben' : ''), $ersteller);
     // Eine Positionszeile aus dem Auftrag (Produkt × Menge × VK). Passt die Zeilensumme nicht exakt
     // zum Netto (z. B. Sub-Cent-Preise), wird eine Pauschal-Zeile (Menge 1 = Netto) gesetzt.
-    $prodName = (string) (scalar("SELECT COALESCE(NULLIF(p.kundenname,''), p.name) FROM produkt p WHERE p.id=?", [(int)($a['produkt_id'] ?? 0)])
-        ?: ($a['produkt_bezeichnung'] ?? '')) ?: ('Leistung laut Auftrag ' . (string)$a['nummer']);
+    // Kundenspezifischer Produktname (je Produkt+Kunde) hat Vorrang -> landet so als Snapshot auf der Rechnung.
+    // Defensiv: fällt die (vom Dashboard verwaltete) Mapping-Tabelle noch, greift der Alt-Weg.
+    $prodName = '';
+    if ((int)($a['produkt_id'] ?? 0) > 0) {
+        try {
+            $prodName = (string) scalar("SELECT COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name)
+                FROM produkt p LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=?
+                WHERE p.id=?", [(int)($a['kunde_id'] ?? 0), (int)$a['produkt_id']]);
+        } catch (\Throwable $e) {
+            $prodName = (string) scalar("SELECT COALESCE(NULLIF(p.kundenname,''), p.name) FROM produkt p WHERE p.id=?", [(int)$a['produkt_id']]);
+        }
+    }
+    $prodName = $prodName ?: (((string)($a['produkt_bezeichnung'] ?? '')) ?: ('Leistung laut Auftrag ' . (string)$a['nummer']));
     $preisCent = (int) round($vk * 100);
     $nettoCent = (int) round($netto * 100);
     if ($menge > 0 && $preisCent * $menge === $nettoCent) { $pMenge = $menge; $pEinheit = 'Stk.'; }

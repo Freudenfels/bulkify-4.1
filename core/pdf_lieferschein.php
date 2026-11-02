@@ -10,8 +10,10 @@ function lieferschein_pdf_bauen(int $beleg_id): ?string {
     $b = one("SELECT * FROM beleg WHERE id=? AND typ='lieferschein'", [$beleg_id]);
     if (!$b) return null;
     $a = !empty($b['auftrag_id'])
-        ? one("SELECT a.*, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name
-               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [(int)$b['auftrag_id']])
+        ? one("SELECT a.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS produkt_name
+               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+                      LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=a.kunde_id
+               WHERE a.id=?", [(int)$b['auftrag_id']])
         : null;
     $k = !empty($b['kunde_id']) ? one("SELECT * FROM kunden WHERE id=?", [(int)$b['kunde_id']]) : null;
     if (!$k) return null;                                   // ohne Empfänger kein Beleg
