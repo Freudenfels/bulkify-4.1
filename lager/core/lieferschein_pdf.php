@@ -119,7 +119,7 @@ function lg_lieferschein_pdf(int $versand_id): ?string {
         $pdf->text($lx, $ty, 'Hinweis', 8, false, $muted); $ty += $mm(5);
         foreach (array_slice($pdf->wrap((string)$v['notiz'], $tw, 9.5, false), 0, 4) as $zl) { $pdf->text($lx, $ty, $zl, 9.5, false, $dark); $ty += $mm(4.8); }
     }
-    $pdf->text($lx, $mm(288), 'Erstellt am ' . date('d.m.Y H:i') . ' · ' . (string)($v['nummer'] ?? '') . ' · bulkify Lager', 7.5, false, $muted);
+    $pdf->text($lx, $mm(288), 'Erstellt am ' . (function_exists('fmt_zeit') ? fmt_zeit(gmdate('Y-m-d H:i:s')) : date('d.m.Y H:i')) . ' · ' . (string)($v['nummer'] ?? '') . ' · bulkify Lager', 7.5, false, $muted);
 
     return $pdf->output();
 }

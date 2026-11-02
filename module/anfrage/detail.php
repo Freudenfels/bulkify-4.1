@@ -277,7 +277,7 @@ if (!$neu):
   <?php elseif (!$kiVor): ?>
     <p class="muted" style="margin:8px 0 0">Aus der Idee des Kunden (Feld Notiz) entsteht ein Vorschlag mit Zutaten und Mengen, dazu eine Novel-Food-Einschätzung, ein Blick auf die Höchstmengen und die Machbarkeit. <strong>Ein Entwurf für dich – keine rechtliche Freigabe.</strong></p>
   <?php else: ?>
-    <p class="muted" style="margin:8px 0 12px">Entwickelt am <?= h(date('d.m.Y H:i', strtotime((string)$kiVor['stand']))) ?> · <?= h($kiVor['modell'] ?? '') ?>. <strong>Entwurf – die rechtliche Bewertung prüfst du.</strong></p>
+    <p class="muted" style="margin:8px 0 12px">Entwickelt am <?= h(fmt_zeit((string)$kiVor['stand'])) ?> · <?= h($kiVor['modell'] ?? '') ?>. <strong>Entwurf – die rechtliche Bewertung prüfst du.</strong></p>
     <?php if ($kiVor['name']): ?><div><strong>Vorschlag:</strong> <?= h($kiVor['name']) ?><?= $kiVor['tagesdosis'] ? ' · ' . h($kiVor['tagesdosis']) : '' ?></div><?php endif; ?>
 
     <?php if ($kiVor['zutaten']): ?>

@@ -84,7 +84,7 @@ if ($batch) {
     $offenAus = count(bank_zeilen($batch, 'ausgang'));
 
     render_header('buchen', 'Kontoauszug buchen');
-    bx_head('Kontoauszug buchen · Import ' . h(date('d.m.Y H:i', strtotime(substr($batch,0,4).'-'.substr($batch,4,2).'-'.substr($batch,6,2).' '.substr($batch,8,2).':'.substr($batch,10,2)))),
+    bx_head('Kontoauszug buchen · Import ' . h(fmt_zeit(substr($batch,0,4).'-'.substr($batch,4,2).'-'.substr($batch,6,2).' '.substr($batch,8,2).':'.substr($batch,10,2))),
             $offenDeb . ' Eingänge · ' . $offenAus . ' Ausgänge', bx_btn('Neuer Import', '?p=buchen', 'ghost'));
     if (isset($_GET['imp'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['imp'] . ' Buchungen eingelesen. Ordne sie unten den offenen Rechnungen zu.</div>';
     if (isset($_GET['gebucht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['gebucht'] . ' Zahlung(en) gebucht.</div>';
@@ -242,7 +242,7 @@ if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="paddi
       <?php if (!$batches): ?><tr><td colspan="6" class="muted">Noch keine Importe.</td></tr><?php endif; ?>
       <?php foreach ($batches as $b): ?>
         <tr style="cursor:pointer" onclick="location.href='?p=buchen&batch=<?= h($b['batch']) ?>'">
-          <td><?= h(date('d.m.Y H:i', strtotime((string)$b['angelegt']))) ?></td>
+          <td><?= h(fmt_zeit((string)$b['angelegt'])) ?></td>
           <td class="bx-num"><?= (int)$b['anz'] ?></td>
           <td class="bx-num"><?= (int)$b['offen'] ?></td>
           <td class="bx-num"><?= (int)$b['gebucht'] ?></td>

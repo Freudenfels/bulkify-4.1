@@ -131,7 +131,7 @@ function produktionsauftrag_pdf_bauen(int $pa_id): ?string {
 
     // Fußzeile
     $fa = beleg_firma();
-    $p->textCenter(($L + $R) / 2, 828, $p->fit('Interner Produktionsauftrag · ' . $fa['name'] . ' · gedruckt ' . date('d.m.Y H:i'), $R - $L, 7, false), 7, false, $GRAY);
+    $p->textCenter(($L + $R) / 2, 828, $p->fit('Interner Produktionsauftrag · ' . $fa['name'] . ' · gedruckt ' . fmt_zeit(gmdate('Y-m-d H:i:s')), $R - $L, 7, false), 7, false, $GRAY);
     return $p->output();
 }
 

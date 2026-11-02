@@ -262,3 +262,6 @@ Bei `produktionsauftrag.zukauf_art='fertig'` (fertige, abgefüllte Ware) – und
 ## Neuinstallation (Paket Neuinstallation & Rechte)
 - St-01: Der CH/CHE-Seed (Nummernkreise Produktionscharge) steht direkt hinter `CREATE TABLE nummernkreis` – vorher lief er auf einer frischen DB gegen die fehlende Tabelle, `init_schema()` brach ab und setzte den Marker nie. `seed_etikett_formate()` läuft als letzter Schritt vor dem Marker (braucht alle Tabellen).
 - St-02: `ensure_column()` auf eine (noch) fehlende Tabelle merkt sich die Lücke (`$GLOBALS[bx_schema_luecken]`); `init_schema()` läuft dann EINMAL sofort erneut statt den Marker zu setzen – so kommen auf einer frischen DB auch die Spalten dazu, deren Migration vor dem CREATE TABLE steht (vorher 27 fehlende Spalten, u. a. dokument.kunde_sichtbar, portal_anfrage.rezeptur_id, kapselgroesse.fuell_*_mg). Was danach noch fehlt, steht in `app_meta schema_luecken`. `nachbestellung_schema()` läuft jetzt in `init_schema()` mit (das Portal las die Tabelle, bevor sie angelegt war).
+
+## Zeitzone (St-03)
+Alle `*/core/db.php` setzen nach dem Verbindungsaufbau `SET time_zone = '+00:00'` – NOW()/CURRENT_TIMESTAMP schreiben damit UTC wie PHP. Gedruckte Zeiten (Laufzettel „gedruckt", Lager-Lieferschein „Erstellt am", KI-Entwurf in der Anfrage, Kontoauszug-Import) laufen über `fmt_zeit()` (Europe/Berlin) statt `date()` (UTC).
