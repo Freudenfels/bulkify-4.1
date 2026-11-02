@@ -83,3 +83,6 @@ Etikett/Verpackung/Rohstoff einbuchen will – der Artikel wird dadurch nicht me
 **Vorgewählte Lieferung per URL (S-06):** `?p=we&lieferung=<id>` öffnet „Aus Liste wählen" und lädt die Lieferung sofort (Link „Einbuchen" aus „Erwartete Lieferungen"). Das Buchen markiert die Bestellung als angekommen und `geliefert`.
 
 **Status ist Regel, keine Wahl (St-12):** Der Haken „Freigegeben" je Position ist nur noch Anzeige (deaktiviert). Rohstoffe, Bulk und verkaufsfertige Ware gehen immer in Quarantäne (Freigabe unter „Quarantäne"), Verpackung und Etiketten sind sofort frei – wie im Dashboard.
+
+## Teillieferung (Nacht 1c)
+`bestellung_position.geliefert_menge` (neu, additiv) zählt, was je Position schon eingebucht ist. Der Wareneingang mit Bestellbezug ruft `bestellung_lieferung_erfassen($bestellung_id, $charge_ids)` (Lager-App: `erp_bestellung_lieferung_erfassen`): die Chargen werden auf die Positionen verteilt (gleicher Artikel, sonst Freitext-Position; g/kg und ml/l werden umgerechnet). **Geschlossen** (angekommen_am, Status geliefert) wird die Bestellung erst, wenn alle Positionen zu mind. 98 % geliefert sind. Vorher bleibt sie offen, und „unterwegs" zählt nur den Rest (`bp_rest_sql()`, auch in `bulk_position_basis_sql()`), es entsteht also kein doppelter Bedarf. Der Knopf „liefern" (`bestellung_wareneingang`) setzt alle Positionen voll.

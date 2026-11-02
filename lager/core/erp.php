@@ -752,7 +752,7 @@ function erp_lieferung_per_tracking(string $tracking): array {
     if (!$b) return ['ok' => false];
     $pos = [];
     if (tabelle_da('bestellung_position')) {
-        foreach (all("SELECT bp.item_id, bp.menge, bp.einheit,
+        foreach (all("SELECT bp.item_id, " . erp_bp_rest_sql() . " AS menge, bp.einheit,
                              COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
                       FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                       WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$b['id']]) as $p) {
@@ -773,6 +773,54 @@ function erp_lieferung_per_tracking(string $tracking): array {
 
 // Bestellung als „angekommen" markieren (Wareneingang) – nur wenn noch offen. Lässt die Kunden-
 // Statusleiste automatisch auf „Rohstoff angekommen" springen und nimmt die Lieferung aus „erwartet".
+// Teillieferung (Nacht 1c, Spiegel von bestellung_lieferung_erfassen() im Dashboard): Chargen auf die Positionen verteilen,
+// geschlossen wird erst, wenn alle Positionen (mind. 98 %) geliefert sind. Ohne die Spalte (frische DB vor dem ersten
+// Dashboard-Aufruf) wie bisher sofort schließen. Rückgabe ['komplett'=>bool, 'offen'=>int Positionen].
+function erp_bp_geliefert_da(): bool {
+    static $da = null;
+    if ($da === null) $da = tabelle_da('bestellung_position') && (int) scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bestellung_position' AND column_name='geliefert_menge'") > 0;
+    return $da;
+}
+function erp_bp_rest_sql(): string { return erp_bp_geliefert_da() ? "GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)" : "bp.menge"; }
+function erp_einheit_faktor(string $von, string $nach): float {
+    $v = mb_strtolower(trim($von)); $n = mb_strtolower(trim($nach));
+    if ($v === $n || $v === '' || $n === '') return 1.0;
+    $f = ['g>kg' => 0.001, 'kg>g' => 1000, 'mg>g' => 0.001, 'g>mg' => 1000, 'mg>kg' => 0.000001, 'kg>mg' => 1000000, 'ml>l' => 0.001, 'l>ml' => 1000];
+    return $f[$v . '>' . $n] ?? 1.0;
+}
+function erp_bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids): array {
+    if ($bestellung_id <= 0 || !tabelle_da('bestellung')) return ['komplett' => false, 'offen' => 0];
+    if (!erp_bp_geliefert_da()) { erp_bestellung_angekommen($bestellung_id); return ['komplett' => true, 'offen' => 0]; }
+    $pos = all("SELECT id, item_id, menge, COALESCE(geliefert_menge,0) AS gel, einheit FROM bestellung_position WHERE bestellung_id=? ORDER BY sort, id", [$bestellung_id]);
+    foreach (array_filter(array_map('intval', $charge_ids)) as $cid) {
+        $c = one("SELECT item_id, menge, einheit FROM charge WHERE id=?", [$cid]);
+        if (!$c) continue;
+        $rest = (float)$c['menge'];
+        foreach ([true, false] as $exakt) {
+            foreach ($pos as &$p) {
+                if ($rest <= 1e-9) break;
+                if ($exakt ? (int)$p['item_id'] !== (int)$c['item_id'] : !empty($p['item_id'])) continue;
+                $fak = erp_einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
+                $offen = max(0.0, (float)$p['menge'] - (float)$p['gel']);
+                if ($offen <= 1e-9) continue;
+                $nimm = min($offen, $rest * $fak);
+                $p['gel'] = (float)$p['gel'] + $nimm; $rest -= $nimm / $fak;
+                q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]);
+            }
+            unset($p);
+        }
+        if ($rest > 1e-9) foreach ($pos as &$p) if ((int)$p['item_id'] === (int)$c['item_id']) {
+            $p['gel'] = (float)$p['gel'] + $rest * erp_einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
+            q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]); break;
+        }
+        unset($p);
+    }
+    $offen = 0;
+    foreach ($pos as $p) if ((float)$p['menge'] > 0 && (float)$p['gel'] + 1e-9 < (float)$p['menge'] * 0.98) $offen++;
+    if ($offen === 0) erp_bestellung_angekommen($bestellung_id);
+    else erp_bedarf_bump();
+    return ['komplett' => $offen === 0, 'offen' => $offen];
+}
 function erp_bestellung_angekommen(int $bestellung_id): void {
     if ($bestellung_id <= 0 || !tabelle_da('bestellung')) return;
     q("UPDATE bestellung SET angekommen_am=CURDATE() WHERE id=? AND angekommen_am IS NULL", [$bestellung_id]);
@@ -830,7 +878,7 @@ function erp_lieferung_positionen(int $id): array {
     if (!$b) return ['ok' => false];
     $pos = [];
     if (tabelle_da('bestellung_position')) {
-        $sel = "SELECT bp.item_id, bp.auftrag_id, bp.menge, bp.einheit,
+        $sel = "SELECT bp.item_id, bp.auftrag_id, " . erp_bp_rest_sql() . " AS menge, bp.einheit,
                        COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie, i.form, i.verpackung_rolle
                 FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                 WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id";
@@ -1048,7 +1096,7 @@ function erp_erwartete_lieferungen(): array {
                  ORDER BY (b.eta_geplant IS NULL), b.eta_geplant, b.bestelldatum DESC, b.id DESC");
     foreach ($rows as &$r) {
         $pos = tabelle_da('bestellung_position')
-            ? all("SELECT bp.item_id, bp.auftrag_id, bp.menge, bp.einheit,
+            ? all("SELECT bp.item_id, bp.auftrag_id, " . erp_bp_rest_sql() . " AS menge, bp.einheit,
                           COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie, i.form
                    FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                    WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$r['id']])

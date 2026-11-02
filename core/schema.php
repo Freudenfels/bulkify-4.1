@@ -1358,6 +1358,7 @@ function init_schema(): void {
 
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
+    ensure_column('bestellung_position', 'geliefert_menge', "DECIMAL(14,3) NOT NULL DEFAULT 0");   // Teillieferung (Nacht 1c): schon eingebucht, in Positions-Einheit
 
     // Maschinenfuhrpark (Spec 9.3) – ab jetzt IM DASHBOARD verwaltet. Tabellen bleiben pr_maschine/pr_raum
     // (geteilte DB), damit bestehende IDs, QR-Codes (MA-<id>) und prod_charge.maschine_id gueltig bleiben.
@@ -4200,6 +4201,52 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
 
 // Bestellung als angekommen/geliefert markieren OHNE Chargen anzulegen (die Ware wurde schon eingebucht, z. B. über die
 // Wareneingangs-Maske mit Bestellbezug). Gleiche Wirkung wie erp_bestellung_angekommen() in der Lager-App (S-06/St-12).
+// Teillieferung (Nacht 1c): „unterwegs" = bestellte Menge MINUS schon gelieferte (bestellung_position.geliefert_menge).
+function bp_rest_sql(string $a = 'bp'): string { return "GREATEST($a.menge - COALESCE($a.geliefert_menge,0), 0)"; }
+// Mengen-Umrechnung zwischen Charge und Bestellposition (g<->kg, ml<->l), sonst 1.
+function einheit_faktor(string $von, string $nach): float {
+    $v = mb_strtolower(trim($von)); $n = mb_strtolower(trim($nach));
+    if ($v === $n || $v === '' || $n === '') return 1.0;
+    $f = ['g>kg' => 0.001, 'kg>g' => 1000, 'mg>g' => 0.001, 'g>mg' => 1000, 'mg>kg' => 0.000001, 'kg>mg' => 1000000, 'ml>l' => 0.001, 'l>ml' => 1000];
+    return $f[$v . '>' . $n] ?? 1.0;
+}
+// Wareneingang zu einer Bestellung (Nacht 1c): die eingebuchten Chargen auf die Positionen verteilen (gleicher Artikel, sonst
+// Freitext-Position ohne Artikel). Die Bestellung wird erst geschlossen (angekommen_am, Status geliefert), wenn ALLE Positionen
+// (mind. 98 %) geliefert sind – eine Teillieferung lässt sie offen, der Rest bleibt „unterwegs". Rückgabe ['komplett'=>bool, 'rest'=>[...]].
+function bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids): array {
+    if ($bestellung_id <= 0) return ['komplett' => false, 'rest' => []];
+    if (!column_exists('bestellung_position', 'geliefert_menge')) { bestellung_als_angekommen($bestellung_id); return ['komplett' => true, 'rest' => []]; }
+    $pos = all("SELECT id, item_id, menge, COALESCE(geliefert_menge,0) AS gel, einheit FROM bestellung_position WHERE bestellung_id=? ORDER BY sort, id", [$bestellung_id]);
+    foreach (array_filter(array_map('intval', $charge_ids)) as $cid) {
+        $c = one("SELECT item_id, menge, einheit FROM charge WHERE id=?", [$cid]);
+        if (!$c) continue;
+        $rest = (float)$c['menge'];
+        foreach ([true, false] as $exakt) {                      // erst gleicher Artikel, dann Freitext-Position
+            foreach ($pos as &$p) {
+                if ($rest <= 1e-9) break;
+                if ($exakt ? (int)$p['item_id'] !== (int)$c['item_id'] : !empty($p['item_id'])) continue;
+                $fak = einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
+                $offen = max(0.0, (float)$p['menge'] - (float)$p['gel']);
+                if ($offen <= 1e-9) continue;
+                $nimm = min($offen, $rest * $fak);
+                $p['gel'] = (float)$p['gel'] + $nimm; $rest -= $nimm / $fak;
+                q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]);
+            }
+            unset($p);
+        }
+        // Mehrlieferung auf die erste passende Position schreiben (Rest > 0): zählt als geliefert, nie negativ „unterwegs".
+        if ($rest > 1e-9) foreach ($pos as &$p) if ((int)$p['item_id'] === (int)$c['item_id']) {
+            $p['gel'] = (float)$p['gel'] + $rest * einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
+            q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]); break;
+        }
+        unset($p);
+    }
+    $offenListe = [];
+    foreach ($pos as $p) if ((float)$p['menge'] > 0 && (float)$p['gel'] + 1e-9 < (float)$p['menge'] * 0.98) $offenListe[] = ['id' => (int)$p['id'], 'rest' => (float)$p['menge'] - (float)$p['gel'], 'einheit' => (string)$p['einheit']];
+    if (!$offenListe) bestellung_als_angekommen($bestellung_id);
+    else bedarf_bump();
+    return ['komplett' => !$offenListe, 'rest' => $offenListe];
+}
 function bestellung_als_angekommen(int $bestellung_id): void {
     if ($bestellung_id <= 0) return;
     q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
@@ -4218,6 +4265,7 @@ function bestellung_wareneingang(int $bestellung_id): bool {
             !empty($p['auftrag_id']) ? (int)$p['auftrag_id'] : null, (int)$p['id']);
     }
     q("UPDATE bestellung SET status='geliefert', angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+    if (column_exists('bestellung_position', 'geliefert_menge')) q("UPDATE bestellung_position SET geliefert_menge=GREATEST(geliefert_menge, menge) WHERE bestellung_id=?", [$bestellung_id]);
     return true;
 }
 
@@ -5595,7 +5643,7 @@ function auftrag_rohstoffe_beschafft(int $aid): ?string {
     if (!$roh) return null;                       // keine eingekauften Rohstoffe -> Signal nicht anwendbar
     $earliest = null; $hatBestellung = false;
     foreach ($roh as $iid => $fehlt) {
-        $bp = one("SELECT COALESCE(SUM(bp.menge),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
+        $bp = one("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
                    FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                    WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
         $ordered = (float)($bp['menge'] ?? 0);
@@ -8103,7 +8151,7 @@ function produktion_bericht_daten(int $pa_id): ?array {
 // Gleiche Logik wie die Bestandsliste: Summe der Bestellpositionen über Bestellungen mit Status 'bestellt' ohne Wareneingang.
 function item_unterwegs(int $item_id): float {
     if ($item_id <= 0) return 0.0;
-    return (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+    return (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                            WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL", [$item_id]);
 }
 
@@ -8615,7 +8663,7 @@ function meldebestand_bedarf(): array {
                   WHERE mindestbestand IS NOT NULL AND mindestbestand > 0 AND gesperrt=0 ORDER BY name") as $it) {
         $iid = (int)$it['id'];
         $bestand = item_bestand($iid, true);
-        $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $offen = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
         $soll = (float)$it['mindestbestand'];
         $verf = $bestand + $offen;
@@ -8817,7 +8865,7 @@ function auftrag_fehlbedarf(int $pa_id): array {
         $fehltBest = (float)($r['zu_bestellen'] ?? $r['fehlt']);
         if ($fehltBest <= 1e-6 || (int)$r['item_id'] <= 0) continue;
         // schon offen bestellt: für diesen Auftrag ODER als Sammelbestellung (Lager, auftrag_id NULL)
-        $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $offen = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND (bp.auftrag_id=? OR bp.auftrag_id IS NULL)", [(int)$r['item_id'], $aid]);
         $noch = $fehltBest - $offen;
         if ($noch <= 1e-6) continue;
@@ -9325,14 +9373,14 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
         if (!empty($a['etikett'])) {
             // Kundenspezifisch: kein generischer Lagerbestand, Bestell-Sperre bis Design da ist.
             $a['stock'] = 0.0; $a['quarantaene'] = 0.0;
-            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id'], $aid]);
+            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id'], $aid]);
             $a['zu_bestellen'] = max(0.0, $a['need'] - $a['bestellt']);
             // Etiketten erst bestellbar, wenn der Kunde das Etikett freigegeben hat (nicht nur hochgeladen).
             $a['etikett_ok'] = etikett_freigegeben($aid);
         } else {
             $a['stock'] = item_bestand($a['item_id'], true);
             $a['quarantaene'] = item_quarantaene((int)$a['item_id']);   // wartet auf Freigabe -> nicht nachbestellen (St-07)
-            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id']]);
+            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id']]);
             $a['zu_bestellen'] = max(0.0, $a['need'] - $a['stock'] - $a['quarantaene'] - $a['bestellt']);
             $a['etikett_ok'] = true;
         }
@@ -9388,7 +9436,9 @@ function bulk_bestell_menge(float $menge, string $einheit): array {
 // bulk_bestell_menge, Express-Bestellung) werden ×1000 genommen – sonst würde „600 kg" gegen einen Bedarf von
 // 600.000 g als 600 gezählt und der Bedarf erneut bestellt.
 function bulk_position_basis_sql(string $a = 'bp'): string {
-    return "CASE WHEN LOWER($a.einheit) IN ('kg','l') THEN $a.menge*1000 ELSE $a.menge END";
+    // Nur der noch offene Rest (Teillieferung, Nacht 1c) – die Funktion wird ausschließlich für „unterwegs" genutzt.
+    $r = "GREATEST($a.menge - COALESCE($a.geliefert_menge,0), 0)";
+    return "CASE WHEN LOWER($a.einheit) IN ('kg','l') THEN $r*1000 ELSE $r END";
 }
 function bedarf_bulk(bool $nur_gemeldet = false): array {
     $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.produktionsart='fremd' AND pa.art_festgelegt_am IS NOT NULL"

@@ -231,7 +231,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     // Kam der Wareneingang aus einer gewählten Lieferung? Dann die Bestellung als „angekommen" markieren
     // -> die Kunden-Statusleiste springt automatisch auf „Rohstoff angekommen" (mit Datum).
     $beId = (int)($_POST['we_bestellung_id'] ?? 0);
-    if ($gebucht && $beId > 0 && function_exists('erp_bestellung_angekommen')) erp_bestellung_angekommen($beId);
+    // Teillieferung (Nacht 1c): nur Gelieferte quittieren, Bestellung bleibt für den Rest offen.
+    $beRes = ($gebucht && $beId > 0) ? erp_bestellung_lieferung_erfassen($beId, $gebucht) : null;
+    if ($beRes && !$beRes['komplett']) flash('Teillieferung: ' . (int)$beRes['offen'] . ' Position(en) der Bestellung sind noch offen und bleiben unterwegs.', 'warn');
 
     if ($gebucht) flash(count($gebucht) . ' Position(en) eingebucht' . ($kisteId > 0 ? ' (in Kiste gelegt).' : ', Blinker angehängt.') . ($fehler ? ' ' . count($fehler) . ' Hinweis(e).' : ''));
     if ($fehler)  flash(implode(' · ', $fehler), $gebucht ? 'warn' : 'warn');

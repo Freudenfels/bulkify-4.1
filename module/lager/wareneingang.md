@@ -37,3 +37,6 @@ Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) ode
 
 ## Quarantäne-Übersicht (Nacht 1b)
 Die Übersicht (`?p=wareneingang&quarantaene=1`, Knopf „Nur Quarantäne (Anzahl)") zeigt alle Chargen in Quarantäne mit Bestand: Charge, Artikel, Menge, **Eingang**, MHD, **Lieferant / Herkunft** (bei Fertigware „Produktion PR-…"), Status und „freigeben" (nur QM/Admin), älteste zuerst. Kein Direkt-frei-Haken beim Wareneingang. Lager-App `?p=quarantaene` zeigt die Herkunft ebenso.
+
+## Teillieferung (Nacht 1c)
+`bestellung_position.geliefert_menge` (neu, additiv) zählt, was je Position schon eingebucht ist. Der Wareneingang mit Bestellbezug ruft `bestellung_lieferung_erfassen($bestellung_id, $charge_ids)` (Lager-App: `erp_bestellung_lieferung_erfassen`): die Chargen werden auf die Positionen verteilt (gleicher Artikel, sonst Freitext-Position; g/kg und ml/l werden umgerechnet). **Geschlossen** (angekommen_am, Status geliefert) wird die Bestellung erst, wenn alle Positionen zu mind. 98 % geliefert sind. Vorher bleibt sie offen, und „unterwegs" zählt nur den Rest (`bp_rest_sql()`, auch in `bulk_position_basis_sql()`), es entsteht also kein doppelter Bedarf. Der Knopf „liefern" (`bestellung_wareneingang`) setzt alle Positionen voll.

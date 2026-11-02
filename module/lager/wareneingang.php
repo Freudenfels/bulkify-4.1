@@ -13,7 +13,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $aid = ($_POST['auftrag_id'] ?? '') !== '' ? (int)$_POST['auftrag_id'] : null;
         $cid = wareneingang_buchen($item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid);
         // Bestellbezug wie im Lager-Wareneingang: gehört die Ware zu einer Bestellung, wird diese geschlossen (kein „unterwegs" + eingebucht).
-        if ($cid && (int)($_POST['bestellung_id'] ?? 0) > 0) bestellung_als_angekommen((int)$_POST['bestellung_id']);
+        // Teillieferung (Nacht 1c): nur die gelieferte Menge quittieren; geschlossen wird erst, wenn alle Positionen da sind.
+        if ($cid && (int)($_POST['bestellung_id'] ?? 0) > 0) bestellung_lieferung_erfassen((int)$_POST['bestellung_id'], [(int)$cid]);
         // Tracking-Code(s) der eingegangenen Pakete/Palette an die Charge haengen (je Zeile ein Code, gescannt).
         if ($cid) {
             $codes = array_values(array_unique(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($_POST['tracking'] ?? ''))))));

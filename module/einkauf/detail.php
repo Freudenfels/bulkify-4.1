@@ -272,7 +272,7 @@ if (!$neu) {
     // B6: Positionen-Überblick (bestellt / geliefert) mit Auftragsbezug – read-only, ganz oben.
     $posUeb = all("SELECT bp.id, bp.menge, bp.einheit, bp.item_id, bp.auftrag_id,
                           COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS pname, a.nummer AS auftrag_nr,
-                          (SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.bestellung_position_id=bp.id) AS geliefert
+                          GREATEST((SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.bestellung_position_id=bp.id), COALESCE(bp.geliefert_menge,0)) AS geliefert   -- + Teillieferung (Nacht 1c)
                    FROM bestellung_position bp
                    LEFT JOIN item i ON i.id=bp.item_id
                    LEFT JOIN auftrag a ON a.id=bp.auftrag_id
@@ -303,7 +303,7 @@ if (!$neu) {
                . '<td class="bx-num">' . $mz($z['bestellt']) . ' ' . h($z['einheit']) . '</td>'
                . '<td class="bx-num">' . $gelHtml . '</td></tr>';
         }
-        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. bereits gelieferte Menge je Position (geliefert = eingebuchte Chargen). Bearbeiten unten im Formular.</p></div>';
+        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. bereits gelieferte Menge je Position (geliefert = eingebuchte Chargen). Bei einer Teillieferung bleibt die Bestellung offen, der Rest zählt weiter als unterwegs. Bearbeiten unten im Formular.</p></div>';
     }
 
     // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.

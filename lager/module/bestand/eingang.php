@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         trim((string)($_POST['mhd'] ?? '')) ?: null, $lief, trim((string)($_POST['notiz'] ?? '')));
     // Bestellbezug wie im Wareneingang (?p=we): kommt die Ware zu einer Bestellung (bestellung_id), wird sie geschlossen.
     $beId = (int)($_POST['bestellung_id'] ?? 0);
-    if ($cid && $beId > 0) erp_bestellung_angekommen($beId);
+    if ($cid && $beId > 0) erp_bestellung_lieferung_erfassen($beId, [(int)$cid]);   // Teillieferung bleibt offen (Nacht 1c)
     if (!$cid) { flash('Bitte Artikel und eine Menge größer 0 angeben.', 'warn'); weiter('?p=eingang'); }
     lg_pakete_set((int)$cid, $pakete);
     // Teil 4: je Karton/Sack ein Gebinde-Datensatz (Gewicht/Restmenge/Ort) – eigener QR je Gebinde aufs Etikett.
