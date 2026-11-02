@@ -7146,9 +7146,12 @@ function produktion_bereitschaft(int $pa_id): array {
         : (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$pa_id]);
     if ($schritteDone > 0) return ['status'=>'laeuft', 'fehlend'=>[]];
 
-    // Voller Stücklisten-Bedarf inkl. Verpackung/Etiketten, netto (Reservierungen anderer abgezogen).
+    // Stücklisten-Bedarf auf den NOCH offenen Rest skaliert (schon produzierte Packungen abgezogen),
+    // netto (Reservierungen anderer abgezogen). So gilt ein zu 4.101/6.000 produzierter Auftrag als
+    // „produktionsbereit", sobald das Material für die 1.899 Rest-Packungen da ist – nicht erst, wenn
+    // Material für die volle Bruttomenge vorliegt. Gleiche Quelle wie die Material-Übersicht.
     $fehlend = [];
-    foreach (auftrag_bedarf_cached($pa_id) as $r)
+    foreach (auftrag_bedarf_rest($pa_id) as $r)
         if ((float)$r['fehlt'] > 1e-6) $fehlend[] = $r;
     return ['status'=>$fehlend ? 'wartet' : 'bereit', 'fehlend'=>$fehlend];
 }
@@ -7906,6 +7909,29 @@ function auftrag_bedarf_cached(int $pa_id): array {
     return $d;
 }
 
+// Materialbedarf auf den NOCH offenen Rest skaliert: bereits produzierte (als Charge gebuchte) Packungen
+// zählen nicht mehr mit. Das ist die EINE Quelle für die Material-Übersicht der Auftragsseite, für
+// produktion_bereitschaft() und für die Material-Tabellen des Produktionsauftrags – damit überall exakt
+// dieselbe Zahl steht (kein „oben gedeckt / unten fehlt"-Widerspruch mehr). Der Bruttobedarf
+// (auftrag_bedarf_cached) bleibt für Einkauf/Reservierung unverändert.
+// Beispiel AB-3286/PR-2796: 6.000 bestellt, 4.101 gebucht -> Faktor 1.899/6.000; jede Position (Bulk,
+// Verpackung, Etikett …) wird anteilig nur noch für die 1.899 Rest-Packungen gerechnet.
+function auftrag_bedarf_rest(int $pa_id): array {
+    $rows = auftrag_bedarf_cached($pa_id);
+    $pa   = pa_row_cached($pa_id);
+    $ziel = $pa ? max(0, (int)$pa['menge']) : 0;
+    if ($ziel <= 0) return $rows;
+    $gebucht = (int) round(produktion_gebucht($pa_id));
+    if ($gebucht <= 0) return $rows;                       // nichts produziert -> Brutto = Rest
+    $faktor = max(0.0, min(1.0, ($ziel - $gebucht) / $ziel));
+    foreach ($rows as &$r) {
+        $r['benoetigt'] = (float)($r['benoetigt'] ?? 0) * $faktor;
+        $r['fehlt']     = max(0.0, (float)$r['benoetigt'] - (float)($r['verfuegbar'] ?? 0));
+    }
+    unset($r);
+    return $rows;
+}
+
 // Teilproduktions-Rechner. Liefert ZWEI Mengen (jeweils in Packungen, schon Produziertes abgezogen):
 //  - vor_etikett: produzieren/abfüllen BIS VOR dem Etikettieren – begrenzt durch den knappsten Baustein
 //    OHNE Etikett (Kapseln/Bulk, Glas, Deckel, Karton, Beipack).
@@ -8361,11 +8387,10 @@ function auftrag_fehlbedarf(int $pa_id): array {
     $pa = pa_row_cached($pa_id);
     $aid = $pa ? (int)$pa['auftrag_id'] : 0;
     $out = [];
-    foreach (auftrag_bedarf_cached($pa_id) as $r) {
+    // Auf den NOCH offenen Rest skaliert: schon produzierte Packungen brauchen kein Material mehr. Solange
+    // nichts produziert ist (Normalfall beim Bestellen) ist das identisch zum Bruttobedarf.
+    foreach (auftrag_bedarf_rest($pa_id) as $r) {
         if ($r['fehlt'] <= 1e-6 || (int)$r['item_id'] <= 0) continue;
-        // Kundeneigene Verpackung (Beistellung) wird NICHT bestellt – der Kunde liefert sie. Sie bleibt aber
-        // regulär im Material-Check/Bereitschaft (Fehlbestand), bis sie im Wareneingang gebucht ist.
-        if ((int) scalar("SELECT COALESCE(kundeneigen,0) FROM item WHERE id=?", [(int)$r['item_id']]) === 1) continue;
         // schon offen bestellt: für diesen Auftrag ODER als Sammelbestellung (Lager, auftrag_id NULL)
         $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status<>'geliefert' AND (bp.auftrag_id=? OR bp.auftrag_id IS NULL)", [(int)$r['item_id'], $aid]);

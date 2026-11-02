@@ -643,8 +643,11 @@ ob_start(); ?>
 
 // --- Einkaufsbedarf (Stückliste vs. Bestand) ---
 ob_start();
-$bedarfListe = auftrag_bedarf($id);
+// Materialbedarf auf den NOCH offenen Rest (schon produzierte Packungen abgezogen) – gleiche Quelle wie
+// die Material-Übersicht der Auftragsseite und produktion_bereitschaft(), damit überall dieselbe Zahl steht.
+$bedarfListe = auftrag_bedarf_rest($id);
 $fehlListe   = auftrag_fehlbedarf($id);
+$pgZiel = max(0, (int)$pa['menge']); $pgGeb = (int) round(produktion_gebucht($id)); $pgRest = max(0, $pgZiel - $pgGeb);
 if ($bedarfListe):
     $rolleBadge = fn($r) => match ($r) {
         'Rohstoff'=>bx_badge('Rohstoff'), 'Leerkapsel'=>bx_badge('Leerkapsel'), 'Fertigware'=>bx_badge('Fertigware','info'),
@@ -674,6 +677,11 @@ if ($bedarfListe):
       <?php endif; ?>
     </div>
   </div>
+  <?php if ($pgGeb > 0): ?>
+    <div style="background:var(--panel-2);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:13px">
+      Restbedarf: <strong><?= number_format($pgGeb, 0, ',', '.') ?></strong> von <?= number_format($pgZiel, 0, ',', '.') ?> Packungen sind schon produziert – das Material unten gilt nur noch für die <strong><?= number_format($pgRest, 0, ',', '.') ?></strong> offenen Packungen.
+    </div>
+  <?php endif; ?>
   <?php $bulkResv = $pa['auftrag_id'] ? auftrag_bulk_reserviert_stueck((int)$pa['auftrag_id']) : 0.0;
         if ($bulkResv > 0): ?>
     <div style="background:var(--panel-2);border-radius:8px;padding:8px 12px;margin-top:10px;font-size:13px">

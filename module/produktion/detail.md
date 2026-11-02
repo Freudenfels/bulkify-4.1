@@ -115,3 +115,9 @@ Ein Auftrag kann teils selbst produziert, teils als fertige Bulkware zugekauft w
 
 ## Materialbedarf spiegelt Verbrauch (A3, 2026-10-28)
 `produktion_materialbedarf($pa_id)` liefert jetzt zusätzlich **entnommen** (Summe `produktion_verbrauch` für diesen PA+Artikel) und **offen** (= benötigt − entnommen); **fehlt** = max(0, offen − verfügbar). Dadurch steht nach Verbrauch/Fertigstellung nicht weiter „fehlt 150.000". Ist bereits Material entnommen, zeigt das Panel ohnehin „Entnommene Materialien (FEFO)". Für Aufträge, die **ohne Buchung** fertig wurden (God-Mode/Alt-Import), zeigt der Materialbedarf-Zweig einen Hinweis und einen neutralen Badge „nicht gebucht" statt rotem „fehlt". Abgebucht wird FEFO an den Stationsschritten (`Rohstoffe bereitstellen`, `Verkapselung`, `Fertigware bereitstellen`, `Verpacken`) in `produktion_schritt_erledigen()`.
+
+## Material = Restbedarf (2026-11-02)
+Die Material-Tabelle nutzt jetzt `auftrag_bedarf_rest($id)` statt `auftrag_bedarf()` – schon produzierte
+Packungen sind abgezogen (Benötigt/Verfügbar/Status + „zu bestellen"). Oben erscheint bei begonnener
+Produktion ein Hinweis „Restbedarf: X von Y schon produziert – Material nur für die Z offenen Packungen".
+Gleiche Zahl wie Material-Übersicht (Auftragsseite) und `produktion_bereitschaft()`.

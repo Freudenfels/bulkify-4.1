@@ -162,3 +162,12 @@ mitführt. Gilt in Team- und Kundenansicht (beide lesen `auftrag.*`, inkl. der P
 - `item.fremdprodukt` / `item.fremd_besitzer_id` – Artikel ist Kundenware (fertiges Produkt von außerhalb), gehört dem Kunden, Lager 2. Dahinter Kategorie `verkaufsfertig`.
 - `item_warenart_label(array $it)` – zeigt „Fremdprodukt", sonst `kategorie_label()`.
 - `fremdprodukt_bestand_zuordnen(int $item_id, int $kunde_id)` – schreibt den eigenen Bestand des Artikels dem Besitzer-Kunden ins Fremdlager (`charge.fremd_kunde_id` + `standort='lager2'`), Rückgabe Anzahl umgestellter Chargen. Dadurch Ausschluss aus unserem Bestand/Produktion/Angeboten (die filtern `fremd_kunde_id IS NULL`).
+
+## auftrag_bedarf_rest() – EINE Quelle für den Restbedarf (2026-11-02)
+`auftrag_bedarf_rest($pa_id)` = `auftrag_bedarf_cached()`, aber jede Position auf den **noch offenen Rest**
+skaliert: Faktor = (PA-Menge − schon als Charge gebuchte Packungen) / PA-Menge. Ist nichts produziert,
+ist es identisch zum Bruttobedarf. Das ist die **einzige** Quelle für (1) `produktion_bereitschaft()`,
+(2) die Material-Übersicht der Auftragsseite und (3) die Material-Tabelle des Produktionsauftrags – so steht
+überall dieselbe Zahl (kein „oben gedeckt / unten fehlt"-Widerspruch mehr). Auch `auftrag_fehlbedarf()`
+(Bestellen) rechnet jetzt über den Rest. Der **Brutto**-`auftrag_bedarf_cached()` bleibt unverändert.
+Beispiel AB-3286/PR-2796: 6.000 bestellt, 4.101 gebucht → Material nur noch für 1.899 Packungen.

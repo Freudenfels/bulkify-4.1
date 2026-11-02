@@ -985,15 +985,12 @@ if (auftrag_braucht_etikett($id)):
 
 <?php // H1 (Teil 3): Material-Übersicht – je Position benötigt / frei / unterwegs mit Deckungs-Ampel.
 // Nutzt den vorhandenen auftrag_bedarf() + item_unterwegs(); nur Übersicht, keine Buchung.
-if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
-    // Bereits produzierte Packungen von „benötigt" abziehen -> die Übersicht zeigt den NOCH offenen Bedarf,
-    // nicht die Bruttomenge des ganzen Auftrags. Sonst stünde „Fehlbestand", obwohl ein Großteil schon fertig
-    // ist: Beispiel AB-3286 = 4.101 von 6.000 produziert -> es fehlt nur noch Material/Bulk für die 1.899 Rest-
-    // Packungen (anteilig je Position). auftrag_bedarf() selbst (Reservierung/Einkauf) bleibt unangetastet.
-    $ueZiel  = isset($zielA) ? (int)$zielA : (int)($a['menge'] ?? 0);
-    $ueOffen = isset($offenA) ? (int)$offenA : $ueZiel;
-    $restFaktor = $ueZiel > 0 ? max(0.0, min(1.0, $ueOffen / $ueZiel)) : 1.0;
-    $ueProd  = max(0, $ueZiel - $ueOffen);        // schon produzierte Packungen (für den Hinweis)
+if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
+    // auftrag_bedarf_rest() liefert den Bedarf bereits auf den NOCH offenen Rest skaliert (schon produzierte
+    // Packungen abgezogen) – EINE Quelle (core/schema.php), identisch zu produktion_bereitschaft() und der
+    // PA-Material-Tabelle. Hier wird nur noch angezeigt. $ueProd dient nur dem Hinweistext.
+    $ueZiel  = max(0, (int)($pa['menge'] ?? 0));
+    $ueProd  = min($ueZiel, (int) round(produktion_gebucht((int)$pa['id'])));
     // Einheitengerechte Anzeige: g/ml lesbar als kg/t bzw. L, Packungen/Stück ganzzahlig (keine 2.096,774 Pkg),
     // alles andere (z. B. kg am Rohstoff) mit bis zu 3 Nachkommastellen. Einheit immer mit dran, auch bei „frei".
     $mng = function($x, $e = '') {
@@ -1011,7 +1008,7 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
     <tbody>
     <?php foreach ($bedarfRows as $r):
         $iid = (int)($r['item_id'] ?? 0);
-        $ben = (float)($r['benoetigt'] ?? 0) * $restFaktor;   // nur der noch offene Anteil
+        $ben = (float)($r['benoetigt'] ?? 0);   // schon auf den offenen Rest skaliert (auftrag_bedarf_rest)
         $frei = (float)($r['verfuegbar'] ?? 0);
         $unterwegs = $iid > 0 ? item_unterwegs($iid) : 0.0;
         $einh = (string)($r['einheit'] ?? 'Stk');
