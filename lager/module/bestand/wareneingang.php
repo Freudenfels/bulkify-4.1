@@ -129,24 +129,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             if (!$item_id) { $fehler[] = 'Zeile ' . ($i + 1) . ': kein Artikel.'; continue; }
             if (function_exists('erp_item_warenart_setzen')) erp_item_warenart_setzen($item_id, 'etikett');
             if ($menge <= 0) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Menge fehlt.'; continue; }
-            // Rollen einsammeln: je Rolle eine Inventarnummer + eine (editierbare) Menge.
-            $rnrs = (array)($_POST['p_rolle_nr'][$key] ?? []);
-            $rmgs = (array)($_POST['p_rolle_menge'][$key] ?? []);
-            $rollen = []; $summe = 0.0; $gesehen = []; $rfehler = '';
-            foreach ($rnrs as $ri => $rnr) {
-                if (trim((string)$rnr) === '') continue;   // leeres Scan-Feld überspringen
-                $nr = erp_inventar_norm((string)$rnr);
-                if ($nr === '')                 { $rfehler = 'Inventaraufkleber braucht genau 7 Ziffern.'; break; }
-                if (isset($gesehen[$nr]))       { $rfehler = 'Inventarnummer ' . $nr . ' doppelt gescannt.'; break; }
-                if (!erp_inventar_frei($nr))    { $rfehler = 'Inventarnummer ' . $nr . ' ist schon vergeben.'; break; }
-                $gesehen[$nr] = 1;
-                $rm = erp_menge_parse((string)($rmgs[$ri] ?? '0'));
-                $rollen[] = ['nr' => $nr, 'menge' => $rm];
-                $summe += $rm;
-            }
-            if ($rfehler !== '') { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): ' . $rfehler; continue; }
-            if (!$rollen)        { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): mindestens einen Inventaraufkleber scannen.'; continue; }
-            if (abs($summe - $menge) > 0.5) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Summe der Rollen (' . menge_txt($summe) . ') ≠ Gesamtmenge (' . menge_txt($menge) . ').'; continue; }
+            // Nur noch: Gesamtmenge + Anzahl Rollen. Menge wird gleichmäßig verteilt (Rest auf die
+            // letzte Rolle), Inventarnummern optional gescannt – leer = automatisch. Keine Summenprüfung.
+            $anzahl  = max(1, (int)($_POST['p_rollen_zahl'][$key] ?? 1));
+            $nummern = array_values((array)($_POST['p_rolle_nr'][$key] ?? []));
             $notiz = 'Wareneingang' . ($ziel === 'l2' ? ' (Kundenware)' : '') . ' · Etikettenrollen';
             if ($artnr !== '')     $notiz .= ' · Art.-Nr. ' . $artnr;
             if ($auftragNr !== '') $notiz .= ' · Auftrag ' . $auftragNr;
@@ -156,8 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             if (!$cid) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Buchen fehlgeschlagen.'; continue; }
             $pAuftragId = (int)($_POST['p_auftrag_id'][$i] ?? 0);
             if ($ziel !== 'l2' && $pAuftragId > 0 && function_exists('erp_charge_auftrag_setzen')) erp_charge_auftrag_setzen((int)$cid, $pAuftragId);
-            $rr = erp_etikett_rollen_anlegen((int)$cid, $rollen);
-            lg_pakete_set((int)$cid, count($rollen));
+            $rr = erp_etikett_rollen_verteilen((int)$cid, $menge, $anzahl, $nummern);
+            lg_pakete_set((int)$cid, max(1, (int)($rr['angelegt'] ?? $anzahl)));
             $cc = erp_charge((int)$cid);
             lg_bewegung_log((int)$cid, 'ein', $menge, $cc['einheit'] ?? null, (string)($cc['item_name'] ?? ''), $notiz . ' (' . (int)$rr['angelegt'] . ' Rolle(n))');
             if (!empty($rr['fehler'])) $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): ' . implode(' · ', $rr['fehler']);
@@ -448,7 +434,7 @@ if ($gebucht):
         <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
       </div>
       <div id="weRows" style="margin-top:var(--sp-3)"></div>
-      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Leerkapseln/Bulk/Fertige Produkte → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist Pflicht – außer bei <strong>Etikett (Rolle)</strong>: dort wird je Rolle ein Maniso-Inventaraufkleber (7 Ziffern) gescannt, die Menge wird gleichmäßig auf die Rollen verteilt und ist je Rolle änderbar. „Aufteilen" je Position: verteilt die Menge gleichmäßig auf die Kartons (z. B. 50 kg / 2 = 25 kg je Karton).</div>
+      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Leerkapseln/Bulk/Fertige Produkte → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist Pflicht – außer bei <strong>Etikett (Rolle)</strong>: dort nur Gesamtmenge + Anzahl Rollen angeben; die Menge wird gleichmäßig auf die Rollen verteilt (Rest auf die letzte), Inventaraufkleber je Rolle sind optional (leer = automatisch vergeben). „Aufteilen" je Position: verteilt die Menge gleichmäßig auf die Kartons (z. B. 50 kg / 2 = 25 kg je Karton).</div>
       <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary" id="weBuchen">Alle buchen &amp; Blinker anhängen</button></div>
     </div>
   </div>
@@ -592,14 +578,14 @@ if ($gebucht):
         '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Angehakt = freigegeben, nicht angehakt = Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
-        // Etikettenrollen: statt Blinker je Rolle ein Inventaraufkleber (7 Ziffern) + Menge je Rolle.
+        // Etikettenrollen: nur Gesamtmenge + Anzahl Rollen. Menge wird gleichmäßig verteilt; Inventaraufkleber optional.
         '<div class="we-rollen" style="display:none;flex:1 1 100%">'+
           '<div class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap">'+
-            '<div class="bx-field" style="margin:0;flex:0 1 110px"><label>Rollen</label><input type="number" class="we-rollenzahl" min="1" step="1" value="1"></div>'+
-            '<div class="muted we-rollen-summe" style="padding-bottom:10px"></div>'+
+            '<div class="bx-field" style="margin:0;flex:0 1 140px"><label>Anzahl Rollen</label><input type="number" class="we-rollenzahl" name="p_rollen_zahl['+rowKey+']" min="1" step="1" value="1"></div>'+
+            '<div class="muted we-rollen-info" style="padding-bottom:10px"></div>'+
           '</div>'+
           '<div class="we-rollen-liste" style="display:flex;flex-direction:column;gap:8px;margin-top:6px"></div>'+
-          '<div class="muted" style="font-size:12px;margin-top:6px">Je Rolle ein Maniso-Inventaraufkleber scannen (Enter springt weiter). Menge je Rolle ist änderbar – die Summe muss der Gesamtmenge entsprechen.</div>'+
+          '<div class="muted" style="font-size:12px;margin-top:6px">Die Gesamtmenge wird gleichmäßig auf die Rollen verteilt (Rest auf die letzte). Inventaraufkleber je Rolle optional scannen (Enter springt weiter) – leer lassen = Nummer wird automatisch vergeben.</div>'+
         '</div>'+
       '</div>';
     rows.appendChild(card);
@@ -685,44 +671,41 @@ if ($gebucht):
     });
     toggleRez();
 
-    // --- Etikettenrollen: statt Blinker je Rolle ein Inventaraufkleber (7 Ziffern) + Menge je Rolle ---
+    // --- Etikettenrollen: nur Gesamtmenge + Anzahl Rollen. Menge gleichmäßig verteilt, Aufkleber optional ---
     var rollenBox=card.querySelector('.we-rollen'), rollenZahl=card.querySelector('.we-rollenzahl'),
-        rollenListe=card.querySelector('.we-rollen-liste'), rollenSumme=card.querySelector('.we-rollen-summe'),
+        rollenListe=card.querySelector('.we-rollen-liste'), rollenInfo=card.querySelector('.we-rollen-info'),
         mengeF=card.querySelector('input[name="p_menge[]"]'), blinkerF=card.querySelector('.we-blinker'),
         feldBlinker=card.querySelector('.f-blinker'), feldPak=card.querySelector('.f-pakete'),
         feldPaknr=card.querySelector('.f-paketnrn'), feldSplit=card.querySelector('.f-split'),
         feldCharge=card.querySelector('.f-charge'), feldMhd=card.querySelector('.f-mhd');
     function mengeWert(v){ return parseFloat(String(v==null?'':v).replace(/\./g,'').replace(',','.'))||0; }
     function gesamtMenge(){ return mengeWert(mengeF&&mengeF.value); }
-    function rollenSync(){
-      if(!rollenSumme) return;
-      var s=0; rollenListe.querySelectorAll('.we-rolle-menge').forEach(function(i){ s+=mengeWert(i.value); });
-      var ges=gesamtMenge();
-      if(ges>0 && Math.abs(s-ges)>0.5){ rollenSumme.textContent='Summe '+nf(s)+' von '+nf(ges)+' – stimmt noch nicht'; rollenSumme.style.color='var(--err,#b00)'; }
-      else { rollenSumme.textContent='Summe '+nf(s)+(ges>0?(' von '+nf(ges)):''); rollenSumme.style.color=''; }
+    function rollenInfoSync(){
+      if(!rollenInfo) return;
+      var ges=gesamtMenge(), n=Math.max(1,(parseInt(rollenZahl&&rollenZahl.value,10)||1));
+      if(ges>0){ var basis=Math.floor(ges/n), rest=ges-basis*(n-1);
+        rollenInfo.textContent = (n>1 && rest!==basis)
+          ? ('= '+nf(basis)+' je Rolle, letzte '+nf(rest))
+          : ('= '+nf(basis)+' je Rolle'); }
+      else rollenInfo.textContent='';
     }
     function renderRollen(n, fokusIdx){
       if(!rollenListe) return;
       n=Math.max(1,n|0);
       var cur=[].map.call(rollenListe.querySelectorAll('.we-rolle-nr'),function(i){return i.value;});
-      var curM=[].map.call(rollenListe.querySelectorAll('.we-rolle-menge'),function(i){return i.value;});
-      var ges=gesamtMenge(), basis=(ges>0)?(Math.floor((ges/n)*1000)/1000):0;
       rollenListe.innerHTML='';
       for(var k=0;k<n;k++){
-        var defM=(curM[k]!==undefined&&curM[k]!=='')?curM[k]:(ges>0?(k<n-1?nf(basis):nf(Math.round((ges-basis*(n-1))*1000)/1000)):'');
         var row=document.createElement('div'); row.className='bx-row'; row.style.gap='8px'; row.style.flexWrap='wrap';
-        row.innerHTML='<input type="text" class="we-rolle-nr lg-code" name="p_rolle_nr['+rowKey+'][]" autocomplete="off" inputmode="numeric" maxlength="7" placeholder="Rolle '+(k+1)+': 7-stellige Nummer scannen" value="'+esc(cur[k]!==undefined?cur[k]:'')+'" style="flex:1 1 220px">'+
-          '<input type="text" class="we-rolle-menge" name="p_rolle_menge['+rowKey+'][]" inputmode="decimal" placeholder="Menge" value="'+esc(defM)+'" style="flex:0 1 120px">';
+        row.innerHTML='<input type="text" class="we-rolle-nr lg-code" name="p_rolle_nr['+rowKey+'][]" autocomplete="off" inputmode="numeric" maxlength="7" placeholder="Rolle '+(k+1)+': Inventaraufkleber scannen (optional)" value="'+esc(cur[k]!==undefined?cur[k]:'')+'" style="flex:1 1 260px">';
         rollenListe.appendChild(row);
       }
       var nrs=rollenListe.querySelectorAll('.we-rolle-nr');
       nrs.forEach(function(inp,idx){ inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); var nx=nrs[idx+1]; if(nx) nx.focus(); } }); });
-      rollenListe.querySelectorAll('.we-rolle-menge').forEach(function(i){ i.addEventListener('input',rollenSync); });
-      rollenSync();
-      if(fokusIdx!=null){ var f=rollenListe.querySelectorAll('.we-rolle-nr')[fokusIdx]; if(f) f.focus(); }
+      rollenInfoSync();
+      if(fokusIdx!=null){ var f=nrs[fokusIdx]; if(f) f.focus(); }
     }
     if(rollenZahl) rollenZahl.addEventListener('input',function(){ renderRollen(parseInt(rollenZahl.value,10)||1); });
-    if(mengeF) mengeF.addEventListener('input',function(){ if(art2.value==='etikett') renderRollen(parseInt(rollenZahl&&rollenZahl.value,10)||1); });
+    if(mengeF) mengeF.addEventListener('input',function(){ if(art2.value==='etikett') rollenInfoSync(); });
     function etikettToggle(){
       var an=art2.value==='etikett';
       if(rollenBox) rollenBox.style.display=an?'':'none';

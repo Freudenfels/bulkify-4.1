@@ -11,14 +11,17 @@ Ein Bereich für alles, was reinkommt. Ablauf:
    `erp_warenart_regeln()`: Rohstoff/Fertig/Kapsel → MHD+Charge Pflicht; Verpackung/Verbrauch → frei.
 
    **Etikett (Rolle):** Warenart „Etikett (Rolle)" (Item = `kategorie='verpackung'` + `verpackung_rolle='etikett'`,
-   erkannt per `erp_item_warenart()`). Hier wird **kein Blinker**, sondern je Rolle ein **Maniso-Inventaraufkleber**
-   (genau 7 Ziffern) gescannt. Feld „Rollen" steuert die Anzahl der Scan-Felder (Enter springt weiter). Die
-   Gesamtmenge wird gleichmäßig auf die Rollen verteilt (Vorbelegung) und ist **je Rolle änderbar**; die Summe
-   muss der Gesamtmenge entsprechen (Live-Prüfung, Toleranz 0,5). Blinker/Charge/MHD/Pakete sind ausgeblendet.
-   2D-POST-Felder `p_rolle_nr[<key>][]` / `p_rolle_menge[<key>][]`, zugeordnet über `p_key[]` (DOM-Reihenfolge).
-   Beim Buchen: eine Charge (Verpackung, frei) + je Rolle ein `charge_gebinde`-Datensatz mit `inventar_nr`
-   (`erp_etikett_rollen_anlegen`), `pakete = Rollenzahl`. Nummer-Format/Eindeutigkeit (aktiv) via
-   `erp_inventar_norm()` / `erp_inventar_frei()`.
+   erkannt per `erp_item_warenart()`). Hier wird **kein Blinker** verlangt. Eingabe: nur **Gesamtmenge (Stk)** +
+   **Anzahl Rollen**. Begründung (Nico): Beim Wareneingang sieht man nicht, wie viele Etiketten auf welcher Rolle
+   sind – deshalb **keine Menge je Rolle und keine Summenprüfung** mehr. Das System **verteilt die Gesamtmenge
+   gleichmäßig** auf die Rollen (Rest auf die letzte Rolle; z. B. 1.100 auf 2 = 550+550). Je Rolle lässt sich
+   **optional** ein Maniso-Inventaraufkleber (7 Ziffern) scannen (Enter springt weiter); **leer = Nummer wird
+   automatisch vergeben** (reserviertes Band 9000000–9999999, kollidiert nicht mit physischen Aufklebern).
+   Blinker/Charge/MHD/Pakete sind ausgeblendet. POST-Felder `p_rollen_zahl[<key>]` (Anzahl) + optional
+   `p_rolle_nr[<key>][]` (gescannte Nummern), zugeordnet über `p_key[]`. Beim Buchen: eine Charge (Verpackung,
+   frei) + je Rolle ein `charge_gebinde`-Datensatz mit `inventar_nr` und berechneter Menge
+   (`erp_etikett_rollen_verteilen` → `erp_etikett_rollen_anlegen`), `pakete = Rollenzahl`. Auto-Nummer via
+   `erp_inventar_naechste()`, Format/Eindeutigkeit via `erp_inventar_norm()` / `erp_inventar_frei()`.
 
    **Fertige Kapseln (Warenart „Fertigware / Bulk"):** Dann erscheint zusätzlich ein **Rezeptur-Picker**
    (Textsuche, `erp_rezeptur_liste()`, nur Rezepturen ≠ Entwurf). Beim Buchen wird die Position aufs

@@ -1183,6 +1183,53 @@ function erp_etikett_rollen_anlegen(int $charge_id, array $rollen): array {
     if ($angelegt > 0) q("UPDATE charge_gebinde SET anzahl_gesamt=(SELECT COUNT(*) FROM (SELECT id FROM charge_gebinde WHERE charge_id=?) t) WHERE charge_id=?", [$charge_id, $charge_id]);
     return ['ok' => $angelegt > 0, 'angelegt' => $angelegt, 'fehler' => $fehler];
 }
+// Nächste freie Auto-Inventarnummer. Reserviertes Band 9000000–9999999, damit die automatisch
+// vergebenen Nummern nicht mit physischen Maniso-Aufklebern (darunter) kollidieren. $benutzt = in
+// diesem Durchlauf schon vergebene Nummern (noch nicht in der DB).
+function erp_inventar_naechste(array $benutzt = []): string {
+    $start = 9000000;
+    if (tabelle_da('charge_gebinde') && erp_gebinde_spalte_da('inventar_nr')) {
+        $max = (int) scalar("SELECT COALESCE(MAX(CAST(inventar_nr AS UNSIGNED)),0) FROM charge_gebinde WHERE inventar_nr REGEXP '^9[0-9]{6}$'");
+        if ($max >= $start) $start = $max + 1;
+    }
+    for ($nr = $start; $nr <= 9999999; $nr++) {
+        $s = str_pad((string)$nr, 7, '0', STR_PAD_LEFT);
+        if (!isset($benutzt[$s]) && erp_inventar_frei($s)) return $s;
+    }
+    for ($t = 0; $t < 50; $t++) {   // Band voll (sehr unwahrscheinlich) -> zufällig
+        $s = str_pad((string)random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT);
+        if (!isset($benutzt[$s]) && erp_inventar_frei($s)) return $s;
+    }
+    return str_pad((string)random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT);
+}
+// Etikettenrollen anlegen aus Gesamtmenge + Rollenzahl: Menge gleichmäßig verteilen (Rest auf die
+// letzte Rolle), Inventarnummer je Rolle aus $nummern (gescannt) ODER automatisch vergeben. Kein
+// Pflicht-Scan, keine Summenprüfung – das Buchen wird nie blockiert. Rückgabe wie erp_etikett_rollen_anlegen.
+function erp_etikett_rollen_verteilen(int $charge_id, float $gesamt, int $anzahl, array $nummern = []): array {
+    $anzahl = max(1, $anzahl);
+    $gesamt = max(0.0, $gesamt);
+    // Ganze Etiketten je Rolle; Rest (inkl. evtl. Nachkomma) auf die letzte Rolle.
+    $basis  = floor($gesamt / $anzahl);
+    $mengen = array_fill(0, $anzahl, $basis);
+    $mengen[$anzahl - 1] = $gesamt - $basis * ($anzahl - 1);
+
+    $rollen = []; $benutzt = []; $fehler = [];
+    for ($k = 0; $k < $anzahl; $k++) {
+        $roh = trim((string)($nummern[$k] ?? ''));
+        if ($roh === '') {                       // leer -> automatisch vergeben
+            $nr = erp_inventar_naechste($benutzt);
+        } else {
+            $nr = erp_inventar_norm($roh);
+            if ($nr === '') { $fehler[] = 'Inventarnummer „' . $roh . '" hat nicht 7 Ziffern – automatisch vergeben.'; $nr = erp_inventar_naechste($benutzt); }
+            elseif (isset($benutzt[$nr]) || !erp_inventar_frei($nr)) { $fehler[] = 'Inventarnummer ' . $nr . ' schon vergeben – automatisch vergeben.'; $nr = erp_inventar_naechste($benutzt); }
+        }
+        $benutzt[$nr] = 1;
+        $rollen[] = ['nr' => $nr, 'menge' => $mengen[$k]];
+    }
+    $res = erp_etikett_rollen_anlegen($charge_id, $rollen);
+    $res['fehler'] = array_merge($fehler, $res['fehler'] ?? []);
+    return $res;
+}
 // Etikettenrollen einer Charge (nur die mit Inventarnummer), inkl. zugeordnetem Auftrag.
 function erp_charge_rollen(int $charge_id): array {
     if ($charge_id <= 0 || !tabelle_da('charge_gebinde') || !erp_gebinde_spalte_da('inventar_nr')) return [];

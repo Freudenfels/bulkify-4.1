@@ -35,12 +35,19 @@ alle Produkte. Grundlage für Versicherungswert (EK, sonst VK/2) und Gewicht.
 
 ## Etikettenrollen: Inventaraufkleber statt Blinker
 Etiketten (`item.kategorie='verpackung'` + `verpackung_rolle='etikett'`, Warenart `etikett`) bekommen beim
-Wareneingang je Rolle einen Maniso-**Inventaraufkleber** (7 Ziffern) statt eines Blinkers. Eine Rolle = ein
+Wareneingang je Rolle einen **Inventaraufkleber** (7 Ziffern) statt eines Blinkers. Eine Rolle = ein
 `charge_gebinde`-Datensatz mit der Spalte `inventar_nr` (+ `auftrag_id`/`pa_id`/`verbraucht_am`, vom Dashboard-Schema
 angelegt). Die Spaltenprüfung `erp_gebinde_spalte_da()` degradiert sauber, solange das Dashboard-Schema noch nicht lief.
+**Eingabe = nur Gesamtmenge + Anzahl Rollen** (Nico): keine Menge je Rolle, keine Summenprüfung – die Menge wird
+gleichmäßig verteilt (Rest auf die letzte Rolle). Aufkleber je Rolle optional scannen, leer = automatisch.
 - `erp_inventar_norm($s)` – nur Ziffern, genau 7 Stellen, sonst `''`.
 - `erp_inventar_frei($nr,$ausser=0)` – frei, wenn keine aktive (status≠'leer') Rolle die Nummer trägt.
-- `erp_etikett_rollen_anlegen($charge_id,$rollen)` – `$rollen=[['nr'=>…,'menge'=>…],…]`, Menge je Rolle frei.
+- `erp_inventar_naechste($benutzt=[])` – nächste freie **Auto-Inventarnummer** im Band 9000000–9999999 (physische
+  Aufkleber liegen darunter); `$benutzt` = in diesem Durchlauf schon vergebene Nummern.
+- `erp_etikett_rollen_verteilen($charge_id,$gesamt,$anzahl,$nummern=[])` – verteilt `$gesamt` gleichmäßig auf
+  `$anzahl` Rollen (Rest auf die letzte), füllt die Inventarnummer je Rolle aus `$nummern` (gescannt) oder
+  automatisch, ruft dann `erp_etikett_rollen_anlegen`. **Blockiert nie** (gescannte Dublette → Auto-Nr. + Hinweis).
+- `erp_etikett_rollen_anlegen($charge_id,$rollen)` – `$rollen=[['nr'=>…,'menge'=>…],…]`, Menge je Rolle frei (Low-Level).
 - `erp_charge_rollen($charge_id)` – Rollen einer Charge (mit Auftragsnummer) für die Anzeige.
 - `erp_rolle_per_inventar($nr)` – eine Rolle per Inventarnummer (Produkt/Charge/Lieferant/Kunde/Auftrag).
 - `erp_etikett_rollen_fuer_item($item_id,$auftrag_id=0)` – freie Rollen eines Etiketts (Produktions-Auswahl).
