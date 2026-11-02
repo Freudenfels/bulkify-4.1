@@ -190,3 +190,11 @@ Quelle: `produktion_bereitschaft()` (netto, Restbedarf). Die farbige Phasenleist
 Bei Herstellung = Einkaufen (Zukauf) zeigt der Reiter Produktion jetzt die **Zukauf-Art** und erlaubt (Admin)
 das Umschalten: „Bulk/Pulver zukaufen – selbst abfüllen" (Verpackung zählt) vs. „Fertige Ware zukaufen"
 (Verpackung enthalten). Aktion `zukauf_art_setzen` → `produktionsauftrag.zukauf_art` + `bedarf_bump()`.
+
+## Fortschritt als Schritt-Karten (Punkt 2, 2026-11-02)
+Der Reiter Produktion zeigt den Fortschritt jetzt als **Schritt-Karten** (eine je Phase aus `auftrag_phasen()`):
+Farbe je Status (grün fertig / gelb läuft / grau wartet / rot blockiert bei „wartet auf Material" bis
+„In Produktion"), je Karte wer (wir/Lieferant; bei Zukauf Produktion/Etikett/QS = Lieferant) und Datum. Der
+AKTUELLE Schritt hat genau EINEN Hauptknopf „Schritt abschließen →" (`phase_setzen` auf idx+1; letzter =
+„Auftrag abschließen"). Die horizontale Phasenleiste bleibt oben als Überblick; „Fortschritt manuell auf eine
+Stufe setzen" (auch zurück) ist eingeklappt verfügbar.

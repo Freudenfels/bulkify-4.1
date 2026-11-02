@@ -1045,23 +1045,68 @@ if (auftrag_braucht_etikett($id)):
       <?php endforeach; ?>
     </ul>
   </div>
-  <?php // Fortschritt direkt auf JEDE Stufe setzen (alle Phasen, nicht nur die groben Status) – kein Reiter-Wechsel,
-        // funktioniert auch ohne Produktionsauftrag. Der grobe Auftragsstatus wird passend mitgefuehrt.
+  <?php // Punkt 2: Fortschritt als Schritt-Karten (eine je Phase) – Farbe je Status (grün fertig / gelb läuft /
+        // grau wartet / rot blockiert), je Karte wer (wir/Lieferant) und für den aktuellen Schritt genau EIN
+        // Hauptknopf. Die Phasenleiste oben bleibt als Überblick. Manuelles Setzen jeder Stufe bleibt (eingeklappt).
   if (has_role('admin') || has_role('sales') || has_role('production')):
       $ffA     = auftrag_ist_fulfillment((int)$a['id']);
       $phasenA = auftrag_phasen($ffA);
-      $curIdxA = (int) kunde_auftrag_phase($a)['idx']; ?>
+      $phInfoA = kunde_auftrag_phase($a);
+      $curIdxA = (int)$phInfoA['idx'];
+      $phDates = $phInfoA['dates'] ?? [];
+      $nPh     = count($phasenA);
+      $berWartet = (($berSt ?? '') === 'wartet'); ?>
   <?php if (isset($_GET['statusok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Status aktualisiert – der Kunde sieht es sofort.</div><?php endif; ?>
-  <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
-    <span class="k muted">Fortschritt setzen</span>
-    <form method="post" style="display:flex;flex-wrap:nowrap;gap:8px;align-items:center;margin:0">
-      <input type="hidden" name="aktion" value="phase_setzen">
-      <select name="phase" style="min-width:190px">
-        <?php foreach ($phasenA as $pi => $plbl): ?><option value="<?= (int)$pi ?>" <?= (int)$pi === $curIdxA ? 'selected' : '' ?>><?= h($plbl) ?></option><?php endforeach; ?>
-      </select>
-      <button class="btn btn-primary btn-sm" type="submit">Setzen</button>
-    </form>
-    <span class="muted" style="font-size:12px">Jede Stufe wählbar (z. B. „Rohstoff bestellt"). Die letzte Stufe schließt den Auftrag ab (Kunden-Archiv); Menge und Preis sind fixiert, Stornieren im Reiter „Details".</span>
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+    <div class="k muted" style="margin-bottom:10px">Schritte</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <?php foreach ($phasenA as $pi => $plbl):
+          $done    = $pi < $curIdxA;
+          $current = $pi === $curIdxA;
+          $blocked = $current && $berWartet && $pi <= 3;          // Material-Gate nur bis „In Produktion"
+          $laeuft  = $current && !$blocked;
+          $farbe = $done ? 'var(--gruen,#1D9E75)' : ($blocked ? '#b23b2f' : ($laeuft ? '#C9A227' : 'var(--line)'));
+          $stTxt = $done ? 'fertig' : ($blocked ? 'blockiert' : ($laeuft ? 'läuft' : 'wartet'));
+          $ikon  = $done ? '&#10003;' : ($current ? '&#9679;' : '&#9675;');
+          $actor = ($istFremd && in_array($pi, [3, 4, 5], true)) ? 'Lieferant' : 'wir';
+          $datum = $phDates[$pi] ?? null;
+      ?>
+      <div class="bx-panel" style="padding:10px 14px;margin:0;border-left:4px solid <?= $farbe ?>;<?= $current ? 'background:var(--panel-2)' : '' ?>">
+        <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:<?= $farbe ?>;font-size:16px;line-height:1"><?= $ikon ?></span>
+            <div>
+              <div style="font-weight:600;font-size:14px">Schritt <?= $pi + 1 ?>/<?= $nPh ?>: <?= h($plbl) ?></div>
+              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor === 'Lieferant' ? 'Lieferant' : 'wir' ?><?= $datum ? ' · ' . h(fmt_zeit((string)$datum, 'd.m.Y')) : '' ?></div>
+            </div>
+          </div>
+          <?php if ($current && $pi + 1 < $nPh): ?>
+          <form method="post" style="margin:0">
+            <input type="hidden" name="aktion" value="phase_setzen">
+            <input type="hidden" name="phase" value="<?= $pi + 1 ?>">
+            <button class="btn btn-primary btn-sm" type="submit"><?= $pi + 1 === $nPh - 1 ? 'Auftrag abschließen' : 'Schritt abschließen' ?> &rarr;</button>
+          </form>
+          <?php elseif ($current): ?>
+          <span class="muted" style="font-size:12px">letzter Schritt</span>
+          <?php endif; ?>
+        </div>
+        <?php if ($blocked): ?>
+        <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Wartet auf Material.</span> <a href="#" data-goto="material">Was fehlt? &rarr; Reiter Material</a></div>
+        <?php endif; ?>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <details class="bx-sek" style="margin-top:12px">
+      <summary style="cursor:pointer;font-size:13px" class="muted">Fortschritt manuell auf eine Stufe setzen</summary>
+      <form method="post" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 0">
+        <input type="hidden" name="aktion" value="phase_setzen">
+        <select name="phase" style="min-width:190px">
+          <?php foreach ($phasenA as $pi => $plbl): ?><option value="<?= (int)$pi ?>" <?= (int)$pi === $curIdxA ? 'selected' : '' ?>><?= h($plbl) ?></option><?php endforeach; ?>
+        </select>
+        <button class="btn btn-ghost btn-sm" type="submit">Setzen</button>
+        <span class="muted" style="font-size:12px">Jede Stufe wählbar (auch zurück, z. B. „Rohstoff bestellt"). Die letzte Stufe schließt den Auftrag ab; Stornieren im Reiter „Details".</span>
+      </form>
+    </details>
   </div>
   <?php endif; ?>
 </div>
