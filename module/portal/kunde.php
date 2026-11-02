@@ -553,6 +553,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         q("UPDATE rezeptur SET status='eingefroren', freigabe_name=?, freigabe_am=UTC_TIMESTAMP(), agb_version=? WHERE id=?", [$name, agb_version(), $rid]);
         rezeptur_naehrwerte_snapshot($rid);   // Nährwert-Deklaration beim Annehmen festschreiben (verschiebt sich nicht mehr)
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Rezeptur ' . $rez['nummer'] . ' verbindlich angenommen durch ' . $name . '.', 'rezeptur', 'rezeptur', $rid);
+        if (mail_bereit()) nach_antwort(fn() => mail_team_rezeptur_angenommen($rid));   // Team: Rezeptur angenommen
     }
     // Kann der Kunde Produkte anfragen, ist der nächste Schritt „prodanfrage" (Menge/Verpackung).
     // Ohne Produkt-Freischaltung führt das ins Leere (fällt auf „start" zurück) – dann zurück auf

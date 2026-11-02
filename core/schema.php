@@ -6388,6 +6388,7 @@ function lieferant_angebot_annehmen(int $angebot_id): string {
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
     q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);
     log_aktivitaet('lieferant', $lief, 'team', 'Angebot zu ' . $an['anfr_nummer'] . ' angenommen – ' . count($zeilen) . ' EK-Staffel(n) übernommen.', 'angebot', 'item', $item);
+    if (function_exists('mail_lieferant_preis_uebernommen') && mail_bereit()) nach_antwort(fn() => mail_lieferant_preis_uebernommen($angebot_id));   // Lieferant: Preis übernommen
     return '';
 }
 
@@ -6417,6 +6418,7 @@ function lieferant_fertig_angebot_annehmen(int $angebot_id, array $an): string {
         'Fertigprodukt-Angebot zu ' . $an['anfr_nummer'] . ' angenommen – Zukaufpreise übernommen (' . count($produkte) . ' Produkt(e)).',
         'angebot', 'rezeptur', $rez);
     // Kein Produkt zur Rezeptur? Angebot ist angenommen, aber der Preis erscheint erst, wenn es ein Produkt gibt.
+    if (function_exists('mail_lieferant_preis_uebernommen') && mail_bereit()) nach_antwort(fn() => mail_lieferant_preis_uebernommen($angebot_id));   // Lieferant: Preis übernommen
     return '';
 }
 // Einladung fuer einen Lieferanten erzeugen (oder die offene wiederverwenden) und den Link liefern.
@@ -6480,7 +6482,7 @@ function lieferant_bewerbung_anlegen(array $d): array {
     q("INSERT INTO benutzer (name,email,pass_hash,rollen,aktiv,lieferant_id) VALUES (?,?,?,?,0,?)",
       [mb_substr($name,0,190) ?: 'Lieferant', $email, password_hash($pass, PASSWORD_DEFAULT), 'lieferant', $lid]);
     log_aktivitaet('lieferant', $lid, 'lieferant', 'Neue Lieferanten-Bewerbung über die Website (' . $email . '). Wartet auf Freigabe.', 'lieferant');
-    return ['ok'=>true, 'fehler'=>''];
+    return ['ok'=>true, 'fehler'=>'', 'id'=>$lid];
 }
 
 // Bewerbung freigeben (Team): Lieferant entsperren + zugehörige Logins aktivieren. Rückgabe: true bei Erfolg.
@@ -7416,6 +7418,27 @@ function produktion_bereitschaft(int $pa_id): array {
     foreach (auftrag_bedarf_rest($pa_id) as $r)
         if ((float)$r['fehlt'] > 1e-6) $fehlend[] = $r;
     return ['status'=>$fehlend ? 'wartet' : 'bereit', 'fehlend'=>$fehlend];
+}
+// „Material komplett" melden (Paket Mails): Produktionsaufträge, die beim letzten Lauf auf Material WARTETEN und jetzt bereit sind,
+// bekommen EINMAL eine Team-Meldung (Mail + Benachrichtigung). Beim ersten Lauf wird nur gemerkt, wer wartet – bereits fertige
+// Aufträge werden nie gemeldet. Gedrosselt (höchstens alle 5 Min., außer $sofort), läuft nach der Antwort. Rückgabe: Anzahl Meldungen.
+function material_komplett_pruefen(bool $sofort = false): int {
+    if (!$sofort && time() - (int) meta_get('material_pruefung_zuletzt', '0') < 300) return 0;
+    meta_set('material_pruefung_zuletzt', (string) time());
+    $warte = array_map('intval', json_decode((string) meta_get('material_wartet', '[]'), true) ?: []);
+    $neu = []; $n = 0;
+    foreach (all("SELECT id FROM produktionsauftrag WHERE status IN ('offen','vorbereitung')") as $r) {
+        $pid = (int)$r['id'];
+        $st = produktion_bereitschaft($pid)['status'] ?? '';
+        if ($st === 'wartet') { $neu[] = $pid; continue; }
+        if ($st === 'bereit' && in_array($pid, $warte, true)) {
+            if (function_exists('mail_team_material_komplett')) mail_team_material_komplett($pid);
+            else benachrichtigung_add('Material komplett: PA #' . $pid, 'Alles Material da – die Produktion kann starten.', '?p=produktionsauftrag&id=' . $pid);
+            $n++;
+        }
+    }
+    meta_set('material_wartet', json_encode($neu));
+    return $n;
 }
 function bereitschaft_badge(string $s): string {
     return match ($s) {
@@ -9456,7 +9479,11 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
             'Verpacken'                => ((string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'fertig') ? ['ok'=>true] : produktion_verpackung_entnehmen($pa_id),
             default                    => ['ok'=>true],
         };
-        if (!($entnahme['ok'] ?? true)) return ['ok'=>false, 'fehler'=>'mangel', 'msg'=>'Nicht genug Bestand für diesen Schritt.', 'fertig'=>false, 'station'=>$station];
+        if (!($entnahme['ok'] ?? true)) {
+            // Team: Fehlbestand melden (Mail + Benachrichtigung; gleiche Meldung binnen 2 Min. nur einmal).
+            if (function_exists('mail_team_fehlbestand')) mail_team_fehlbestand($pa_id, $station, (array)($entnahme['fehlt'] ?? []));
+            return ['ok'=>false, 'fehler'=>'mangel', 'msg'=>'Nicht genug Bestand für diesen Schritt.', 'fertig'=>false, 'station'=>$station];
+        }
     }
     $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
     q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $wer !== '' ? $wer : null, $schritt_id]);

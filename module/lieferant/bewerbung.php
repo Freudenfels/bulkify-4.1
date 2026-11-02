@@ -26,6 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ]);
     $ok = !empty($r['ok']);
     $fehler = $r['fehler'] ?? '';
+    // Team: neue Bewerbung; Lieferant: Eingangsbestätigung (Paket Mails).
+    if ($ok && !empty($r['id']) && mail_bereit()) { $lidB = (int)$r['id']; nach_antwort(fn() => mail_lieferant_bewerbung_eingang($lidB)); }
 }
 
 lp_head('bulkify – ' . lp_t('bew_titel'));

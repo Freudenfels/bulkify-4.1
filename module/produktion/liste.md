@@ -36,3 +36,6 @@ Die Seite war unübersichtlich – „Produktionsbereit" enthielt auch schon LAU
 - **D1 produzierte Menge:** Neue Spalte **„Produziert"** je Zeile zeigt `gebucht / gesamt` (Packungen) – gebucht = Summe der Fertigware-Chargen am PA (`SUM(charge.menge) WHERE pa_id`), in EINER Sammelabfrage (`$prodMap`, kein N+1). Grün, sobald die Zielmenge erreicht ist.
 - **D2 ein Klick:** Klick auf eine Zeile führt **immer** auf die Produktionsauftrag-Übersicht (`?p=produktionsauftrag`) mit schnellem Überblick (Status, produzierte Menge, Charge, fehlendes Material, Fortschritt). Die geführte Produktion (`?p=produktion_run`) ist von dort per Button „Geführt produzieren" erreichbar – nicht mehr die erste Ansicht.
 - **D3 UI:** Status-Badges lesbarer (`public/assets/app.css`): `font-size` fs-sm statt fs-xs, `font-weight:500`, mehr Padding, kräftigere Textfarben für besseren Kontrast. Die Status-Kacheln oben sind ein responsives `bx-cards`-Grid (gleich groß). God-Mode bleibt.
+
+## Material komplett (Paket Mails)
+Beim Öffnen läuft `material_komplett_pruefen()` gedrosselt (höchstens alle 5 Min., nach der Antwort).

@@ -567,6 +567,7 @@ function mail_kunde_anfrage_eingang(string $quelle, int $id): string {
                   FROM portal_anfrage p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$id]);
     }
     if (!$p) return 'Anfrage oder Kunde nicht gefunden.';
+    mail_team_anfrage_eingang($quelle, $id);   // Team: neue Anfrage (unabhängig von der Kunden-Abschaltung)
     if (kunde_mails_aus((int)$p['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
     if (trim((string)$p['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
     $fa   = beleg_firma();
@@ -898,6 +899,109 @@ function mail_team_etikett_freigegeben(int $auftrag_id): int {
 "
         . mail_basis_url() . '/?p=auftrag&id=' . $auftrag_id . "
 ");
+}
+
+// --- Team- und Lieferanten-Mails zu Ablauf-Ereignissen (Paket Mails) ----------
+
+// Neue Kundenanfrage (Rezeptur, Produkt, Rohstoff, Dienstleistung) -> Team. $quelle wie mail_kunde_anfrage_eingang().
+function mail_team_anfrage_eingang(string $quelle, int $id): int {
+    if ($quelle === 'rezeptur') {
+        $p = one("SELECT r.nummer, r.produktname AS betreff, k.firma FROM rezeptur_anfrage r JOIN kunden k ON k.id=r.kunde_id WHERE r.id=?", [$id]);
+        $link = '?p=anfrage&id=' . $id; $art = 'Rezepturanfrage';
+    } else {
+        $p = one("SELECT p.nummer, p.betreff, p.typ, k.firma FROM portal_anfrage p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$id]);
+        $link = '?p=portal_anfragen'; $art = 'Portal-Anfrage';
+    }
+    if (!$p) return 0;
+    $bet = trim((string)($p['betreff'] ?? ''));
+    return mail_team($art . ' eingegangen: ' . $p['nummer'] . ' (' . $p['firma'] . ')',
+        'Der Kunde ' . $p['firma'] . ' hat die ' . $art . ' ' . $p['nummer'] . ($bet !== '' ? ' („' . $bet . '")' : '') . " im Portal gestellt.\n\n"
+        . mail_basis_url() . '/' . $link . "\n");
+}
+
+// Kunde hat eine Rezeptur verbindlich angenommen (eingefroren) -> Team.
+function mail_team_rezeptur_angenommen(int $rezeptur_id): int {
+    $r = one("SELECT r.nummer, r.name, r.freigabe_name, k.firma FROM rezeptur r LEFT JOIN kunden k ON k.id=r.kunde_id WHERE r.id=?", [$rezeptur_id]);
+    if (!$r) return 0;
+    return mail_team('Rezeptur angenommen: ' . $r['nummer'] . ' (' . ($r['firma'] ?: 'Kunde') . ')',
+        'Der Kunde ' . ($r['firma'] ?: '') . ' hat die Rezeptur ' . $r['nummer'] . ' („' . $r['name'] . '") verbindlich angenommen'
+        . ($r['freigabe_name'] ? ' (' . $r['freigabe_name'] . ')' : '') . ". Sie ist jetzt eingefroren.\n"
+        . "Nächster Schritt: Produkt/Angebot (Menge, Verpackung).\n\n" . mail_basis_url() . '/?p=rezeptur_detail&id=' . $rezeptur_id . "\n");
+}
+
+// Lieferanten-Bewerbung eingegangen -> Team + Eingangsbestätigung an den Lieferanten (in seiner Sprache).
+function mail_lieferant_bewerbung_eingang(int $lieferant_id): string {
+    $l = one("SELECT firma, ansprechpartner, email, sprache, land, kategorien, bewerbung_nachricht FROM lieferanten WHERE id=?", [$lieferant_id]);
+    if (!$l) return 'Lieferant nicht gefunden.';
+    mail_team('Neue Lieferanten-Bewerbung: ' . $l['firma'],
+        'Über die Website hat sich ' . $l['firma'] . ' (' . $l['email'] . ', ' . $l['land'] . ') als Lieferant beworben'
+        . ($l['kategorien'] ? ' – Bereiche: ' . $l['kategorien'] : '') . ".\n"
+        . (trim((string)$l['bewerbung_nachricht']) !== '' ? "\n" . mb_substr(trim((string)$l['bewerbung_nachricht']), 0, 600) . "\n" : '')
+        . "\nPrüfen und freigeben: " . mail_basis_url() . '/?p=lieferant&id=' . $lieferant_id . "\n");
+    if (trim((string)$l['email']) === '') return 'Keine E-Mail-Adresse.';
+    $fa = beleg_firma(); $sp = mail_lief_sprache($l['sprache']);
+    $an = trim((string)$l['ansprechpartner']) !== '' ? (string)$l['ansprechpartner'] : (string)$l['firma'];
+    if ($sp === 'de') { $b = 'Ihre Bewerbung als Lieferant bei ' . $fa['name'];
+        $t = "Guten Tag $an,\n\nvielen Dank für Ihre Bewerbung als Lieferant. Wir prüfen Ihre Angaben und schalten Ihren Zugang zum Lieferantenportal frei – Sie erhalten dann eine weitere E-Mail.\n\nViele Grüße\n" . $fa['name']; }
+    elseif ($sp === 'zh') { $b = '您在 ' . $fa['name'] . ' 的供应商申请';
+        $t = "$an 您好，\n\n感谢您申请成为我们的供应商。我们将审核您的信息，并开通供应商门户的访问权限——届时您会收到另一封邮件。\n\n此致\n" . $fa['name']; }
+    else { $b = 'Your supplier application at ' . $fa['name'];
+        $t = "Dear $an,\n\nthank you for applying as a supplier. We will review your details and activate your access to the supplier portal – you will receive another e-mail then.\n\nBest regards\n" . $fa['name']; }
+    return mail_senden((string)$l['email'], $b, $t, '');
+}
+
+// Lieferanten-Bewerbung freigegeben -> Lieferant (Zugang aktiv, Login-Link).
+function mail_lieferant_freigegeben(int $lieferant_id): string {
+    $l = one("SELECT firma, ansprechpartner, email, sprache FROM lieferanten WHERE id=?", [$lieferant_id]);
+    if (!$l || trim((string)$l['email']) === '') return 'Keine E-Mail-Adresse.';
+    $fa = beleg_firma(); $sp = mail_lief_sprache($l['sprache']); $link = mail_basis_url() . '/?p=lieferant_login';
+    $an = trim((string)$l['ansprechpartner']) !== '' ? (string)$l['ansprechpartner'] : (string)$l['firma'];
+    if ($sp === 'de') { $b = 'Ihr Zugang zum Lieferantenportal ist freigeschaltet';
+        $t = "Guten Tag $an,\n\nIhre Bewerbung ist freigegeben. Sie können sich ab sofort mit Ihrer E-Mail-Adresse und Ihrem Passwort im Lieferantenportal anmelden:\n$link\n\nDort sehen Sie Preisanfragen und Bestellungen.\n\nViele Grüße\n" . $fa['name']; }
+    elseif ($sp === 'zh') { $b = '您的供应商门户账户已开通';
+        $t = "$an 您好，\n\n您的申请已获批准。您现在可以使用电子邮箱和密码登录供应商门户：\n$link\n\n在门户中您可以查看询价和订单。\n\n此致\n" . $fa['name']; }
+    else { $b = 'Your supplier portal access is now active';
+        $t = "Dear $an,\n\nyour application has been approved. You can now log in to the supplier portal with your e-mail address and password:\n$link\n\nThere you will find price requests and purchase orders.\n\nBest regards\n" . $fa['name']; }
+    return mail_senden((string)$l['email'], $b, $t);
+}
+
+// Lieferantenpreis übernommen (Angebot angenommen) -> Lieferant.
+function mail_lieferant_preis_uebernommen(int $angebot_id): string {
+    $a = one("SELECT ag.preis, ag.einheit, ag.waehrung, af.nummer, af.betreff, l.firma, l.ansprechpartner, l.email, l.sprache, i.name AS item
+              FROM lieferant_angebot ag JOIN lieferant_anfrage af ON af.id=ag.anfrage_id JOIN lieferanten l ON l.id=ag.lieferant_id
+              LEFT JOIN item i ON i.id=af.item_id WHERE ag.id=?", [$angebot_id]);
+    if (!$a || trim((string)$a['email']) === '') return 'Keine E-Mail-Adresse.';
+    $fa = beleg_firma(); $sp = mail_lief_sprache($a['sprache']); $link = mail_basis_url() . '/?p=lieferant_login';
+    $was = (string)($a['item'] ?: $a['betreff']);
+    $an  = trim((string)$a['ansprechpartner']) !== '' ? (string)$a['ansprechpartner'] : (string)$a['firma'];
+    if ($sp === 'de') { $b = 'Ihr Angebot zu ' . $a['nummer'] . ' wurde übernommen';
+        $t = "Guten Tag $an,\n\nvielen Dank – wir haben Ihr Angebot zur Preisanfrage " . $a['nummer'] . ($was !== '' ? " ($was)" : '') . " angenommen und die Preise in unsere Kalkulation übernommen. Bestellungen folgen separat über das Portal.\n\n$link\n\nViele Grüße\n" . $fa['name']; }
+    elseif ($sp === 'zh') { $b = '您对 ' . $a['nummer'] . ' 的报价已被采纳';
+        $t = "$an 您好，\n\n感谢您的报价——我们已采纳询价 " . $a['nummer'] . ($was !== '' ? "（{$was}）" : '') . " 的报价，并将价格纳入我们的核算。订单将另行通过门户发出。\n\n$link\n\n此致\n" . $fa['name']; }
+    else { $b = 'Your offer for ' . $a['nummer'] . ' has been accepted';
+        $t = "Dear $an,\n\nthank you – we have accepted your offer for price request " . $a['nummer'] . ($was !== '' ? " ($was)" : '') . " and taken the prices into our calculation. Purchase orders will follow separately via the portal.\n\n$link\n\nBest regards\n" . $fa['name']; }
+    return mail_senden((string)$a['email'], $b, $t);
+}
+
+// Fehlbestand: ein Produktionsschritt konnte wegen fehlenden Materials nicht abgeschlossen werden -> Team.
+function mail_team_fehlbestand(int $pa_id, string $station, array $fehlt): int {
+    $pa = one("SELECT pa.nummer, a.nummer AS auftrag_nr, k.firma FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN kunden k ON k.id=pa.kunde_id WHERE pa.id=?", [$pa_id]);
+    if (!$pa) return 0;
+    $zeilen = [];
+    foreach ($fehlt as $f) $zeilen[] = '- ' . (string)($f['name'] ?? 'Material') . ': fehlt ' . rtrim(rtrim(number_format((float)($f['fehlt'] ?? 0), 3, ',', '.'), '0'), ',') . ' ' . (string)($f['einheit'] ?? '');
+    return mail_team('Fehlbestand: ' . $pa['nummer'] . ' – ' . $station,
+        'Der Schritt „' . $station . '" von ' . $pa['nummer'] . ($pa['auftrag_nr'] ? ' (Auftrag ' . $pa['auftrag_nr'] . ($pa['firma'] ? ', ' . $pa['firma'] : '') . ')' : '')
+        . " konnte nicht abgeschlossen werden – es fehlt Material:\n" . ($zeilen ? implode("\n", $zeilen) : '- (keine Details)') . "\n\n"
+        . mail_basis_url() . '/?p=produktionsauftrag&id=' . $pa_id . "\n");
+}
+
+// Material komplett: ein Produktionsauftrag, der auf Material WARTETE, ist jetzt produktionsbereit -> Team (einmal je PA).
+function mail_team_material_komplett(int $pa_id): int {
+    $pa = one("SELECT pa.nummer, a.nummer AS auftrag_nr, k.firma FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN kunden k ON k.id=pa.kunde_id WHERE pa.id=?", [$pa_id]);
+    if (!$pa) return 0;
+    return mail_team('Material komplett: ' . $pa['nummer'] . ($pa['auftrag_nr'] ? ' (' . $pa['auftrag_nr'] . ')' : ''),
+        'Für ' . $pa['nummer'] . ($pa['auftrag_nr'] ? ' (Auftrag ' . $pa['auftrag_nr'] . ($pa['firma'] ? ', ' . $pa['firma'] : '') . ')' : '')
+        . " ist jetzt alles Material da – die Produktion kann starten.\n\n" . mail_basis_url() . '/?p=produktionsauftrag&id=' . $pa_id . "\n");
 }
 
 // Neue Rückfrage/Antwort: die andere Seite bekommt den Text und einen Link zum Antworten.

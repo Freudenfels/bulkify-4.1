@@ -19,11 +19,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $codes = array_values(array_unique(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($_POST['tracking'] ?? ''))))));
             q("UPDATE charge SET tracking=? WHERE id=?", [$codes ? implode("\n", $codes) : null, $cid]);
         }
+        if ($cid) nach_antwort(fn() => material_komplett_pruefen(true));   // Team: „Material komplett" für wartende Aufträge
         header('Location: ?p=wareneingang' . ($cid ? '&ok=1' : '&fehler=1')); exit;
     }
     if ($aktion === 'freigeben') {
         q("UPDATE charge SET status='frei' WHERE id=? AND status='quarantaene'", [(int)($_POST['charge_id'] ?? 0)]);
         bedarf_bump();   // freigegebene Ware zählt sofort als verfügbar (Bedarf/Einkauf/Produktion)
+        nach_antwort(fn() => material_komplett_pruefen(true));   // Team: „Material komplett" für wartende Aufträge
         header('Location: ?p=wareneingang&frei=1' . (!empty($_POST['quarantaene']) ? '&quarantaene=1' . ((int)($_POST['q_item'] ?? 0) > 0 ? '&item=' . (int)$_POST['q_item'] : '') : '')); exit;
     }
     // Zukauf: fertige Bulkware zu einem Auftrag buchen (Fremdproduktion). Es gibt (noch) keinen Fertigware-
@@ -47,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $codes = array_values(array_unique(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($_POST['tracking'] ?? ''))))));
             q("UPDATE charge SET tracking=? WHERE id=?", [$codes ? implode("\n", $codes) : null, $cid]);
         }
+        if ($cid) nach_antwort(fn() => material_komplett_pruefen(true));
         header('Location: ?p=wareneingang' . ($cid ? '&zkok=1' : '&zkfehler=1')); exit;
     }
 }

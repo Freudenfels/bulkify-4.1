@@ -365,3 +365,6 @@ Neue Spalten (`core/schema.php`): `kunden.onboarding_checkliste_aus`, `kunden.po
 
 ## Etikett-Freigabe meldet „freigegeben“ (Paket Mails)
 Nach der Etikett-Freigabe im Portal gehen `mail_team_etikett_freigegeben()` (Team) und `mail_kunde_etikett_freigegeben()` (Bestätigung an den Kunden) raus – vorher erneut „Etikett-Design hochgeladen“.
+
+## Rezeptur angenommen (Paket Mails)
+Nach „Rezeptur verbindlich annehmen" bekommt das Team `mail_team_rezeptur_angenommen()`.

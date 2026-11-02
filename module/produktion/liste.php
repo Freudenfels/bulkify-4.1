@@ -3,6 +3,7 @@
 // Standard: nur produktionsbereite (alles Material da) + laufende. „Wartet auf Material" nur im eigenen Reiter.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+nach_antwort(fn() => material_komplett_pruefen());   // „Material komplett"-Meldung, höchstens alle 5 Min. (auch für Lager-App-Buchungen)
 
 $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'prio';

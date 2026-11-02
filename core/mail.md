@@ -81,3 +81,14 @@ Alle über `mail_kunde_einfach()` (Abschaltung je Kunde, Adresse, Anrede, Portal
 | `mail_kunde_zugang($kid)` | Kundenkonto: Knopf „Per Mail senden" am Erstzugang | Portal |
 | `mail_kunde_etikett_freigegeben($aid)` | Etikett-Freigabe im Portal | `v=bestellung&aid=` |
 Bei Lieferung (`auftrag_rechnung_bei_lieferung`) geht keine eigene Rechnungsmail raus – die Versand-/Fremdlager-Mail nennt die Rechnung mit.
+
+## Neue Team- und Lieferanten-Mails (Paket Mails)
+| Funktion | Auslöser | Empfänger |
+|---|---|---|
+| `mail_team_anfrage_eingang($quelle,$id)` | jede Kundenanfrage im Portal (aus `mail_kunde_anfrage_eingang()`, auch wenn Kunden-Mails aus sind) | Team |
+| `mail_team_rezeptur_angenommen($rid)` | Kunde nimmt Rezeptur verbindlich an | Team |
+| `mail_lieferant_bewerbung_eingang($lid)` | Lieferanten-Bewerbung über die Website | Team + Eingangsbestätigung an den Lieferanten (de/en/zh) |
+| `mail_lieferant_freigegeben($lid)` | Bewerbung freigegeben | Lieferant (Login-Link) |
+| `mail_lieferant_preis_uebernommen($angebot)` | `lieferant_angebot_annehmen()` / Fertigprodukt-Angebot übernommen | Lieferant |
+| `mail_team_fehlbestand($pa,$station,$fehlt)` | Produktionsschritt scheitert an Material (Dashboard) | Team |
+| `mail_team_material_komplett($pa)` | `material_komplett_pruefen()`: PA wartete auf Material und ist jetzt bereit | Team (einmal je PA) |

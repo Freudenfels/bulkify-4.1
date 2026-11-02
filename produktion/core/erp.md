@@ -63,3 +63,6 @@ Die Dashboard-Tabellen `prod_charge` / `prod_charge_rohstoff` + `charge.standort
 
 ## Zukauf-Art „fertig" (St-24)
 `erp_zukauf_fertig()` / `erp_zukauf_fertig_chargen()`: Bei fertiger Ware zeigt „Fertigware bereitstellen" die verkaufsfertigen Packungen am Auftrag (Soll in Pkg), `erp_fertigware_entnehmen()` prüft nur (kein Verbrauch), `erp_pa_fehlbedarf()` meldet Packungen, „Verpacken" bucht keine Verpackung ab. Eingelagert/zugeordnet wird im Dashboard (Lieferanten-MHD bleibt). Spiegel von `produktion_zukauf_fertig_chargen()`.
+
+## Fehlbestand melden (Paket Mails)
+`erp_fehlbestand_melden($pa,$station,$msg)`: scheitert ein Schritt in Werk-/Prod-App an Material, entsteht eine Team-Benachrichtigung im Dashboard (gleiche Meldung binnen 10 Min. nur einmal). Mails verschickt nur das Dashboard.

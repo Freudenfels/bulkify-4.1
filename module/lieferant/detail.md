@@ -80,3 +80,6 @@ Wird im Formular die Kategorie **Rohstoff** abgewählt (vorher gesetzt), ruft de
 
 ## E1 – Keine Massenanfragen mehr (2026-10-28)
 Der Reiter „Katalog" zeigt kein „Alles auf einmal anfragen" mehr; der `sammelanfrage`-Handler ist deaktiviert (nur Hinweis). Rohstoffe werden gezielt einzeln angefragt (Reiter „Preisanfragen", `aktion=anfrage`). Bestehende aufgeblähte Anfragen räumt man über `?p=lief_anfragen` (Admin-Panel „Massenanfragen aufräumen") auf.
+
+## Bewerbung freigeben (Paket Mails)
+„Bewerbung freigeben" schickt dem Lieferanten `mail_lieferant_freigegeben()` (Zugang aktiv, Login-Link).

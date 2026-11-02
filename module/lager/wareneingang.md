@@ -28,3 +28,6 @@ Der Helfer `$mng($menge,$einheit)` (Chargen-Liste) zeigt Gewichts-/Volumen-Charg
 
 ## Fertige Ware zum Auftrag (Handelsware / Zukauf „fertig", S-15)
 „Fertigware zum Auftrag" bietet auch Handelsware-Aufträge (ohne Rezeptur) an. Bei Handelsware bzw. Zukauf-Art „fertig" wird in **Packungen** auf den verkaufsfertigen Artikel des Produkts gebucht (MHD = Lieferanten-MHD aus der Eingabe) und die Charge dem Auftrag zugeordnet; sonst wie bisher lose Bulkware auf den Rezeptur-Bulk-Artikel.
+
+## Material komplett (Paket Mails)
+Nach Buchung, Zukauf-Buchung und Quarantäne-Freigabe läuft `material_komplett_pruefen(true)` (nach der Antwort).

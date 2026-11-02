@@ -250,3 +250,8 @@ Bei `produktionsauftrag.zukauf_art='fertig'` (fertige, abgefüllte Ware) – und
 
 ## Versand-Mails (Paket Mails)
 `auftrag_versenden_menge()` schickt nach jeder (Teil-)Lieferung `mail_kunde_versand()` (LS-Nummer, Menge, offener Rest, freigegebene Rechnung), `auftrag_ins_fremdlager()` schickt `mail_kunde_fremdlager()`. Beide nach der Antwort, nur wenn der Mailversand eingerichtet ist.
+
+## Material komplett / Fehlbestand (Paket Mails)
+- `material_komplett_pruefen($sofort)`: merkt sich in `app_meta material_wartet` die Produktionsaufträge, die auf Material warten; ist einer davon beim nächsten Lauf bereit, geht EINMAL „Material komplett" ans Team. Beim ersten Lauf wird nur gemerkt (keine Meldung für schon bereite). Läuft nach Wareneingang/Quarantäne-Freigabe im Dashboard (`$sofort`) und gedrosselt (alle 5 Min.) beim Öffnen der Produktionsübersicht – so werden auch Buchungen aus der Lager-App erfasst.
+- `produktion_schritt_erledigen()`: scheitert ein Schritt an Material, geht `mail_team_fehlbestand()` raus.
+- `lieferant_bewerbung_anlegen()` gibt zusätzlich `id` zurück.

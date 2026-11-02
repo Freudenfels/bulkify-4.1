@@ -24,7 +24,7 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
 
 // Lieferanten-Bewerbung freigeben: entsperrt den Lieferanten und aktiviert seinen Portal-Zugang.
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bewerbung_freigeben') {
-    lieferant_bewerbung_freigeben((int)$id);
+    if (lieferant_bewerbung_freigeben((int)$id) && mail_bereit()) nach_antwort(fn() => mail_lieferant_freigegeben((int)$id));   // Lieferant: Zugang frei
     header('Location: ?p=lieferant&id=' . (int)$id . '&freigegeben=1'); exit;
 }
 

@@ -678,6 +678,7 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
             $teile[] = (string)($f['name'] ?? 'Material') . ' (fehlt ' . $fehlbetrag . ' ' . (string)($f['einheit'] ?? '') . ')';
         }
         $msg = 'Nicht genug Bestand für diesen Schritt' . ($teile ? ': ' . implode(', ', $teile) . '.' : '.');
+        erp_fehlbestand_melden($pa_id, $station, $msg);   // Team-Benachrichtigung im Dashboard (Paket Mails)
         return ['ok'=>false, 'fehler'=>'mangel', 'msg'=>$msg, 'fertig'=>false, 'station'=>$station, 'fehlt'=>$fehlt];
     }
 
@@ -828,6 +829,17 @@ function erp_fertigware_einheit(int $pa_id): string {
     $rid = erp_pa_rezeptur_id($pa_id);
     $f = $rid ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) : '';
     return in_array($f, ['pulver', 'granulat'], true) ? 'g' : (in_array($f, ['fluessig', 'gel'], true) ? 'ml' : 'Stk');
+}
+// Fehlbestand im Werk -> Team-Benachrichtigung im Dashboard (Mails verschickt nur das Dashboard). Gleiche Meldung binnen 10 Min. nur einmal.
+function erp_fehlbestand_melden(int $pa_id, string $station, string $msg): void {
+    if (!tabelle_da('benachrichtigung')) return;
+    $nr = (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $betreff = 'Fehlbestand: ' . ($nr ?: 'PA #' . $pa_id) . ' – ' . $station;
+    if ((int) scalar("SELECT COUNT(*) FROM benachrichtigung WHERE betreff=? AND erstellt > ?", [$betreff, gmdate('Y-m-d H:i:s', time() - 600)]) > 0) return;
+    $jetzt = gmdate('Y-m-d H:i:s'); $link = '?p=produktionsauftrag&id=' . $pa_id;
+    $hatArt = (bool) scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='benachrichtigung' AND column_name='art'");
+    if ($hatArt) q("INSERT INTO benachrichtigung (betreff,text,link,art,wichtig,erstellt) VALUES (?,?,?,?,1,?)", [$betreff, $msg, $link, 'auftrag', $jetzt]);
+    else         q("INSERT INTO benachrichtigung (betreff,text,link,erstellt) VALUES (?,?,?,?)", [$betreff, $msg, $link, $jetzt]);
 }
 // Zukauf „fertig" (St-24, Spiegel von produktion_zukauf_fertig_chargen): die zugekaufte Ware sind schon verkaufsfertige Packungen
 // am Auftrag. Bereitstellen prüft sie nur (kein Verbrauch); eingelagert/zugeordnet werden sie im Dashboard (Lieferanten-MHD bleibt).
