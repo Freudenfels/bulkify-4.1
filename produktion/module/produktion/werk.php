@@ -519,7 +519,7 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endif; ?>
 
     <?php if (!empty($mat['zeilen'])): ?>
-    <div class="muted" style="margin-top:14px"><?= h($T['get_from_stock']) ?><?php if (($mat['soll_menge'] ?? null) !== null): ?> · <?= h($T['needed']) ?> <strong style="color:var(--text)"><?= menge_txt($mat['soll_menge']) ?> <?= h((string)($mat['soll_einheit'] ?? '')) ?></strong><?php endif; ?>:</div>
+    <div class="muted" style="margin-top:14px"><?= h($T['get_from_stock']) ?><?php if (($mat['soll_menge'] ?? null) !== null): ?> · <?= h($T['needed']) ?> <strong style="color:var(--text)"><?= h(menge_einh_txt($mat['soll_menge'], (string)($mat['soll_einheit'] ?? ''))) ?></strong><?php endif; ?>:</div>
     <table class="mat">
       <thead><tr><th><?= h($T['th_material']) ?></th><th class="num"><?= h($T['th_amount']) ?></th><th class="num"><?= h($T['th_stock']) ?></th><th class="num"><?= h($T['th_location']) ?></th></tr></thead>
       <tbody>
@@ -533,8 +533,8 @@ header('Content-Type: text/html; charset=utf-8');
                 <?php if ($scanAktiv && $pflicht): ?><span class="scanstat" data-cid="<?= (int)$z['charge_id'] ?>" data-cnr="<?= h(strtoupper((string)($z['charge_nr'] ?? ''))) ?>" style="display:inline-block;margin-left:8px;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:700;background:var(--panel2);border:1px solid var(--line);color:var(--muted)"><?= h($T['to_scan']) ?></span><?php endif; ?>
               </div>
               <?php endif; ?></td>
-          <td class="num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
-          <td class="num <?= $knapp ? 'knapp' : '' ?>"><?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '–' ?></td>
+          <td class="num"><?= h(menge_einh_txt($z['menge'], (string)$z['einheit'])) ?></td>
+          <td class="num <?= $knapp ? 'knapp' : '' ?>"><?= isset($z['verfuegbar']) ? h(menge_einh_txt($z['verfuegbar'], (string)$z['einheit'])) : '–' ?></td>
           <td class="num"><?= $blinkBtn($z['charge_id'] ?? 0) ?></td>
         </tr>
         <?php endforeach; ?>

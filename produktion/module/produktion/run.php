@@ -84,7 +84,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         else {
             $r = erp_teilmenge_produzieren($id, (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0')), $akteur);
             if (!$r['ok'] && !empty($r['fehlt'])) {
-                $t = []; foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_txt($f['fehlt']) . ' ' . (string)$f['einheit'] . ')';
+                $t = []; foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_einh_txt($f['fehlt'], (string)$f['einheit']) . ')';
                 flash('Nicht genug Material: ' . implode(', ', $t) . '.', 'warn');
             } else flash($r['msg'], $r['ok'] ? 'ok' : 'warn');
         }
@@ -253,7 +253,7 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
 
   <?php if ($mat['zeilen']): ?>
   <div style="margin:0 0 14px">
-    <div class="muted" style="font-size:13px;margin-bottom:6px">Aus dem Lager holen<?php if ($mat['soll_menge'] !== null): ?> · benötigt <strong><?= menge_txt($mat['soll_menge']) ?> <?= h((string)$mat['soll_einheit']) ?></strong><?php endif; ?>:</div>
+    <div class="muted" style="font-size:13px;margin-bottom:6px">Aus dem Lager holen<?php if ($mat['soll_menge'] !== null): ?> · benötigt <strong><?= h(menge_einh_txt($mat['soll_menge'], (string)$mat['soll_einheit'])) ?></strong><?php endif; ?>:</div>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Material</th><th class="bx-num">Menge</th><th class="bx-num">Bestand</th><th></th></tr></thead>
       <tbody>
@@ -262,9 +262,9 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
             $knapp = $pflicht && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']; ?>
         <tr>
           <td><?= h((string)$z['name']) ?><?php if (!empty($z['detail'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$z['detail']) ?><?= $pflicht ? '' : ' (zur Info)' ?></span><?php endif; ?></td>
-          <td class="bx-num"><?= menge_txt($z['menge']) ?> <?= h((string)$z['einheit']) ?></td>
+          <td class="bx-num"><?= h(menge_einh_txt($z['menge'], (string)$z['einheit'])) ?></td>
           <td class="bx-num"<?= $knapp ? ' style="color:#8f231b"' : '' ?>>
-            <?= isset($z['verfuegbar']) ? menge_txt($z['verfuegbar']) . ' ' . h((string)$z['einheit']) : '' ?>
+            <?= isset($z['verfuegbar']) ? h(menge_einh_txt($z['verfuegbar'], (string)$z['einheit'])) : '' ?>
             <?php if (!empty($z['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($z['quarantaene']) ?> in Quarantäne – <a href="/lager/?p=quarantaene&item=<?= (int)($z['item_id'] ?? 0) ?>">erst freigeben</a></span><?php endif; ?>
           </td>
           <td class="bx-num">

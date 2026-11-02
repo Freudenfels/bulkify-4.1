@@ -57,3 +57,6 @@ Die Dashboard-Tabellen `prod_charge` / `prod_charge_rohstoff` + `charge.standort
 
 ## Teil 4 (Schritt 5): Restmischung einbuchen
 `erp_restmischung_einbuchen($pa_id, $menge_kg, $von)` – legt die übrige gemischte Bulkware als `charge` des Rezeptur-Bulk-Artikels (`erp_rezeptur_bulkitem`) an: Menge in kg (`einheit='kg'`), `charge_nr` = Mischcharge-Nr (`erp_prod_charge_fuer_pa`, sonst PR-Charge-Nr), MHD = `erp_mhd_standard()`, Status 'frei', Standort Lager 1, `pa_id` gesetzt. Rückgabe ['ok','charge_nr','mhd',…].
+
+## Zugekaufte Bulkware in g/ml statt Stk (St-13)
+`erp_fertigware_einheit($pa_id)` liefert die Einheit der zugekauften Bulkware nach Darreichungsform der Rezeptur: Pulver/Granulat `g`, Flüssig/Gel `ml`, sonst `Stk`. `erp_schritt_material()` (Station „Fertigware bereitstellen"), `erp_pa_fehlbedarf()` und `erp_fertigware_entnehmen()` nutzen sie statt des festen „Stk"; der Verbrauch (`produktion_verbrauch.einheit`) bekommt die Einheit der Charge. `erp_fertigware_chargen()` liefert dafür zusätzlich `c.einheit`. Spiegel im Dashboard: `produktion_fertigware_einheit()` in `core/schema.php`.

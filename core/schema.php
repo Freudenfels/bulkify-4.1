@@ -3182,9 +3182,17 @@ function produktion_kapseln_entnehmen(int $pa_id): array {
     return ['ok'=>true, 'fehlt'=>[]];
 }
 
+// Einheit der zugekauften Bulkware eines PA: Pulver/Granulat in g, Flüssig/Gel in ml (Soll = Packungen × Füllmenge),
+// sonst Stück (Kapseln/Tabletten). Vorher stand fest „Stk" – bei Pulver „600.000 Stk" statt 600 kg (St-13).
+function produktion_fertigware_einheit(array $pa): string {
+    $rid = (int)($pa['rezeptur_id'] ?? 0);
+    if (!$rid && !empty($pa['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    $e = $rid ? form_groessen_einheit((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid])) : '';
+    return $e !== '' ? $e : 'Stk';
+}
 // Zugekaufte fertige Bulkware (Kategorie 'fertig') für den Auftrag FEFO abbuchen (Station „Fertigware bereitstellen").
 function produktion_fertigware_entnehmen(int $pa_id): array {
-    $pa = one("SELECT menge, produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $pa = one("SELECT menge, produkt_id, auftrag_id, rezeptur_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa || !$pa['auftrag_id']) return ['ok'=>true, 'fehlt'=>[]];
     $einh = produktion_stueck_je_packung($pa);                         // mit Fallback auf auftrag.stueck (v3-Import)
     $benoetigt = (float)$pa['menge'] * $einh;
@@ -3194,15 +3202,16 @@ function produktion_fertigware_entnehmen(int $pa_id): array {
                     ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]);
     $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
     if ($verf + 0.0001 < $benoetigt)
-        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
+        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>produktion_fertigware_einheit($pa)]]];
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
+        // Verbrauch in der Einheit der Charge (Pulver-Bulk in g), nicht pauschal „Stk".
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
-          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, 'Stk', gmdate('Y-m-d H:i:s')]);
+          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, (string)($c['einheit'] ?? '') ?: produktion_fertigware_einheit($pa), gmdate('Y-m-d H:i:s')]);
         $rest -= $nimm;
     }
     return ['ok'=>true, 'fehlt'=>[]];

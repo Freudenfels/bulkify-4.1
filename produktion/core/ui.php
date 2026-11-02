@@ -14,6 +14,14 @@ function menge_txt($m): string {
     if ($m === null || $m === '') return '';
     return rtrim(rtrim(number_format((float)$m, 3, ',', '.'), '0'), ',');
 }
+// Menge MIT Einheit, Schüttgut lesbar: g -> kg/t, ml -> L (600.000 g -> „600 kg"); Stück & Co. wie menge_txt + Einheit.
+function menge_einh_txt($m, ?string $e): string {
+    $e = (string)$e; $v = (float)$m;
+    if ($e === 'g'  && abs($v) >= 1000000) return menge_txt($v / 1000000) . ' t';
+    if ($e === 'g'  && abs($v) >= 1000)    return menge_txt($v / 1000) . ' kg';
+    if ($e === 'ml' && abs($v) >= 1000)    return menge_txt($v / 1000) . ' L';
+    return trim(menge_txt($m) . ' ' . $e);
+}
 function weiter(string $ziel): never { header('Location: ' . $ziel); exit; }
 // Eine Dauer in Sekunden menschenlesbar machen (Sek/Min/Std/Tage). null -> „–".
 function dauer_txt(?float $sek): string {

@@ -37,7 +37,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') ==
     $r = erp_teilmenge_produzieren($id, $m, (string)(pr_benutzer()['name'] ?? ''));
     if (!$r['ok'] && !empty($r['fehlt'])) {
         $t = [];
-        foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_txt($f['fehlt']) . ' ' . (string)$f['einheit'] . ')';
+        foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_einh_txt($f['fehlt'], (string)$f['einheit']) . ')';
         flash('Nicht genug Material für diese Teilmenge: ' . implode(', ', $t) . '.', 'warn');
     } else {
         flash($r['msg'], $r['ok'] ? 'ok' : 'warn');
@@ -182,9 +182,9 @@ if ($bedarf && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($bedarf as $b
       <tr>
         <td><?= h((string)$b['name']) ?></td>
         <td class="bx-num"><?= (float)$b['menge_mg'] > 0 ? menge_txt($b['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td>
-        <td class="bx-num"><?= menge_txt($b['benoetigt']) ?> <?= h((string)$b['einheit']) ?></td>
-        <td class="bx-num"><?= menge_txt($b['verfuegbar']) ?> <?= h((string)$b['einheit']) ?><?php if (!empty($b['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($b['quarantaene']) ?> in Quarantäne – <a href="/lager/?p=quarantaene&item=<?= (int)($b['item_id'] ?? 0) ?>">erst freigeben</a></span><?php endif; ?></td>
-        <td><?= $ok ? '<span class="badge badge-ok">genug</span>' : '<span class="badge badge-warn">fehlt ' . menge_txt($b['fehlt']) . ' ' . h((string)$b['einheit']) . '</span>' ?></td>
+        <td class="bx-num"><?= h(menge_einh_txt($b['benoetigt'], (string)$b['einheit'])) ?></td>
+        <td class="bx-num"><?= h(menge_einh_txt($b['verfuegbar'], (string)$b['einheit'])) ?><?php if (!empty($b['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($b['quarantaene']) ?> in Quarantäne – <a href="/lager/?p=quarantaene&item=<?= (int)($b['item_id'] ?? 0) ?>">erst freigeben</a></span><?php endif; ?></td>
+        <td><?= $ok ? '<span class="badge badge-ok">genug</span>' : '<span class="badge badge-warn">fehlt ' . h(menge_einh_txt($b['fehlt'], (string)$b['einheit'])) . '</span>' ?></td>
       </tr>
       <?php endforeach; ?>
       <tr><td class="muted">Füllgewicht je Einheit</td><td class="bx-num"><?= menge_txt($sumMg) ?> mg</td><td colspan="3"></td></tr>
@@ -217,9 +217,9 @@ if ($bedarf && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($bedarf as $b
       <?php foreach ($ber['fehlend'] as $fdd): ?>
         <tr>
           <td><?= h((string)$fdd['name']) ?></td>
-          <td class="bx-num"><?= menge_txt($fdd['benoetigt']) ?> <?= h((string)$fdd['einheit']) ?></td>
-          <td class="bx-num"><?= menge_txt($fdd['verfuegbar']) ?> <?= h((string)$fdd['einheit']) ?><?php if (!empty($fdd['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($fdd['quarantaene']) ?> in Quarantäne – <a href="/lager/?p=quarantaene&item=<?= (int)($fdd['item_id'] ?? 0) ?>">erst freigeben</a></span><?php endif; ?></td>
-          <td class="bx-num" style="color:#8f231b"><?= menge_txt($fdd['fehlt']) ?> <?= h((string)$fdd['einheit']) ?></td>
+          <td class="bx-num"><?= h(menge_einh_txt($fdd['benoetigt'], (string)$fdd['einheit'])) ?></td>
+          <td class="bx-num"><?= h(menge_einh_txt($fdd['verfuegbar'], (string)$fdd['einheit'])) ?><?php if (!empty($fdd['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($fdd['quarantaene']) ?> in Quarantäne – <a href="/lager/?p=quarantaene&item=<?= (int)($fdd['item_id'] ?? 0) ?>">erst freigeben</a></span><?php endif; ?></td>
+          <td class="bx-num" style="color:#8f231b"><?= h(menge_einh_txt($fdd['fehlt'], (string)$fdd['einheit'])) ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>

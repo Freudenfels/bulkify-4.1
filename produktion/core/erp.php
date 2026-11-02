@@ -339,11 +339,11 @@ function erp_schritt_material(int $pa_id, string $station): array {
             break;
         case 'Fertigware bereitstellen':
             $soll_menge = (float)$pa['menge'] * erp_stueck_je_packung($pa);
-            $soll_einheit = 'Stk';
+            $soll_einheit = erp_fertigware_einheit($pa_id);        // Pulver: g (Packungen × g je Packung), sonst Stk
             $chargen = erp_fertigware_chargen($pa_id, 'frei');   // Auftrag ODER Rezeptur-Bulk
             foreach ($chargen as $c)
                 $zeilen[] = ['name'=>$c['name'], 'detail'=>'Charge ' . $c['charge_nr'], 'menge'=>(float)$c['menge_verfuegbar'],
-                             'einheit'=>'Stk', 'verfuegbar'=>(float)$c['menge_verfuegbar'], 'item_id'=>(int)$c['item_id'], 'charge_id'=>(int)$c['id']];
+                             'einheit'=>(string)($c['einheit'] ?? '') ?: $soll_einheit, 'verfuegbar'=>(float)$c['menge_verfuegbar'], 'item_id'=>(int)$c['item_id'], 'charge_id'=>(int)$c['id']];
             // Noch keine Fertigware im Lager: trotzdem klar ansagen, WAS und WIE VIEL bereitzustellen ist.
             if (!$chargen) {
                 $pname = (string) scalar("SELECT COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung, r.name)
@@ -353,7 +353,7 @@ function erp_schritt_material(int $pa_id, string $station): array {
                                           LEFT JOIN rezeptur r ON r.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
                                           WHERE pa.id=?", [$pa_id]);
                 $zeilen[] = ['name'=>($pname !== '' ? $pname : 'Fertigware') . ' (zugekaufte Fertigware)', 'detail'=>'noch nicht im Lager gebucht',
-                             'menge'=>$soll_menge, 'einheit'=>'Stk', 'verfuegbar'=>0.0, 'item_id'=>0];
+                             'menge'=>$soll_menge, 'einheit'=>$soll_einheit, 'verfuegbar'=>0.0, 'item_id'=>0];
             }
             break;
         case 'Verpacken':
@@ -572,7 +572,7 @@ function erp_pa_fehlbedarf(int $pa_id): array {
         $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_fertigware_chargen($pa_id, 'frei')));
         if ($verf + 0.0001 < $benoetigt) {
             $quar = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_fertigware_chargen($pa_id, 'quarantaene')));
-            $fehlend[] = ['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt - $verf, 'einheit'=>'Stk', 'quarantaene'=>$quar];
+            $fehlend[] = ['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt - $verf, 'einheit'=>erp_fertigware_einheit($pa_id), 'quarantaene'=>$quar];
         }
         return $fehlend;
     }
@@ -813,13 +813,20 @@ function erp_pa_rezeptur_id(int $pa_id): int {
     if (!$rid && !empty($pa['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
     return $rid;
 }
+// Einheit der zugekauften Bulkware eines PA (Spiegel von produktion_fertigware_einheit): Pulver/Granulat g,
+// Flüssig/Gel ml (Soll = Packungen × Füllmenge je Packung), sonst Stück. Vorher fest „Stk" („600.000 Stk", St-13).
+function erp_fertigware_einheit(int $pa_id): string {
+    $rid = erp_pa_rezeptur_id($pa_id);
+    $f = $rid ? (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) : '';
+    return in_array($f, ['pulver', 'granulat'], true) ? 'g' : (in_array($f, ['fluessig', 'gel'], true) ? 'ml' : 'Stk');
+}
 // Zugekaufte fertige Bulkware eines Auftrags: entweder direkt AM AUFTRAG gebucht oder als Bulk der REZEPTUR
 // (Kunde koppelt die Bulkware an die Rezeptur, nicht zwingend an den einzelnen Auftrag). $status: frei|quarantaene.
 function erp_fertigware_chargen(int $pa_id, string $status = 'frei'): array {
     $auf = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     $rid = erp_pa_rezeptur_id($pa_id);
     if (!$auf && !$rid) return [];
-    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.item_id, i.name
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.item_id, i.name
                 FROM charge c JOIN item i ON i.id=c.item_id
                 WHERE i.kategorie='fertig' AND c.status=? AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL
                   AND (c.auftrag_id=? OR (?>0 AND i.rezeptur_id=?))
@@ -835,7 +842,7 @@ function erp_fertigware_entnehmen(int $pa_id): array {
     $chargen = erp_fertigware_chargen($pa_id, 'frei');
     $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
     if ($verf + 0.0001 < $benoetigt)
-        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>'Stk']]];
+        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>erp_fertigware_einheit($pa_id)]]];
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
@@ -843,7 +850,7 @@ function erp_fertigware_entnehmen(int $pa_id): array {
         $neu  = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
-          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, 'Stk', gmdate('Y-m-d H:i:s')]);
+          [$pa_id, (int)$c['item_id'], $c['id'], $nimm, (string)($c['einheit'] ?? '') ?: erp_fertigware_einheit($pa_id), gmdate('Y-m-d H:i:s')]);   // Einheit der Charge (Pulver g)
         $rest -= $nimm;
     }
     return ['ok'=>true, 'fehlt'=>[]];
