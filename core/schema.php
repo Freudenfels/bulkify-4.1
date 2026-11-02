@@ -5736,6 +5736,14 @@ function angebot_staffel_cache_verwerfen(int $angebot_id): void {
 // (Herstellung + Verpackung + Deckel + Etikett …) wie im Angebot, statt einer Sammelposition.
 // Streng: nur wenn die Summe (Preis je Packung × Menge) EXAKT den Auftrags-Netto ergibt – sonst [].
 // So kann eine Rechnung nie eine falsche Summe zeigen; der Aufrufer faellt dann auf die Sammelposition zurueck.
+// GESAMTpreis je Packung eines Auftrags (netto, inkl. Glas/Deckel/Etikett): gesamt_netto / menge. auftrag.vk_stueck war bei
+// Positions-/Zellen-Aufträgen nur die Herstellung (S-04 intern, S-19) – neue Aufträge tragen den Gesamtpreis, ältere werden hier
+// aus gesamt_netto/menge abgeleitet. Rückfall auf vk_stueck, wenn es keinen Gesamtbetrag gibt.
+function auftrag_vk_gesamt(array $a): float {
+    $menge = (int)($a['menge'] ?? 0); $netto = (float)($a['gesamt_netto'] ?? 0);
+    if ($menge > 0 && $netto > 0) return round($netto / $menge, 4);
+    return (float)($a['vk_stueck'] ?? 0);
+}
 function beleg_positionen_aus_auftrag(array $auf, float $ustSatz): array {
     $angId = (int)($auf['angebot_id'] ?? 0);
     if ($angId <= 0) return [];
@@ -10821,7 +10829,9 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
 
     $menge = (int) round((float)$herst['menge']);                       // Anzahl Packungen
     $netto = 0.0; foreach ($pos as $p) $netto += (float)$p['menge'] * (int)$p['preis_cent'] / 100;
-    $vkStk = round((int)$herst['preis_cent'] / 100, 4);                 // Herstellung je Packung
+    // vk_stueck = GESAMTpreis je Packung (Herstellung + Glas + Deckel + Etikett), nicht nur die Herstellungszeile (S-04/S-19).
+    // Die Kundenpreisliste (unten) führt weiter den Herstellungspreis OHNE Verpackung.
+    $vkStk = $menge > 0 ? round($netto / $menge, 4) : round((int)$herst['preis_cent'] / 100, 4);
 
     q("INSERT INTO auftrag (nummer,angebot_id,kunde_id,produkt_id,menge,stueck,verpackung_id,vk_stueck,gesamt_netto,status)
        VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -10872,9 +10882,11 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
     // mit dessen Packungsgröße und Verpackung statt mit der bestellten.
     $bestellt = produkt_variante_id((int)$a['produkt_id'], $stueck, $verp_id) ?: (int)$a['produkt_id'];
     $netto = angebot_zelle_netto_cent((int)$a['produkt_id'], $stueck, $bestellmenge, (int)$a['kunde_id'], $verp_id) / 100;   // Herstellung + Verpackung der Zelle, belegkonform gerundet
+    // vk_stueck = GESAMTpreis je Packung (Herstellung + Verpackung der Zelle), $vk (nur Herstellung) bleibt für die Kundenpreisliste.
+    $vkGesamt = $menge > 0 ? round($netto / $menge, 4) : $vk;
     q("INSERT INTO auftrag (nummer,angebot_id,kunde_id,produkt_id,menge,stueck,verpackung_id,vk_stueck,gesamt_netto,status)
        VALUES (?,?,?,?,?,?,?,?,?,?)",
-      [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, $vk, $netto, 'offen']);
+      [naechste_nummer('AB'), $angebot_id, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, $vkGesamt, $netto, 'offen']);
     $aid = insert_id();
     auftrag_name_snapshot((int)$aid);
     q("INSERT IGNORE INTO angebot_produkt (angebot_id,produkt_id,stueck,verpackung_id) VALUES (?,?,?,?)",

@@ -3883,7 +3883,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php foreach ($nbCards as $a):
         $pidK      = (int)$a['produkt_id']; $stk = (int)($a['stueck'] ?? 0);
         $defMenge  = (int)($a['menge'] ?? 0);
-        $nbVk      = (float)($a['vk_stueck'] ?? 0);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
+        $nbVk      = auftrag_vk_gesamt($a);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
         $nbStaffel = nachbestellung_staffel($kid, $pidK, $stk);
         $nbInit    = nachbestellung_preis_fuer($kid, $pidK, $stk, $defMenge, $nbVk);
         // Läuft für dieses Produkt schon eine Nachbestellung? (per Produkt – robust ohne Angebot.)
@@ -4081,7 +4081,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       if ($nbOff): ?>
   <div class="nb-wrap muted" style="margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13px">Eine Nachbestellung zu diesem Produkt ist eingegangen – wir bestätigen den Preis kurz.</div>
   <?php else:
-        $nbVk      = (float)($a['vk_stueck'] ?? 0);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
+        $nbVk      = auftrag_vk_gesamt($a);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
         $nbStaffel = nachbestellung_staffel($kid, $nbPid, $nbStk);
         $nbInit    = nachbestellung_preis_fuer($kid, $nbPid, $nbStk, $nbDef, $nbVk); ?>
   <div class="nb-wrap" style="margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line)">
@@ -4413,7 +4413,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <tr><td class="muted">Versendet</td><td><strong><?= number_format((int)$a['versendet_menge'],0,',','.') ?></strong> von <?= number_format((int)$a['menge'],0,',','.') ?> Packungen<?php if ((int)$a['versendet_menge'] < (int)$a['menge']): ?> <span class="muted">· Restlieferung folgt</span><?php endif; ?></td></tr>
         <?php endif; ?>
         <?php if ($vName): ?><tr><td class="muted">Verpackung</td><td><?= h($vName) ?></td></tr><?php endif; ?>
-        <?php if ((float)$a['vk_stueck']): ?><tr><td class="muted">Preis je Packung</td><td><?= $eur($a['vk_stueck']) ?></td></tr><?php endif; ?>
+        <?php if (auftrag_vk_gesamt($a) > 0): ?><tr><td class="muted">Preis je Packung</td><td><?= $eur(auftrag_vk_gesamt($a)) ?></td></tr><?php endif; ?>
         <tr><td class="muted">Bestellt am</td><td><?= h(fmt_zeit($a['angelegt'], 'd.m.Y')) ?></td></tr>
       </tbody>
     </table></div>

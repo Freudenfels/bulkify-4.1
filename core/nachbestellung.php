@@ -121,7 +121,7 @@ function nachbestellung_anlegen(int $kunde_id, int $angebot_id, int $menge): arr
 // ohne klassisches bestätigtes Angebot mit Staffel). Nimmt Produkt/Packungsgröße/Menge/Preis vom Auftrag.
 function nachbestellung_quelle_auftrag(int $auftrag_id, int $kunde_id): ?array {
     if ($auftrag_id <= 0 || $kunde_id <= 0) return null;
-    $a = one("SELECT id, angebot_id, produkt_id, menge, stueck, vk_stueck
+    $a = one("SELECT id, angebot_id, produkt_id, menge, stueck, vk_stueck, gesamt_netto
               FROM auftrag WHERE id=? AND kunde_id=? AND produkt_id IS NOT NULL AND COALESCE(kategorie,'produkt')<>'dienstleistung'
                 AND status<>'storniert'", [$auftrag_id, $kunde_id]);
     if (!$a) return null;
@@ -133,7 +133,7 @@ function nachbestellung_quelle_auftrag(int $auftrag_id, int $kunde_id): ?array {
         'rezeptur_id'=> $rezId ?: null,
         'stueck'     => (int)($a['stueck'] ?? 0),
         'menge'      => (int)($a['menge'] ?? 0),
-        'vk_stueck'  => (float)($a['vk_stueck'] ?? 0),
+        'vk_stueck'  => auftrag_vk_gesamt($a),   // GESAMTpreis je Packung (inkl. Glas/Deckel/Etikett), nicht nur die Herstellung (S-19)
     ];
 }
 // Nachbestellung aus einem Auftrag anlegen (gleiche Verpackung/Etikett, Preis aus Staffel oder zuletzt vom Auftrag).

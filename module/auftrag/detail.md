@@ -200,3 +200,5 @@ AKTUELLE Schritt hat genau EINEN Hauptknopf „Schritt abschließen →" (`phase
 Stufe setzen" (auch zurück) ist eingeklappt verfügbar.
 
 **Quarantäne im Auftrag (St-07):** Die Material-Übersicht hat die Spalte „in Quarantäne" und die Deckung „in Quarantäne – freigeben" (Link zur Freigabe-Liste). „Nächster Schritt" nennt Quarantäne-Ware mit Freigabe-Link statt „noch nicht bestellt".
+
+Kennzahl „VK / Packung (gesamt)" = `auftrag_vk_gesamt()` (gesamt_netto / menge), nicht mehr nur die Herstellungszeile.

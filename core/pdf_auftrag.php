@@ -22,17 +22,22 @@ function auftrag_pdf_bauen(int $auftrag_id): ?string {
     $vName = $a['verpackung_id'] ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$a['verpackung_id']]) : '';
     $stk   = (int)($a['stueck'] ?? 0);
     $menge = (int)($a['menge'] ?? 0);
-    $vk    = (float)($a['vk_stueck'] ?? 0);
     $beschParts = [];
     if ($stk > 0)      $beschParts[] = $stk . ' Stück je Packung';
     if ($vName !== '') $beschParts[] = $vName;
-    $positionen = [[
+    // Positionen: die VOLLSTÄNDIGEN Angebotspositionen des Auftrags (Herstellung + Glas + Deckel + Etikett …) wie auf der Kunden-AB und der
+    // Rechnung (S-04 intern) – nicht nur die Herstellungszeile. Passt die Aufschlüsselung nicht exakt zum Auftrags-Netto, steht EINE
+    // Sammelposition mit dem Gesamtpreis je Packung (gesamt_netto / menge).
+    $positionen = beleg_positionen_aus_auftrag(['angebot_id'=>$a['angebot_id'] ?? null, 'menge'=>$menge, 'gesamt_netto'=>(float)($a['gesamt_netto'] ?? 0)], $ustP);
+    foreach ($positionen as &$pp) $pp['mwst_satz'] = $ustP;   // build_beleg_pdf liest mwst_satz (nicht ust_satz)
+    unset($pp);
+    if (!$positionen) $positionen = [[
         'artikelnr'   => '',
         'bezeichnung' => $name,
         'beschreibung'=> implode(' · ', $beschParts),
         'menge'       => $menge,
         'einheit'     => 'Pkg.',
-        'preis_cent'  => (int) round($vk * 100),
+        'preis_cent'  => (int) round(auftrag_vk_gesamt($a) * 100),
         'mwst_satz'   => $ustP,
     ]];
 

@@ -666,7 +666,7 @@ $kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCar
         echo '<div class="bx-card"><div class="k">' . $grK . '</div><div class="v">' . h($groesseLbl) . '</div></div>'; }
     echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Etikett</div><div class="v">' . $etikettBadge . '</div></div>';
-    echo '<div class="bx-card"><div class="k">VK / Stück</div><div class="v">' . $eur($a['vk_stueck']) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">VK / Packung (gesamt)</div><div class="v">' . $eur(auftrag_vk_gesamt($a)) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $eur($a['gesamt_netto']) . '</div></div>';
     if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
     echo '</div>';

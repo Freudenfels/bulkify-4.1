@@ -35,3 +35,5 @@ geänderte Verpackung ginge verloren); danach `bedarf_bump()`.
 - Helfer `nachbestellung_offen_count()` (Badge/Übersicht) und `nachbestellung_offen_fuer()` (Portal-Anzeige je Quell-Angebot).
 
 Siehe auch: Portal-Box in [../module/portal/_angebot_karte.php](../module/portal/_angebot_karte.php) (bestätigter Zweig), Team-Eingang [../module/system/nachbestellungen.php](../module/system/nachbestellungen.php).
+
+`nachbestellung_quelle_auftrag()` nimmt als Preis je Packung den GESAMTpreis des Vorauftrags (`auftrag_vk_gesamt`, inkl. Glas/Deckel/Etikett) statt `auftrag.vk_stueck` (nur Herstellung) – S-19.
