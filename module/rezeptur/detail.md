@@ -8,7 +8,7 @@
 
 **Kopf-Felder:** Name, Kunde, Darreichungsform (Kapsel/Tablette/Softgel/Stick/Pulver/Flüssig), Status, Notiz. **Kunde gewählt = eigene Rezeptur DIESES Kunden** (`kunde_id` + `exklusiv=1`, erscheint beim Kunden, nur für ihn). **Leer = Hausrezeptur** (Katalog, `exklusiv=0`).
 
-**Zutaten:** Zeilen aus Rohstoff + Menge (mg je Einheit). Das Rohstoff-Feld ist ein **Tippfeld mit Filter** (`<datalist>`): einfach lostippen, die Vorschläge grenzen sich auf das Getippte ein; die Auswahl setzt ein verstecktes `z_item[]` (die Rohstoff-id), Anzeige = Label „Name · Form · Art.-Nr". Beim Speichern zählt nur eine echte Auswahl (leere/unpassende Zeilen werden übersprungen). „+" fügt eine Zeile hinzu.
+**Zutaten:** Zeilen aus Rohstoff + Menge (mg je Einheit). Das Rohstoff-Feld ist ein **Tippfeld mit lesbarer Trefferliste** (eigene Combobox `zcombo()`, statt der früheren nativen `<datalist>`): lostippen filtert; die Liste nutzt die rscombo-Optik (`.rs-list`/`.rs-opt`/`.rs-opt-t`) mit **Tooltip** (voller Name) und **Hover-Scroll** – lange Rohstoffnamen (z. B. „5-MTHF … [Vitamin B9] … · Pulver · R-13284") werden so **ganz lesbar**, obwohl sie breiter als das Feld sind. Die Auswahl setzt das versteckte `z_item[]` (Rohstoff-id), Anzeige = Label „Name · Form · Art.-Nr". **Freitext bleibt erlaubt**: ein getippter Name ohne Katalog-Treffer bleibt stehen (id leer = „nicht zugeordnet", Label→id über `ZMAP`/`zsync`). Tastatur: ↑/↓/Enter/Esc. Beim Speichern zählt nur eine echte Auswahl; „+" fügt eine Zeile hinzu (`bind()` ruft `zcombo()` mit). Siehe `bulkify-dropdown-textsuche`.
 
 **Live-Deklaration & Kalkulation (rechnet im Browser mit, pro Einheit):**
 - **Gesamtgewicht** (Summe der Mengen).

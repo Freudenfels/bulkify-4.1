@@ -419,7 +419,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
         ?>
         <tr class="zutatrow">
           <td>
-            <input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%<?= $zMatch!=='ok' ? ';border-color:var(--warn)' : '' ?>" value="<?= h($zTxt) ?>">
+            <input type="text" class="zitem-txt" autocomplete="off" placeholder="Rohstoff tippen oder wählen …" style="width:100%<?= $zMatch!=='ok' ? ';border-color:var(--warn)' : '' ?>" value="<?= h($zTxt) ?>">
             <input type="hidden" name="z_item[]" class="zitem" value="<?= (int)($z['item_id'] ?? 0) ?: '' ?>">
             <div class="zactions" style="margin-top:4px"><?php if ($zBadge !== ''): ?><span class="muted" style="font-size:12px;color:var(--warn)">&#9888; <?= h($zBadge) ?></span> <?php endif; ?><?= $zActionsHtml($z['item_id'] ?? 0) ?></div>
           </td>
@@ -429,7 +429,6 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
         <?php endforeach; ?>
       </tbody>
     </table>
-    <datalist id="zutat_dl"><?php foreach ($items as $it): ?><option value="<?= h($zlabel($it)) ?>"></option><?php endforeach; ?></datalist>
     <button type="button" class="btn btn-ghost btn-sm" id="addZutat">+ Zutat</button>
   </div>
 
@@ -734,6 +733,39 @@ var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
 // Rohstoff-Label -> id (für das tippbare Zutatenfeld mit datalist)
 var ZMAP = <?= json_encode((function($items,$FORMLBL,$gehaltSet){ $m=[]; foreach($items as $it){ $lbl=implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])) . (!empty($gehaltSet[(int)$it['id']]) ? ' · Gehalt ✓' : ''); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL,$gehaltSet), JSON_UNESCAPED_UNICODE) ?>;
 function zsync(row){ var t=row.querySelector('.zitem-txt'), h=row.querySelector('.zitem'); if(!t||!h) return; var id=ZMAP[(t.value||'').trim()]; h.value = id ? id : ''; }
+// Durchsuchbares, LESBARES Zutaten-Dropdown (wie rscombo): volle Rohstoffnamen, Tooltip + Text wandert beim
+// Hover (langes Label wird so ganz lesbar). Anders als rscombo bleibt FREITEXT erlaubt – ein getippter Name,
+// der (noch) kein Katalog-Rohstoff ist, bleibt stehen (dann id leer = „nicht zugeordnet", bestehende Logik).
+var ZOPTS = Object.keys(ZMAP).map(function(l){ return {t:l, v:ZMAP[l]}; });
+function znorm(s){ return String(s).toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss'); }
+function zesc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function zcombo(input){
+  if(!input||input.dataset.zc) return; input.dataset.zc='1'; input.removeAttribute('list');
+  var wrap=document.createElement('span'); wrap.className='rs-combo'; wrap.style.display='block';
+  input.parentNode.insertBefore(wrap,input); wrap.appendChild(input);
+  var list=document.createElement('div'); list.className='rs-list'; list.hidden=true; wrap.appendChild(list);
+  var shown=[], hl=-1;
+  function mq(o){ var t=o.querySelector('.rs-opt-t'); if(!t) return;
+    o.addEventListener('mouseenter',function(){ var ov=t.scrollWidth-(o.clientWidth-22); if(ov>2){ var d=Math.min(6,Math.max(1.2,ov/70)); t.style.transition='transform '+d+'s linear'; t.style.transform='translateX(-'+ov+'px)'; } });
+    o.addEventListener('mouseleave',function(){ t.style.transition='transform .25s ease'; t.style.transform=''; }); }
+  function render(){ var q=znorm((input.value||'').trim());
+    shown=ZOPTS.filter(function(o){ return !q||znorm(o.t).indexOf(q)>=0; }).slice(0,100);
+    if(!shown.length){ list.innerHTML='<div class="rs-empty">Kein Katalog-Treffer – Freitext bleibt stehen.</div>'; }
+    else { list.innerHTML=shown.map(function(o,i){ return '<div class="rs-opt" data-i="'+i+'" title="'+zesc(o.t)+'"><span class="rs-opt-t">'+zesc(o.t)+'</span></div>'; }).join('');
+      Array.prototype.forEach.call(list.querySelectorAll('.rs-opt'),mq); }
+    hl=-1; list.hidden=false; }
+  function paint(){ Array.prototype.forEach.call(list.querySelectorAll('.rs-opt'),function(o){ o.classList.toggle('hl',+o.dataset.i===hl); }); var e=list.querySelector('.rs-opt.hl'); if(e)e.scrollIntoView({block:'nearest'}); }
+  function pick(i){ var o=shown[i]; if(!o) return; input.value=o.t; list.hidden=true; var row=input.closest('.zutatrow'); if(row){ zsync(row); zactions(row); } recalc(); }
+  input.addEventListener('focus',render);
+  input.addEventListener('input',render);
+  input.addEventListener('keydown',function(e){ if(list.hidden){ if(e.key==='ArrowDown')render(); return; }
+    if(e.key==='ArrowDown'){ e.preventDefault(); hl=Math.min(hl+1,shown.length-1); paint(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); hl=Math.max(hl-1,0); paint(); }
+    else if(e.key==='Enter'){ if(hl>=0){ e.preventDefault(); pick(hl); } }
+    else if(e.key==='Escape'){ list.hidden=true; } });
+  list.addEventListener('mousedown',function(e){ var o=e.target.closest('.rs-opt'); if(o){ e.preventDefault(); pick(+o.dataset.i); } });
+  document.addEventListener('click',function(e){ if(!wrap.contains(e.target)) list.hidden=true; });
+}
 // R-Nummer-Link + CoA/Spec je Zutat (Anchor -> funktioniert auch bei festgesetzter/disabled Rezeptur).
 var ZNR = <?= json_encode($ZNR) ?>;
 var ITEMDOCS = <?= json_encode($ITEMDOCS, JSON_UNESCAPED_UNICODE) ?>;
@@ -833,7 +865,7 @@ function recalc(){
   var add = document.getElementById('addZutat');
   function bind(tr){
     var t = tr.querySelector('.zitem-txt');
-    if (t){ var on=function(){ zsync(tr); zactions(tr); recalc(); }; t.addEventListener('input', on); t.addEventListener('change', on); }
+    if (t){ var on=function(){ zsync(tr); zactions(tr); recalc(); }; t.addEventListener('input', on); t.addEventListener('change', on); zcombo(t); }
     var m = tr.querySelector('.zmenge'); if (m) m.addEventListener('input', recalc);
     var b = tr.querySelector('button'); if (b) b.addEventListener('click', function(){ tr.remove(); recalc(); });
     zactions(tr);
@@ -841,7 +873,7 @@ function recalc(){
   if (add) add.addEventListener('click', function(){
     var tr = document.createElement('tr');
     tr.className = 'zutatrow';
-    tr.innerHTML = '<td><input type="text" class="zitem-txt" list="zutat_dl" autocomplete="off" placeholder="Rohstoff tippen …" style="width:100%"><input type="hidden" name="z_item[]" class="zitem"><div class="zactions" style="margin-top:4px"></div></td>'
+    tr.innerHTML = '<td><input type="text" class="zitem-txt" autocomplete="off" placeholder="Rohstoff tippen oder wählen …" style="width:100%"><input type="hidden" name="z_item[]" class="zitem"><div class="zactions" style="margin-top:4px"></div></td>'
       + '<td><input type="number" step="0.001" name="z_menge[]" class="zmenge"></td>'
       + '<td><button type="button" class="btn btn-ghost btn-sm">entfernen</button></td>';
     document.getElementById('zutatrows').appendChild(tr);
