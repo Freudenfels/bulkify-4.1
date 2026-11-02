@@ -4009,6 +4009,8 @@ portal_head('Kundenportal · ' . $k['firma']);
         // Deshalb display:block fest per CSS-Klasse verankern (nicht nur als Inline-Style).
         // „Etikett fehlt"-Karte: solide linke Akzent-Leiste (inset box-shadow) statt dünner 1px-Border, die bei
         // manchen Zoom-/Bildschirm-Skalierungen nur an den Ecken sichtbar war und wie Klammern aussah. ?>
+  <style>.anf-dlg{border:1px solid var(--line);border-radius:14px;max-width:560px;width:calc(100% - 32px);padding:22px 24px;background:var(--panel);color:var(--text);box-shadow:0 24px 70px rgba(0,0,0,.45);color-scheme:light dark}.anf-dlg::backdrop{background:rgba(0,0,0,.55)}</style>
+  <script>document.addEventListener('click', function(e){ if (e.target && e.target.classList && e.target.classList.contains('anf-dlg')) e.target.close(); });</script>
   <style>.bx-order-row{display:block}.bx-ord-etmiss{border-color:#e6c4c0;box-shadow:inset 3px 0 0 #e6c4c0,0 2px 8px rgba(0,0,0,.25)}</style>
   <?php if (!$auftraege): ?><div class="bx-panel"><div class="muted">Noch keine Bestellungen.</div></div>
   <?php else: ?>
@@ -4070,27 +4072,41 @@ portal_head('Kundenportal · ' . $k['firma']);
     </ul>
   </a>
   <?php
-    // Nachbestellen direkt an der ABGESCHLOSSENEN Bestellung: Menge eintippen -> verbindlich. AUFTRAGSBASIERT
-    // (robust auch ohne klassisches Angebot). Gleiche Verpackung/Etikett, Preis aus Auftrag bzw. bisherigen Staffeln.
+    // Nachbestellen direkt an der ABGESCHLOSSENEN Bestellung: Knopf unter der Karte -> Popup, Menge eintippen -> verbindlich.
+    // AUFTRAGSBASIERT (robust auch ohne klassisches Angebot). Gleiche Verpackung/Etikett, Preis aus Auftrag bzw. bisherigen Staffeln.
     if ($complete && !$istDLrow && !empty($darfBestellen) && !empty($a['produkt_id'])):
       $nbPid     = (int)$a['produkt_id']; $nbStk = (int)($a['stueck'] ?? 0); $nbDef = (int)($a['menge'] ?? 0);
       $nbOff     = one("SELECT id FROM nachbestellung WHERE kunde_id=? AND produkt_id=? AND status IN ('pruefung','preis_neu') LIMIT 1", [$kid, $nbPid]);
-      if (!$nbOff):
+      if ($nbOff): ?>
+  <div class="nb-wrap muted" style="margin:-6px 0 16px;font-size:13px">Eine Nachbestellung zu diesem Produkt ist eingegangen – wir bestätigen den Preis kurz.</div>
+  <?php else:
         $nbVk      = (float)($a['vk_stueck'] ?? 0);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
         $nbStaffel = nachbestellung_staffel($kid, $nbPid, $nbStk);
         $nbInit    = nachbestellung_preis_fuer($kid, $nbPid, $nbStk, $nbDef, $nbVk); ?>
-  <form method="post" class="bx-panel nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$nbVk) ?>" style="margin:-6px 0 16px;padding:12px 14px;border-color:var(--gruen)" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
-    <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_auftrag_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="zurueck" value="bestellungen">
-    <div style="font-weight:600;margin-bottom:6px">Einfach nachbestellen<?= $nbStk ? ' <span class="muted" style="font-weight:400;font-size:13px">· ' . number_format($nbStk,0,',','.') . ' je Packung</span>' : '' ?></div>
-    <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-      <label style="display:flex;flex-direction:column;gap:3px;font-size:13px">Menge (Packungen)
-        <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format($nbDef,0,',','.') ?>" style="min-width:140px"></label>
-      <div style="font-size:13px">Preis / Pkg: <strong class="nb-preis"><?= $eur($nbInit['vk']) ?></strong></div>
-      <button class="btn btn-primary btn-sm" type="submit">Verbindlich nachbestellen</button>
-    </div>
-    <div class="muted nb-warn" style="font-size:12px;margin-top:6px;<?= empty($nbInit['ueber_max']) ? 'display:none' : '' ?>"><?= h((string)($nbInit['hinweis'] ?? '')) ?></div>
-    <div class="muted" style="font-size:12px;margin-top:6px">Gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Der Preis richtet sich nach Ihrer Menge. Wir bestätigen den Preis kurz, dann startet die Produktion.</div>
-  </form>
+  <div class="nb-wrap" style="margin:-6px 0 16px">
+    <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('nbDlg_<?= (int)$a['id'] ?>').showModal()">Nachbestellen</button>
+    <dialog id="nbDlg_<?= (int)$a['id'] ?>" class="anf-dlg">
+      <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px">
+        <h2 style="margin:0;font-size:18px">Nachbestellen</h2>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('dialog').close()" aria-label="schließen">&#10005;</button>
+      </div>
+      <div class="muted" style="font-size:13px;margin:4px 0 14px"><?= h($a['nummer']) ?> · <?= h($titelFuer($a)) ?><?= $nbStk ? ' · ' . number_format($nbStk,0,',','.') . ' je Packung' : '' ?></div>
+      <form method="post" class="nb-form" data-staffel='<?= h(json_encode(array_map(fn($r)=>[$r['menge'],$r['vk']], $nbStaffel))) ?>' data-fallback="<?= h((string)$nbVk) ?>" style="margin:0" onsubmit="return confirm('Verbindlich nachbestellen? Wir bestätigen den Preis kurz, dann startet die Produktion.');">
+        <input type="hidden" name="aktion" value="nachbestellen"><input type="hidden" name="quelle_auftrag_id" value="<?= (int)$a['id'] ?>"><input type="hidden" name="zurueck" value="bestellungen">
+        <div class="bx-row" style="gap:18px;align-items:flex-end;flex-wrap:wrap">
+          <label style="display:flex;flex-direction:column;gap:6px;font-size:13px">Menge (Packungen)
+            <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format($nbDef,0,',','.') ?>" style="min-width:160px"></label>
+          <div style="font-size:14px">Preis / Pkg: <strong class="nb-preis"><?= $eur($nbInit['vk']) ?></strong></div>
+        </div>
+        <div class="muted nb-warn" style="font-size:12px;margin-top:8px;<?= empty($nbInit['ueber_max']) ? 'display:none' : '' ?>"><?= h((string)($nbInit['hinweis'] ?? '')) ?></div>
+        <div class="muted" style="font-size:12px;margin-top:12px">Gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Der Preis richtet sich nach Ihrer Menge. Wir bestätigen den Preis kurz, dann startet die Produktion.</div>
+        <div class="bx-row" style="gap:10px;margin-top:18px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('dialog').close()">Abbrechen</button>
+          <button class="btn btn-primary btn-sm" type="submit">Verbindlich nachbestellen</button>
+        </div>
+      </form>
+    </dialog>
+  </div>
   <?php endif; endif; ?>
   <?php endforeach; ?>
   </div>
@@ -4130,7 +4146,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     function filter(){
       var q = norm(inp.value), treffer = 0;
       rows.forEach(function(r){ var ok = !q || r.dataset.such.indexOf(q) !== -1; r.style.display = ok ? '' : 'none';
-        var nf = r.nextElementSibling; if (nf && nf.classList && nf.classList.contains('nb-form')) nf.style.display = ok ? '' : 'none';   // Nachbestell-Form mit der Karte ein-/ausblenden
+        var nf = r.nextElementSibling; if (nf && nf.classList && nf.classList.contains('nb-wrap')) nf.style.display = ok ? '' : 'none';   // Nachbestell-Knopf mit der Karte ein-/ausblenden
         if (ok) treffer++; });
       if (leer) leer.style.display = treffer ? 'none' : 'block';
     }
