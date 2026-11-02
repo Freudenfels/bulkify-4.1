@@ -26,7 +26,7 @@ $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
                       WHERE i.kategorie='verkaufsfertig' AND c.status='frei' AND c.fremd_kunde_id IS NULL
                         AND (c.auftrag_id=a.id OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=a.id AND status<>'storniert')))
                ELSE (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM item i JOIN charge c ON c.item_id=i.id
-                      WHERE i.produkt_id=a.produkt_id AND i.kategorie='verkaufsfertig' AND c.status='frei') END AS fertig_frei,
+                      WHERE i.produkt_id=a.produkt_id AND i.kategorie='verkaufsfertig' AND c.status='frei' AND c.fremd_kunde_id IS NULL) END AS fertig_frei,   -- ohne Kundenware (S-16)
              (SELECT GROUP_CONCAT(CONCAT(b.id,':',b.nummer) ORDER BY b.id SEPARATOR '|')
               FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='lieferschein') AS lieferscheine,
              COALESCE(k.nutzt_fulfillment,0) AS fulfillment

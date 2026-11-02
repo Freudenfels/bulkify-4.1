@@ -607,6 +607,8 @@ $fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
 $fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);
 $fremdJeEinheit = $neu ? [] : item_fremdbestand_je_einheit((int)$id);
 $fremdKunden  = all("SELECT id, firma FROM kunden ORDER BY firma");
+// Ins Fremdlager (Lager 2) nur für Fulfillment-Kunden umbuchen (bulkify-4-1-lager2, S-16).
+$flKunden     = all("SELECT id, firma FROM kunden WHERE nutzt_fulfillment=1 ORDER BY firma");
 if (!$neu) seed_lieferant_preis_if_empty();
 $preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma, l.kuerzel AS lief_kuerzel FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
 $preis_lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
@@ -1526,7 +1528,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
         <div class="bx-grid" style="margin-top:10px">
           <div class="bx-field"><label>Kunde (Eigentümer)</label>
             <select name="fl_kunde" required><option value="">– wählen –</option>
-              <?php foreach ($fremdKunden as $kk): ?><option value="<?= (int)$kk['id'] ?>"><?= h($kk['firma']) ?></option><?php endforeach; ?>
+              <?php foreach ($flKunden as $kk): ?><option value="<?= (int)$kk['id'] ?>"><?= h($kk['firma']) ?></option><?php endforeach; ?>
             </select>
           </div>
           <div class="bx-field"><label>Menge (<?= h($it['einheit']) ?>)</label><input type="number" step="0.001" min="0.001" name="fl_menge" required placeholder="max. <?= h(rtrim(rtrim(number_format($bestand_frei, 3, ',', '.'), '0'), ',')) ?>"></div>

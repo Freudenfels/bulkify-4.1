@@ -34,3 +34,6 @@ Das Panel **„Energetisierung"** listet die betroffenen Chargen (frei + verfüg
   `POST retoure_defekt` (nur Doku). Muss exakt zum Fulfillment-Vertrag passen (`fulfillment-web/src/bulkify_dash.php`).
 - Reverse-Feed vom Fulfillment (`bulkify_feed.php`) ziehen, um Produkt per inventory_item_id zu verknüpfen.
 - Kisten-Etikett mit BSKU-Barcode (Code128).
+
+## Besitzer (S-16)
+„Fertigware einbuchen" bucht die Charge als Kundenware: `fremd_kunde_id` = Kunde des Produkts, Standort Lager 2. Sie erscheint damit nicht mehr als eigener Bestand in Lager 1.

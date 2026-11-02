@@ -271,3 +271,11 @@ Alle `*/core/db.php` setzen nach dem Verbindungsaufbau `SET time_zone = '+00:00'
 
 ## QM-Gate Fertigware (St-11d)
 Eigene Fertigware (Einlagern aus der Produktion: `produktion_teilmenge_einbuchen()`, Produktions-App `erp_teilmenge_einbuchen()`, Easy Production außer „schon geliefert") kommt in **Quarantäne** statt frei. Versand, Fremdlager-Übergabe und Weiterverarbeitung nehmen nur freie Chargen, also erst nach der QM-Freigabe (Lager-App „Quarantäne" / Dashboard-Wareneingang, nur QM/Admin). Die Versand-/Fremdlager-Meldung nennt die wartende Menge (`fertigware_qm_hinweis()`), die Bulk-Reservierung einer nicht freien Charge warnt nur, und die Lager-App lässt Fertigware in Quarantäne nicht entnehmen. Zukauf „fertig" behält den Status vom Wareneingang.
+## Fremdlager: Kundenware gehört dem Kunden (S-16)
+- `lager2_besitzer_item($item)`: Besitzer eines Lager-2-Artikels (Kunde am Produkt, sonst Besitzer vorhandener Fremdlager-Chargen, sonst Fulfillment-Kunde des jüngsten Auftrags).
+- `lager2_einbuchen()` und die ds_api-Retoure (`lager2_retoure()`) setzen `fremd_kunde_id` = Besitzer und `standort='lager2'` (vorher eigener Bestand in Lager 1 und gleichzeitig im Portal = doppelt). Ohne Besitzer bucht `lager2_einbuchen()` nicht.
+- `lager2_verbrauch()` (Shop-Abbau) bucht FEFO **nach Besitzer**: zuerst die Chargen des Kunden, nur danach Altbestand ohne Besitzer; Ware anderer Kunden nie.
+- `auftrag_ins_fremdlager()` überträgt die Fertigware des Auftrags per `fertigware_an_kunde_uebertragen()` an den Kunden (je Quell-Charge Fremdlager-Charge mit gleicher Charge-Nr./MHD/PA, Lager 2) – vorher blieb sie unser Lager-1-Bestand und zählte zusätzlich im Lager 2; unser Versand hätte sie ausliefern können.
+- `fremdlager_umbuchen()`: nur für Fulfillment-Kunden, Standort Lager 2.
+- Eigener Versand (`auftrag_versenden_menge`, FEFO `fremd_kunde_id IS NULL`) greift damit nie auf Kundenware zu.
+- Übergang: `lager2_bestand()` zählt weiter alle freien Chargen des Artikels (auch Altbestand ohne Besitzer), damit „Mein Lager" für bestehende Kunden nicht einbricht. Altbestand ohne Besitzer bitte per Migration zuordnen (SQL in der Rückmeldung).

@@ -3313,6 +3313,7 @@ function fremdprodukt_bestand_zuordnen(int $item_id, int $kunde_id): int {
 function fremdlager_umbuchen(int $item_id, int $kunde_id, float $menge, ?string $charge_nr, ?string $mhd, string $notiz = ''): array {
     if ($item_id <= 0 || $kunde_id <= 0) return ['ok'=>false, 'msg'=>'Artikel und Kunde sind nötig.'];
     if ($menge <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Menge größer 0 angeben.'];
+    if (!(int) scalar("SELECT nutzt_fulfillment FROM kunden WHERE id=?", [$kunde_id])) return ['ok'=>false, 'msg'=>'Lager 2 gibt es nur für Fulfillment-Kunden.'];
     $frei = item_bestand($item_id, true);   // nur unser Bestand (Fremdlager ist hier schon ausgeschlossen)
     if ($frei + 1e-9 < $menge) return ['ok'=>false, 'msg'=>'Nicht genug im Warenlager (' . rtrim(rtrim(number_format($frei, 3, ',', '.'), '0'), ',') . ' verfügbar).'];
     $einheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stk';
@@ -3326,8 +3327,8 @@ function fremdlager_umbuchen(int $item_id, int $kunde_id, float $menge, ?string 
         $rest -= $nimm;
     }
     // Neue Fremd-Charge (Kundenware) anlegen.
-    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,angelegt)
-       VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?)",
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,standort,notiz,angelegt)
+       VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,'lager2',?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $mhd ?: null, $kunde_id, $notiz ?: 'Umbuchung ins Fremdlager', gmdate('Y-m-d H:i:s')]);
     $cid = insert_id();
     $kfirma = (string) scalar("SELECT firma FROM kunden WHERE id=?", [$kunde_id]);
@@ -3716,18 +3717,53 @@ function lager2_produkte(?int $kunde_id = null): array {
 function auftrag_ist_fulfillment(int $auftrag_id): bool {
     return (bool) scalar("SELECT k.nutzt_fulfillment FROM auftrag a JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [$auftrag_id]);
 }
-// Manuelle Lager-2-Einbuchung (Menge/Charge/MHD) auf das Verkaufsfertig-Item eines Produkts.
+// Besitzer (Kunde) eines Lager-2-Artikels (S-16): Kunde am Produkt (exklusiv/extern), sonst der Kunde, dem bereits Fremdlager-
+// Chargen dieses Artikels gehören, sonst der Fulfillment-Kunde des jüngsten Auftrags über das Produkt. 0 = unbekannt.
+function lager2_besitzer_item(int $item_id): int {
+    $pid = (int) scalar("SELECT produkt_id FROM item WHERE id=?", [$item_id]);
+    $kid = $pid ? (int) scalar("SELECT kunde_id FROM produkt WHERE id=?", [$pid]) : 0;
+    if ($kid > 0) return $kid;
+    $kid = (int) scalar("SELECT fremd_kunde_id FROM charge WHERE item_id=? AND fremd_kunde_id IS NOT NULL ORDER BY id DESC LIMIT 1", [$item_id]);
+    if ($kid > 0) return $kid;
+    return $pid ? (int) scalar("SELECT a.kunde_id FROM auftrag a JOIN kunden k ON k.id=a.kunde_id WHERE a.produkt_id=? AND k.nutzt_fulfillment=1 ORDER BY a.id DESC LIMIT 1", [$pid]) : 0;
+}
+// Eigene Fertigware (unsere freien Chargen, FEFO) an einen Kunden übertragen (S-16): je Quell-Charge wird die Menge abgezogen und als
+// Fremdlager-Charge des Kunden (fremd_kunde_id, standort='lager2') mit GLEICHER Charge-Nr./MHD/Auftrag/PA neu angelegt. Bevorzugt die
+// Chargen des Auftrags (auftrag_id oder PA des Auftrags). Rückgabe: übertragene Menge.
+function fertigware_an_kunde_uebertragen(int $item_id, int $kunde_id, float $menge, int $auftrag_id = 0): float {
+    if ($item_id <= 0 || $kunde_id <= 0 || $menge <= 0) return 0.0;
+    $rest = $menge; $neu = 0.0;
+    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL
+                  ORDER BY (auftrag_id=? OR pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=?)) DESC, (mhd IS NULL), mhd ASC, id ASC",
+                 [$item_id, $auftrag_id, $auftrag_id]) as $c) {
+        if ($rest <= 1e-9) break;
+        $nimm = min($rest, (float)$c['menge_verfuegbar']);
+        $vRest = (float)$c['menge_verfuegbar'] - $nimm;
+        q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$vRest, $vRest <= 1e-9 ? 'leer' : 'frei', (int)$c['id']]);
+        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,auftrag_id,pa_id,fremd_kunde_id,standort,energetisiert_am,energetisiert_von,angelegt)
+           VALUES (?,?,?,?,?,?,?,?, 'frei', ?,?,?,?, 'lager2', ?,?,?)",
+          [$c['charge_nr'], $item_id, $nimm, $nimm, $c['einheit'] ?: 'Stk', $c['lieferant_id'] ?: null, $c['mhd'] ?: null, $c['wareneingang'] ?: date('Y-m-d'),
+           'Ins Fremdlager übergeben (aus Charge #' . (int)$c['id'] . ')', $c['auftrag_id'] ?: null, $c['pa_id'] ?: null, $kunde_id,
+           $c['energetisiert_am'] ?? null, $c['energetisiert_von'] ?? null, gmdate('Y-m-d H:i:s')]);
+        $rest -= $nimm; $neu += $nimm;
+    }
+    return $neu;
+}
+// Manuelle Lager-2-Einbuchung (Menge/Charge/MHD) auf das Verkaufsfertig-Item eines Produkts. Die Ware gehört dem KUNDEN (S-16):
+// fremd_kunde_id = Besitzer, standort='lager2' – sie zählt damit nie als unser Bestand (Lager 1) und nie für unseren Versand.
 function lager2_einbuchen(int $produkt_id, float $menge, ?string $charge_nr, ?string $mhd, string $notiz = ''): ?int {
     if ($menge <= 0) return null;
     $item_id = produkt_lageritem($produkt_id);
     if (!$item_id) return null;
+    $besitzer = lager2_besitzer_item((int)$item_id);
+    if ($besitzer <= 0) return null;   // ohne Besitzer keine Kundenware (Lager 2 nur für Fulfillment-Kunden)
     bsku_ensure($item_id);
-    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?)",
-      [$charge_nr ?: null, $item_id, $menge, $menge, $mhd ?: null, $notiz ?: 'Lager-2-Einbuchung', gmdate('Y-m-d H:i:s')]);
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,fremd_kunde_id,standort,angelegt)
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, 'lager2', ?)",
+      [$charge_nr ?: null, $item_id, $menge, $menge, $mhd ?: null, $notiz ?: 'Lager-2-Einbuchung', $besitzer, gmdate('Y-m-d H:i:s')]);
     $cid = (int) insert_id();
     // Energetisierung: bei freigeschalteten Kunden (kunden.zeige_energetisierung) wird JEDE Einlagerung energetisiert.
-    $kid = (int) scalar("SELECT kunde_id FROM produkt WHERE id=?", [$produkt_id]);
+    $kid = (int) scalar("SELECT kunde_id FROM produkt WHERE id=?", [$produkt_id]) ?: $besitzer;
     if ($kid && kunde_zeigt_energetisierung($kid)) {
         $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
         q("UPDATE charge SET energetisiert_am=NOW(), energetisiert_von=? WHERE id=?", [$wer !== '' ? $wer : 'Team', $cid]);
@@ -3751,8 +3787,12 @@ function lager2_verbrauch(int $item_id, float $menge, string $ref): array {
     if ($menge <= 0) return ['ok'=>true, 'skip'=>'menge<=0'];
     if (lager2_ref_gesehen($ref, 'verbrauch')) return ['ok'=>true, 'idempotent'=>true];
     $rest = $menge;
+    // FEFO NACH BESITZER (S-16): zuerst die Chargen des Kunden (fremd_kunde_id = Besitzer), danach – nur für Altbestand ohne Besitzer –
+    // freie Chargen ohne Zuordnung. Ware ANDERER Kunden wird nie angefasst.
+    $besitzer = lager2_besitzer_item($item_id);
     foreach (all("SELECT id, menge_verfuegbar FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0
-                  ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
+                    AND (fremd_kunde_id=? OR fremd_kunde_id IS NULL)
+                  ORDER BY (fremd_kunde_id IS NULL), (mhd IS NULL), mhd ASC, id ASC", [$item_id, $besitzer]) as $c) {
         if ($rest <= 1e-9) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu  = (float)$c['menge_verfuegbar'] - $nimm;
@@ -3768,9 +3808,11 @@ function lager2_verbrauch(int $item_id, float $menge, string $ref): array {
 function lager2_retoure(int $item_id, float $menge, string $ref): array {
     if ($menge <= 0) return ['ok'=>true, 'skip'=>'menge<=0'];
     if (lager2_ref_gesehen($ref, 'retoure')) return ['ok'=>true, 'idempotent'=>true];
-    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,wareneingang,status,notiz,angelegt)
-       VALUES ('RETOURE',?,?,?, 'Stk', CURDATE(), 'frei', ?, ?)",
-      [$item_id, $menge, $menge, 'Retoure (Fulfillment) ' . $ref, gmdate('Y-m-d H:i:s')]);
+    // Retoure gehört dem Kunden (S-16) – sonst würde sie zu unserem Bestand in Lager 1.
+    $besitzer = lager2_besitzer_item($item_id);
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,wareneingang,status,notiz,fremd_kunde_id,standort,angelegt)
+       VALUES ('RETOURE',?,?,?, 'Stk', CURDATE(), 'frei', ?, ?, ?, ?)",
+      [$item_id, $menge, $menge, 'Retoure (Fulfillment) ' . $ref, $besitzer > 0 ? $besitzer : null, $besitzer > 0 ? 'lager2' : 'lager1', gmdate('Y-m-d H:i:s')]);
     q("INSERT INTO lager2_bewegung (item_id,typ,menge,ref) VALUES (?,?,?,?)", [$item_id, 'retoure', $menge, $ref]);
     return ['ok'=>true];
 }
@@ -10074,6 +10116,9 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
     $verf = auftrag_hat_fertigware_bindung($auftrag_id) ? auftrag_produzierte_fertigware($auftrag_id)['frei'] : item_bestand($vfitem, true);
     if ($verf + 0.0001 < (float)$a['menge']) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$a['menge'] . ').' . fertigware_qm_hinweis($vfitem)];
     $bsku = bsku_ensure($vfitem);   // Brücke zum Shop – ohne sie findet die Kopplung den Artikel nicht
+    // Eigentum geht auf den Kunden über (S-16): die Fertigware des Auftrags wird Fremdlager-Ware des Kunden (fremd_kunde_id, Lager 2)
+    // – vorher blieb sie unser Bestand in Lager 1 und zählte gleichzeitig im Portal „Mein Lager" (doppelt, eigener Versand möglich).
+    fertigware_an_kunde_uebertragen($vfitem, (int)$a['kunde_id'], (float)$a['menge'], $auftrag_id);
     q("UPDATE auftrag SET status='versendet' WHERE id=?", [$auftrag_id]);
     auftrag_rechnung_bei_lieferung($auftrag_id, true);   // Übergabe ins Fremdlager = Lieferung: Rechnung festschreiben
     if (function_exists('mail_kunde_fremdlager') && mail_bereit()) nach_antwort(fn() => mail_kunde_fremdlager($auftrag_id));   // Kunde: Ware liegt in seinem Lager

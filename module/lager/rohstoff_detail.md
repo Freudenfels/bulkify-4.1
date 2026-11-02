@@ -152,3 +152,6 @@ Außerdem neu (Grundlage): Tabelle `charge_gebinde` + `charge_gebinde_liste()` (
 ## Zusammenführen / Löschen (Admin, unten im Detail)
 - **Mit anderem Artikel zusammenführen** (`artikel_merge`): Chargen + Reservierungen wandern aufs Ziel, dieser Artikel wird **deaktiviert** (gesperrt + `zusammengefuehrt_in`), nicht gelöscht. Einheiten müssen gleich sein.
 - **Rohstoff löschen** (`rohstoff_loeschen` in core/schema.php): endgültiges Löschen (z. B. Import-Dublette). **Blockiert** bei echter Verwendung (Rezeptur, Reservierung, Bestand, Bestellung, Angebot, Produktion/Produktions-Chargen, Schwund, Proben, Lager-2, Lieferanten-/Rezeptur-/Kunden-Anfragen, Leerkapsel am Produkt); Katalog-/Import-Zuordnungen werden auf „keine" zurückgesetzt – dann „zusammenführen". Sonst werden Wirkstoffe/Kennwerte/Grenzwerte, leere Chargen (+ Analysen/Gebinde), interne Dokumente und Lieferantenpreise mitgelöscht (Transaktion). Nur Admin.
+
+## Ins Fremdlager umbuchen (S-16)
+Die Kundenauswahl zeigt nur Fulfillment-Kunden (`kunden.nutzt_fulfillment=1`); serverseitig prüft `fremdlager_umbuchen()` das ebenfalls. Die neue Charge steht auf Standort Lager 2.

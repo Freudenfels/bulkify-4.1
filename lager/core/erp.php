@@ -487,8 +487,10 @@ function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charg
     $itEinheit = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]) ?: 'Stk';
     if ($einheit === '') $einheit = $itEinheit;
     [$menge, $einheit] = erp_menge_in_item_einheit($menge, $einheit, $itEinheit);   // g -> kg usw.
-    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,angelegt)
-       VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?)",
+    // Kundenware steht im Lager 2 (S-16) – Standort mitsetzen, sonst erscheint sie unter Lager 1.
+    $hatStandort = (bool) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='charge' AND COLUMN_NAME='standort'");
+    q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,angelegt" . ($hatStandort ? ",standort" : "") . ")
+       VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?" . ($hatStandort ? ",'lager2'" : "") . ")",
       [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $mhd ?: null, $kunde_id, $notiz ?: 'Fremdlager-Wareneingang', gmdate('Y-m-d H:i:s')]);
     return (int) insert_id();
 }
