@@ -4050,7 +4050,8 @@ portal_head('Kundenportal · ' . $k['firma']);
         $totalA = count($trackA) ?: 1;
         // Etikett offen? Nur Produkt-Aufträge, die ein Etikett brauchen und noch nicht freigegeben sind.
         $etMiss = !$istDLrow && !$complete && auftrag_braucht_etikett((int)$a['id']) && !etikett_freigegeben((int)$a['id']); ?>
-  <a class="bx-panel bx-order-row<?= $etMiss ? ' bx-ord-etmiss' : '' ?>" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
+  <div class="bx-panel bx-order-row<?= $etMiss ? ' bx-ord-etmiss' : '' ?>" style="display:block">
+  <a href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>" style="display:block;text-decoration:none;color:inherit">
     <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= (int)$a['menge'] ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:13px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
@@ -4078,12 +4079,12 @@ portal_head('Kundenportal · ' . $k['firma']);
       $nbPid     = (int)$a['produkt_id']; $nbStk = (int)($a['stueck'] ?? 0); $nbDef = (int)($a['menge'] ?? 0);
       $nbOff     = one("SELECT id FROM nachbestellung WHERE kunde_id=? AND produkt_id=? AND status IN ('pruefung','preis_neu') LIMIT 1", [$kid, $nbPid]);
       if ($nbOff): ?>
-  <div class="nb-wrap muted" style="margin:-6px 0 16px;font-size:13px">Eine Nachbestellung zu diesem Produkt ist eingegangen – wir bestätigen den Preis kurz.</div>
+  <div class="nb-wrap muted" style="margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13px">Eine Nachbestellung zu diesem Produkt ist eingegangen – wir bestätigen den Preis kurz.</div>
   <?php else:
         $nbVk      = (float)($a['vk_stueck'] ?? 0);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
         $nbStaffel = nachbestellung_staffel($kid, $nbPid, $nbStk);
         $nbInit    = nachbestellung_preis_fuer($kid, $nbPid, $nbStk, $nbDef, $nbVk); ?>
-  <div class="nb-wrap" style="margin:-6px 0 16px">
+  <div class="nb-wrap" style="margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line)">
     <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('nbDlg_<?= (int)$a['id'] ?>').showModal()">Nachbestellen</button>
     <dialog id="nbDlg_<?= (int)$a['id'] ?>" class="anf-dlg">
       <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px">
@@ -4108,6 +4109,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </dialog>
   </div>
   <?php endif; endif; ?>
+  </div>
   <?php endforeach; ?>
   </div>
   <script>
