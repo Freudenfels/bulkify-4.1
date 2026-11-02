@@ -485,9 +485,12 @@ header('Content-Type: text/html; charset=utf-8');
   <?php else:
     $anl = werk_station_anleitung((string)$cur['station'], $lang);
     $mat = erp_schritt_material($id, (string)$cur['station']);
-    $materialFehlt = false;
+    $materialFehlt = false; $materialQuar = true;   // Nacht 1: fehlt NUR, was in Quarantäne liegt -> eigener Hinweis „wartet auf QM"
     foreach (($mat['zeilen'] ?? []) as $z)
-        if (($z['pflicht'] ?? true) && empty($z['entnommen']) && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']) { $materialFehlt = true; break; }
+        if (($z['pflicht'] ?? true) && empty($z['entnommen']) && isset($z['verfuegbar']) && (float)$z['verfuegbar'] + 0.0001 < (float)$z['menge']) {
+            $materialFehlt = true;
+            if ((float)$z['verfuegbar'] + (float)($z['quarantaene'] ?? 0) + 0.0001 < (float)$z['menge']) $materialQuar = false;
+        }
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
     $istMischen = (string)$cur['station'] === 'Mischen';
     $cap  = $istMischen ? (float) str_replace(',', '.', (string)($_GET['cap'] ?? '')) : 0.0;
@@ -550,7 +553,7 @@ header('Content-Type: text/html; charset=utf-8');
               </div>
               <?php endif; ?></td>
           <td class="num"><?= h(menge_einh_txt($z['menge'], (string)$z['einheit'])) ?></td>
-          <td class="num <?= $knapp ? 'knapp' : '' ?>"><?= isset($z['verfuegbar']) ? h(menge_einh_txt($z['verfuegbar'], (string)$z['einheit'])) : '–' ?></td>
+          <td class="num <?= $knapp ? 'knapp' : '' ?>"><?= isset($z['verfuegbar']) ? h(menge_einh_txt($z['verfuegbar'], (string)$z['einheit'])) : '–' ?><?php if (!empty($z['quarantaene'])): ?><br><span style="font-size:13px;color:#e8c766">+ <?= h(menge_einh_txt($z['quarantaene'], (string)$z['einheit'])) ?> <?= h($T['in_quarantine'] ?? 'in Quarantäne') ?></span><?php endif; ?></td>
           <td class="num"><?= $blinkBtn($z['charge_id'] ?? 0) ?></td>
         </tr>
         <?php endforeach; ?>
@@ -576,7 +579,7 @@ header('Content-Type: text/html; charset=utf-8');
 
     <div style="margin-top:22px">
       <?php if ($materialFehlt): ?>
-        <div class="flash err" style="margin-bottom:14px"><?= h($T['material_missing']) ?></div>
+        <div class="flash err" style="margin-bottom:14px"><?= h($materialQuar ? ($T['material_quarantine'] ?? $T['material_missing']) : $T['material_missing']) ?></div>
         <button class="btn btn-primary btn-lg" disabled><?= $isGate ? h($T['release']) : h($T['done_btn']) ?></button>
       <?php else: ?>
         <form method="post" onsubmit="return confirm('<?= h($T['confirm_finish']) ?>');">

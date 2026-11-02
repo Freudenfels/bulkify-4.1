@@ -184,7 +184,9 @@ if ($bedarf && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($bedarf as $b
         <td class="bx-num"><?= (float)$b['menge_mg'] > 0 ? menge_txt($b['menge_mg']) . ' mg' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= h(menge_einh_txt($b['benoetigt'], (string)$b['einheit'])) ?></td>
         <td class="bx-num"><?= h(menge_einh_txt($b['verfuegbar'], (string)$b['einheit'])) ?><?php if (!empty($b['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($b['quarantaene']) ?> in Quarantäne – <a href="/lager/?p=quarantaene&item=<?= (int)($b['item_id'] ?? 0) ?>">erst freigeben</a></span><?php endif; ?></td>
-        <td><?= $ok ? '<span class="badge badge-ok">genug</span>' : '<span class="badge badge-warn">fehlt ' . h(menge_einh_txt($b['fehlt'], (string)$b['einheit'])) . '</span>' ?></td>
+        <td><?= $ok ? '<span class="badge badge-ok">genug</span>'
+                 : ((float)($b['quarantaene'] ?? 0) + 1e-6 >= (float)$b['fehlt'] ? '<span class="badge badge-warn">in Quarantäne – wartet auf QM</span>'   // Nacht 1
+                 : '<span class="badge badge-warn">fehlt ' . h(menge_einh_txt($b['fehlt'], (string)$b['einheit'])) . '</span>') ?></td>
       </tr>
       <?php endforeach; ?>
       <tr><td class="muted">Füllgewicht je Einheit</td><td class="bx-num"><?= menge_txt($sumMg) ?> mg</td><td colspan="3"></td></tr>
@@ -219,7 +221,8 @@ if ($bedarf && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($bedarf as $b
           <td><?= h((string)$fdd['name']) ?></td>
           <td class="bx-num"><?= h(menge_einh_txt($fdd['benoetigt'], (string)$fdd['einheit'])) ?></td>
           <td class="bx-num"><?= h(menge_einh_txt($fdd['verfuegbar'], (string)$fdd['einheit'])) ?><?php if (!empty($fdd['quarantaene'])): ?><br><span class="muted" style="font-size:11px">+ <?= menge_txt($fdd['quarantaene']) ?> in Quarantäne – <a href="/lager/?p=quarantaene&item=<?= (int)($fdd['item_id'] ?? 0) ?>">erst freigeben</a></span><?php endif; ?></td>
-          <td class="bx-num" style="color:#8f231b"><?= h(menge_einh_txt($fdd['fehlt'], (string)$fdd['einheit'])) ?></td>
+          <?php $fddQ = (float)($fdd['quarantaene'] ?? 0) + 1e-6 >= (float)$fdd['fehlt']; ?>
+          <td class="bx-num" style="color:<?= $fddQ ? '#8a6d00' : '#8f231b' ?>"><?= $fddQ ? 'in Quarantäne' : h(menge_einh_txt($fdd['fehlt'], (string)$fdd['einheit'])) ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>

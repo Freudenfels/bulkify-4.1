@@ -1000,6 +1000,8 @@ if (auftrag_braucht_etikett($id)):
   $nsTon = 'info'; $nsLager = false;
   if (!$pa)                                    { $nsText = 'Beschaffung wählen: Herstellen (aus Rohstoffen) oder Einkaufen (fertige Bulkware) – unten.'; }
   elseif ($paVorbereitung)                     { $nsText = 'Produktionsauftrag ist in Vorbereitung – unten „Zur Produktion freigeben".'; $nsTon = 'warn'; }
+  elseif ($berSt === 'wartet' && $fehlDetail && !array_filter($fehlDetail, fn($fd) => $fd['quar'] + 1e-6 < $fd['fehlt']))
+                                               { $nsText = 'Produktion wartet auf die QM-Freigabe – das Material liegt in Quarantäne:'; $nsTon = 'warn'; }
   elseif ($berSt === 'wartet')                 { $nsText = 'Produktion noch nicht möglich – es fehlt Material:'; $nsTon = 'err'; }
   elseif ($berSt === 'bereit')                 { $nsText = 'Material ist vollständig – die Produktion kann starten.'; $nsTon = 'ok'; }
   elseif ($berSt === 'laeuft')                 { $nsText = 'Produktion läuft – fertige Menge unten melden.'; }
@@ -1013,8 +1015,9 @@ if (auftrag_braucht_etikett($id)):
     <?php if ($fehlDetail): ?>
     <ul style="margin:10px 0 0;padding-left:18px;font-size:13px">
       <?php foreach ($fehlDetail as $fd): ?>
-      <li style="margin:3px 0"><strong><?= h($fmtM($fd['fehlt'], $fd['einheit'])) ?></strong> <?= h($fd['name']) ?> fehlt –
-        <?php if ($fd['quar'] > 1e-6 && $fd['quar'] + 1e-6 >= $fd['fehlt']): ?><span style="color:#8a6d00">liegt in Quarantäne (<?= h($fmtM($fd['quar'], $fd['einheit'])) ?>)</span> – <a href="<?= h(quarantaene_freigabe_url((int)$fd['iid'])) ?>">freigeben</a>
+      <?php $fdQ = $fd['quar'] > 1e-6 && $fd['quar'] + 1e-6 >= $fd['fehlt']; ?>
+      <li style="margin:3px 0"><strong><?= h($fmtM($fd['fehlt'], $fd['einheit'])) ?></strong> <?= h($fd['name']) ?> <?= $fdQ ? 'in Quarantäne' : 'fehlt' ?> –
+        <?php if ($fdQ): ?><span style="color:#8a6d00">wartet auf die QM-Freigabe (<?= h($fmtM($fd['quar'], $fd['einheit'])) ?> in Quarantäne)</span> – <a href="<?= h(quarantaene_freigabe_url((int)$fd['iid'])) ?>">freigeben</a>
         <?php elseif ($fd['best']): ?>bestellt mit <a href="?p=bestellung&id=<?= (int)$fd['best']['id'] ?>"><?= h((string)$fd['best']['nummer']) ?></a><?= !empty($fd['best']['eta_geplant']) ? ', erwartet ' . h(date('d.m.Y', strtotime((string)$fd['best']['eta_geplant']))) : '' ?>
         <?php else: ?><span style="color:#8f231b">noch nicht bestellt</span> – <a href="?p=einkaufsliste">zum Einkauf</a><?php endif; ?>
       </li>

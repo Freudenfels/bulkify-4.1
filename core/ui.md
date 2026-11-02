@@ -20,3 +20,6 @@ Wandelt einen Statuswert aus der Datenbank in lesbares Deutsch **mit Umlauten**:
 
 **Wichtig / Regel:**
 - Neue Listen und Formulare **immer über diese Bausteine** bauen, nie eigenes HTML pro Seite. Änderungen am Aussehen passieren zentral hier bzw. in `assets/app.css`.
+
+## Quarantäne statt „fehlt" (Nacht 1)
+Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … – freigeben" (wartet auf QM) statt rot „fehlt". Reicht die Quarantäne nicht, bleibt „fehlt" mit Hinweis auf den Quarantäne-Teil. Dashboard-Helfer `bx_fehlt_quar()` (core/ui.php). Produktion bleibt bis zur Freigabe blockiert.

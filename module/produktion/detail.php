@@ -446,7 +446,7 @@ ob_start(); ?>
           <td><?= h($f['name']) ?></td>
           <td class="bx-num"><?= $mfmt($f['benoetigt']) ?> <?= h($f['einheit']) ?></td>
           <td class="bx-num"><?= $mfmt($f['verfuegbar']) ?> <?= h($f['einheit']) ?></td>
-          <td class="bx-num" style="color:#8f231b"><?= $mfmt(max(0,$fehlt)) ?> <?= h($f['einheit']) ?><?php if (!empty($f['quarantaene'])): ?><br><span style="color:#8a6d00;font-size:12px"><?= $mfmt($f['quarantaene']) ?> <?= h($f['einheit']) ?> in Quarantäne – <a href="<?= h(quarantaene_freigabe_url((int)($f['item_id'] ?? 0))) ?>">freigeben</a></span><?php endif; ?></td>
+          <td class="bx-num"><?= bx_fehlt_quar(max(0,$fehlt), (float)($f['quarantaene'] ?? 0), $mfmt(max(0,$fehlt)) . ' ' . $f['einheit'], $mfmt((float)($f['quarantaene'] ?? 0)) . ' ' . $f['einheit'], quarantaene_freigabe_url((int)($f['item_id'] ?? 0))) ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
@@ -634,7 +634,7 @@ ob_start(); ?>
           <td><?= h($b['name']) ?></td>
           <td class="bx-num"><?= $mng($b['benoetigt'], $b['einheit']) ?></td>
           <td class="bx-num"><?= $mng($b['verfuegbar'], $b['einheit']) ?></td>
-          <td><?= $ok ? bx_badge('genug','ok') : ($erl ? bx_badge('nicht gebucht','info') : ((float)($b['quarantaene'] ?? 0) > 1e-6 ? '<a href="' . h(quarantaene_freigabe_url((int)$b['item_id'])) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a> ' : '') . bx_badge('fehlt ' . $mng($b['fehlt'], $b['einheit']), 'err')) ?></td>
+          <td><?= $ok ? bx_badge('genug','ok') : ($erl ? bx_badge('nicht gebucht','info') : bx_fehlt_quar((float)$b['fehlt'], (float)($b['quarantaene'] ?? 0), html_entity_decode($mng($b['fehlt'], $b['einheit'])), html_entity_decode($mng((float)($b['quarantaene'] ?? 0), $b['einheit'])), quarantaene_freigabe_url((int)$b['item_id']))) ?></td>
         </tr>
       <?php endforeach; ?>
       <?php if ($kapNeed): $okK = $kapNeed['fehlt'] <= 0.0001; ?>
@@ -712,7 +712,7 @@ if ($bedarfListe):
           <td class="bx-num"><?= $mfmt($r['benoetigt']) ?> <?= h($r['einheit']) ?></td>
           <td class="bx-num"><?= $mfmt($r['verfuegbar']) ?> <?= h($r['einheit']) ?></td>
           <td class="bx-num"><?= $res > 1e-6 ? '<span class="bx-ok">' . $mfmt($res) . ' ' . h($r['einheit']) . '</span>' : '<span class="muted">–</span>' ?></td>
-          <td><?= $ok ? bx_badge('vorhanden','ok') : bx_badge('fehlt ' . $mfmt($fehlt) . ' ' . h($r['einheit']), 'err') ?><?php if ((float)($r['quarantaene'] ?? 0) > 1e-6): ?> <a href="<?= h(quarantaene_freigabe_url((int)($r['item_id'] ?? 0))) ?>" style="text-decoration:none"><?= bx_badge('in Quarantäne – freigeben','warn') ?></a><?php endif; ?></td>
+          <td><?= $ok ? bx_badge('vorhanden','ok') : bx_fehlt_quar((float)$fehlt, (float)($r['quarantaene'] ?? 0), $mfmt($fehlt) . ' ' . $r['einheit'], $mfmt((float)($r['quarantaene'] ?? 0)) . ' ' . $r['einheit'], quarantaene_freigabe_url((int)($r['item_id'] ?? 0))) ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>

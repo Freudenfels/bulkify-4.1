@@ -57,6 +57,15 @@ function bx_badge(string $text, string $kind = ''): string {
     return '<span class="badge' . $c . '">' . h($text) . '</span>';
 }
 
+// Fehlt-Anzeige mit Quarantäne (Nacht 1): deckt Ware in Quarantäne die Lücke, ist das KEIN Fehlbestand, sondern wartet auf die
+// QM-Freigabe -> gelbes „in Quarantäne" statt rotem „fehlt". Reicht die Quarantäne nicht, „fehlt" mit Hinweis auf den Quarantäne-Teil.
+// $menge = fertig formatierter Text (z. B. „12 kg"), $url = Freigabe-Link (leer = ohne Link).
+function bx_fehlt_quar(float $fehlt, float $quar, string $fehltTxt, string $quarTxt, string $url = ''): string {
+    $q = $quar > 1e-6 ? ($url !== '' ? '<a href="' . h($url) . '" style="text-decoration:none">' : '') . bx_badge('in Quarantäne ' . $quarTxt . ($url !== '' ? ' – freigeben' : ''), 'warn') . ($url !== '' ? '</a>' : '') : '';
+    if ($quar > 1e-6 && $quar + 1e-6 >= $fehlt) return $q;
+    return bx_badge('fehlt ' . $fehltTxt, 'err') . ($q !== '' ? ' ' . $q : '');
+}
+
 // Firmenname für Listen kürzen: nur den Teil VOR einem umschlossenen Trenner „ / " oder „ - "
 // (z. B. „BioMedical Company / FuturaYou" -> „BioMedical Company", „Get Fit - Dr. Arnd Schürmann"
 // -> „Get Fit"). Namen ohne umschlossenen Trenner (z. B. „Coca-Cola") bleiben unveraendert.

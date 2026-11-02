@@ -24,3 +24,6 @@ Oben rechts der Button in den Produktionsmodus (`?p=run&id=…`); Beschriftung j
 Werk-App: der Hinweis „in Quarantäne – erst freigeben" ist jetzt ein Link in die Lager-Freigabeseite (`/lager/?p=quarantaene&item=ID`).
 
 **Teilmenge (S-12):** wie in `run`: Rechner „Jetzt machbar" über dem Formular, Prüfung und anteilige Abbuchung aller Materialien.
+
+## Quarantäne statt „fehlt" (Nacht 1)
+Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … – freigeben" (wartet auf QM) statt rot „fehlt". Reicht die Quarantäne nicht, bleibt „fehlt" mit Hinweis auf den Quarantäne-Teil. Dashboard-Helfer `bx_fehlt_quar()` (core/ui.php). Produktion bleibt bis zur Freigabe blockiert.

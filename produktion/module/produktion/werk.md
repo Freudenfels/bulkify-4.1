@@ -52,3 +52,6 @@ Das Scan-Panel erkennt jetzt neben Charge-QR (`?p=charge&id=`, Alt-Etiketten), n
 Nach dem Mischen (`$mischenDone`) erscheint ein Panel „Restmischung ins Lager 1 einbuchen" (kg-Feld + Button, mehrsprachig `rest_*`). POST `werk_restmischung` → `erp_restmischung_einbuchen`. Dasselbe gibt es im Dashboard-Produktionsmodus (`run.php`, POST `restmischung`).
 
 **Teil-/Restmenge im Werk (St-08/S-12):** Im Auftragskopf steht nach einer Teilmenge „Rest N von M Packungen offen" und der Rechner „Jetzt machbar" (komplett fertig / bis vor dem Etikettieren, begrenzt durch das knappste Material) bzw. die Etikett-Sperre. Texte in `werk_i18n.php` (de/en/ru).
+
+## Quarantäne statt „fehlt" (Nacht 1)
+Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … – freigeben" (wartet auf QM) statt rot „fehlt". Reicht die Quarantäne nicht, bleibt „fehlt" mit Hinweis auf den Quarantäne-Teil. Dashboard-Helfer `bx_fehlt_quar()` (core/ui.php). Produktion bleibt bis zur Freigabe blockiert.
