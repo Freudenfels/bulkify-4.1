@@ -55,8 +55,11 @@ function route_rollen_map(): array {
         'auftraege'          => ['sales', 'finance', 'production', 'fulfillment'],
         'nachbestellungen'   => ['sales', 'finance'],   // Eingang Portal-Nachbestellungen (Preisprüfung/Freigabe)
         'auftrag_preise'     => ['sales', 'finance'],
-        'auftrag'            => ['sales', 'finance', 'production', 'fulfillment'],
+        'auftrag'            => ['sales', 'finance', 'production', 'fulfillment', 'labor'],   // + QM: Freigaben/QK am Auftrag (St-10)
         'auftrag_pdf'        => ['sales', 'finance', 'production', 'fulfillment'],
+        'lieferschein_pdf'   => ['sales', 'finance', 'production', 'fulfillment', 'labor'],   // Lieferschein drucken (Lager/Versand, St-10)
+        'kontingente'        => ['sales', 'finance'],   // Jahresverträge/Kontingente
+        'kontingent'         => ['sales', 'finance'],
         'fasttrack'          => ['sales', 'finance', 'production', 'fulfillment'],
         'anfragen'           => ['sales', 'production'],
         'anfrage'            => ['sales', 'production'],
@@ -64,11 +67,14 @@ function route_rollen_map(): array {
         'portal_anfrage'     => ['sales', 'production', 'einkauf'],
         'rezeptur'           => ['production', 'labor'],
         'kapsel_referenz'    => ['production', 'labor', 'sales'],   // Nachschlagewerk Kapselgrößen
-        'rezeptur_detail'    => ['production', 'labor'],
+        'rezeptur_detail'    => ['production', 'labor', 'sales'],   // + Innendienst: Ziel nach „Vorschlag senden" (St-10)
+        'rezeptur_pib'       => ['production', 'labor', 'sales'],   // PIB zur Rezeptur (St-10)
+        'rezeptur_dubletten' => [],                                 // Dubletten zusammenführen – nur Admin (Stammdaten)
         'rezeptur_umbau'     => ['production', 'labor'],
         'produktbuilder'     => ['production', 'sales', 'labor'],
         'produkte'           => ['production', 'sales'],
         'produkt'            => ['production', 'sales'],
+        'produkt_pib'        => ['production', 'sales', 'labor'],   // PIB zum Produkt (+ QM, St-10)
         'novelfood'          => ['production', 'sales', 'labor'],   // Novel-Food-Schnellsuche
         'novelfood_import'   => ['production', 'labor'],            // Katalog aktualisieren (Upload+Diff+EU-Abgleich)
         'novelfood_verlauf'  => ['production', 'sales', 'labor'],   // Aktualisierungs-Verlauf (je Lauf)
@@ -83,7 +89,8 @@ function route_rollen_map(): array {
         'lager2'             => ['production', 'fulfillment', 'einkauf', 'labor'],
         'lager2_import'      => ['production', 'fulfillment', 'einkauf', 'labor'],
         'betriebsmittel'     => ['production', 'fulfillment', 'einkauf', 'labor'],
-        'wareneingang'       => ['einkauf', 'labor', 'production'],
+        'wareneingang'       => ['einkauf', 'labor', 'production', 'fulfillment'],   // + Lager: Dashboard-Wareneingang (St-10)
+        'rohstoffe_papiere'  => ['production', 'einkauf', 'labor'],   // Rohstoffe ohne Papiere -> CoA/Spec anfragen
         'rohstoffe'          => ['production', 'einkauf', 'labor'],
         'rohstoff_website'   => ['production', 'einkauf', 'labor'],   // Massen-Freigabe für die öffentliche Rohstoff-DB
         'rohstoff'           => ['production', 'einkauf', 'labor'],
@@ -93,6 +100,7 @@ function route_rollen_map(): array {
         'lief_preisliste'    => ['production', 'einkauf', 'labor'],
         'rezept_preise'      => ['production', 'einkauf', 'labor'],
         'einkauf_preise'     => ['production', 'einkauf', 'labor'],
+        'lieferant_preise'   => ['production', 'einkauf', 'labor'],   // Alt-Route -> leitet auf einkauf_preise
         'rezeptur_popup'     => ['production', 'einkauf', 'labor', 'sales'],
         'spec_pdf'           => ['production', 'einkauf', 'labor'],
         'spec_bulkify'       => ['production', 'einkauf', 'labor'],
@@ -106,6 +114,7 @@ function route_rollen_map(): array {
         'naehrstoff'         => ['production'],
         'lieferanten'        => ['einkauf', 'finance'],
         'lief_anfragen'      => ['einkauf', 'finance'],   // Übersicht aller Lieferanten-Anfragen + abgegebene Preise
+        'lief_anfrage_detail'=> ['einkauf', 'finance'],   // einzelne Preisanfrage (St-10)
         'lief_nachrichten'   => ['einkauf', 'finance'],   // Team-Übersicht aller Lieferanten-Nachrichten
         'lieferant'          => ['einkauf', 'finance'],
         'katalog_freigaben'  => ['einkauf', 'finance'],
@@ -145,6 +154,21 @@ function route_rollen_map(): array {
         'benutzer'           => ['admin'],
         'benutzer_detail'    => ['admin'],
         'fastaction'         => ['admin'],
+        // Bewusst nur Admin (System-/Import-/Bereinigungswerkzeuge) – explizit gelistet, damit der Abgleich
+        // index.php <-> Rollen-Map (St-10) vollständig ist und nichts versehentlich am Default hängt.
+        'benachrichtigungen' => [],   // Team-Postfach (enthält Kunden/Preise) – Freigabe für weitere Rollen offen, siehe Rückmeldung
+        'suche'              => [],
+        'protokoll'          => [],
+        'durchlaufzeiten'    => [],
+        'angebot_import'     => [],
+        'db_import'          => [],
+        'v3_import_upload'   => [],
+        'v3_dok_import'      => [],
+        'alt_rechnungen'     => [],
+        'testdaten'          => [],
+        'labor_bereinigung'  => [],
+        'dl_split_bereinigung' => [],
+        'crmdemo'            => [],
     ];
 }
 
