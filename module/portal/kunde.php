@@ -4731,7 +4731,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="et-card">
         <div class="et-name"><?= h(($rep['produkt'] ?? '') !== '' ? $etName($rep) : ($rep['datei_orig'] ?: 'Etikett')) ?></div>
         <div class="muted" style="font-size:12px;word-break:break-all"><?= h($rep['datei_orig'] ?: '') ?></div>
-        <a class="et-hint" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-etikett="<?= h($purl) ?>" data-pdf="<?= $isPdf ? '1' : '0' ?>">🔍 Vorschau <?= $isPdf ? '(PDF)' : '' ?></a>
+        <a class="et-hint" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-etikett="<?= h($purl) ?>" data-pdf="<?= $isPdf ? '1' : '0' ?>">Vorschau <?= $isPdf ? '(PDF)' : '' ?></a>
         <div class="et-orders">
           <div class="muted" style="font-size:12px">Genutzt in <?= count($g['orders']) ?> Auftrag/Aufträgen:</div>
           <?php foreach ($g['orders'] as $o): $sb = $stLbl[$o['status']] ?? [$o['status'], '']; ?>

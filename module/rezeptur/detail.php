@@ -424,7 +424,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
           <td>
             <input type="text" class="zitem-txt" autocomplete="off" placeholder="Rohstoff tippen oder wählen …" style="width:100%<?= $zMatch!=='ok' ? ';border-color:var(--warn)' : '' ?>" value="<?= h($zTxt) ?>">
             <input type="hidden" name="z_item[]" class="zitem" value="<?= (int)($z['item_id'] ?? 0) ?: '' ?>">
-            <div class="zactions" style="margin-top:4px"><?php if ($zBadge !== ''): ?><span class="muted" style="font-size:12px;color:var(--warn)">&#9888; <?= h($zBadge) ?></span> <?php endif; ?><?= $zActionsHtml($z['item_id'] ?? 0) ?></div>
+            <div class="zactions" style="margin-top:4px"><?php if ($zBadge !== ''): ?><span class="muted" style="font-size:12px;color:var(--warn)">Hinweis: <?= h($zBadge) ?></span> <?php endif; ?><?= $zActionsHtml($z['item_id'] ?? 0) ?></div>
           </td>
           <td><input type="number" step="0.001" name="z_menge[]" class="zmenge" value="<?= h($z['menge_mg']!==''&&$z['menge_mg']!==null ? rtrim(rtrim(number_format((float)$z['menge_mg'],3,'.',''),'0'),'.') : '') ?>"></td>
           <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.zutatrow').remove();recalc()">entfernen</button></td>

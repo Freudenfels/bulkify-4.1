@@ -61,7 +61,7 @@ $kiBereit = (function(){ require_once BX_ROOT . '/core/ki.php'; return ki_bereit
 if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">KI ist nicht eingerichtet – ohne KI kann der Betrag nicht ausgelesen werden (Preis dann im Auftrag von Hand eintragen).</div>';
 ?>
 <?php if (!$offene): ?>
-  <div class="bx-panel"><div class="muted">Alle Aufträge haben einen Preis. 👍</div></div>
+  <div class="bx-panel"><div class="muted">Alle Aufträge haben einen Preis.</div></div>
 <?php else: ?>
 <div class="bx-tablewrap"><table class="bx-table">
   <thead><tr><th>Nummer</th><th>Kunde</th><th>Produkt</th><th class="bx-num">Menge</th><th>Rechnung hochladen (Preis wird übernommen)</th></tr></thead>

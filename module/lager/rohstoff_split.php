@@ -68,7 +68,7 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h
 <?php if (!$kiDa): ?><div class="muted" style="font-size:12px;margin:-6px 2px 10px">KI-Vorschläge nur auf beta. Du kannst die Varianten aber überall von Hand eintragen (eine pro Zeile) und übernehmen.</div><?php endif; ?>
 
 <?php if (!$rows): ?>
-  <div class="bx-panel muted"><?= $statusF==='todo' ? 'Keine zu langen Rohstoffnamen offen. 🎉' : 'Nichts in dieser Ansicht.' ?></div>
+  <div class="bx-panel muted"><?= $statusF==='todo' ? 'Keine zu langen Rohstoffnamen offen.' : 'Nichts in dieser Ansicht.' ?></div>
 <?php else: foreach ($rows as $r):
     $vollName = trim((string)($r['name_v3'] ?? '')) ?: (string)$r['name'];
     $gekappt  = $vollName !== (string)$r['name'];

@@ -71,7 +71,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <div class="bx-field"><label>Notiz (optional)</label>
       <div class="bx-row" style="gap:6px;align-items:flex-start">
         <textarea name="notiz" id="ftNotiz" rows="2" style="flex:1" placeholder="z. B. 500 Dosen erhalten, Rest folgt … (Strg+D für Sprache)"></textarea>
-        <button type="button" class="btn btn-ghost btn-sm" id="ftMic" title="Sprache (Strg+D)" style="white-space:nowrap">🎤 Sprache</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="ftMic" title="Sprache (Strg+D)" style="white-space:nowrap">Sprache</button>
       </div>
       <div class="muted" id="ftMicInfo" style="font-size:12px"></div>
     </div>
@@ -118,7 +118,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     erk.onresult = function(ev){ var t = ev.results[0][0].transcript; feld.value = (feld.value ? feld.value.replace(/\s*$/,'') + ' ' : '') + t; };
     erk.onerror = function(ev){ info.textContent = 'Sprachfehler: ' + (ev.error || ''); };
     erk.onstart = function(){ laeuft = true; btn.textContent = '● hört zu …'; info.textContent = 'Sprich jetzt …'; };
-    erk.onend   = function(){ laeuft = false; btn.textContent = '🎤 Sprache'; };
+    erk.onend   = function(){ laeuft = false; btn.textContent = 'Sprache'; };
     try { erk.start(); } catch(e){}
   }
   btn.addEventListener('click', start);

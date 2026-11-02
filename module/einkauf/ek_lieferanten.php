@@ -51,7 +51,7 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:8px 12px">' . $f
 
 <div class="bx-panel">
 <?php if (!$namen): ?>
-  <div class="muted">Alle Lieferanten aus den EK-Preisen sind zugeordnet. 🎉</div>
+  <div class="muted">Alle Lieferanten aus den EK-Preisen sind zugeordnet.</div>
 <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Lieferant (Text)</th><th class="bx-num">Zeilen</th><th>Vorschlag</th><th>Aktion</th></tr></thead>

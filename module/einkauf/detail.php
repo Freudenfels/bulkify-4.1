@@ -314,7 +314,7 @@ if (!$neu) {
         // B3: zur Bestellung abgelegte Rechnung(en) (dokument typ='rechnung').
         $rechn = all("SELECT id, titel, datei_orig FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [(int)$id]);
         $rechnHtml = '';
-        foreach ($rechn as $rd) $rechnHtml .= '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">&#11015;&#65039; ' . h((string)($rd['datei_orig'] ?: $rd['titel'] ?: 'Rechnung')) . '</a>';
+        foreach ($rechn as $rd) $rechnHtml .= '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">' . h((string)($rd['datei_orig'] ?: $rd['titel'] ?: 'Rechnung')) . '</a>';
         echo '<div class="bx-panel"><h2 style="margin-top:0">Online-Einkauf</h2><div class="bx-cards">'
            . '<div class="bx-card"><div class="k">Händler / Quelle</div><div class="v">' . (((string)($b['online_haendler'] ?? '')) !== '' ? h((string)$b['online_haendler']) : '<span class="muted">–</span>') . '</div></div>'
            . '<div class="bx-card"><div class="k">Zahlungsart</div><div class="v">' . ($za !== '' ? h($za) : '<span class="muted">–</span>') . '</div></div>'
@@ -332,7 +332,7 @@ if (!$neu) {
         // Rechnung(en) des Lieferanten zum Download
         echo '<div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px">';
         echo '<div><div class="muted" style="font-size:12px">Rechnung des Lieferanten</div><div>';
-        if ($rechnDocs) { foreach ($rechnDocs as $rd) echo '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">&#11015;&#65039; ' . h((string)($rd['datei_orig'] ?: 'Rechnung')) . '</a>'; }
+        if ($rechnDocs) { foreach ($rechnDocs as $rd) echo '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">' . h((string)($rd['datei_orig'] ?: 'Rechnung')) . '</a>'; }
         else echo '<span class="muted">noch keine hochgeladen (Lieferant lädt sie im Portal hoch)</span>';
         echo '</div></div>';
         echo '<div><div class="muted" style="font-size:12px">Status</div><div>' . ($istBezahlt ? bx_badge('bezahlt am ' . date('d.m.Y', strtotime((string)$b['bezahlt_am'])) . ((string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : ''), 'ok') : bx_badge('offen', 'warn')) . '</div></div>';
@@ -346,7 +346,7 @@ if (!$neu) {
                . '<button class="btn btn-primary btn-sm" type="submit">Als bezahlt markieren</button></form>';
         } elseif ($zbeleg) {
             echo '<div class="muted" style="font-size:12px">Überweisungsbestätigung: ';
-            foreach ($zbeleg as $zd) echo '<a href="?p=dokument&id=' . (int)$zd['id'] . '" target="_blank" style="margin-right:12px">&#11015;&#65039; ' . h((string)($zd['datei_orig'] ?: 'Beleg')) . '</a>';
+            foreach ($zbeleg as $zd) echo '<a href="?p=dokument&id=' . (int)$zd['id'] . '" target="_blank" style="margin-right:12px">' . h((string)($zd['datei_orig'] ?: 'Beleg')) . '</a>';
             echo '</div>';
         }
         echo '</div>';
@@ -401,7 +401,7 @@ if (!$neu) {
         foreach ($etikettPos as $ep) {
             $ei = etikett_info((int)$ep['auftrag_id']);
             $dl = !empty($ei['dok'])
-                ? '<a href="?p=dokument&id=' . (int)$ei['dok']['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none">&#11015;&#65039; ' . h($ei['dok']['datei_orig'] ?: 'Etikett') . '</a>'
+                ? '<a href="?p=dokument&id=' . (int)$ei['dok']['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none">' . h($ei['dok']['datei_orig'] ?: 'Etikett') . '</a>'
                 : bx_badge('kein Design hochgeladen', 'warn');
             echo '<tr><td>' . h($ep['name']) . '</td>'
                . '<td>' . ($ei['produkt'] ? h($ei['produkt']) : '<span class="muted">–</span>') . '</td>'
