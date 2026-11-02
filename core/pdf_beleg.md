@@ -73,3 +73,9 @@ Cent gerundet × Menge).
 **Zahlungsbedingung (St-05):** Die Zeile „Zahlungsbedingung" nimmt – wenn nicht ausdrücklich gesetzt – das Zahlungsziel des Kunden (`$b['zahlungsziel_tage']` = `kunden.zahlungsziel_tage`): „Zahlbar innerhalb von N Tagen ohne Abzug" (Lieferanten-Belege englisch). Erst ohne Zahlungsziel gilt die Standardbedingung („Sofort zahlbar ohne Abzug"). Angebot, Auftragsbestätigung (intern + Portal) und Rechnung reichen das Ziel durch.
 
 **Einkaufsbeleg-Modus (St-21):** Bei `belegart_label` „Bestellung"/„Purchase Order" (`$istEinkauf`) entfallen USt-/§-19-Zeilen, Kundenhinweis zur Herstellung, eigene Kontoverbindung und die Standard-Zahlungszeile; es bleibt „Positionen netto" + Hinweis „Alle Preise netto".
+
+## PDF-Details (Aufräumen 14)
+- Bearbeiter/E-Mail stehen nur noch im Kopf, wenn bekannt (kein „Bearbeiter –"). Das Angebots-PDF trägt den angemeldeten Team-Mitarbeiter ein.
+- Lieferschein: Abstand vor „Hinweis zur Herstellung", er liegt nicht mehr auf der Positions-Unterzeile.
+- Einheitenspalte wächst mit der längsten Einheit (bis 90 pt), z. B. „Palettenplatz/Monat" auf DL-Angebot/-Rechnung. Menge und Einheit rücken dafür nach links.
+- Angebots-Positionen: Füllgewicht auf 1 mg gerundet („~435mg" statt „~440mg").

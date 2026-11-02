@@ -65,3 +65,9 @@ Cent gerundet × Menge).
 - Rohstoff-Angebot ebenfalls über diesen Generator ausgeben (eine Position, wie das
   Muster `AN-0048`), sobald „Rohstoff-Angebot senden" gebaut ist.
 - Bankverbindungen / Kundenportal-QR (im v3-Original vorhanden) bei Bedarf ergänzen.
+
+## PDF-Details (Aufräumen 14)
+- Bearbeiter/E-Mail stehen nur noch im Kopf, wenn bekannt (kein „Bearbeiter –"). Das Angebots-PDF trägt den angemeldeten Team-Mitarbeiter ein.
+- Lieferschein: Abstand vor „Hinweis zur Herstellung", er liegt nicht mehr auf der Positions-Unterzeile.
+- Einheitenspalte wächst mit der längsten Einheit (bis 90 pt), z. B. „Palettenplatz/Monat" auf DL-Angebot/-Rechnung. Menge und Einheit rücken dafür nach links.
+- Angebots-Positionen: Füllgewicht auf 1 mg gerundet („~435mg" statt „~440mg").

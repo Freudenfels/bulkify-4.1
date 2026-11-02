@@ -150,8 +150,9 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $right[] = [$T['faellig'], $fmtD($b['faellig_bis'])];
     }
     if (!empty($b['bezug'])) $left[] = [$T['bezug'], (string) $b['bezug']];
-    $right[] = [$T['bearbeiter'], (string) ($b['bearbeiter'] ?? '') ?: '-'];
-    $right[] = [$T['email'], (string) ($b['bearbeiter_email'] ?? '') ?: '-'];
+    // Bearbeiter/E-Mail nur, wenn bekannt – kein „Bearbeiter –" mehr (Aufräumen 14).
+    if (trim((string)($b['bearbeiter'] ?? '')) !== '')       $right[] = [$T['bearbeiter'], (string)$b['bearbeiter']];
+    if (trim((string)($b['bearbeiter_email'] ?? '')) !== '') $right[] = [$T['email'], (string)$b['bearbeiter_email']];
     if (!empty($b['ust_id'])) $right[] = [$T['ustid'], (string) $b['ust_id']];
     $n = max(count($left), count($right));
     for ($i = 0; $i < $n; $i++) {
@@ -173,6 +174,12 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
 
     // ---- Positionstabelle ----
     $cPos = $L + 2; $cArt = $L + 24; $cBez = $L + 92; $cMengeR = 438; $cEinh = 444; $cPreisR = 502; $cGesR = $R;
+    // Lange Einheiten („pro Probe", „Pauschal", DL-Angebot/-Rechnung) nicht abschneiden: Menge/Einheit so weit nach links
+    // rücken, dass die längste Einheit ganz passt (Bezeichnung wird schmaler). Aufräumen 14.
+    $einhW = 34.0;
+    foreach ($positionen as $pp0) $einhW = max($einhW, $p->strwidth((string)($pp0['einheit'] ?? ''), 8, false) + 2);
+    $einhW = min($einhW, 90.0);
+    if ($einhW > 34.0) { $d = $einhW - 34.0; $cMengeR -= $d; $cEinh -= $d; }
     $hy = $my + 10; $hb = $hy + 8;
     $p->text($cPos, $hb, $T['pos'], 8, true, $INK);
     $p->text($cArt, $hb, $T['artnr'], 8, true, $INK);
@@ -193,7 +200,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $p->text($cArt, $by, $p->fit((string) ($pos['artikelnr'] ?? ''), 62, 8, false), 8, false, $INK);
         $p->text($cBez, $by, $p->fit((string) $pos['bezeichnung'], $bezMax, 9, true), 9, true, $INK);
         $p->textRight($cMengeR, $by, beleg_num((float) $pos['menge']), 8, false, $INK);
-        $p->text($cEinh, $by, $p->fit((string) ($pos['einheit'] ?? ''), 34, 8, false), 8, false, $INK);
+        $p->text($cEinh, $by, $p->fit((string) ($pos['einheit'] ?? ''), $einhW, 8, false), 8, false, $INK);
         if (!$lieferschein) {
             $p->textRight($cPreisR, $by, ((isset($pos['preis_e4']) && $pos['preis_e4'] !== null && $pos['preis_e4'] !== '') ? $posVkStr($pos) : beleg_eur((int) $pos['preis_cent'], '')), 8, false, $INK);
             $p->textRight($cGesR, $by, beleg_eur((int) ($pos['gesamt_cent'] ?? $posNetto($pos)), ''), 9, true, $INK);
@@ -330,6 +337,8 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     // Der „Hinweis zur Herstellung" ist ein KUNDEN-Hinweis – nie auf einer Bestellung an den Lieferanten (St-21).
     $hinweis = (string) ($b['hinweis'] ?? '') ?: ($istEinkauf ? '' : (string) meta_get('bh_hinweis_herstellung', ''));
     if (trim($hinweis) !== '') {
+        // Lieferschein: ohne Summenblock stand der Hinweis direkt auf der Positions-Unterzeile („60 Softgels je Packung") – Abstand (Aufräumen 14).
+        if (!empty($lieferschein)) $y += 16;
         if ($y > 700) { $p->addPage(); $y = 54; }
         $p->text($L, $y, 'Hinweis zur Herstellung', 9, true, $INK); $y += 12;
         foreach ($p->wrap($hinweis, $R - $L, 8, false) as $wl) {

@@ -91,8 +91,9 @@ function angebot_pdf_bauen(int $angebot_id): ?string {
         'kundennummer'     => $k['kundennummer'] ?? '',
         'version'          => 1,
         'bezug'            => $anf ? ('Anfrage ' . $anf['nummer']) : '',
-        'bearbeiter'       => '',
-        'bearbeiter_email' => '',
+        // Bearbeiter = angemeldeter Team-Mitarbeiter, der das PDF erzeugt/verschickt (im Portal leer -> Zeile entfällt).
+        'bearbeiter'       => ($bxCu = (function_exists('current_user') ? current_user() : null)) && empty($bxCu['lieferant_id']) ? (string)($bxCu['name'] ?? '') : '',
+        'bearbeiter_email' => ($bxCu && empty($bxCu['lieferant_id'])) ? (string)($bxCu['email'] ?? '') : '',
         'ust_id'           => $k['ust_id'] ?? '',
         'kopf_text'        => $kopf,
         'zahlungsart_label'=> $zaMap[$k['zahlungsart'] ?? 'vorkasse'] ?? ucfirst((string)($k['zahlungsart'] ?? 'Vorkasse')),

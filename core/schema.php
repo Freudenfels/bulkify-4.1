@@ -5242,7 +5242,7 @@ function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $let
         $mg = (float)$z['menge_mg']; $totalMg += $mg;
         $rezLines[] = $z['bezeichnung'] . ' ' . rtrim(rtrim(number_format($mg, 2, ',', ''), '0'), ',') . 'mg';
     }
-    $sumMg = (int) round($totalMg / 10) * 10;
+    $sumMg = (int) round($totalMg);   // auf 1 mg (vorher auf 10 mg: „~440mg" statt 435 mg, Aufräumen 14)
     if ($jePortion) $summary = '~' . $sumMg . 'mg je Portion, ' . $stkLabel . ' je Packung';
     else {
         $summary = '~' . $sumMg . 'mg, ' . $stkLabel;
@@ -5446,7 +5446,7 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
         $mg = (float)$z['menge_mg']; $totalMg += $mg;
         $rezLines[] = $z['bezeichnung'] . ' ' . rtrim(rtrim(number_format($mg, 2, ',', ''), '0'), ',') . 'mg';
     }
-    $sumMg = (int) round($totalMg / 10) * 10;
+    $sumMg = (int) round($totalMg);   // auf 1 mg (vorher auf 10 mg: „~440mg" statt 435 mg, Aufräumen 14)
     $stkLabel = form_groessen_label($form, (float)$stueck);
     if ($jePortion) $summary = '~' . $sumMg . 'mg je Portion, ' . $stkLabel . ' je Packung';
     else {
