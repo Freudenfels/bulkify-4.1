@@ -683,16 +683,17 @@ if ($bedarfListe):
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
     <thead><tr><th style="width:34px"></th><th>Komponente</th><th></th><th class="bx-num">Benötigt</th><th class="bx-num">Verfügbar (netto)</th><th class="bx-num">Reserviert</th><th>Status</th></tr></thead>
     <tbody>
-      <?php foreach ($bedarfListe as $r): $fehlt = (float)$r['fehlt']; $res = (float)($r['reserviert_eigen'] ?? 0); $ok = $fehlt <= 1e-6;
+      <?php foreach ($bedarfListe as $r): $fehlt = (float)$r['fehlt']; $res = (float)($r['reserviert_eigen'] ?? 0);
+            $beist = !empty($r['beistellung']); $ok = $fehlt <= 1e-6;
             $tint = $ok ? 'rgba(29,158,117,.08)' : 'rgba(143,35,27,.08)'; ?>
         <tr style="background:<?= $tint ?>">
           <td style="text-align:center;font-size:16px"><?= $ok ? '<span class="bx-ok">&#10003;</span>' : '<span style="color:#8f231b">&#10007;</span>' ?></td>
           <td><?= h($r['name']) ?></td>
           <td><?= $rolleBadge($r['rolle']) ?></td>
           <td class="bx-num"><?= $mfmt($r['benoetigt']) ?> <?= h($r['einheit']) ?></td>
-          <td class="bx-num"><?= $mfmt($r['verfuegbar']) ?> <?= h($r['einheit']) ?></td>
+          <td class="bx-num"><?= $beist ? '<span class="muted">–</span>' : $mfmt($r['verfuegbar']) . ' ' . h($r['einheit']) ?></td>
           <td class="bx-num"><?= $res > 1e-6 ? '<span class="bx-ok">' . $mfmt($res) . ' ' . h($r['einheit']) . '</span>' : '<span class="muted">–</span>' ?></td>
-          <td><?= $ok ? bx_badge('vorhanden','ok') : bx_badge('fehlt ' . $mfmt($fehlt) . ' ' . h($r['einheit']), 'err') ?></td>
+          <td><?= $beist ? bx_badge('Beistellung (Kunde)','ok') : ($ok ? bx_badge('vorhanden','ok') : bx_badge('fehlt ' . $mfmt($fehlt) . ' ' . h($r['einheit']), 'err')) ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>

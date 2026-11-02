@@ -108,7 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     if (!(has_role('admin') || has_role('sales'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
     $vp = (int)($_POST['verpackung_id'] ?? 0);
     if ($vp > 0 && !scalar("SELECT id FROM item WHERE id=? AND kategorie='verpackung'", [$vp])) $vp = 0;
-    q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vp ?: null, $id]);
+    $beist = !empty($_POST['verpackung_beistellung']) ? 1 : 0;   // Behälter kundeneigen (Beistellung)
+    q("UPDATE auftrag SET verpackung_id=?, verpackung_beistellung=? WHERE id=?", [$vp ?: null, $beist, $id]);
+    if (function_exists('bedarf_bump')) bedarf_bump();            // Material-/Bedarf-Cache neu rechnen
     header('Location: ?p=auftrag&id=' . $id . '&vpok=1'); exit;
 }
 
@@ -768,8 +770,10 @@ if (has_role('admin') || has_role('sales')):
       <option value="">– kein Behälter (reine Bulkware) –</option>
       <?php foreach ($vpListe as $vpi): ?><option value="<?= (int)$vpi['id'] ?>" <?= $aVp === (int)$vpi['id'] ? 'selected' : '' ?>><?= h($vpi['name']) ?></option><?php endforeach; ?>
     </select>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px" class="muted"><input type="checkbox" name="verpackung_beistellung" value="1" <?= !empty($a['verpackung_beistellung']) ? 'checked' : '' ?>> vom Kunden beigestellt (kundeneigen)</label>
     <button class="btn btn-primary btn-sm" type="submit">Verpackung speichern</button>
   </form>
+  <?php if (!empty($a['verpackung_beistellung'])): ?><div class="muted" style="font-size:12px;margin-top:6px">Der Behälter gilt als <strong>Beistellung des Kunden</strong> – er wird nicht gegen unseren Lagerbestand geprüft und blockiert die Produktion nicht.</div><?php endif; ?>
   <?php if ($effVp): ?>
     <div class="muted" style="font-size:12px;margin-top:8px">Aktueller Behälter: <strong><?= h($effName) ?></strong><?= $aVp ? '' : ' (vom Produkt übernommen)' ?> · Etikett-Endformat: <?= trim($effFinal) !== '' ? '<strong>' . h($effFinal) . '</strong>' : '<span style="color:var(--warn)">nicht hinterlegt – am Behälter unter Lager → Verpackungen pflegen</span>' ?></div>
   <?php else: ?>
@@ -1005,15 +1009,16 @@ if ($pa): $bedarfRows = auftrag_bedarf((int)$pa['id']); if ($bedarfRows):
         $frei = (float)($r['verfuegbar'] ?? 0);
         $unterwegs = $iid > 0 ? item_unterwegs($iid) : 0.0;
         $einh = (string)($r['einheit'] ?? 'Stk');
+        $beist = !empty($r['beistellung']);   // kundeneigene Verpackung (Beistellung) -> kein Bestandscheck
         $deckt = $frei + 1e-6 >= $ben;
         $decktMitUnterwegs = !$deckt && ($frei + $unterwegs + 1e-6 >= $ben); ?>
       <tr>
         <td><?= h((string)($r['name'] ?? '–')) ?></td>
         <td class="muted"><?= h((string)($r['rolle'] ?? '–')) ?></td>
         <td class="bx-num"><?= $mng($ben, $einh) ?></td>
-        <td class="bx-num"><?= $mng($frei, $einh) ?></td>
-        <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
-        <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn')) ?></td>
+        <td class="bx-num"><?= $beist ? '<span class="muted">–</span>' : $mng($frei, $einh) ?></td>
+        <td class="bx-num"><?= $beist ? '<span class="muted">–</span>' : ($unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>') ?></td>
+        <td><?= $beist ? bx_badge('Beistellung (Kunde)','ok') : ($deckt ? bx_badge('gedeckt','ok') : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn'))) ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

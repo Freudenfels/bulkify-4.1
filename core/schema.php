@@ -1556,6 +1556,7 @@ function init_schema(): void {
     // Angebot als Preismatrix (Kunde wählt Zelle: Stückzahl × Bestellmenge) -> gewählte Werte fließen in Auftrag + Produktion
     ensure_column('auftrag', 'stueck', "INT NULL");
     ensure_column('auftrag', 'verpackung_id', "INT NULL");
+    ensure_column('auftrag', 'verpackung_beistellung', "TINYINT(1) NOT NULL DEFAULT 0"); // Behälter ist kundeneigen (Beistellung) -> nicht gegen unseren Lagerbestand prüfen
     ensure_column('auftrag', 'etikett_item_id', "INT NULL"); // welche Kundenetikett-Version (item) für diesen Auftrag gilt (kundenreine Verbuchung + Rückverfolgung)
     ensure_column('auftrag', 'kontingent_id', "INT NULL");   // Abruf aus einem Rahmenvertrag/Kontingent
     ensure_column('auftrag', 'produkt_bezeichnung', "VARCHAR(190) NULL");  // Namens-SNAPSHOT: friert den (internen) Produktnamen zur Auftragszeit ein -> spaetere Umbenennung aendert Auftraege nicht
@@ -7851,6 +7852,15 @@ function auftrag_bedarf(int $pa_id): array {
         }
     }
     unset($r);
+    // Kundeneigene Verpackung (Beistellung): der Behälter wird vom Kunden gestellt -> NICHT gegen unseren
+    // Lagerbestand prüfen. Die Zeile bleibt sichtbar (Flag 'beistellung'), gilt aber nicht als Fehlbestand
+    // (fehlt=0), damit Material-Übersicht/Bereitschaft nicht fälschlich blockieren.
+    if (!empty($afRow['verpackung_beistellung'])) {
+        foreach ($rows as &$r) {
+            if (($r['rolle'] ?? '') === 'Verpackung') { $r['beistellung'] = true; $r['fehlt'] = 0.0; }
+        }
+        unset($r);
+    }
     return $rows;
 }
 
