@@ -222,7 +222,11 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     $p->line($sumX, $y, $R, $y, 0.8, $INK); $y += 14;
     $p->text($sumX, $y, 'Positionen netto', 9, false, $INK);
     $p->textRight($valR, $y, beleg_eur($nettoSum), 9, true, $INK); $y += 14;
-    if ($klein) {
+    if ($istEinkauf) {
+        // Einkaufsbeleg (Bestellung an den Lieferanten, St-21): keine USt-Zeilen und KEIN § 19-Hinweis – die Steuer stellt der Lieferant selbst.
+        $hin = (($b['sprache'] ?? 'de') === 'de') ? 'Alle Preise netto. Die Umsatzsteuer ergibt sich aus Ihrer Rechnung.' : 'All prices are net. VAT will be stated on your invoice.';
+        foreach ($p->wrap($hin, $R - $sumX, 8, false) as $wl) { $p->text($sumX, $y, $wl, 8, false, $GRAY); $y += 11; }
+    } elseif ($klein) {
         foreach ($p->wrap('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', $R - $sumX, 8, false) as $wl) { $p->text($sumX, $y, $wl, 8, false, $GRAY); $y += 11; }
     } else {
         foreach ($rates as $v) {
@@ -313,12 +317,18 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $zb = (($b['sprache'] ?? 'de') === 'de') ? 'Zahlbar innerhalb von ' . $zbTage . ' Tagen ohne Abzug' : 'Payable within ' . $zbTage . ' days without deduction';
     if ($zb === '') $zb = (string) meta_get('bh_zahlungsbedingung', 'Sofort zahlbar ohne Abzug');
     $za = (string) ($b['zahlungsart_label'] ?? 'Vorkasse');
+    if ($istEinkauf) {
+        // Bestellung: nur die ZAHLUNGSBEDINGUNG DES LIEFERANTEN (falls hinterlegt) – keine Standard-„Sofort zahlbar"-Zeile, keine Zahlungsart.
+        if ($zbTage > 0) { $p->text($L, $y, ((($b['sprache'] ?? 'de') === 'de') ? 'Zahlungsbedingung: ' : 'Payment terms: ') . $zb, 9, false, $INK); $y += 18; }
+    } else {
     $p->text($L, $y, 'Zahlungsbedingung: ' . $zb, 9, false, $INK); $y += 13;
     $p->text($L, $y, $T['zahlungsart'] . ': ' . $za, 9, false, $INK); $y += 18;
     }
+    }
 
     // ---- Hinweis zur Herstellung ----
-    $hinweis = (string) ($b['hinweis'] ?? '') ?: (string) meta_get('bh_hinweis_herstellung', '');
+    // Der „Hinweis zur Herstellung" ist ein KUNDEN-Hinweis – nie auf einer Bestellung an den Lieferanten (St-21).
+    $hinweis = (string) ($b['hinweis'] ?? '') ?: ($istEinkauf ? '' : (string) meta_get('bh_hinweis_herstellung', ''));
     if (trim($hinweis) !== '') {
         if ($y > 700) { $p->addPage(); $y = 54; }
         $p->text($L, $y, 'Hinweis zur Herstellung', 9, true, $INK); $y += 12;
@@ -329,7 +339,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
     }
 
     // ---- Bankverbindungen ---- (nicht auf dem Lieferschein)
-    if (!$lieferschein && ($fa['bank_de_iban'] !== '' || $fa['bank_int_iban'] !== '')) {
+    if (!$lieferschein && !$istEinkauf && ($fa['bank_de_iban'] !== '' || $fa['bank_int_iban'] !== '')) {   // eigene Bank gehört nicht auf die Bestellung (St-21)
         if ($y > 720) { $p->addPage(); $y = 54; }
         $y += 4;
         $p->text($L, $y, 'Kontoverbindungen:', 9, true, $INK); $y += 13;

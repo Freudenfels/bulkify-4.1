@@ -46,13 +46,21 @@ function bestellung_pdf_bauen(int $bestellung_id): ?string {
     $adr = trim(($lf['strasse'] ?? '') . ' ' . ($lf['hausnummer'] ?? '')) . "\n" . trim(($lf['plz'] ?? '') . ' ' . ($lf['ort'] ?? ''));
     if (!empty($lf['land'])) $adr .= "\n" . $lf['land'];
 
-    // Kopftext: was wir erwarten. Bewusst knapp und in der Sprache des Lieferanten.
+    // Kopftext (St-21): Anfrage zur Bestätigung – NACH der Bestätigung der Stand (bestätigt am, geplanter Liefertermin). Die interne
+    // Notiz der Bestellung („wartet auf Bestätigung", Auftragsbezug, Express-Vermerke) ist intern und steht NICHT auf dem PDF.
     $en   = strtolower((string)($lf['sprache'] ?? 'de')) !== 'de';
-    $kopf = $en
-        ? "Please find our purchase order below. Kindly confirm the order and the planned delivery date."
-          . ($b['notiz'] ? "\n" . $b['notiz'] : '')
-        : "hiermit bestellen wir wie unten aufgeführt. Bitte bestätigen Sie die Bestellung und den geplanten Liefertermin."
-          . ($b['notiz'] ? "\n" . $b['notiz'] : '');
+    $bestaetigt = (int)($b['bestaetigt'] ?? 0) === 1;
+    $fmtD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '';
+    if ($bestaetigt) {
+        $eta = $fmtD($b['eta_geplant'] ?? '');
+        $kopf = $en
+            ? "Thank you for confirming our purchase order" . ($eta !== '' ? " (planned delivery: $eta)" : '') . ". The order details are listed below."
+            : "Vielen Dank für die Bestätigung unserer Bestellung" . ($eta !== '' ? " (geplanter Liefertermin: $eta)" : '') . ". Die Bestelldaten stehen unten.";
+    } else {
+        $kopf = $en
+            ? "Please find our purchase order below. Kindly confirm the order and the planned delivery date."
+            : "hiermit bestellen wir wie unten aufgeführt. Bitte bestätigen Sie die Bestellung und den geplanten Liefertermin.";
+    }
 
     return build_beleg_pdf([
         'belegart_label'   => $en ? 'Purchase Order' : 'Bestellung',
@@ -69,9 +77,9 @@ function bestellung_pdf_bauen(int $bestellung_id): ?string {
         'ust_id'           => (string)($lf['ust_id'] ?? ''),
         'kopf_text'        => $kopf,
         'zahlungsart_label'=> (string)($lf['zahlungsart'] ?? ''),
+        'zahlungsziel_tage'=> (int)($lf['zahlungsziel_tage'] ?? 0),   // Zahlungsziel des LIEFERANTEN (sonst keine Zahlungszeile)
         'hinweis'          => '',
-        'kleinunternehmer' => 1,                             // keine USt auf dem Einkaufsbeleg ausweisen
-        'sprache'          => $en ? 'en' : 'de',   // Beschriftungen des Belegs
+        'sprache'          => $en ? 'en' : 'de',   // Beschriftungen des Belegs (Einkaufsbeleg: kein § 19-Hinweis, keine eigene Bank, kein Kundenhinweis)
     ], $positionen, []);
 }
 

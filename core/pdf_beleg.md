@@ -71,3 +71,5 @@ Cent gerundet × Menge).
 - Bankverbindungen / Kundenportal-QR (im v3-Original vorhanden) bei Bedarf ergänzen.
 
 **Zahlungsbedingung (St-05):** Die Zeile „Zahlungsbedingung" nimmt – wenn nicht ausdrücklich gesetzt – das Zahlungsziel des Kunden (`$b['zahlungsziel_tage']` = `kunden.zahlungsziel_tage`): „Zahlbar innerhalb von N Tagen ohne Abzug" (Lieferanten-Belege englisch). Erst ohne Zahlungsziel gilt die Standardbedingung („Sofort zahlbar ohne Abzug"). Angebot, Auftragsbestätigung (intern + Portal) und Rechnung reichen das Ziel durch.
+
+**Einkaufsbeleg-Modus (St-21):** Bei `belegart_label` „Bestellung"/„Purchase Order" (`$istEinkauf`) entfallen USt-/§-19-Zeilen, Kundenhinweis zur Herstellung, eigene Kontoverbindung und die Standard-Zahlungszeile; es bleibt „Positionen netto" + Hinweis „Alle Preise netto".

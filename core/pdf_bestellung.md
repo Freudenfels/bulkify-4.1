@@ -15,3 +15,5 @@ Positionen aus `bestellung_position` – Lagerartikel mit Artikelnummer und Name
 
 ## Verwandt
 - `module/einkauf/pdf.php` – die Route `?p=bestellung_pdf&id=<ID>`.
+
+**Einkaufsbeleg statt Verkaufsbeleg-Kopie (St-21):** Das Bestell-PDF an den Lieferanten hat kein „§ 19 UStG"-Hinweis (stattdessen „Alle Preise netto, USt laut Ihrer Rechnung"), keine eigene Bankverbindung, keinen „Hinweis zur Herstellung" (Kundenhinweis), keine interne Notiz und keine Standardzeile „Sofort zahlbar / Zahlungsart". Der Kopftext fragt vor der Bestätigung um Bestätigung und nennt danach „Bestätigung + geplanter Liefertermin" (kein „wartet auf Bestätigung" mehr). Eine Zahlungsbedingung steht nur, wenn der Lieferant ein Zahlungsziel hat.
