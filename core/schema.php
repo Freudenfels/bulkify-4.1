@@ -8383,17 +8383,29 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
         $gruppen = array_values(array_filter(bedarf_bulk(false), fn($g) => in_array($g['produkt_id'], $bulkProduktIds, true) && $g['zu_bestellen'] > 1e-6));
         foreach ($gruppen as $g) {
             $erstePosId = 0;
+            // Fertigware (Handelsware / Zukauf „fertig", S-15/St-24): Position auf den verkaufsfertigen Artikel in Packungen,
+            // Preis je Packung aus den Zukaufpreisen – sonst wie bisher Bulk-Freitextzeile.
+            $fertig = ($g['art'] ?? 'bulk') === 'fertig';
+            $vfItem = $fertig ? (int) produkt_lageritem((int)$g['produkt_id']) : 0;
+            $itemSql = $vfItem > 0 ? "(bp.item_id IS NULL OR bp.item_id=" . $vfItem . ")" : "bp.item_id IS NULL";
+            $ekPkg = function (float $m) use ($g, $lieferant) {
+                $pp = produkt_lieferant_preise_pkg((int)$g['produkt_id'], $m);
+                return $lieferant && isset($pp[(int)$lieferant]) ? (float)$pp[(int)$lieferant] : 0.0;
+            };
             foreach ($g['orders'] as $o) {
                 $offen = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                         WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [(int)$o['auftrag_id']]);
+                                         WHERE $itemSql AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [(int)$o['auftrag_id']]);
                 $noch = (float)$o['need'] - $offen;
                 if ($noch <= 1e-6) continue;
                 // Fremdfertigungs-/Zukaufpreis des Lieferanten je Einheit als EK-Snapshot übernehmen (sonst 0 -> kein Preis).
                 // Schüttgut (g/ml) wird in kg/L bestellt, passend zum Preis je kg/L (S-10); die Staffel gilt für diese Menge.
-                [$bMenge, $bEinheit] = bulk_bestell_menge($noch, (string)($g['einheit'] ?? 'Stk'));
-                $bulkEk = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $bMenge) ?? 0.0) : 0.0;
+                if ($fertig) { $bMenge = $noch; $bEinheit = 'Stk'; $bulkEk = $ekPkg($bMenge); }
+                else {
+                    [$bMenge, $bEinheit] = bulk_bestell_menge($noch, (string)($g['einheit'] ?? 'Stk'));
+                    $bulkEk = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $bMenge) ?? 0.0) : 0.0;
+                }
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $bMenge, $bulkEk, $bEinheit, (int)$o['auftrag_id'], $i++]);
+                  [$bid, $vfItem > 0 ? $vfItem : null, ($fertig ? 'Fertigware: ' : 'Bulk: ') . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $bMenge, $bulkEk, $bEinheit, (int)$o['auftrag_id'], $i++]);
                 if (!$erstePosId) $erstePosId = (int) insert_id();
                 $betroffen[(int)$o['auftrag_id']] = true;
             }
@@ -8402,14 +8414,14 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
             $wunsch = (float)($bulkMenge[(int)$g['produkt_id']] ?? 0);
             $ueber  = $wunsch - (float)$g['zu_bestellen'];
             if ($ueber > 1e-6) {
-                [$uMenge, $uEinheit] = bulk_bestell_menge($ueber, (string)($g['einheit'] ?? 'Stk'));   // gleiche Einheit wie die Produktzeile
+                [$uMenge, $uEinheit] = $fertig ? [$ueber, 'Stk'] : bulk_bestell_menge($ueber, (string)($g['einheit'] ?? 'Stk'));   // gleiche Einheit wie die Produktzeile
                 if ($erstePosId) {
                     q("UPDATE bestellung_position SET menge=menge+? WHERE id=?", [$uMenge, $erstePosId]);
                 } else {
                     // Kein offener Auftragsbedarf -> reine Vorratsmenge als normale Produktzeile (ohne Auftrag, kein „Puffer").
-                    $bulkEkP = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $uMenge) ?? 0.0) : 0.0;
+                    $bulkEkP = $fertig ? $ekPkg($uMenge) : ($lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $uMenge) ?? 0.0) : 0.0);
                     q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                      [$bid, null, 'Bulk: ' . $g['produkt'], $uMenge, $bulkEkP, $uEinheit, null, $i++]);
+                      [$bid, $vfItem > 0 ? $vfItem : null, ($fertig ? 'Fertigware: ' : 'Bulk: ') . $g['produkt'], $uMenge, $bulkEkP, $uEinheit, null, $i++]);
                 }
             }
         }
@@ -8510,6 +8522,34 @@ function produkt_lieferant_preise(int $produkt_id, float $stueck = 0): array {
         elseif (!isset($out[$lid])) $out[$lid] = $pr;                  // alle Staffeln > Menge -> kleinste als Fallback
     }
     return $out;
+}
+// Zukaufpreise eines Produkts je PACKUNG (fertige Ware / Handelsware), passend zu $packungen. Zeilen mit einheit
+// 'packung'/'pkg' gelten je Packung; ältere Zeilen je Kapsel/Stück ('kapsel', 'stk' …) werden × Einheiten je Packung
+// gerechnet (Staffel „ab" dann ebenfalls in Stück -> / Einheiten je Packung). Rückgabe [lieferant_id => € je Packung].
+function produkt_lieferant_preise_pkg(int $produkt_id, float $packungen = 0): array {
+    if ($produkt_id <= 0 || !table_exists('produkt_lieferant_preis')) return [];
+    $ep = max(1, (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [$produkt_id]));
+    $rows = [];
+    foreach (all("SELECT lieferant_id, menge_ab, preis, einheit FROM produkt_lieferant_preis
+                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$produkt_id]) as $r) {
+        $jePkg = in_array(strtolower(trim((string)$r['einheit'])), ['packung', 'pkg', 'pkg.', 'packungen'], true);
+        $rows[] = ['lid'=>(int)$r['lieferant_id'], 'ab'=>$jePkg ? (float)$r['menge_ab'] : (float)$r['menge_ab'] / $ep,
+                   'preis'=>$jePkg ? (float)$r['preis'] : (float)$r['preis'] * $ep];
+    }
+    usort($rows, fn($a, $b) => $a['ab'] <=> $b['ab']);
+    $out = [];
+    foreach ($rows as $r) {
+        if ($packungen <= 0 || $r['ab'] <= $packungen + 1e-9) $out[$r['lid']] = $r['preis'];   // größte passende Staffel
+        elseif (!isset($out[$r['lid']])) $out[$r['lid']] = $r['preis'];                         // sonst kleinste als Rückfall
+    }
+    return $out;
+}
+// Fertigware-Zukauf eines Auftrags (in PACKUNGEN statt loser Bulkware): Handelsware ODER Produktionsauftrag mit Zukauf-Art „fertig".
+function auftrag_zukauf_fertig(int $auftrag_id): bool {
+    if ($auftrag_id <= 0) return false;
+    $pid = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (produkt_ist_handelsware($pid)) return true;
+    return (string) scalar("SELECT zukauf_art FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$auftrag_id]) === 'fertig';
 }
 // Fremdfertigungs-Preise je Lieferant für eine Rezeptur (rezeptur_lief_angebot), passend zur Stückzahl.
 // Rückgabe [lieferant_id => preis_je_stück]. So tauchen die Fremdfertiger (z. B. Wellgreen, Rainwood) auch
@@ -9090,14 +9130,34 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
         $grp[$pid]['pa_ids'][] = (int)$pa['id'];
         $grp[$pid]['auftrag_ids'][(int)$pa['auftrag_id']] = true;
     }
+    // Handelsware OHNE Produktionsauftrag (S-15): beschafft wird die fertige Ware in PACKUNGEN (verkaufsfertiger Artikel),
+    // nicht lose Bulkware. Offen = Auftragsmenge − bereits versendet.
+    foreach (all("SELECT a.id AS auftrag_id, a.nummer AS auftrag_nr, a.menge, COALESCE(a.versendet_menge,0) AS vers, a.produkt_id, p.name AS produkt
+                  FROM auftrag a JOIN produkt p ON p.id=a.produkt_id
+                  WHERE p.handelsware=1 AND a.status IN ('offen','in_produktion')
+                    AND NOT EXISTS (SELECT 1 FROM produktionsauftrag x WHERE x.auftrag_id=a.id AND x.status<>'storniert')
+                  ORDER BY a.angelegt") as $hw) {
+        $need = max(0, (int)$hw['menge'] - (int)$hw['vers']);
+        if ($need <= 0) continue;
+        $pid = (int)$hw['produkt_id'];
+        if (!isset($grp[$pid])) $grp[$pid] = ['produkt_id'=>$pid, 'produkt'=>$hw['produkt'], 'need'=>0.0, 'orders'=>[], 'pa_ids'=>[], 'auftrag_ids'=>[],
+                                              'ep'=>1, 'einheit'=>'Stk', 'gewicht'=>false];
+        $grp[$pid]['art'] = 'fertig';
+        $grp[$pid]['need'] += $need;
+        $grp[$pid]['orders'][] = ['pa_id'=>0, 'auftrag_id'=>(int)$hw['auftrag_id'], 'auftrag_nr'=>$hw['auftrag_nr'], 'need'=>(float)$need, 'handelsware'=>true];
+        $grp[$pid]['auftrag_ids'][(int)$hw['auftrag_id']] = true;
+    }
     $out = [];
     foreach ($grp as $g) {
         $aids = array_keys($g['auftrag_ids']);
         $in = implode(',', array_map('intval', $aids ?: [0]));
-        $bestellt = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                    WHERE bp.item_id IS NULL AND bp.auftrag_id IN ($in) AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL");
         // Freier, nicht kundengebundener Fertigware-Bestand dieses Produkts (ohne Item neu anzulegen).
         $lagerItem = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$g['produkt_id']]);
+        $g['art'] = $g['art'] ?? 'bulk';
+        // Offene Bestellungen: Bulk-Freitextzeilen; bei Fertigware auch Zeilen auf den verkaufsfertigen Artikel des Auftrags.
+        $itemSql = ($g['art'] === 'fertig' && $lagerItem > 0) ? "(bp.item_id IS NULL OR bp.item_id=" . $lagerItem . ")" : "bp.item_id IS NULL";
+        $bestellt = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                                    WHERE $itemSql AND bp.auftrag_id IN ($in) AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL");
         $stockRaw = $lagerItem > 0 ? item_bestand($lagerItem, true) : 0.0;   // fertige Packungen (Beutel/Dosen)
         // Bei Schüttgut den Packungs-Bestand in dieselbe Einheit wie den Bedarf bringen (Packungen × Füllmenge = g/ml),
         // sonst würden Beutel von Gramm abgezogen. Stück-Formen bleiben wie bisher (Packungs-Bestand).
@@ -9125,19 +9185,30 @@ function bestellung_bulk_anlegen(array $produkt_ids, ?int $lieferant, ?string $d
     $i = 0;
     foreach ($gruppen as $g) {
         $stockPool = (float)($g['stock'] ?? 0);   // freier Fertigware-Bestand deckt den Bedarf zuerst (FIFO über die Aufträge)
+        // Fertigware (Handelsware / Zukauf „fertig"): Position auf den verkaufsfertigen Artikel (Packungen), damit der
+        // Wareneingang (Dashboard + Lager-App) die Ware richtig bucht und dem Auftrag zuordnet. Preis je Packung.
+        $fertig = ($g['art'] ?? 'bulk') === 'fertig';
+        $vfItem = $fertig ? (int) produkt_lageritem((int)$g['produkt_id']) : 0;
+        $itemSql = $vfItem > 0 ? "(bp.item_id IS NULL OR bp.item_id=" . $vfItem . ")" : "bp.item_id IS NULL";
         foreach ($g['orders'] as $o) {
             $offen = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                     WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [(int)$o['auftrag_id']]);
+                                     WHERE $itemSql AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [(int)$o['auftrag_id']]);
             $noch = (float)$o['need'] - $offen;
             if ($stockPool > 1e-6 && $noch > 1e-6) {   // vorhandenen Bestand anrechnen
                 $ab = min($stockPool, $noch);
                 $noch -= $ab; $stockPool -= $ab;
             }
             if ($noch <= 1e-6) continue;
-            [$bMenge, $bEinheit] = bulk_bestell_menge($noch, (string)($g['einheit'] ?? 'Stk'));   // Schüttgut in kg/L (Preis je kg/L, S-10)
-            $ek = produkt_zukauf_preis((int)$g['produkt_id'], $lieferant ?: null, $bMenge) ?? 0.0;
+            if ($fertig) {
+                $bMenge = $noch; $bEinheit = 'Stk';
+                $pp = produkt_lieferant_preise_pkg((int)$g['produkt_id'], $bMenge);
+                $ek = $lieferant && isset($pp[(int)$lieferant]) ? (float)$pp[(int)$lieferant] : 0.0;
+            } else {
+                [$bMenge, $bEinheit] = bulk_bestell_menge($noch, (string)($g['einheit'] ?? 'Stk'));   // Schüttgut in kg/L (Preis je kg/L, S-10)
+                $ek = produkt_zukauf_preis((int)$g['produkt_id'], $lieferant ?: null, $bMenge) ?? 0.0;
+            }
             q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $bMenge, $ek, $bEinheit, (int)$o['auftrag_id'], $i++]);
+              [$bid, $vfItem > 0 ? $vfItem : null, ($fertig ? 'Fertigware: ' : 'Bulk: ') . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $bMenge, $ek, $bEinheit, (int)$o['auftrag_id'], $i++]);
             if ((int)$o['auftrag_id'] > 0)
                 log_aktivitaet('auftrag', (int)$o['auftrag_id'], 'team', 'Bulk (Fremdproduktion) per Bestellung ' . $nummer . $wann . ' bestellt.', 'bestellung', 'bestellung', $bid);
         }
@@ -9595,6 +9666,7 @@ function produktion_verpackung_entnehmen(int $pa_id): array {
 // (lager2_verbrauch). Deshalb wird hier NICHTS ausgebucht und kein Lieferschein geschrieben.
 function auftrag_ins_fremdlager(int $auftrag_id): array {
     $a = one("SELECT * FROM auftrag WHERE id=? AND status='erledigt'", [$auftrag_id]);
+    if (!$a && auftrag_handelsware_ohne_pa($auftrag_id)) $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);   // Handelsware (S-15)
     if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht fertig produziert.'];
     $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
     if (!$vfitem) return ['ok'=>false, 'msg'=>'Zu diesem Produkt gibt es keinen Fertigwaren-Artikel.'];
@@ -9615,6 +9687,9 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
 // Auftrag 'erledigt' (versandbereit) und der Rest kann später nachgeliefert werden. versendet_menge zählt mit.
 function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     $a = one("SELECT * FROM auftrag WHERE id=? AND status='erledigt'", [$auftrag_id]);
+    // Handelsware ohne Produktionsauftrag (S-15): es gibt keine Produktion, die abgeschlossen werden müsste – versendet
+    // wird, sobald die zugekaufte Ware frei im Lager liegt (Bestandsprüfung unten).
+    if (!$a && auftrag_handelsware_ohne_pa($auftrag_id)) $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
     if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht versandbereit (Produktion muss abgeschlossen sein).'];
     $gesamt  = (int)$a['menge'];
     $bereits = max(0, (int)($a['versendet_menge'] ?? 0));
@@ -9756,6 +9831,13 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     return $aid;
 }
 
+// Handelsware-Auftrag OHNE Produktionsauftrag (S-15): es gibt keine Produktion, die abgeschlossen werden müsste – der Auftrag
+// ist versandbereit, sobald die zugekaufte Ware frei im Lager liegt (Versand prüft den Bestand). Offen/in Produktion zählen.
+function auftrag_handelsware_ohne_pa(int $auftrag_id): bool {
+    $a = one("SELECT produkt_id, status FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a || !in_array((string)$a['status'], ['offen', 'in_produktion'], true) || !produkt_ist_handelsware((int)$a['produkt_id'])) return false;
+    return (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'", [$auftrag_id]) === 0;
+}
 // Handelsware (Spec 7.1): Produkt wird als Fertigware zugekauft und weiterverkauft – KEINE Produktion bei uns.
 function produkt_ist_handelsware(int $produkt_id): bool {
     if ($produkt_id <= 0) return false;

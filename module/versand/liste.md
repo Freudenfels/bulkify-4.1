@@ -13,3 +13,6 @@ Bei einem Kunden mit Fremdlager heißt der Knopf **Ins Fremdlager** und der Stat
 
 ## Lager entscheidet (2026-10-08)
 Je versandbereiter Auftrag (Status `erledigt`, Ware in Lager 1): **An Kunden senden** (`aktion=versenden` -> `auftrag_versenden`) für alle; zusätzlich **An Lager 2 übergeben** (`aktion=an_lager2` -> `auftrag_ins_fremdlager`) nur bei Fulfillment-Kunden. Beide erfordern genug Fertigware. Status-Badges: `erledigt`=versandbereit, `versendet`=abgeschlossen.
+
+## Handelsware (S-15)
+Handelsware-Aufträge ohne Produktionsauftrag erscheinen schon im Status offen/in Produktion – versendbar, sobald die zugekaufte Ware frei im Lager liegt (sonst „zu wenig Fertigware").

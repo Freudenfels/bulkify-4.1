@@ -36,8 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
         $au = $aid ? one("SELECT a.produkt_id, p.rezeptur_id FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$aid]) : null;
         $rez = (int)($au['rezeptur_id'] ?? 0);
-        if (!$au || $rez <= 0) { header('Location: ?p=wareneingang&zkfehler=1'); exit; }
-        $item_id = rezeptur_bulkitem($rez);
+        // Fertige Ware (Handelsware / Zukauf „fertig", S-15/St-24): in PACKUNGEN auf den verkaufsfertigen Artikel des Produkts,
+        // MHD = Lieferanten-MHD aus der Eingabe. Sonst wie bisher lose Bulkware auf den Rezeptur-Bulk-Artikel.
+        $zkFertig = $au && auftrag_zukauf_fertig($aid);
+        if (!$au || (!$zkFertig && $rez <= 0)) { header('Location: ?p=wareneingang&zkfehler=1'); exit; }
+        $item_id = $zkFertig ? produkt_lageritem((int)$au['produkt_id']) : rezeptur_bulkitem($rez);
         if (!$item_id) { header('Location: ?p=wareneingang&zkfehler=1'); exit; }
         $cid = wareneingang_buchen((int)$item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid);
         if ($cid) {
@@ -57,10 +60,11 @@ $offeneAuftraege = all("SELECT a.id, a.nummer, COALESCE(NULLIF(p.kundenname,''),
                         FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
                         WHERE a.status <> 'versendet' ORDER BY a.angelegt DESC");
 // Aufträge, für die zugekaufte Fertigware (Bulk) eingebucht werden kann: offen + Produkt mit Rezeptur.
-$zukaufAuftraege = all("SELECT a.id, a.nummer, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma, r.name AS rezeptur
-                        FROM auftrag a JOIN produkt p ON p.id=a.produkt_id JOIN rezeptur r ON r.id=p.rezeptur_id
+// Handelsware (ohne Rezeptur, S-15) kommt hier ebenfalls – als fertige Ware in Packungen.
+$zukaufAuftraege = all("SELECT a.id, a.nummer, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma, r.name AS rezeptur, p.handelsware
+                        FROM auftrag a JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                         LEFT JOIN kunden k ON k.id=a.kunde_id
-                        WHERE a.status NOT IN ('versendet','erledigt') ORDER BY a.angelegt DESC");
+                        WHERE a.status NOT IN ('versendet','erledigt') AND (r.id IS NOT NULL OR p.handelsware=1) ORDER BY a.angelegt DESC");
 // Etikett-Design je offenem Auftrag (dokument typ='etikett') – fürs Abgleichen beim Etikett-Wareneingang:
 // Bild + Maße zeigen, damit man sieht, ob das gelieferte Etikett dem bestellten entspricht.
 $aufEtikett = [];   // auftrag_id => dokument_id
@@ -150,9 +154,9 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <div class="bx-field" id="weBlockAuf" style="display:none"><label>Auftrag (Fremdproduktion)</label>
         <select name="auftrag_id" id="weZukaufAuf" disabled>
           <option value="">– Auftrag wählen –</option>
-          <?php foreach ($zukaufAuftraege as $a): ?><option value="<?= (int)$a['id'] ?>"><?= h($a['nummer'] . ' · ' . $a['produkt'] . ($a['firma'] ? ' · ' . $a['firma'] : '')) ?></option><?php endforeach; ?>
+          <?php foreach ($zukaufAuftraege as $a): $zkF = auftrag_zukauf_fertig((int)$a['id']); ?><option value="<?= (int)$a['id'] ?>"><?= h($a['nummer'] . ' · ' . $a['produkt'] . ($a['firma'] ? ' · ' . $a['firma'] : '') . ($zkF ? ' · fertige Ware in Packungen' : '')) ?></option><?php endforeach; ?>
         </select>
-        <div class="muted" style="font-size:12px;margin-top:4px">Der Fertigware-Artikel der Rezeptur wird automatisch angelegt und die Charge dem Auftrag zugeordnet.</div>
+        <div class="muted" style="font-size:12px;margin-top:4px">Der Fertigware-Artikel der Rezeptur wird automatisch angelegt und die Charge dem Auftrag zugeordnet. Bei Handelsware / fertiger Ware: Menge in Packungen, MHD des Lieferanten eintragen.</div>
       </div>
       <div class="bx-field"><label>Menge</label>
         <div class="bx-row" style="gap:8px;align-items:center;margin:0">

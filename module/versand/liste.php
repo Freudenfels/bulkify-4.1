@@ -26,6 +26,8 @@ $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
              COALESCE(k.nutzt_fulfillment,0) AS fulfillment
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
              WHERE a.status IN ('erledigt','versendet')
+                OR (p.handelsware=1 AND a.status IN ('offen','in_produktion')   -- Handelsware ohne Produktion (S-15)
+                    AND NOT EXISTS (SELECT 1 FROM produktionsauftrag x WHERE x.auftrag_id=a.id AND x.status<>'storniert'))
              ORDER BY a.status='versendet', a.angelegt DESC");
 if ($q !== '') {
     $needle = mb_strtolower($q);
@@ -50,7 +52,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
 <div class="bx-tablewrap"><table class="bx-table">
   <thead><tr><th>Auftrag</th><th>Kunde</th><th>Produkt</th><th class="bx-num">Menge</th><th class="bx-num">Fertig im Lager</th><th>Lieferschein</th><th>Status</th><th></th></tr></thead>
   <tbody>
-  <?php if (!$rows): ?><tr><td colspan="8" class="muted">Keine versandbereiten Aufträge. Ein Auftrag wird versandbereit, wenn die Produktion abgeschlossen ist.</td></tr><?php endif; ?>
+  <?php if (!$rows): ?><tr><td colspan="8" class="muted">Keine versandbereiten Aufträge. Ein Auftrag wird versandbereit, wenn die Produktion abgeschlossen ist (Handelsware: sobald die Ware frei im Lager liegt).</td></tr><?php endif; ?>
   <?php foreach ($rows as $r):
       $versendet = $r['status'] === 'versendet';
       $gesamt   = (int)$r['menge'];

@@ -1182,9 +1182,13 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
 <?php endif; endif; ?>
 <div class="bx-panel" data-panel="produktion">
   <h2>Produktion</h2>
-  <?php if (produkt_ist_handelsware((int)($a['produkt_id'] ?? 0))): ?>
+  <?php $istHW = produkt_ist_handelsware((int)($a['produkt_id'] ?? 0)); if ($istHW): ?>
   <div class="bx-panel" style="border-color:var(--gruen,#1D9E75);background:var(--panel-2);padding:10px 14px;margin:0 0 12px">
-    <strong>Handelsware</strong> – dieses Produkt wird als Fertigware zugekauft &amp; weiterverkauft. Es wird <strong>kein Produktionsauftrag</strong> erzeugt; versendet wird aus dem Bestand.
+    <?php if ($pa): ?>
+    <strong>Handelsware</strong> – dieser Auftrag hat (aus einer älteren Annahme) noch einen Produktionsauftrag. Neue Handelsware-Aufträge entstehen ohne Produktion.
+    <?php else: ?>
+    <strong>Handelsware</strong> – dieses Produkt wird als Fertigware zugekauft &amp; weiterverkauft. Es gibt <strong>keinen Produktionsauftrag</strong>: Beschaffung über die Einkaufsliste (Fertige Produkte), Wareneingang „Fertigware zum Auftrag", versendet wird aus dem Bestand.
+    <?php endif; ?>
   </div>
   <?php endif; ?>
   <div class="bx-grid">
@@ -1266,6 +1270,30 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
     <?php endif; ?>
     <?php // „Einlagern" (In Lager 1 buchen) steht jetzt im Reiter „Lager". ?>
     <?php else: $aktivPA = in_array((string)$a['status'], ['offen', 'in_produktion'], true); ?>
+    <?php if ($istHW && $aktivPA):
+        // Handelsware ohne PA (S-15): Beschaffung statt „Herstellen/Einkaufen" – Bestand, unterwegs, noch zu beschaffen.
+        $hwItem  = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [(int)$a['produkt_id']]) ?: 0);
+        $hwFrei  = $hwItem ? item_bestand($hwItem, true) : 0.0;
+        $hwQuar  = $hwItem ? item_bestand($hwItem, false) - $hwFrei : 0.0;
+        $hwUnt   = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                                   WHERE bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$id]);
+        $hwOffen = max(0, (int)$a['menge'] - (int)($a['versendet_menge'] ?? 0));
+        $hwZu    = max(0.0, $hwOffen - $hwFrei - $hwQuar - $hwUnt); ?>
+    <div style="grid-column:1/-1"><div class="k muted">Beschaffung (Handelsware)</div>
+      <div class="bx-row" style="gap:18px;flex-wrap:wrap;margin:4px 0 8px">
+        <div>Offen: <strong><?= number_format($hwOffen, 0, ',', '.') ?> Pkg</strong></div>
+        <div>Frei im Lager: <strong><?= number_format($hwFrei, 0, ',', '.') ?></strong></div>
+        <?php if ($hwQuar > 0): ?><div>in Quarantäne: <strong><?= number_format($hwQuar, 0, ',', '.') ?></strong> <a href="<?= h(quarantaene_freigabe_url($hwItem)) ?>">freigeben</a></div><?php endif; ?>
+        <div>Bestellt/unterwegs: <strong><?= number_format($hwUnt, 0, ',', '.') ?></strong></div>
+        <div>Noch zu beschaffen: <strong><?= number_format($hwZu, 0, ',', '.') ?></strong></div>
+      </div>
+      <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+        <?php if ($hwZu > 0): ?><a class="btn btn-primary btn-sm" href="?p=einkaufsliste">In der Einkaufsliste bestellen</a><?php endif; ?>
+        <a class="btn btn-ghost btn-sm" href="?p=wareneingang">Wareneingang buchen</a>
+        <?php if ($hwFrei > 0): ?><a class="btn btn-ghost btn-sm" href="?p=versand">Zum Versand</a><?php endif; ?>
+      </div>
+    </div>
+    <?php else: ?>
     <div><div class="k muted">Produktionsauftrag</div>
       <?php if ($aktivPA): ?>
       <div class="muted" style="margin-bottom:6px">Wie soll dieser Auftrag beschafft werden?</div>
@@ -1306,6 +1334,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
       <div class="muted">Auftrag ist storniert – nichts einzulagern.</div>
       <?php endif; ?>
     </div>
+    <?php endif; // Handelsware-Beschaffung ?>
     <?php endif; ?>
   </div>
 </div>

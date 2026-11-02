@@ -234,3 +234,9 @@ mehr. Umschaltbar am Auftrag (Reiter Produktion, Herstellung; `aktion=zukauf_art
 
 ## Handelsware im Positions-Weg (S-15)
 `auftrag_aus_positionen()` hat einen Handelsware-Zweig: Ist das Kopf-Produkt Handelsware, reicht eine Produkt-/Herstellungszeile mit Menge – eine Rezeptur ist nicht nötig. Produkt = Kopf-Produkt (bei passender Konfiguration), sonst eine Variante über `produkt_aus_rezeptur()`. Es entsteht Auftrag + Rechnung, **kein Produktionsauftrag** (auch wenn die Position eine Rezeptur trägt). `produkt_aus_rezeptur()` vererbt das Flag `handelsware` der Vorlage und verwendet nur Produkte mit gleichem Flag wieder.
+
+## Handelsware ohne Produktionsauftrag: Beschaffung, Wareneingang, Versand (S-15)
+- `bedarf_bulk()` nimmt Handelsware-Aufträge ohne PA (Status offen/in Produktion) als **Fertigware in Packungen** auf (`art='fertig'`, Bedarf = Menge − versendet, Bestand = verkaufsfertiger Artikel).
+- `bestellung_bulk_anlegen()` und der Einkaufslisten-Weg legen für `art='fertig'` die Position **auf den verkaufsfertigen Artikel** an (`item_id` = `produkt_lageritem()`, Menge in Packungen, Bezeichnung „Fertigware: …", `auftrag_id`) – so bucht der Wareneingang (Dashboard und Lager-App) die Ware richtig und bindet sie an den Auftrag. EK je Packung über `produkt_lieferant_preise_pkg()` (Zukaufpreise je Packung; Zeilen je Kapsel/Stück × Einheiten je Packung).
+- `auftrag_handelsware_ohne_pa($aid)`: Handelsware-Auftrag ohne PA in offen/in Produktion ist versandbereit, sobald Ware frei im Lager liegt – `auftrag_versenden_menge()` und `auftrag_ins_fremdlager()` akzeptieren ihn.
+- `auftrag_zukauf_fertig($aid)`: Handelsware ODER PA mit Zukauf-Art „fertig".

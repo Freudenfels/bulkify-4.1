@@ -389,8 +389,11 @@ if ($ohneFestlegung): ?>
       <?php foreach ($bulkTab as $b): $key = 'bulk:' . (int)$b['produkt_id'];
           // Zukaufpreise (produkt_lieferant_preis) UND Fremdfertigungspreise (rezeptur_lief_angebot der Rezeptur,
           // z. B. Wellgreen/Rainwood) zusammenführen – Zukauf gewinnt bei gleichem Lieferanten, Fremd füllt auf.
-          $bPreise = produkt_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen'])
-                   + produkt_fremd_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen']);
+          // Fertigware (Handelsware / Zukauf „fertig"): Preis je PACKUNG aus den Zukaufpreisen (S-15/St-24).
+          $bFertig = ($b['art'] ?? 'bulk') === 'fertig';
+          $bPreise = $bFertig ? produkt_lieferant_preise_pkg((int)$b['produkt_id'], (float)$b['zu_bestellen'])
+                   : produkt_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen'])
+                     + produkt_fremd_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen']);
           // Günstigster Zukaufpreis je Stück + dessen Währung (Lieferanten-Stamm) – als Vorgabe („ab"), solange
           // kein Lieferant gewählt ist. Danach rechnet JS die Summe auf den GEWÄHLTEN Lieferanten/Preis um.
           $bAb = null; $bAbLid = null;
@@ -400,14 +403,16 @@ if ($ohneFestlegung): ?>
       ?>
         <tr>
           <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
-          <td>Bulk: <?= h($b['produkt'] ?: '–') ?></td>
+          <td><?= $bFertig ? 'Fertigware' : 'Bulk' ?>: <?= h($b['produkt'] ?: '–') ?></td>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
           <?php $bEinh = (string)($b['einheit'] ?? 'Stk'); $bGew = !empty($b['gewicht']);
-                $bLes = fn($v) => $bGew ? gewicht_lesbar((float)$v, $bEinh) : $mfmt($v) . ' Stk'; ?>
+                $bLes = fn($v) => $bGew ? gewicht_lesbar((float)$v, $bEinh) : $mfmt($v) . ($bFertig ? ' Pkg' : ' Stk'); ?>
           <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], $bEinh) ?><div class="muted" style="font-size:11px">Bedarf <?= $bLes($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $bLes($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $bLes($b['bestellt']) : '' ?></div></td>
           <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur, 'data-einheit'=>$bEinh]) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/<?= h($bEinh) ?> · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php endif; ?></td>
-          <td style="font-size:12px"><?php foreach ($b['orders'] as $o): ?>
-            <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $bLes($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· Fremdfertigung</span></td>
+          <td style="font-size:12px"><?php $bHw = false; foreach ($b['orders'] as $o): $bHw = $bHw || !empty($o['handelsware']);
+              // Handelsware hat keinen Produktionsauftrag -> Link auf den Auftrag.
+              $oHref = (int)$o['pa_id'] > 0 ? '?p=produktionsauftrag&id=' . (int)$o['pa_id'] : '?p=auftrag&id=' . (int)$o['auftrag_id']; ?>
+            <a href="<?= h($oHref) ?>" target="_blank" title="<?= (int)$o['pa_id'] > 0 ? 'Produktionsauftrag' : 'Auftrag' ?> im neuen Tab öffnen" style="white-space:nowrap;margin-right:10px;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $bLes($o['need']) ?>)&#8599;</a><?php endforeach; ?><span class="muted">· <?= $bHw ? 'Handelsware' : ($bFertig ? 'Fertigware-Zukauf' : 'Fremdfertigung') ?></span></td>
         </tr>
       <?php endforeach; ?>
       <?php foreach ($nachTab as $nb): $key = 'nach:' . (int)$nb['item_id']; ?>
