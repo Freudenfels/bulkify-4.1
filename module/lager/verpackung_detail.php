@@ -75,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'umkar
     header('Location: ?p=verpackung&id=' . $id . '&tab=fuell&gespeichert=1'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && is_numeric($id)) {
-    $kat = in_array($_POST['dok_kategorie'] ?? '', ['ppwr','doc','spez','etikett','druckvorlage','sonstiges'], true) ? $_POST['dok_kategorie'] : 'ppwr';
+    $kat = in_array($_POST['dok_kategorie'] ?? '', ['ppwr','doc','spez','etikett','druckvorlage','sonstiges'], true) ? (string)($_POST['dok_kategorie'] ?? '') : 'ppwr';
     if (!empty($_FILES['dok']['name']) && ($_FILES['dok']['error'] ?? 1) === UPLOAD_ERR_OK) {
         if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
         $orig = $_FILES['dok']['name'];
@@ -242,7 +242,7 @@ if (!$neu) {
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="bx-field"><label>EK je Stk <?= bx_hint('ergibt sich automatisch aus der niedrigsten Staffelstufe unten') ?></label><input type="text" value="<?= $it['ek_preis'] !== null && $it['ek_preis'] !== '' ? number_format((float)$it['ek_preis'],4,',','.') . ' €' : '–' ?>" disabled></div>
+      <div class="bx-field"><label>EK je Stk <?= bx_hint('ergibt sich automatisch aus der niedrigsten Staffelstufe unten') ?></label><input type="text" value="<?= ($it['ek_preis'] ?? null) !== null && ($it['ek_preis'] ?? '') !== '' ? number_format((float)$it['ek_preis'],4,',','.') . ' €' : '–' ?>" disabled></div>
     </div>
     <p class="muted" style="font-size:12px">Der Einkaufspreis wird über die Mengenstaffel gepflegt; der effektive EK je Bestellmenge kommt automatisch aus der passenden Stufe.</p>
     </div>

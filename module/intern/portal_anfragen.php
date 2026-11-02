@@ -7,7 +7,7 @@ require_once BX_ROOT . '/core/schema.php';
 // Status setzen
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'status') {
     $aid = (int)($_POST['id'] ?? 0);
-    $st  = in_array($_POST['status'] ?? '', ['neu','in_bearbeitung','beantwortet','abgelehnt'], true) ? $_POST['status'] : 'neu';
+    $st  = in_array($_POST['status'] ?? '', ['neu','in_bearbeitung','beantwortet','abgelehnt'], true) ? (string)($_POST['status'] ?? '') : 'neu';
     if ($aid) q("UPDATE portal_anfrage SET status=? WHERE id=?", [$st, $aid]);
     header('Location: ?p=portal_anfragen&ok=1'); exit;
 }

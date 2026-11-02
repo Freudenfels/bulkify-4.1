@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $flash = $_SESSION['rw_flash'] ?? null; unset($_SESSION['rw_flash']);
-$f = in_array($_GET['f'] ?? 'bereit', ['alle','frei','offen','bereit'], true) ? $_GET['f'] : 'bereit';
+$f = in_array($_GET['f'] ?? 'bereit', ['alle','frei','offen','bereit'], true) ? (string)($_GET['f'] ?? 'bereit') : 'bereit';
 $q = trim((string)($_GET['q'] ?? ''));
 
 // Basis + Filter

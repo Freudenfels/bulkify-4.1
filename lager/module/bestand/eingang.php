@@ -67,7 +67,7 @@ flash_zeigen();
 ?>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" value="buchen">
-  <input type="hidden" name="bestellung_id" value="<?= (int)($_GET['bestellung'] ?? 0) ?>"><!-- optional: Ware gehört zu dieser Bestellung -> wird geschlossen -->
+  <input type="hidden" name="bestellung_id" value="<?= (int)($_GET['bestellung'] ?? 0) ?>"><?php /* optional: Ware gehört zu dieser Bestellung (Teillieferung bleibt offen) */ ?>
   <div class="bx-panel">
     <style>
       .lg-acombo{position:relative}

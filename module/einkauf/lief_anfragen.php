@@ -20,9 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angeb
 
 $ansicht = ($_GET['ansicht'] ?? '') === 'vergleich' ? 'vergleich' : 'liste';   // E6: Vergleich nach Produkt gruppiert
 $q = trim((string)($_GET['q'] ?? ''));
-$f = in_array($_GET['f'] ?? 'alle', ['alle', 'offen', 'beantwortet'], true) ? $_GET['f'] : 'alle';
+$f = in_array($_GET['f'] ?? 'alle', ['alle', 'offen', 'beantwortet'], true) ? (string)($_GET['f'] ?? 'alle') : 'alle';
 // Typ-Filter: Rohstoffe vs. Fertigprodukte (aus lieferant_anfrage.art), plus „Alle".
-$typ = in_array($_GET['typ'] ?? 'alle', ['alle', 'rohstoff', 'fertig'], true) ? $_GET['typ'] : 'alle';
+$typ = in_array($_GET['typ'] ?? 'alle', ['alle', 'rohstoff', 'fertig'], true) ? (string)($_GET['typ'] ?? 'alle') : 'alle';
 
 $ARTLBL = ['rohstoff'=>'Rohstoff','fertigprodukt'=>'Fremdfertigung','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','sonstiges'=>'Sonstiges'];
 

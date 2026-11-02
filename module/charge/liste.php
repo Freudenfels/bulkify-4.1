@@ -5,7 +5,7 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
 $q    = trim($_GET['q'] ?? '');
-$typ  = in_array($_GET['typ'] ?? '', ['intern', 'extern'], true) ? $_GET['typ'] : '';
+$typ  = in_array($_GET['typ'] ?? '', ['intern', 'extern'], true) ? (string)($_GET['typ'] ?? '') : '';
 
 $w = ['pc.parent_id IS NULL']; $args = [];
 if ($q !== '') {

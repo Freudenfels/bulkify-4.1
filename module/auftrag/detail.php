@@ -356,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
         $fn   = 'analyse_' . $id . '_' . bin2hex(random_bytes(5)) . ($ext ? '.' . $ext : '');
         $datum = trim((string)($_POST['datum'] ?? '')); if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
         $charge = trim((string)($_POST['charge_nr'] ?? '')) ?: null;
-        $befund = in_array($_POST['befund'] ?? '', ['bestanden','auffaellig','unklar'], true) ? $_POST['befund'] : 'unklar';
+        $befund = in_array($_POST['befund'] ?? '', ['bestanden','auffaellig','unklar'], true) ? (string)($_POST['befund'] ?? '') : 'unklar';
         if (move_uploaded_file($_FILES['dok']['tmp_name'], BX_UPLOADS . '/' . $fn)) {
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
                VALUES ('auftrag',?,'analyse',?,?,?,?,?,?,?,'team')",

@@ -96,7 +96,7 @@ if (!$neu) {
       </select>
     </div>
     <div class="bx-field"><label>Einheit</label><input type="text" name="einheit" value="<?= h((string)($it['einheit'] ?? 'Stk')) ?>" placeholder="Stk"></div>
-    <div class="bx-field"><label>Bestand</label><input type="number" step="0.001" name="bestand_menge" value="<?= h($it['bestand_menge'] !== null && $it['bestand_menge'] !== '' ? rtrim(rtrim(number_format((float)($it['bestand_menge'] ?? 0), 3, '.', ''), '0'), '.') : '') ?>" placeholder="0"></div>
+    <div class="bx-field"><label>Bestand</label><input type="number" step="0.001" name="bestand_menge" value="<?= h(($it['bestand_menge'] ?? null) !== null && ($it['bestand_menge'] ?? '') !== '' ? rtrim(rtrim(number_format((float)($it['bestand_menge'] ?? 0), 3, '.', ''), '0'), '.') : '') ?>" placeholder="0"></div>
     <div class="bx-field"><label>Mindestbestand <?= bx_hint('optional – Meldebestand für die Nachbestellung') ?></label><input type="number" step="0.001" name="mindestbestand" value="<?= h(($it['mindestbestand'] ?? '') !== '' && ($it['mindestbestand'] ?? null) !== null ? rtrim(rtrim(number_format((float)$it['mindestbestand'], 3, '.', ''), '0'), '.') : '') ?>" placeholder="–"></div>
     <div class="bx-field"><label>Haupt-Lieferant</label>
       <select name="haupt_lieferant_id">

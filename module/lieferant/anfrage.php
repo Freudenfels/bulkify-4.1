@@ -148,7 +148,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
 if (!$a):
     // Zurückgezogene Anfragen (Rohstoff-Berechtigung entzogen) zeigen wir dem Lieferanten nicht mehr –
     // Historie bleibt nur intern. Typ-Filter: Rohstoffe vs. Fertigprodukte (aus af.art).
-    $ptyp = in_array($_GET['typ'] ?? 'alle', ['alle','rohstoff','fertig'], true) ? $_GET['typ'] : 'alle';
+    $ptyp = in_array($_GET['typ'] ?? 'alle', ['alle','rohstoff','fertig'], true) ? (string)($_GET['typ'] ?? 'alle') : 'alle';
     $liste = all("SELECT af.*, i.name AS item_name, i.einheit AS item_einheit, ag.preis, ag.einheit AS ang_einheit
                   FROM lieferant_anfrage af LEFT JOIN item i ON i.id=af.item_id
                   LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=af.id

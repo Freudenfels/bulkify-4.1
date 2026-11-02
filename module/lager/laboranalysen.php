@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $datum = trim((string)($_POST['datum'] ?? ''));
         $titel = trim((string)($_POST['titel'] ?? '')) ?: null;
         $charge = trim((string)($_POST['charge_nr'] ?? '')) ?: null;
-        $befund = in_array($_POST['befund'] ?? '', ['bestanden','auffaellig','unklar'], true) ? $_POST['befund'] : 'unklar';
+        $befund = in_array($_POST['befund'] ?? '', ['bestanden','auffaellig','unklar'], true) ? (string)($_POST['befund'] ?? '') : 'unklar';
         $sicht = isset($_POST['kunde_sichtbar']) ? 1 : 0;
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) $datum = null;
         // Zielobjekt bestimmen. Normalfall: Produkt -> Auftrag (Bestellung); ohne Auftrag ans Produkt.

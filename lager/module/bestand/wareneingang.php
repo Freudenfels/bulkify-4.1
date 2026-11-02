@@ -292,7 +292,7 @@ if ($gebucht):
 
 <form method="post" id="weForm" class="bx-form">
   <input type="hidden" name="aktion" value="buchen">
-  <input type="hidden" name="we_bestellung_id" id="weBestellungId" value=""><!-- gewählte Lieferung -> markiert Bestellung als angekommen -->
+  <input type="hidden" name="we_bestellung_id" id="weBestellungId" value=""><?php /* gewählte Lieferung: markiert die Bestellung als angekommen bzw. teilgeliefert */ ?>
 
   <!-- Start: 4 Kacheln – wie einbuchen? -->
   <div id="weStart" class="we-kacheln">

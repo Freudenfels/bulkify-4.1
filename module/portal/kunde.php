@@ -469,7 +469,7 @@ $anfrageGueltig = function(): bool {
 // Neue Rezepturanfrage vom Kunden entgegennehmen
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfrage_senden') {
     if (!$anfrageGueltig()) { header('Location: ?p=portal&token=' . $token . '&v=anfrage&fehlt=1'); exit; }
-    $form = in_array($_POST['form'] ?? '', ['kapsel','tablette','softgel','stick','pulver','fluessig'], true) ? $_POST['form'] : 'kapsel';
+    $form = in_array($_POST['form'] ?? '', ['kapsel','tablette','softgel','stick','pulver','fluessig'], true) ? (string)($_POST['form'] ?? '') : 'kapsel';
     q("INSERT INTO rezeptur_anfrage (nummer,kunde_id,darreichungsform,produktname,notiz,status) VALUES (?,?,?,?,?,'neu')",
       [naechste_nummer('RZA'), (int)$k['id'], $form, trim($_POST['produktname'] ?? '') ?: null, trim($_POST['notiz'] ?? '')]);
     $aid = insert_id();
@@ -527,7 +527,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     $an  = $aid ? one("SELECT * FROM rezeptur_anfrage WHERE id=? AND kunde_id=? AND status='neu'", [$aid, (int)$k['id']]) : null;
     if ($an && !$anfrageGueltig()) { header('Location: ?p=portal&token=' . $token . '&v=anfrage&edit=' . $aid . '&fehlt=1'); exit; }
     if ($an) {
-        $form = in_array($_POST['form'] ?? '', ['kapsel','tablette','softgel','stick','pulver','fluessig'], true) ? $_POST['form'] : 'kapsel';
+        $form = in_array($_POST['form'] ?? '', ['kapsel','tablette','softgel','stick','pulver','fluessig'], true) ? (string)($_POST['form'] ?? '') : 'kapsel';
         q("UPDATE rezeptur_anfrage SET darreichungsform=?, produktname=?, notiz=? WHERE id=?",
           [$form, trim($_POST['produktname'] ?? '') ?: null, trim($_POST['notiz'] ?? ''), $aid]);
         q("DELETE FROM rezeptur_anfrage_wunsch WHERE anfrage_id=?", [$aid]);   // Wunsch-Zeilen ersetzen (eigene Anfrage)
@@ -4214,7 +4214,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       ?></div></div>
   </div>
 
-  <!-- Fortschritt (bei DL „nur Abrechnung" ist der Track leer -> kein Balken) -->
+  <?php /* Fortschritt (bei DL „nur Abrechnung" ist der Track leer, dann kein Balken) */ ?>
   <?php if ($track): ?>
   <div class="bx-panel">
     <h2 style="margin:0 0 18px;font-size:16px">Fortschritt</h2>

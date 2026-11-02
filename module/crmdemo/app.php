@@ -340,7 +340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // --- KI-COA/Spec-Reader: Text auslesen, Rohstoff anlegen, Kunden-COA erzeugen ---
     if ($akt === 'coa_erstellen') {
         $text = trim($_POST['quelle'] ?? '');
-        $ziel = in_array($_POST['zielsprache'] ?? '', ['de','en','zh'], true) ? $_POST['zielsprache'] : 'de';
+        $ziel = in_array($_POST['zielsprache'] ?? '', ['de','en','zh'], true) ? (string)($_POST['zielsprache'] ?? '') : 'de';
         $fromRoh = (int)($_POST['rohstoff_id'] ?? 0); // aus der Rohstoff-Detailseite
         $back = $fromRoh ? cd_url('katalog', ['id'=>$fromRoh]) : cd_url('coareader');
         if ($text === '') { header('Location: ' . $back); exit; }
@@ -1364,7 +1364,7 @@ elseif ($m === 'finanzen'):
 
 <?php // ================= EINSTELLUNGEN (Reiter: Briefkopf · Standardwerte, nur Admin) ===
 elseif ($m === 'einstellungen'):
-    $tab = in_array($_GET['tab'] ?? '', ['briefkopf','standard','mitarbeiter','dokument'], true) ? $_GET['tab'] : 'briefkopf';
+    $tab = in_array($_GET['tab'] ?? '', ['briefkopf','standard','mitarbeiter','dokument'], true) ? (string)($_GET['tab'] ?? '') : 'briefkopf';
     $abs = cd_absender(); $logo = cd_logo_datauri(); ?>
     <h1 style="margin-bottom:10px"><?= h(cd_t('einstellungen')) ?></h1>
     <div class="cd-rolchips" style="margin-bottom:14px">
