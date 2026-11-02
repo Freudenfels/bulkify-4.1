@@ -8231,23 +8231,30 @@ function auftrag_bedarf_cached(int $pa_id): array {
     return $d;
 }
 
-// Materialbedarf auf den NOCH offenen Rest skaliert: bereits produzierte (als Charge gebuchte) Packungen
-// zählen nicht mehr mit. Das ist die EINE Quelle für die Material-Übersicht der Auftragsseite, für
-// produktion_bereitschaft() und für die Material-Tabellen des Produktionsauftrags – damit überall exakt
-// dieselbe Zahl steht (kein „oben gedeckt / unten fehlt"-Widerspruch mehr). Der Bruttobedarf
-// (auftrag_bedarf_cached) bleibt für Einkauf/Reservierung unverändert.
-// Beispiel AB-3286/PR-2796: 6.000 bestellt, 4.101 gebucht -> Faktor 1.899/6.000; jede Position (Bulk,
-// Verpackung, Etikett …) wird anteilig nur noch für die 1.899 Rest-Packungen gerechnet.
+// Materialbedarf auf den NOCH offenen Rest: EINE Quelle für die Material-Übersicht der Auftragsseite, produktion_bereitschaft(),
+// die Material-Tabellen des Produktionsauftrags, die Einkaufsliste (bedarf_aggregiert) und – gespiegelt – die Prod-/Werk-App (St-08).
+// Der Rest einer Position ist das Kleinere von
+//  (a) Vollbedarf × (noch nicht produzierte Packungen / Gesamtmenge) – bereits als Charge gebuchte Packungen zählen nicht mehr mit – und
+//  (b) Vollbedarf − bereits für diesen Produktionsauftrag verbrauchtes Material (Station schon gebucht = nichts mehr offen).
+// So gilt: Material, das eine Station schon für den ganzen Auftrag abgebucht hat, wird nicht ein zweites Mal als Bedarf gerechnet
+// (sonst Doppelbestellung), und eine Teilmenge verringert den Bedarf anteilig. Der Bruttobedarf (auftrag_bedarf_cached) bleibt
+// für Reservierung unverändert. Beispiel AB-3286/PR-2796: 6.000 bestellt, 4.101 gebucht -> Faktor 1.899/6.000.
 function auftrag_bedarf_rest(int $pa_id): array {
     $rows = auftrag_bedarf_cached($pa_id);
     $pa   = pa_row_cached($pa_id);
     $ziel = $pa ? max(0, (int)$pa['menge']) : 0;
     if ($ziel <= 0) return $rows;
     $gebucht = (int) round(produktion_gebucht($pa_id));
-    if ($gebucht <= 0) return $rows;                       // nichts produziert -> Brutto = Rest
-    $faktor = max(0.0, min(1.0, ($ziel - $gebucht) / $ziel));
+    $faktor = $gebucht > 0 ? max(0.0, min(1.0, ($ziel - $gebucht) / $ziel)) : 1.0;
+    $verb = [];
+    foreach (all("SELECT item_id, SUM(menge) AS m FROM produktion_verbrauch WHERE pa_id=? GROUP BY item_id", [$pa_id]) as $v) $verb[(int)$v['item_id']] = (float)$v['m'];
+    if ($faktor >= 1.0 && !$verb) return $rows;            // nichts produziert, nichts verbraucht -> Brutto = Rest
     foreach ($rows as &$r) {
-        $r['benoetigt'] = (float)($r['benoetigt'] ?? 0) * $faktor;
+        $voll = (float)($r['benoetigt'] ?? 0);
+        $rest = $voll * $faktor;
+        $iid = (int)($r['item_id'] ?? 0);
+        if ($iid > 0 && isset($verb[$iid])) $rest = min($rest, max(0.0, $voll - $verb[$iid]));
+        $r['benoetigt'] = $rest;
         $r['fehlt']     = max(0.0, (float)$r['benoetigt'] - (float)($r['verfuegbar'] ?? 0));
         $r['zu_bestellen'] = max(0.0, (float)$r['fehlt'] - (float)($r['quarantaene'] ?? 0));
     }
@@ -9252,7 +9259,9 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
                   LEFT JOIN auftrag a ON a.id=pa.auftrag_id
                   LEFT JOIN produkt p ON p.id=a.produkt_id
                   LEFT JOIN kunden k ON k.id=a.kunde_id WHERE $wo") as $pa) {
-        foreach (auftrag_bedarf_cached((int)$pa['id']) as $r) {
+        // Auf den noch offenen REST skaliert (St-08): schon produzierte Packungen brauchen kein Material mehr – dieselbe Quelle wie
+        // Auftrag, Produktionsauftrag und Werk-App (auftrag_bedarf_rest), nicht der Vollbedarf.
+        foreach (auftrag_bedarf_rest((int)$pa['id']) as $r) {
             $iid = (int)$r['item_id']; if ($iid <= 0) continue;
             // Etiketten NICHT gruppieren (jedes braucht das Kundendesign) -> Schlüssel je (Item + Auftrag).
             $etikett = $r['rolle'] === 'Etikett';
@@ -9749,6 +9758,8 @@ function produktion_materialbedarf(int $pa_id): array {
     }
     // Für die Gewichtsrechnung: Summe der Rezeptur-mg je Einheit = 100 % der Mischung (Massenbasis).
     $summeMg = 0.0; if ($fuellGesamtG > 0) foreach ($zutaten as $zz) $summeMg += (float)$zz['menge_mg'];
+    $menge0 = (float)($pa['menge'] ?? 0);
+    $restFaktor = $menge0 > 0 ? (produktion_gebucht($pa_id) > 0 ? max(0.0, min(1.0, produktion_rest($pa_id) / $menge0)) : 1.0) : 1.0;
     $out = [];
     foreach ($zutaten as $z) {
         if ($fuellGesamtG > 0) {
@@ -9765,7 +9776,8 @@ function produktion_materialbedarf(int $pa_id): array {
         // ist, fehlt nicht mehr: offener Restbedarf = benötigt - entnommen; „fehlt" = davon, was der Bestand nicht
         // deckt. So steht bei fertiger/laufender Produktion nicht weiter „fehlt 150.000", obwohl entnommen wurde.
         $entnommen = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, (int)$z['item_id']]);
-        $offen = max(0.0, $benoetigt - $entnommen);
+        // Rest: das Kleinere aus „noch nicht produzierte Packungen" und „benötigt − schon verbraucht" (siehe auftrag_bedarf_rest).
+        $offen = max(0.0, min($benoetigt * $restFaktor, $benoetigt - $entnommen));
         $fehltM = max(0.0, $offen - $verf);
         $quarM  = $fehltM > 1e-6 ? item_quarantaene((int)$z['item_id']) : 0.0;
         $out[] = ['item_id'=>(int)$z['item_id'], 'name'=>$z['name'], 'einheit'=>$z['einheit'],

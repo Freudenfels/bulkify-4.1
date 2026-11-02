@@ -380,13 +380,23 @@ function erp_schritt_material(int $pa_id, string $station): array {
             break;
     }
     // Je Zeile die FEFO-Charge (für Blinker + Anzeige/Scan-Bestätigung), Quarantäne-Menge (Hinweis) und ob schon entnommen.
+    // Restbuchung (S-13/St-08): „Menge" = was für diesen Schritt NOCH abzubuchen ist (Soll − bereits verbraucht), z. B. nach einer Teilmenge;
+    // 'menge_gesamt' = Soll für den ganzen Auftrag. Fertigware-Zeilen (Chargenliste) bleiben unverändert.
+    foreach ($zeilen as &$z)
+        if (!empty($z['item_id']) && !isset($z['charge_id']) && $station !== 'Fertigware bereitstellen') {
+            $z['menge_gesamt'] = (float)$z['menge'];
+            $z['menge'] = max(0.0, (float)$z['menge'] - erp_verbraucht($pa_id, (int)$z['item_id']));
+        }
+    unset($z);
     foreach ($zeilen as &$z)
         if (!empty($z['item_id'])) {
             if (!isset($z['charge_id'])) $z['charge_id'] = erp_fefo_charge_id((int)$z['item_id']);
             if (!empty($z['charge_id']) && empty($z['charge_nr']))
                 $z['charge_nr'] = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [(int)$z['charge_id']]);
             $z['quarantaene'] = erp_item_quarantaene((int)$z['item_id']);
-            $z['entnommen'] = (int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, (int)$z['item_id']]) > 0;
+            $z['entnommen'] = isset($z['menge_gesamt'])
+                ? (float)$z['menge'] <= max(0.0001, (float)$z['menge_gesamt'] * 0.001)       // Soll komplett gebucht
+                : (int) scalar("SELECT COUNT(*) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, (int)$z['item_id']]) > 0;
         }
     unset($z);
     return ['soll_menge'=>$soll_menge, 'soll_einheit'=>$soll_einheit, 'zeilen'=>$zeilen];
@@ -604,7 +614,7 @@ function erp_pa_fehlbedarf(int $pa_id): array {
     }
     $hatFertigware = count(erp_fertigware_chargen($pa_id, 'frei')) > 0 || count(erp_fertigware_chargen($pa_id, 'quarantaene')) > 0;
     if (erp_weg_basis($pa_id) === 'zukauf' || $hatFertigware) {
-        $benoetigt = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+        $benoetigt = (float)$pa['menge'] * erp_rest_faktor($pa_id) * erp_stueck_je_packung($pa);   // nur der noch offene Rest (St-08)
         if ($benoetigt <= 0) return $fehlend;
         $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], erp_fertigware_chargen($pa_id, 'frei')));
         if ($verf + 0.0001 < $benoetigt) {
@@ -621,7 +631,8 @@ function erp_pa_fehlbedarf(int $pa_id): array {
     // Leerkapseln (nur Kapselprodukte, eindeutig bestimmbar)
     $kid = erp_produkt_leerkapsel_id((int)$pa['produkt_id']);
     if ($kid) {
-        $need = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+        $voll = (float)$pa['menge'] * erp_stueck_je_packung($pa);
+        $need = max(0.0, min($voll * erp_rest_faktor($pa_id), $voll - erp_verbraucht($pa_id, (int)$kid)));   // Rest (St-08)
         $verf = erp_item_bestand($kid);
         if ($need > 0 && $verf + 0.0001 < $need)
             $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stk'];
@@ -629,9 +640,9 @@ function erp_pa_fehlbedarf(int $pa_id): array {
     // Verpackung (1 je Packung)
     $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
     if ($vid) {
-        $need = (float)$pa['menge'];
+        $need = max(0.0, min((float)$pa['menge'] * erp_rest_faktor($pa_id), (float)$pa['menge'] - erp_verbraucht($pa_id, $vid)));   // Rest (St-08)
         $verf = erp_item_bestand($vid);
-        if ($verf + 0.0001 < $need)
+        if ($need > 0 && $verf + 0.0001 < $need)
             $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$vid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stk'];
     }
     return $fehlend;
@@ -799,10 +810,33 @@ function erp_stueck_je_packung(array $pa): int {
 // Bulk-Auftrag = ohne Produkt, aber mit Rezeptur.
 function erp_pa_ist_bulk(array $pa): bool { return empty($pa['produkt_id']) && !empty($pa['rezeptur_id']); }
 
-// Materialbedarf (Rohstoffe) eines Auftrags: je Zutat benötigte vs. verfügbare Menge.
+// Anteil der Auftragsmenge, der NOCH produziert werden muss (Rest / Gesamt) – 1,0 solange nichts gebucht ist. Spiegel der Skalierung
+// in auftrag_bedarf_rest(): überall dieselbe Restmenge (St-08).
+function erp_rest_faktor(int $pa_id): float {
+    $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($menge <= 0) return 1.0;
+    $geb = round(erp_produktion_gebucht($pa_id));
+    return $geb <= 0 ? 1.0 : max(0.0, min(1.0, ($menge - $geb) / $menge));
+}
+// Als Bulk zugekaufte, fest dem Auftrag zugeteilte (reservierte) Menge – wird nicht selbst produziert (Spiegel auftrag_bulk_reserviert_stueck()).
+function erp_auftrag_bulk_reserviert(int $auftrag_id): float {
+    if ($auftrag_id <= 0 || !tabelle_da('reservierung')) return 0.0;
+    $a = one("SELECT produkt_id, rezeptur_id FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a) return 0.0;
+    $rid = (int)($a['rezeptur_id'] ?? 0);
+    if (!$rid && !empty($a['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
+    $item = $rid ? (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [$rid]) : 0;
+    if (!$item) return 0.0;
+    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE auftrag_id=? AND item_id=? AND status='aktiv'
+                           AND (bestellung_position_id IS NOT NULL OR charge_id IS NOT NULL)", [$auftrag_id, $item]);
+}
+// Materialbedarf (Rohstoffe) eines Auftrags: je Zutat benötigte vs. verfügbare Menge. Spiegel von produktion_materialbedarf():
+// Pulver/Granulat nach FÜLLGEWICHT (Massenanteil), als Bulk reservierter Teil abgezogen, schon verbrauchte Menge ('entnommen')
+// zählt nicht mehr als fehlend ('offen' = benötigt − entnommen).
 function erp_materialbedarf(int $pa_id): array {
     $pa = one("SELECT menge, produkt_id, rezeptur_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return [];
+    $fuellGesamtG = 0.0;
     if (erp_pa_ist_bulk($pa)) {
         $rid = (int)$pa['rezeptur_id'];
         $einheiten_total = (int)$pa['menge'];
@@ -810,16 +844,29 @@ function erp_materialbedarf(int $pa_id): array {
         $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
         if (!$rid) return [];
         $einheiten_total = (int)$pa['menge'] * erp_stueck_je_packung($pa);
+        $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+        if (in_array($form, ['pulver', 'granulat'], true)) $fuellGesamtG = (float)$pa['menge'] * (float) erp_stueck_je_packung($pa);
+        $resv = erp_auftrag_bulk_reserviert((int)($pa['auftrag_id'] ?? 0));
+        if ($resv > 0) {
+            if ($fuellGesamtG > 0) $fuellGesamtG = max(0.0, $fuellGesamtG - $resv);
+            else $einheiten_total = max(0, $einheiten_total - (int)round($resv));
+        }
     }
+    $zutaten = all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
+                    FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]);
+    $summeMg = 0.0; if ($fuellGesamtG > 0) foreach ($zutaten as $zz) $summeMg += (float)$zz['menge_mg'];
     $out = [];
-    foreach (all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
-                  FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]) as $z) {
-        $mg = (float)$z['menge_mg'] * $einheiten_total;
+    foreach ($zutaten as $z) {
+        if ($fuellGesamtG > 0) $mg = $fuellGesamtG * 1000.0 * ($summeMg > 0 ? (float)$z['menge_mg'] / $summeMg : 0.0);
+        else                   $mg = (float)$z['menge_mg'] * $einheiten_total;
         $faktor = $z['einheit'] === 'g' ? 1e3 : 1e6;          // mg -> Basiseinheit (kg-Standard)
         $benoetigt = $mg / $faktor;
         $verf = erp_item_bestand((int)$z['item_id']);
+        $entnommen = erp_verbraucht($pa_id, (int)$z['item_id']);
+        $offen = max(0.0, min($benoetigt * erp_rest_faktor($pa_id), $benoetigt - $entnommen));   // Rest (St-08), siehe auftrag_bedarf_rest()
         $out[] = ['item_id'=>(int)$z['item_id'], 'name'=>$z['name'], 'einheit'=>$z['einheit'], 'menge_mg'=>(float)$z['menge_mg'],
-                  'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'quarantaene'=>erp_item_quarantaene((int)$z['item_id']), 'fehlt'=>max(0.0, $benoetigt - $verf)];
+                  'benoetigt'=>$benoetigt, 'entnommen'=>$entnommen, 'offen'=>$offen,
+                  'verfuegbar'=>$verf, 'quarantaene'=>erp_item_quarantaene((int)$z['item_id']), 'fehlt'=>max(0.0, $offen - $verf)];
     }
     return $out;
 }
@@ -1479,12 +1526,17 @@ function erp_mischer_plan(int $pa_id, float $cap = 0.0): array {
     if (!$pa) return ['ok'=>false];
     $rid = erp_pa_rezeptur_id($pa_id);
     if (!$rid) return ['ok'=>false];
-    $einheiten = erp_pa_ist_bulk($pa) ? (int)$pa['menge'] : (int)$pa['menge'] * erp_stueck_je_packung($pa);
+    // Nur der noch offene REST wird gemischt (St-08); Pulver/Granulat nach Füllgewicht (Massenanteil), nicht nach Portionszahl.
+    $restM = (float)$pa['menge'] * erp_rest_faktor($pa_id);
+    $einheiten = erp_pa_ist_bulk($pa) ? (int)round($restM) : (int)round($restM) * erp_stueck_je_packung($pa);
     $zutaten = all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name, z.menge_mg
                     FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                     WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]);
     $total_mg = 0.0; foreach ($zutaten as $z) $total_mg += (float)$z['menge_mg'];
-    $total_kg = $total_mg * $einheiten / 1e6;
+    $formM = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+    $pulver = !erp_pa_ist_bulk($pa) && in_array($formM, ['pulver', 'granulat'], true) && $total_mg > 0;
+    if ($pulver) { $einheiten = (int)round($restM) * erp_stueck_je_packung($pa); $total_mg = 1.0; }   // g Füllgewicht; Zutat = Anteil an 1,0
+    $total_kg = $pulver ? $einheiten / 1000.0 : $total_mg * $einheiten / 1e6;
     $out = ['ok'=>true, 'total_kg'=>$total_kg, 'einheiten'=>$einheiten, 'anzahl'=>0, 'cap'=>$cap, 'gebinde'=>[]];
     if ($cap <= 0 || $total_kg <= 0) return $out;
     $anzahl = (int) ceil($total_kg / $cap - 1e-9);
@@ -1493,7 +1545,10 @@ function erp_mischer_plan(int $pa_id, float $cap = 0.0): array {
         $kg = min($cap, $rest); $rest = max(0.0, $rest - $kg);
         $anteil = $total_kg > 0 ? $kg / $total_kg : 0.0;
         $zrows = [];
-        foreach ($zutaten as $z) $zrows[] = ['name'=>(string)$z['name'], 'kg'=>((float)$z['menge_mg'] * $einheiten / 1e6) * $anteil];
+        $sumMgPulver = 0.0; if ($pulver) foreach ($zutaten as $zz) $sumMgPulver += (float)$zz['menge_mg'];
+        foreach ($zutaten as $z) $zrows[] = ['name'=>(string)$z['name'], 'kg'=>($pulver
+            ? ($sumMgPulver > 0 ? (float)$z['menge_mg'] / $sumMgPulver : 0.0) * $total_kg
+            : ((float)$z['menge_mg'] * $einheiten / 1e6)) * $anteil];
         $gebinde[] = ['nr'=>$i, 'kg'=>$kg, 'zutaten'=>$zrows];
     }
     $out['anzahl'] = $anzahl; $out['gebinde'] = $gebinde;

@@ -50,3 +50,5 @@ Das Scan-Panel erkennt jetzt neben Charge-QR (`?p=charge&id=`, Alt-Etiketten), n
 
 ## Teil 4 (Schritt 5): Restmischung einbuchen
 Nach dem Mischen (`$mischenDone`) erscheint ein Panel „Restmischung ins Lager 1 einbuchen" (kg-Feld + Button, mehrsprachig `rest_*`). POST `werk_restmischung` → `erp_restmischung_einbuchen`. Dasselbe gibt es im Dashboard-Produktionsmodus (`run.php`, POST `restmischung`).
+
+**Teil-/Restmenge im Werk (St-08/S-12):** Im Auftragskopf steht nach einer Teilmenge „Rest N von M Packungen offen" und der Rechner „Jetzt machbar" (komplett fertig / bis vor dem Etikettieren, begrenzt durch das knappste Material) bzw. die Etikett-Sperre. Texte in `werk_i18n.php` (de/en/ru).

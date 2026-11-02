@@ -347,6 +347,22 @@ header('Content-Type: text/html; charset=utf-8');
   <div class="panel" style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
     <div><span style="font-size:24px;font-weight:800"><?= h((string)$pa['nummer']) ?></span> · <?= h((string)($pa['produkt_name'] ?? '–')) ?></div>
     <div class="count"><?= menge_txt($pa['menge']) ?> <?= h($T['packages']) ?> · <?= h($T['step']) ?> <?= min($fertigCnt + 1, $total) ?> / <?= $total ?></div>
+    <?php
+      // Teil-/Restmenge + „jetzt machbar" (St-08/S-12): nach einer Teilmenge zeigt das Werk, wie viel NOCH zu produzieren ist und wie viel
+      // das vorhandene Material jetzt hergibt – dieselbe Restmenge wie Auftrag, Einkauf und Prod-App.
+      $wkGeb = (float) erp_produktion_gebucht($id); $wkRest = (float) erp_produktion_rest($id);
+      $wkTm  = ($wkRest > 0 && $fertigCnt < $total) ? erp_teilmenge_machbar($id) : null;
+    ?>
+    <?php if ($wkGeb > 0 || $wkTm): ?>
+    <div style="flex-basis:100%;font-size:17px;margin-top:6px">
+      <?php if ($wkGeb > 0): ?><span class="muted"><?= h(sprintf($T['rest_of'], menge_txt($wkRest), menge_txt($pa['menge']))) ?></span><?php endif; ?>
+      <?php if ($wkTm): ?>
+        <?php if ($wkTm['sperre'] !== ''): ?> <strong style="color:#e0786c"><?= h($T['label_blocked']) ?></strong> <?= h($wkTm['sperre']) ?>
+        <?php else: ?> · <strong><?= h($T['doable_now']) ?>:</strong> <?= menge_txt($wkTm['komplett']) ?> <?= h($T['doable_full']) ?><?= $wkTm['komplett'] < $wkTm['rest'] && $wkTm['limit'] !== '' ? ' <span class="muted">(' . h($T['limited_by']) . ' ' . h($wkTm['limit']) . ')</span>' : '' ?><?php if ($wkTm['vor_etikett'] > $wkTm['komplett']): ?> · <?= menge_txt($wkTm['vor_etikett']) ?> <?= h($T['doable_before_label']) ?><?php endif; ?>
+        <?php endif; ?>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
   </div>
 
   <?php if ($probenPflicht): ?>
