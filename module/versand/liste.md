@@ -16,3 +16,4 @@ Je versandbereiter Auftrag (Status `erledigt`, Ware in Lager 1): **An Kunden sen
 
 ## Handelsware (S-15)
 Handelsware-Aufträge ohne Produktionsauftrag erscheinen schon im Status offen/in Produktion – versendbar, sobald die zugekaufte Ware frei im Lager liegt (sonst „zu wenig Fertigware").
+**Teilversand während der Produktion (S-14):** Aufträge mit schon eingebuchter Teilmenge erscheinen als „in Produktion · Teilmenge fertig" mit Knopf „Senden" (Menge = höchstens die aus diesem Auftrag produzierte, noch nicht versendete Fertigware). Der Auftrag bleibt bis zum Produktionsabschluss offen.

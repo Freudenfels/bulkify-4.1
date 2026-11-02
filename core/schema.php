@@ -9665,7 +9665,7 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
         if (!$god) produktion_an_lager_uebergeben($pa_id);
         $pa = one("SELECT auftrag_id, kunde_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
         if ($pa && $pa['auftrag_id']) {
-            q("UPDATE auftrag SET status='erledigt' WHERE id=?", [(int)$pa['auftrag_id']]);
+            auftrag_nach_produktion_status((int)$pa['auftrag_id']);   // 'erledigt' – oder 'versendet', wenn per Teilversand schon alles raus ist
             if ($pa['kunde_id']) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . $pa['nummer'] . ($god ? ' per God-Mode (Admin) ohne Bestandsbuchung durchlaufen.' : ' abgeschlossen – an Lager zum Einlagern übergeben.'), 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
         }
     }
@@ -10081,28 +10081,53 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
     return ['ok'=>true, 'msg'=>'Ins Fremdlager übernommen – der Bestand steht jetzt in Lager 2.', 'fremdlager'=>true];
 }
 
+// Aus der Produktion DIESES Auftrags eingebuchte, noch freie Fertigware (Chargen mit pa_id der Produktionsaufträge des Auftrags).
+// Grundlage für den Teilversand während die Produktion noch läuft (S-14) – Ware anderer Aufträge desselben Produkts zählt nicht.
+function auftrag_produzierte_fertigware(int $auftrag_id): array {
+    $r = one("SELECT COALESCE(SUM(c.menge),0) AS gebucht,
+                     COALESCE(SUM(CASE WHEN c.status='frei' AND c.fremd_kunde_id IS NULL THEN c.menge_verfuegbar ELSE 0 END),0) AS frei
+              FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id WHERE pa.auftrag_id=? AND pa.status<>'storniert'", [$auftrag_id]);
+    return ['gebucht'=>(float)($r['gebucht'] ?? 0), 'frei'=>(float)($r['frei'] ?? 0)];
+}
 // „An den Kunden senden" – echte Auslieferung (FEFO-Ausbuchen + Lieferschein). $menge = null versendet den
 // kompletten noch offenen Rest; ein kleinerer Wert ist ein TEILVERSAND (mehrere Lieferungen je Auftrag).
+// Teilversand ist ab der ersten eingebuchten Teilcharge möglich (S-14), auch während der Auftrag noch in Produktion ist: dann zählt nur
+// die Fertigware aus der Produktion dieses Auftrags, und der Status bleibt unverändert (offen/in_produktion) bis die Produktion fertig ist.
 // Erst wenn alle Packungen (auftrag.menge) versendet sind, geht der Status auf 'versendet'; vorher bleibt der
 // Auftrag 'erledigt' (versandbereit) und der Rest kann später nachgeliefert werden. versendet_menge zählt mit.
 function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
-    $a = one("SELECT * FROM auftrag WHERE id=? AND status='erledigt'", [$auftrag_id]);
-    // Handelsware ohne Produktionsauftrag (S-15): es gibt keine Produktion, die abgeschlossen werden müsste – versendet
-    // wird, sobald die zugekaufte Ware frei im Lager liegt (Bestandsprüfung unten).
-    if (!$a && auftrag_handelsware_ohne_pa($auftrag_id)) $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
-    if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht versandbereit (Produktion muss abgeschlossen sein).'];
+    // 'erledigt' = Produktion fertig; 'offen'/'in_produktion' = Produktion läuft (der Auftragsstatus wird beim Produzieren nicht
+    // automatisch auf 'in_produktion' gesetzt) -> Teilversand aus der schon eingebuchten Teilmenge.
+    // Handelsware ohne Produktionsauftrag (S-15): es gibt keine Produktion – versendet wird, sobald die zugekaufte Ware frei
+    // im Lager liegt (Bestandsprüfung unten), daher NICHT als „Produktion läuft" behandeln.
+    $a = one("SELECT * FROM auftrag WHERE id=? AND status IN ('erledigt','offen','in_produktion') AND COALESCE(kategorie,'produkt')<>'dienstleistung'", [$auftrag_id]);
+    if (!$a) return ['ok'=>false, 'msg'=>'Auftrag ist nicht versandbereit (es muss mindestens eine Teilmenge produziert und eingebucht sein).'];
+    $inProd  = (string)$a['status'] !== 'erledigt' && !auftrag_handelsware_ohne_pa($auftrag_id);
     $gesamt  = (int)$a['menge'];
     $bereits = max(0, (int)($a['versendet_menge'] ?? 0));
     $offen   = max(0, $gesamt - $bereits);
     if ($offen <= 0) return ['ok'=>false, 'msg'=>'Es ist bereits alles versendet.'];
+    $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
+    if ($inProd) {
+        // Produktion läuft noch: versendbar ist nur, was aus DIESEM Auftrag produziert und noch nicht versendet ist.
+        $pf = auftrag_produzierte_fertigware($auftrag_id);
+        $verf = min($pf['frei'], max(0.0, $pf['gebucht'] - $bereits));
+        if ($verf < 1) return ['ok'=>false, 'msg'=>'Noch keine versandbereite Teilmenge – es wurde noch nichts aus diesem Auftrag eingebucht.' . ($vfitem ? fertigware_qm_hinweis($vfitem) : '')];
+        $offen = min($offen, (int) floor($verf + 1e-6));
+    } else {
+        $verf = $vfitem ? item_bestand($vfitem, true) : 0;
+    }
     $ship = ($menge === null) ? $offen : max(0, min((int)$menge, $offen));
     if ($ship <= 0) return ['ok'=>false, 'msg'=>'Bitte eine Versandmenge größer 0 angeben.'];
-    $vfitem = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$a['produkt_id']]) ?: 0);
-    $verf = $vfitem ? item_bestand($vfitem, true) : 0;
     if ($verf + 0.0001 < (float)$ship) return ['ok'=>false, 'msg'=>'Nicht genug Fertigware im Lager (' . (int)$verf . ' von ' . (int)$ship . ' zu versendenden).' . ($vfitem ? fertigware_qm_hinweis($vfitem) : '')];
-    // Fertigware FEFO ausbuchen (nur die zu versendende Menge)
+    // Fertigware FEFO ausbuchen (nur die zu versendende Menge); in der laufenden Produktion nur aus den Chargen dieses Auftrags
+    $chQ = $inProd
+        ? all("SELECT c.* FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+               WHERE pa.auftrag_id=? AND pa.status<>'storniert' AND c.item_id=? AND c.status='frei' AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL
+               ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$auftrag_id, $vfitem])
+        : all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vfitem]);
     $rest = (float)$ship;
-    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$vfitem]) as $c) {
+    foreach ($chQ as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
@@ -10117,18 +10142,32 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     $lsId = (int) insert_id();
     $neuVersendet = $bereits + $ship;
     $voll = $neuVersendet >= $gesamt;
-    if ($voll) q("UPDATE auftrag SET versendet_menge=?, status='versendet', status_datum=CURDATE() WHERE id=?", [$neuVersendet, $auftrag_id]);
-    else       q("UPDATE auftrag SET versendet_menge=? WHERE id=?", [$neuVersendet, $auftrag_id]);
+    // 'versendet' erst, wenn alles geliefert UND die Produktion fertig ist; läuft sie noch, bleibt der Status unverändert
+    // (beim Produktionsabschluss wird er dann auf 'versendet' gesetzt, siehe auftrag_nach_produktion_status()).
+    if ($voll && !$inProd) q("UPDATE auftrag SET versendet_menge=?, status='versendet', status_datum=CURDATE() WHERE id=?", [$neuVersendet, $auftrag_id]);
+    else                   q("UPDATE auftrag SET versendet_menge=? WHERE id=?", [$neuVersendet, $auftrag_id]);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
         $voll ? ('Auftrag ' . $a['nummer'] . ' versendet' . ($bereits > 0 ? ' (Restlieferung ' . number_format($ship,0,',','.') . ')' : '') . '.')
               : ('Teillieferung Auftrag ' . $a['nummer'] . ': ' . number_format($ship,0,',','.') . ' von ' . number_format($gesamt,0,',','.') . ' versendet (gesamt ' . number_format($neuVersendet,0,',','.') . ').'),
         'auftrag', 'auftrag', $auftrag_id);
-    auftrag_rechnung_bei_lieferung($auftrag_id, $voll);   // Leistungsdatum + Festschreiben bei Lieferung (St-04)
+    // Leistungsdatum + Festschreiben bei Lieferung (St-04). Läuft die Produktion noch, gilt die Lieferung erst beim Abschluss als
+    // komplett (auftrag_nach_produktion_status()).
+    auftrag_rechnung_bei_lieferung($auftrag_id, $voll && !$inProd);
     // Kunde: Versand-/Lieferschein-Mail (Teil-/Restlieferung), inkl. Hinweis auf die freigegebene Rechnung (Paket Mails).
     if (function_exists('mail_kunde_versand') && mail_bereit()) nach_antwort(fn() => mail_kunde_versand($auftrag_id, $lsId, (int)$ship, (bool)$voll));
     bedarf_bump();   // Fertigware ausgebucht
     return ['ok'=>true, 'voll'=>$voll, 'versendet'=>$ship, 'gesamt'=>$gesamt, 'kumuliert'=>$neuVersendet,
             'msg'=>$voll ? 'Versendet.' : ('Teillieferung ' . number_format($ship,0,',','.') . ' versendet – offen bleiben ' . number_format($gesamt - $neuVersendet,0,',','.') . '.')];
+}
+// Nach Produktionsabschluss: war schon (per Teilversand während der Produktion) alles geliefert, geht der Auftrag direkt auf 'versendet'
+// statt auf 'erledigt' (versandbereit). Sonst 'erledigt'.
+function auftrag_nach_produktion_status(int $auftrag_id): string {
+    $a = one("SELECT menge, versendet_menge FROM auftrag WHERE id=?", [$auftrag_id]);
+    $st = ($a && (int)$a['menge'] > 0 && (int)($a['versendet_menge'] ?? 0) >= (int)$a['menge']) ? 'versendet' : 'erledigt';
+    q("UPDATE auftrag SET status=?" . ($st === 'versendet' ? ", status_datum=CURDATE()" : "") . " WHERE id=?", [$st, $auftrag_id]);
+    // Während der Produktion schon alles geliefert -> jetzt ist die Lieferung komplett: Rechnung festschreiben (St-04).
+    if ($st === 'versendet' && function_exists('auftrag_rechnung_bei_lieferung')) auftrag_rechnung_bei_lieferung($auftrag_id, true);
+    return $st;
 }
 // Kompletten (restlichen) Auftrag versenden – Rückwärtskompatibilität.
 function auftrag_versenden(int $auftrag_id): array { return auftrag_versenden_menge($auftrag_id, null); }

@@ -757,7 +757,10 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur): array {
         erp_an_lager_uebergeben($pa_id);                // an Lager zum Einlagern übergeben (bucht NICHT selbst ein)
         $pa = one("SELECT auftrag_id, kunde_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
         if ($pa && $pa['auftrag_id'] && tabelle_da('auftrag')) {
-            q("UPDATE auftrag SET status='erledigt' WHERE id=?", [(int)$pa['auftrag_id']]);
+            // war per Teilversand während der Produktion schon alles geliefert -> direkt 'versendet' (Spiegel auftrag_nach_produktion_status)
+            $av = one("SELECT menge, versendet_menge FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]);
+            $allesRaus = $av && (int)$av['menge'] > 0 && (int)($av['versendet_menge'] ?? 0) >= (int)$av['menge'];
+            q("UPDATE auftrag SET status=?" . ($allesRaus ? ", status_datum=CURDATE()" : "") . " WHERE id=?", [$allesRaus ? 'versendet' : 'erledigt', (int)$pa['auftrag_id']]);
             if ($pa['kunde_id'])
                 erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team',
                     'Produktion ' . $pa['nummer'] . ' abgeschlossen – an Lager zum Einlagern übergeben.',

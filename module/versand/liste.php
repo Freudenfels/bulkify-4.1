@@ -19,8 +19,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'an_la
 
 $q    = trim($_GET['q'] ?? '');
 $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
-             (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM item i JOIN charge c ON c.item_id=i.id
-              WHERE i.produkt_id=a.produkt_id AND i.kategorie='verkaufsfertig' AND c.status='frei') AS fertig_frei,
+             CASE WHEN a.status IN ('offen','in_produktion')
+               -- Produktion läuft noch (Teilversand, S-14): nur Fertigware aus der Produktion DIESES Auftrags, abzüglich schon Versendetem
+               THEN GREATEST(0, LEAST(
+                      (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                        WHERE pa.auftrag_id=a.id AND pa.status<>'storniert' AND c.status='frei' AND c.fremd_kunde_id IS NULL),
+                      (SELECT COALESCE(SUM(c.menge),0) FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                        WHERE pa.auftrag_id=a.id AND pa.status<>'storniert') - a.versendet_menge))
+               ELSE (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM item i JOIN charge c ON c.item_id=i.id
+                      WHERE i.produkt_id=a.produkt_id AND i.kategorie='verkaufsfertig' AND c.status='frei') END AS fertig_frei,
              (SELECT GROUP_CONCAT(CONCAT(b.id,':',b.nummer) ORDER BY b.id SEPARATOR '|')
               FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='lieferschein') AS lieferscheine,
              COALESCE(k.nutzt_fulfillment,0) AS fulfillment
@@ -28,6 +35,8 @@ $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
              WHERE a.status IN ('erledigt','versendet')
                 OR (p.handelsware=1 AND a.status IN ('offen','in_produktion')   -- Handelsware ohne Produktion (S-15)
                     AND NOT EXISTS (SELECT 1 FROM produktionsauftrag x WHERE x.auftrag_id=a.id AND x.status<>'storniert'))
+                OR (a.status IN ('offen','in_produktion') AND COALESCE(a.kategorie,'produkt')<>'dienstleistung' AND EXISTS (SELECT 1 FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                                                          WHERE pa.auftrag_id=a.id AND pa.status<>'storniert' AND c.status='frei' AND c.menge_verfuegbar>0))
              ORDER BY a.status='versendet', a.angelegt DESC");
 if ($q !== '') {
     $needle = mb_strtolower($q);
@@ -79,7 +88,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
             echo implode('<br>', $links);
         }
       ?></td>
-      <td><?= $versendet ? bx_badge('abgeschlossen','ok') : ($teil ? bx_badge('teilversendet','warn') : bx_badge('versandbereit','info')) ?></td>
+      <td><?= $versendet ? bx_badge('abgeschlossen','ok') : (in_array($r['status'], ['offen','in_produktion'], true) ? bx_badge('in Produktion · Teilmenge fertig','warn') . ($teil ? '<br>' . bx_badge('teilversendet','warn') : '') : ($teil ? bx_badge('teilversendet','warn') : bx_badge('versandbereit','info'))) ?></td>
       <td style="text-align:right">
         <?php if (!$versendet): ?>
           <?php if ($maxShip > 0): ?>
@@ -89,11 +98,11 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
                 <input type="number" name="menge" value="<?= $maxShip ?>" min="1" max="<?= $maxShip ?>" style="width:90px;text-align:right;padding:5px 8px" title="Wieviele Packungen jetzt versenden? Weniger als offen = Teilversand.">
                 <button class="btn btn-primary btn-sm" type="submit" title="Diese Menge an den Kunden ausliefern (Lieferschein, Fertigware ausbuchen)"><?= $maxShip >= $offen ? ($teil ? 'Rest senden' : 'An Kunden senden') : 'Senden' ?></button>
               </form>
-              <?php if ($ff): ?>
+              <?php if ($ff && $r['status'] === 'erledigt'): ?>
               <form method="post" style="margin:0"><input type="hidden" name="aktion" value="an_lager2"><input type="hidden" name="auftrag_id" value="<?= (int)$r['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit" title="An das Fremdlager (Lager 2) übergeben – Bestand bleibt bis zur Endkundenbestellung">An Lager 2 übergeben</button></form>
               <?php endif; ?>
             </div>
-            <?php if ($frei < $offen): ?><div class="muted" style="font-size:11px;margin-top:3px">nur <?= number_format($frei,0,',','.') ?> fertig im Lager – Rest nach weiterer Produktion</div><?php endif; ?>
+            <?php if ($frei < $offen): ?><div class="muted" style="font-size:11px;margin-top:3px"><?= in_array($r['status'], ['offen','in_produktion'], true) ? 'Produktion läuft noch – jetzt ' . number_format($frei,0,',','.') . ' versendbar' : 'nur ' . number_format($frei,0,',','.') . ' fertig im Lager – Rest nach weiterer Produktion' ?></div><?php endif; ?>
           <?php else: ?>
             <span class="badge badge-warn">zu wenig Fertigware</span>
           <?php endif; ?>
