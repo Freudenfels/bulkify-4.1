@@ -4423,8 +4423,17 @@ function behaelter_fuer_groesse(int $vorlage_produkt_id, int $stueck, ?string $t
 // $vorlage_produkt_id (optional) liefert Deckel/Etikett/Karton/Beipack und die Verzehrempfehlung.
 function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int $vorlage_produkt_id = null): ?int {
     if ($rezeptur_id <= 0 || $stueck <= 0) return null;
-    $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 ORDER BY id LIMIT 1",
-                   [$rezeptur_id, $stueck, $verp_id]);
+    // Exklusive Kundenrezeptur -> das Produkt gehört diesem Kunden (exklusiv=1, kunde_id) und steht NICHT im Katalog
+    // (S-02). Ohne Kunde an der Rezeptur lässt sich kein Besitzer bestimmen -> wie bisher Katalogprodukt.
+    $rzx = one("SELECT exklusiv, kunde_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    $exKid = ($rzx && (int)$rzx['exklusiv'] === 1 && (int)$rzx['kunde_id'] > 0) ? (int)$rzx['kunde_id'] : 0;
+    if ($exKid > 0) {
+        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=1 AND kunde_id=? ORDER BY id LIMIT 1",
+                       [$rezeptur_id, $stueck, $verp_id, $exKid]);
+    } else {
+        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 ORDER BY id LIMIT 1",
+                       [$rezeptur_id, $stueck, $verp_id]);
+    }
     if ($treffer) return (int)$treffer['id'];
     $v = $vorlage_produkt_id ? one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]) : null;
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]) ?: 'kapsel';
@@ -4432,9 +4441,10 @@ function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int
     $behName = $verp_id ? (string) scalar("SELECT name FROM item WHERE id=?", [$verp_id]) : '';
     $name = produkt_name_versioniert($rez . ' · ' . form_groessen_label($form, (float)$stueck) . ($behName !== '' ? ' · ' . $behName : ''));
     q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
-       VALUES (?,?,NULL,?,?,?,?,?,?,?,0,?,?,?,?)",
-      [naechste_nummer('P'), $name, $rezeptur_id, $verp_id,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('P'), $name, $exKid > 0 ? $exKid : null, $rezeptur_id, $verp_id,
        $v['verschluss_id'] ?? null, $v['etikett_id'] ?? null, $v['karton_id'] ?? null, $v['beipack_id'] ?? null, $v['leerkapsel_id'] ?? null,
+       $exKid > 0 ? 1 : 0,
        $stueck, $v['einnahme_pro_tag'] ?? 1, 'aktiv',
        'Aus einer Kundenanfrage entstanden (Rezeptur x Menge + Verpackung).']);
     $neu = insert_id();
@@ -4449,10 +4459,19 @@ function produkt_variante_id(int $vorlage_produkt_id, int $stueck, ?int $verp_id
     $v = one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]);
     if (!$v || !$v['rezeptur_id'] || $stueck <= 0) return null;
     $rid = (int)$v['rezeptur_id'];
+    // Ist das Vorlage-Produkt exklusiv (gehört einem Kunden), erbt die Variante Kunde + Exklusivität (S-02) –
+    // sonst würde ein kundenloses Katalogprodukt mit der Zusammensetzung des Kunden entstehen.
+    $exKid = ((int)($v['exklusiv'] ?? 0) === 1 && (int)($v['kunde_id'] ?? 0) > 0) ? (int)$v['kunde_id'] : 0;
     // Vorhandenes Produkt mit genau dieser Kombination wiederverwenden (Katalog oder dasselbe Vorlage-Produkt)
-    $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=?
-                    AND (verpackung_id <=> ?) AND (exklusiv=0 OR id=?) ORDER BY id LIMIT 1",
-                   [$rid, $stueck, $verp_id, $vorlage_produkt_id]);
+    if ($exKid > 0) {
+        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=?
+                        AND (verpackung_id <=> ?) AND ((exklusiv=1 AND kunde_id=?) OR id=?) ORDER BY id LIMIT 1",
+                       [$rid, $stueck, $verp_id, $exKid, $vorlage_produkt_id]);
+    } else {
+        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=?
+                        AND (verpackung_id <=> ?) AND (exklusiv=0 OR id=?) ORDER BY id LIMIT 1",
+                       [$rid, $stueck, $verp_id, $vorlage_produkt_id]);
+    }
     if ($treffer) return (int)$treffer['id'];
     // Sonst neu anlegen
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]) ?: 'kapsel';
@@ -4462,9 +4481,10 @@ function produkt_variante_id(int $vorlage_produkt_id, int $stueck, ?int $verp_id
     $behName = $verp_id ? (string) scalar("SELECT name FROM item WHERE id=?", [$verp_id]) : '';
     $name = produkt_name_versioniert($rez . ' · ' . form_groessen_label($form, (float)$stueck) . ($behName !== '' ? ' · ' . $behName : ''));
     q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,beipack_id,leerkapsel_id,exklusiv,handelsware,einheiten_pro_packung,einnahme_pro_tag,status,notiz)
-       VALUES (?,?,NULL,?,?,?,?,?,?,?,0,?,?,?,?,?)",
-      [naechste_nummer('P'), $name, $rid, $verp_id,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [naechste_nummer('P'), $name, $exKid > 0 ? $exKid : null, $rid, $verp_id,
        $v['verschluss_id'], $v['etikett_id'], $v['karton_id'], $v['beipack_id'], $v['leerkapsel_id'],
+       $exKid > 0 ? 1 : 0,
        (int)($v['handelsware'] ?? 0),
        $stueck, $v['einnahme_pro_tag'], 'aktiv',
        'Automatisch aus der Angebotskalkulation entstanden (Rezeptur x Menge + Verpackung).']);
