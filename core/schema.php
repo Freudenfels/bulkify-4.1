@@ -26,7 +26,11 @@ function column_exists(string $t, string $c): bool {
     );
 }
 function ensure_column(string $t, string $c, string $definition): void {
-    if (table_exists($t) && !column_exists($t, $c)) {
+    // Tabelle (noch) nicht da – typisch auf einer FRISCHEN DB, wenn die Migration vor dem CREATE TABLE steht (St-02):
+    // Lücke merken. init_schema() läuft dann sofort ein zweites Mal (jetzt existiert die Tabelle) statt den Marker
+    // zu setzen und die Spalte für immer zu überspringen.
+    if (!table_exists($t)) { $GLOBALS['bx_schema_luecken'][$t . '.' . $c] = true; return; }
+    if (!column_exists($t, $c)) {
         db()->exec("ALTER TABLE `$t` ADD COLUMN `$c` $definition");
     }
 }
@@ -2361,6 +2365,21 @@ function init_schema(): void {
     // Bewusst als LETZTER Schritt: braucht Tabellen/Spalten, die weiter oben erst angelegt werden (St-01).
     if (function_exists('seed_etikett_formate')) seed_etikett_formate();
 
+    // Nachbestellungen: eigene Tabelle (Selbst-Schema) gleich mit anlegen – das Portal liest sie, bevor eine
+    // Nachbestell-Funktion sie sonst erst anlegen würde (St-02, kunde.php).
+    require_once __DIR__ . '/nachbestellung.php';
+    nachbestellung_schema();
+
+    // St-02: Gab es ensure_column() auf noch fehlende Tabellen, EINMAL sofort wiederholen – jetzt existieren die Tabellen,
+    // die Spalten kommen dazu. Bleibt danach etwas offen (Tabelle wird nie angelegt), Marker trotzdem setzen (sonst liefe
+    // die Migration bei jedem Aufruf) und die Lücken in app_meta schema_luecken festhalten.
+    if (!empty($GLOBALS['bx_schema_luecken']) && empty($GLOBALS['bx_schema_wiederholt'])) {
+        $GLOBALS['bx_schema_wiederholt'] = true;
+        $GLOBALS['bx_schema_luecken'] = [];
+        init_schema();
+        return;
+    }
+    meta_set('schema_luecken', implode(',', array_keys($GLOBALS['bx_schema_luecken'] ?? [])));
     // Migrationen durch -> Marker setzen, damit der nächste Request den Block überspringt.
     if ($schemaBuild !== '') meta_set('schema_build', $schemaBuild);
 }
