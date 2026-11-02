@@ -33,7 +33,11 @@ function produktionsauftrag_pdf_bauen(int $pa_id): ?string {
     $chargeMhd = ($fCharge && $fCharge['mhd']) ? (string)$fCharge['mhd'] : mhd_standard();
 
     $verpName = !empty($pa['verpackung_id']) ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$pa['verpackung_id']]) : '';
-    $etikettName = !empty($pa['etikett_id']) ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$pa['etikett_id']]) : '';
+    // Etikett DIESES Auftrags (gebundenes Kundenetikett des Kunden) – nicht der Produkt-Slot (bei Katalogprodukten
+    // mit mehreren Kunden wäre das ein fremdes Etikett).
+    $etikettEid = !empty($pa['auftrag_id']) ? etikett_item_fuer_auftrag((int)$pa['auftrag_id']) : 0;
+    if ($etikettEid <= 0 && !empty($pa['etikett_id'])) $etikettEid = (int)$pa['etikett_id'];
+    $etikettName = $etikettEid > 0 ? (string) scalar("SELECT name FROM item WHERE id=?", [$etikettEid]) : '';
     $artLbl = ($pa['produktionsart'] ?? 'eigen') === 'fremd' ? 'Fremdproduktion (Zukauf)' : 'Eigenproduktion';
     $statusLbl = match ((string)($pa['status'] ?? '')) { 'laufend'=>'läuft', 'erledigt'=>'fertig', default=>'offen' };
 

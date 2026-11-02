@@ -422,18 +422,32 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
         </div>
       </div>
       <?php endif; ?>
-      <?php // Aktuelles Kundenetikett-DESIGN (versioniert) zum Herunterladen – z. B. um es an die Druckerei zu schicken.
+      <?php // Kundenetiketten JE KUNDE (Versionskette gilt je Produkt+Kunde): aktuelle Version, Design zum Herunterladen
+            // (z. B. für die Druckerei) und Bestand. Ein Katalogprodukt mit mehreren Kunden hat mehrere Etiketten.
       if (!$neu):
-        $__keItem = kundenetikett_aktuell((int)$id);
-        $__keDok  = $__keItem ? (int) scalar("SELECT COALESCE(etikett_dokument_id,0) FROM item WHERE id=?", [$__keItem]) : 0;
-        if ($__keDok):
-          $__keVer = (int) scalar("SELECT COALESCE(etikett_version,1) FROM item WHERE id=?", [$__keItem]);
-          $__keFn  = (string) scalar("SELECT COALESCE(NULLIF(datei_orig,''),'Etikett-Design') FROM dokument WHERE id=?", [$__keDok]); ?>
-      <div class="bx-field" style="align-self:end">
-        <label>Kundenetikett (Design)</label>
-        <div style="font-size:13px;padding-top:6px">v<?= $__keVer ?> · <strong><?= h($__keFn) ?></strong><br>
-          <a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= $__keDok ?>" download target="_blank" rel="noopener" style="margin-top:6px">&#8681; Herunterladen (für die Druckerei)</a>
-        </div>
+        $__kes = all("SELECT i.id, i.kunde_id, COALESCE(i.etikett_version,1) AS v, COALESCE(i.etikett_dokument_id,0) AS dok, k.firma
+                      FROM item i LEFT JOIN kunden k ON k.id=i.kunde_id
+                      WHERE i.verpackung_rolle='etikett' AND i.produkt_id=? AND COALESCE(i.gesperrt,0)=0
+                      ORDER BY k.firma, i.etikett_version DESC", [(int)$id]);
+        if ($__kes): ?>
+      <div class="bx-field" style="grid-column:1/-1">
+        <label>Kundenetiketten je Kunde <?= bx_hint('Das Etikett gehört zu Produkt + Kunde: jeder Kunde hat seine eigene Versionskette (v1, v2 …) und seinen eigenen Bestand. Eine neue Freigabe sperrt nur die Version desselben Kunden.') ?></label>
+        <div class="bx-tablewrap"><table class="bx-table">
+          <thead><tr><th>Kunde</th><th>Version</th><th>Design</th><th class="bx-num">physisch</th><th class="bx-num">bezahlt</th></tr></thead>
+          <tbody>
+          <?php foreach ($__kes as $__ke):
+              $__keBi = $__ke['kunde_id'] ? etikett_bestand_info((int)$id, (int)$__ke['kunde_id']) : ['physisch'=>(float)item_bestand((int)$__ke['id'], true), 'bezahlt'=>0];
+              $__keFn = $__ke['dok'] ? (string) scalar("SELECT COALESCE(NULLIF(datei_orig,''),'Etikett-Design') FROM dokument WHERE id=?", [(int)$__ke['dok']]) : ''; ?>
+            <tr>
+              <td><?= $__ke['kunde_id'] ? h((string)$__ke['firma']) : '<span class="muted">ohne Kunde (Altbestand)</span>' ?></td>
+              <td>v<?= (int)$__ke['v'] ?></td>
+              <td><?php if ($__ke['dok']): ?><a href="?p=dokument&id=<?= (int)$__ke['dok'] ?>" download target="_blank" rel="noopener"><?= h($__keFn) ?> &#8681;</a><?php else: ?><span class="muted">noch kein Design freigegeben</span><?php endif; ?></td>
+              <td class="bx-num"><?= number_format((float)$__keBi['physisch'], 0, ',', '.') ?> Stk</td>
+              <td class="bx-num"><?= number_format((float)$__keBi['bezahlt'], 0, ',', '.') ?> Stk</td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table></div>
       </div>
       <?php endif; endif; ?>
       <?= verp_slot('Faltschachtel/Karton', 'karton_id', $VERP_ROLLE['karton'], $p['karton_id'] ?? '') ?>

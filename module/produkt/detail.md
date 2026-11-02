@@ -65,3 +65,5 @@ Oben im Formular eine Auswahl (Radio `extern`): „Eigenes Produkt – Herstellu
 
 ## Zukaufpreis je Packung (St-24)
 Im Panel „Lieferantenpreise (Zukauf)" wird beim Hinzufügen gewählt, ob der Preis **je Packung (fertige Ware)** oder **je Kapsel/Stück (lose)** gilt; bei Handelsware ist „Packung" vorausgewählt. Die Liste zeigt „/Packung" bzw. „/Kapsel".
+## Kundenetiketten je Kunde (Paket Etiketten)
+Im Reiter Verpackung steht unter dem Etikett-Slot die Tabelle **Kundenetiketten je Kunde**: je Kunde die aktuelle Version (v1, v2 ...), das freigegebene Design zum Herunterladen (Druckerei) sowie physischer und bezahlter Bestand. Das Etikett gehoert zu Produkt + Kunde, ein Katalogprodukt mit mehreren Kunden hat mehrere Etiketten (siehe `core/schema.md`). Der Block "Etiketten-Bestand" darueber ist die Summe ueber alle Kunden dieses Produkts.

@@ -369,7 +369,7 @@ function erp_schritt_material(int $pa_id, string $station): array {
                              'menge'=>(float)$pa['menge'], 'einheit'=>'Stk', 'verfuegbar'=>erp_item_bestand($did), 'item_id'=>$did, 'pflicht'=>false];
             break;
         case 'Etikettieren':
-            $eid = (int) (scalar("SELECT etikett_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+            $eid = erp_etikett_item_id($pa_id);   // Kundenetikett DIESES Auftrags (nicht das eines anderen Kunden)
             if ($eid)
                 $zeilen[] = ['name'=> (string) scalar("SELECT name FROM item WHERE id=?", [$eid]), 'detail'=>'Etikett',
                              'menge'=>(float)$pa['menge'], 'einheit'=>'Stk', 'verfuegbar'=>erp_item_bestand($eid), 'item_id'=>$eid, 'pflicht'=>false];
@@ -519,11 +519,35 @@ function erp_etikett_schon_verwendet(string $hash, int $pa_id): int {
     return (int) scalar("SELECT COUNT(DISTINCT objekt_id) FROM dokument
                          WHERE objekt_typ='auftrag' AND typ='etikett' AND datei_hash=? AND objekt_id<>?", [$hash, $auf]);
 }
+// WELCHES Etikett gehört zu diesem Produktionsauftrag? Das KUNDENETIKETT des Auftrags – nie das eines anderen Kunden
+// desselben Katalogprodukts: 1) die an den Auftrag gebundene Version (auftrag.etikett_item_id), 2) das aktuelle
+// Kundenetikett dieses Kunden (item.kunde_id), 3) der Produkt-Slot NUR wenn er ein generisches Etikett ist (kein
+// Kundenetikett eines Fremden). Spiegel von etikett_item_fuer_auftrag_kunde() im Dashboard.
+function erp_etikett_item_id(int $pa_id): int {
+    $pa = one("SELECT produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa || empty($pa['produkt_id'])) return 0;
+    $pid = (int)$pa['produkt_id']; $auf = (int)($pa['auftrag_id'] ?? 0);
+    if ($auf && erp_spalte_da('auftrag', 'etikett_item_id')) {
+        $b = (int) scalar("SELECT COALESCE(etikett_item_id,0) FROM auftrag WHERE id=?", [$auf]);
+        if ($b > 0) return $b;
+    }
+    if ($auf && erp_spalte_da('item', 'kunde_id')) {
+        $k = (int) scalar("SELECT COALESCE(kunde_id,0) FROM auftrag WHERE id=?", [$auf]);
+        if ($k > 0) {
+            $ke = (int) scalar("SELECT id FROM item WHERE verpackung_rolle='etikett' AND produkt_id=? AND kunde_id=? AND COALESCE(gesperrt,0)=0
+                                ORDER BY COALESCE(etikett_version,1) DESC, id DESC LIMIT 1", [$pid, $k]);
+            if ($ke > 0) return $ke;
+        }
+    }
+    $slot = (int) (scalar("SELECT etikett_id FROM produkt WHERE id=?", [$pid]) ?: 0);
+    if ($slot > 0 && (int) scalar("SELECT 1 FROM item WHERE id=? AND verpackung_rolle='etikett' AND produkt_id IS NOT NULL", [$slot])) return 0;   // fremdes Kundenetikett
+    return $slot;
+}
 // Physisches Etikett: angekommen (Bestand frei), in Quarantäne, bestellt oder offen.
 function erp_etikett_status(int $pa_id): array {
     $pa = one("SELECT produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa || empty($pa['produkt_id'])) return ['status'=>'kein_etikett'];
-    $eid = (int) (scalar("SELECT etikett_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+    $eid = erp_etikett_item_id($pa_id);
     if (!$eid) return ['status'=>'kein_etikett'];
     $name = (string) scalar("SELECT name FROM item WHERE id=?", [$eid]);
     $frei = erp_item_bestand($eid);
