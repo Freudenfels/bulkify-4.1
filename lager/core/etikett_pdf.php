@@ -59,6 +59,7 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
                 $erste = false;
                 $c['menge_anzeige'] = (float)($g['menge_verfuegbar'] ?? ($g['menge'] ?? 0));
                 $c['menge_label']   = 'Menge/Karton';
+                $c['inventar_nr']   = (string)($g['inventar_nr'] ?? '');   // Etikettenrolle: 7-stellige Nummer auf den Aufkleber (S-20)
                 if (!empty($g['einheit'])) $c['einheit'] = $g['einheit'];
                 $gurl = $scheme . '://' . $host . '/lager/?p=gebinde&bg=' . (int)$g['id'];
                 $knr  = (int)($g['nummer'] ?? ($gi + 1));
@@ -94,6 +95,46 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
     return $pdf->output();
 }
 
+// === Code 128 (Teilversion B) für die Inventarnummer der Etikettenrollen =====================
+// Die 7-stellige Inventarnummer muss auf den Rollen-Aufkleber – menschenlesbar UND scanbar (Scanner im Lager/Werk
+// liest sie wie den aufgeklebten Maniso-Inventaraufkleber; automatisch vergebene Nummern 9000000… gibt es sonst nur
+// im System, nie auf der Rolle). Muster: je Symbol 6 Elemente (Strich, Lücke, …) in Modulbreiten; Stopp 7 Elemente.
+function lg_code128b_module(string $text): array {
+    static $P = ['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213','221312','231212','112232','122132','122231',
+        '113222','123122','123221','223211','221132','221231','213212','223112','312131','311222','321122','321221','312212','322112','322211','212123',
+        '212321','232121','111323','131123','131321','112313','132113','132311','211313','231113','231311','112133','112331','132131','113123','113321',
+        '133121','313121','211331','231131','213113','213311','213131','311123','311321','331121','312113','312311','332111','314111','221411','431111',
+        '111224','111422','121124','121421','141122','141221','112214','112412','122114','122411','142112','142211','241211','221114','413111','241112',
+        '134111','111242','121142','121241','114212','124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141',
+        '114113','114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'];
+    $codes = [104];                                           // Start B
+    foreach (str_split($text) as $ch) { $v = ord($ch) - 32; $codes[] = ($v >= 0 && $v <= 95) ? $v : 0; }
+    $sum = 104; foreach (array_slice($codes, 1) as $i => $v) $sum += ($i + 1) * $v;
+    $codes[] = $sum % 103;                                    // Prüfsumme
+    $codes[] = 106;                                           // Stopp
+    $mods = [];
+    foreach ($codes as $cd) foreach (str_split($P[$cd]) as $w) $mods[] = (int)$w;
+    return $mods;
+}
+// Barcode zeichnen: Breite $w (inkl. je 10 Modulen Ruhezone), Höhe $h. Striche an geraden Stellen (0,2,4,…).
+function lg_barcode128(MiniPDF $pdf, float $x, float $y, float $w, float $h, string $text, array $color): void {
+    $mods = lg_code128b_module($text);
+    $total = array_sum($mods) + 20;                           // 10 Module Ruhezone links + rechts
+    $mw = $w / $total; $cx = $x + 10 * $mw;
+    foreach ($mods as $i => $bw) {
+        if ($i % 2 === 0) $pdf->rect($cx, $y, $bw * $mw + 0.12, $h, $color);
+        $cx += $bw * $mw;
+    }
+}
+// Inventar-Block (Etikettenrolle): Beschriftung, große Nummer, scanbarer Barcode – in die Box $x/$y/$w (oben links).
+// Höhe des Blocks ca. 14 + $barH mm. Abstände in mm: Beschriftung (Grundlinie +3), Nummer (+$numBase), Barcode darunter.
+function lg_inventar_block(MiniPDF $pdf, callable $mm, string $inv, float $x, float $y, float $w, float $numSize = 20.0, float $barH = 11.0, float $numBase = 11.5): void {
+    $dark = [20, 20, 20]; $muted = [120, 120, 120];
+    $pdf->text($x, $y + $mm(3), 'Inventar-Nr.', 8, false, $muted);
+    $pdf->text($x, $y + $mm($numBase), $inv, $numSize, true, $dark);
+    lg_barcode128($pdf, $x - $mm(1), $y + $mm($numBase + 2.5), $w + $mm(2), $mm($barH), $inv, $dark);
+}
+
 // Kleines Karton-Etikett 100 x 70 mm (quer). QR rechts, Textblock links.
 function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, int $karton, int $gesamt): void {
     $W = $pdf->w; $H = $pdf->h;
@@ -111,6 +152,13 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
         }
     }
     $pdf->textCenter($qx + $qrArea / 2, $qy + $qrArea + $mm(6), 'Karton ' . $karton . ' / ' . $gesamt, 11, true, $dark);
+    // Etikettenrolle: 7-stellige Inventarnummer groß + scanbarer Barcode unter dem QR (rechte Spalte).
+    $invK = trim((string)($c['inventar_nr'] ?? ''));
+    if (preg_match('/^\d{7}$/', $invK)) {
+        $pdf->textCenter($qx + $qrArea / 2, $qy + $qrArea + $mm(10.5), 'Inventar-Nr.', 6.5, false, $muted);
+        $pdf->textCenter($qx + $qrArea / 2, $qy + $qrArea + $mm(15.5), $invK, 12, true, $dark);
+        lg_barcode128($pdf, $qx - $mm(1), $qy + $qrArea + $mm(17.5), $qrArea + $mm(2), $mm(7), $invK, $dark);
+    }
 
     $lx = $mm(4); $tw = $qx - $lx - $mm(3);
     $pdf->text($lx, $mm(7), 'bulkify · Wareneingang', 7, false, $muted);
@@ -154,7 +202,11 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
     $pdf->rectStroke($mm(2), $mm(2), $W - $mm(4), $pdf->h - $mm(4), 0.6, $line);
     $pdf->text($mm(6), $mm(9), 'bulkify · Wareneingang', 9, false, $muted);
 
-    $qrArea = $mm(52); $qx = ($W - $qrArea) / 2; $qy = $mm(12);
+    // Etikettenrolle (7-stellige Inventarnummer): QR kleiner links, daneben Inventar-Block (Nummer groß + scanbarer
+    // Barcode) und „Karton X / N". Ohne Inventarnummer bleibt das Layout wie bisher.
+    $inv = trim((string)($c['inventar_nr'] ?? ''));
+    $mitInv = (bool) preg_match('/^\d{7}$/', $inv);
+    $qrArea = $mm($mitInv ? 36 : 52); $qx = $mitInv ? $mm(6) : ($W - $qrArea) / 2; $qy = $mm(12);
     $m = qr_matrix($url);
     if ($m) {
         $n = count($m); $quiet = 2; $mod = $qrArea / ($n + 2 * $quiet);
@@ -163,9 +215,17 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
             if ($m[$y][$x]) $pdf->rect($qx + ($x + $quiet) * $mod, $qy + ($y + $quiet) * $mod, $mod + 0.3, $mod + 0.3, $dark);
         }
     }
-    $pdf->textCenter($W / 2, $qy + $qrArea + $mm(9), 'Karton ' . $karton . ' / ' . $gesamt, 14, true, $dark);
+    if ($mitInv) {
+        $bx = $qx + $qrArea + $mm(5); $bw = $W - $mm(6) - $bx;
+        lg_inventar_block($pdf, $mm, $inv, $bx, $qy, $bw, 19.0, 11.0, 11.0);
+        $pdf->text($bx, $qy + $qrArea - $mm(1), 'Karton ' . $karton . ' / ' . $gesamt, 14, true, $dark);
+        $yy0 = $qy + $qrArea + $mm(12);
+    } else {
+        $pdf->textCenter($W / 2, $qy + $qrArea + $mm(9), 'Karton ' . $karton . ' / ' . $gesamt, 14, true, $dark);
+        $yy0 = $qy + $qrArea + $mm(17);
+    }
 
-    $lx = $mm(6); $tw = $W - $mm(12); $yy = $qy + $qrArea + $mm(17);
+    $lx = $mm(6); $tw = $W - $mm(12); $yy = $yy0;
     $name = (string)($c['item_name'] ?? '');
     $zeilen = array_slice($pdf->wrap($name, $tw, 15, true), 0, 3);
     foreach ($zeilen as $ln) { $pdf->text($lx, $yy, $ln, 15, true, $dark); $yy += $mm(6.3); }
