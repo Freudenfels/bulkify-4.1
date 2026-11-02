@@ -194,3 +194,5 @@ Der frühere „kundeneigen/Beistellung"-Weg (`item.kundeneigen`, `auftrag.verpa
 `auftrag_bedarf()` richtet sich danach. `auftrag_express_bulk_bestellung()` bestellt entsprechend: fertig →
 Packungen (Stk), bulk+Pulver → kg (Menge×Füllgewicht/1000), bulk+Kapseln → lose Stück. Kein „Gramm als Stk"
 mehr. Umschaltbar am Auftrag (Reiter Produktion, Herstellung; `aktion=zukauf_art_setzen`).
+
+**Bulk-Bestellung Schüttgut in kg/L (S-10):** Der Bulk-Bedarf von Pulver/Granulat/Flüssig/Gel rechnet in g bzw. ml, die Lieferantenpreise gelten je kg bzw. L. `bestellung_erstellen()` und `bestellung_bulk_anlegen()` legen die Position deshalb über `bulk_bestell_menge()` in **kg/L** an (600.000 g -> 600 kg × 14,90 = 8.940 €); die Staffel wird gegen diese kg/L-Menge gelesen. Die Summen „schon bestellt" (`bedarf_bulk`, Bestell-Netting, `auftrag_offener_bedarf`) zählen Positionen in kg/L über `bulk_position_basis_sql()` zurück in g/ml, damit der Bedarf nicht doppelt bestellt wird. Stück-Formen (Kapseln) bleiben unverändert in Stk. Einkaufsliste, Bestell-PDF und Lieferantenportal zeigen damit dieselbe, richtige Summe.

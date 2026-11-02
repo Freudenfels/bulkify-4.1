@@ -8276,14 +8276,16 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
         foreach ($gruppen as $g) {
             $erstePosId = 0;
             foreach ($g['orders'] as $o) {
-                $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                $offen = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                          WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$o['auftrag_id']]);
                 $noch = (float)$o['need'] - $offen;
                 if ($noch <= 1e-6) continue;
-                // Fremdfertigungs-/Zukaufpreis des Lieferanten je Stück als EK-Snapshot übernehmen (sonst 0 -> kein Preis).
-                $bulkEk = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $noch) ?? 0.0) : 0.0;
+                // Fremdfertigungs-/Zukaufpreis des Lieferanten je Einheit als EK-Snapshot übernehmen (sonst 0 -> kein Preis).
+                // Schüttgut (g/ml) wird in kg/L bestellt, passend zum Preis je kg/L (S-10); die Staffel gilt für diese Menge.
+                [$bMenge, $bEinheit] = bulk_bestell_menge($noch, (string)($g['einheit'] ?? 'Stk'));
+                $bulkEk = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $bMenge) ?? 0.0) : 0.0;
                 q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $bulkEk, (string)($g['einheit'] ?? 'Stk'), (int)$o['auftrag_id'], $i++]);
+                  [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $bMenge, $bulkEk, $bEinheit, (int)$o['auftrag_id'], $i++]);
                 if (!$erstePosId) $erstePosId = (int) insert_id();
                 $betroffen[(int)$o['auftrag_id']] = true;
             }
@@ -8292,13 +8294,14 @@ function bestellung_erstellen(array $itemPositionen, array $bulkProduktIds, ?int
             $wunsch = (float)($bulkMenge[(int)$g['produkt_id']] ?? 0);
             $ueber  = $wunsch - (float)$g['zu_bestellen'];
             if ($ueber > 1e-6) {
+                [$uMenge, $uEinheit] = bulk_bestell_menge($ueber, (string)($g['einheit'] ?? 'Stk'));   // gleiche Einheit wie die Produktzeile
                 if ($erstePosId) {
-                    q("UPDATE bestellung_position SET menge=menge+? WHERE id=?", [$ueber, $erstePosId]);
+                    q("UPDATE bestellung_position SET menge=menge+? WHERE id=?", [$uMenge, $erstePosId]);
                 } else {
                     // Kein offener Auftragsbedarf -> reine Vorratsmenge als normale Produktzeile (ohne Auftrag, kein „Puffer").
-                    $bulkEkP = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $ueber) ?? 0.0) : 0.0;
+                    $bulkEkP = $lieferant ? (produkt_zukauf_preis((int)$g['produkt_id'], (int)$lieferant, $uMenge) ?? 0.0) : 0.0;
                     q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-                      [$bid, null, 'Bulk: ' . $g['produkt'], $ueber, $bulkEkP, (string)($g['einheit'] ?? 'Stk'), null, $i++]);
+                      [$bid, null, 'Bulk: ' . $g['produkt'], $uMenge, $bulkEkP, $uEinheit, null, $i++]);
                 }
             }
         }
@@ -8929,6 +8932,21 @@ function produktionsart_letzte(int $produkt_id, ?int $kunde_id = null, int $excl
                 LIMIT 1", [$produkt_id, $exclude_pa_id, (int)($kunde_id ?: 0)]);
     return $row ?: null;
 }
+// Bulk-Schüttgut (Pulver/Granulat/Flüssig/Gel) rechnet der Bedarf in g bzw. ml, die Lieferantenpreise gelten aber je
+// kg bzw. L (Bezugseinheit). Eine Bestellposition mit „600.000 g × 14,90" wäre 1.000-fach zu teuer (S-10) – deshalb wird
+// die Position in kg/L bestellt: [menge, einheit] = [600, 'kg']. Andere Einheiten (Stk …) bleiben unverändert.
+function bulk_bestell_menge(float $menge, string $einheit): array {
+    $e = strtolower(trim($einheit));
+    if ($e === 'g')  return [round($menge / 1000, 3), 'kg'];
+    if ($e === 'ml') return [round($menge / 1000, 3), 'L'];
+    return [$menge, $einheit];
+}
+// SQL-Ausdruck: Menge einer Bulk-Bestellposition in der BEDARFS-Basiseinheit (g/ml). Positionen in kg/L (siehe
+// bulk_bestell_menge, Express-Bestellung) werden ×1000 genommen – sonst würde „600 kg" gegen einen Bedarf von
+// 600.000 g als 600 gezählt und der Bedarf erneut bestellt.
+function bulk_position_basis_sql(string $a = 'bp'): string {
+    return "CASE WHEN LOWER($a.einheit) IN ('kg','l') THEN $a.menge*1000 ELSE $a.menge END";
+}
 function bedarf_bulk(bool $nur_gemeldet = false): array {
     $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.produktionsart='fremd' AND pa.art_festgelegt_am IS NOT NULL"
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
@@ -8965,7 +8983,7 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
     foreach ($grp as $g) {
         $aids = array_keys($g['auftrag_ids']);
         $in = implode(',', array_map('intval', $aids ?: [0]));
-        $bestellt = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $bestellt = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                     WHERE bp.item_id IS NULL AND bp.auftrag_id IN ($in) AND b.status<>'geliefert'");
         // Freier, nicht kundengebundener Fertigware-Bestand dieses Produkts (ohne Item neu anzulegen).
         $lagerItem = (int) scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$g['produkt_id']]);
@@ -8997,7 +9015,7 @@ function bestellung_bulk_anlegen(array $produkt_ids, ?int $lieferant, ?string $d
     foreach ($gruppen as $g) {
         $stockPool = (float)($g['stock'] ?? 0);   // freier Fertigware-Bestand deckt den Bedarf zuerst (FIFO über die Aufträge)
         foreach ($g['orders'] as $o) {
-            $offen = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+            $offen = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                      WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$o['auftrag_id']]);
             $noch = (float)$o['need'] - $offen;
             if ($stockPool > 1e-6 && $noch > 1e-6) {   // vorhandenen Bestand anrechnen
@@ -9005,9 +9023,10 @@ function bestellung_bulk_anlegen(array $produkt_ids, ?int $lieferant, ?string $d
                 $noch -= $ab; $stockPool -= $ab;
             }
             if ($noch <= 1e-6) continue;
-            $ek = produkt_zukauf_preis((int)$g['produkt_id'], $lieferant ?: null, $noch) ?? 0.0;
+            [$bMenge, $bEinheit] = bulk_bestell_menge($noch, (string)($g['einheit'] ?? 'Stk'));   // Schüttgut in kg/L (Preis je kg/L, S-10)
+            $ek = produkt_zukauf_preis((int)$g['produkt_id'], $lieferant ?: null, $bMenge) ?? 0.0;
             q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,?)",
-              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $noch, $ek, (string)($g['einheit'] ?? 'Stk'), (int)$o['auftrag_id'], $i++]);
+              [$bid, null, 'Bulk: ' . $g['produkt'] . ' (' . $o['auftrag_nr'] . ')', $bMenge, $ek, $bEinheit, (int)$o['auftrag_id'], $i++]);
             if ((int)$o['auftrag_id'] > 0)
                 log_aktivitaet('auftrag', (int)$o['auftrag_id'], 'team', 'Bulk (Fremdproduktion) per Bestellung ' . $nummer . $wann . ' bestellt.', 'bestellung', 'bestellung', $bid);
         }
@@ -9082,7 +9101,7 @@ function auftrag_offener_bedarf(int $pa_id): bool {
     if ($pa && ($pa['produktionsart'] ?? 'eigen') === 'fremd') {
         $einh = produktion_stueck_je_packung($pa);   // Fallback auf auftrag.stueck (v3-Import, produkt.einheiten_pro_packung=0)
         $need = (int)$pa['menge'] * $einh;
-        $ordered = (float) scalar("SELECT COALESCE(SUM(bp.menge),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $ordered = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                    WHERE bp.item_id IS NULL AND bp.auftrag_id=? AND b.status<>'geliefert'", [(int)$pa['auftrag_id']]);
         if ($need - $ordered > 1e-6) return true;
     }
