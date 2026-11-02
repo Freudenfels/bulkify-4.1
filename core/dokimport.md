@@ -34,7 +34,17 @@ Rohstoffen (kein Treffer = bleibt offen stehen).
    Dublette. (Grund für frühere Dubletten: Beim Einlesen existierte der neue Rohstoff noch nicht → beide Dateien
    „kein Treffer" → jede legte einen eigenen an. Der Einzel-Knopf „+ Neuer Rohstoff" legt weiterhin bewusst an.)
 4. `dokimport_import($job_id)` – je bestätigter Zeile: Original als **internes** Dokument am Rohstoff
-   (`kunde_sichtbar=0`, nie an Kunde) + `spec_ki_anwenden()` (Charge/Grenzwerte/Kennwerte/Wirkstoffe, additiv).
+   (`kunde_sichtbar=0`, nie an Kunde, **mit `lieferant_id`**) + `spec_ki_anwenden($item,$ki,$lieferant_id)`
+   (Charge mit Lieferant / Grenzwerte / Kennwerte / Wirkstoffe, additiv). Neue Rohstoffe werden dabei
+   automatisch freigegeben (`spec_nach_datenaenderung`, siehe `core/spec_ki.md`).
+
+## Lieferant (Aussteller) je Datei
+Die KI liest den Aussteller der CoA/Spec aus (`lieferant_vorschlag`); beim Einlesen wird er über
+`ek_lieferant_id()` (unscharf gegen `lieferanten.firma`) einem vorhandenen Lieferanten zugeordnet und in
+`dok_import_datei.lieferant_id` (+ Rohname `lieferant_name`) gespeichert. In der Vorschau gibt es je Zeile ein
+Lieferanten-Dropdown (rscombo) zum Korrigieren (`dokimport_lieferant_setzen`) und oben „Lieferant für Rest
+setzen" für alle ohne Erkennung (`dokimport_lieferant_alle(..., nur_leere=true)`). Beim Import wandert die
+Zuordnung auf das Dokument und die (Vorab-)Charge.
 5. `dokimport_abbrechen($job_id)` – nicht übernommene Dateien aus data/uploads entfernen, Job schließen.
 
 ## Duplikate

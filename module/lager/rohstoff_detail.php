@@ -333,6 +333,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'artik
     if (function_exists('bedarf_bump')) bedarf_bump();
     header('Location: ?p=rohstoff&id=' . $ziel . '&merged=1'); exit;
 }
+// Rohstoff löschen (Bereinigung, z. B. Import-Dublette). Nur Admin; abgesichert in rohstoff_loeschen().
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rohstoff_loeschen' && !$neu) {
+    if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&delfehler=' . rawurlencode('Nur Admins dürfen löschen.')); exit; }
+    $r = rohstoff_loeschen((int)$id);
+    if ($r['ok']) { header('Location: ?p=rohstoffe&geloescht=1'); exit; }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=spec&delfehler=' . rawurlencode($r['fehler'] ?? 'Fehler')); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && !$neu) {
     dokument_freigabe_toggle('item', (int)$id, (int)($_POST['dok_id'] ?? 0));
     header('Location: ?p=rohstoff&id=' . $id . '&tab=dok'); exit;
@@ -1363,6 +1370,16 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
         <button class="btn btn-primary" type="submit">Zusammenführen</button>
       </div>
       <p class="muted" style="font-size:12px;margin:8px 0 0">Alle Chargen und Reservierungen dieses Artikels wandern auf den Ziel-Artikel. Dieser Artikel wird danach deaktiviert (gesperrt), nicht gelöscht – Historie bleibt.</p>
+    </form>
+  </div>
+  <?php // Admin: Rohstoff endgültig löschen (z. B. Import-Dublette). Abgesichert; blockiert bei echter Verwendung. ?>
+  <div class="bx-panel" style="border-left:3px solid var(--err,#c0392b)">
+    <h2 style="margin-top:0">Rohstoff löschen <span class="muted" style="font-weight:400;font-size:13px">(endgültig – z. B. versehentliche Dublette)</span></h2>
+    <?php if (isset($_GET['delfehler'])): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b"><?= h((string)$_GET['delfehler']) ?></div><?php endif; ?>
+    <p class="muted" style="font-size:13px;margin-top:0">Löscht diesen Rohstoff samt Wirkstoffen/Kennwerten/Grenzwerten, leeren Chargen und internen Dokumenten. <strong>Blockiert</strong>, wenn er in einer Rezeptur, Bestellung, einem Angebot, in Produktion oder mit Bestand verwendet wird – dann stattdessen oben „zusammenführen". Nicht umkehrbar.</p>
+    <form method="post" onsubmit="return confirm('Diesen Rohstoff endgültig löschen? Das kann nicht rückgängig gemacht werden.');">
+      <input type="hidden" name="aktion" value="rohstoff_loeschen">
+      <button class="btn btn-ghost" type="submit" style="color:#c0392b;border-color:#c0392b">Rohstoff löschen</button>
     </form>
   </div>
   <script>

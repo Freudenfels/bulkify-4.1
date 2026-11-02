@@ -977,6 +977,8 @@ function init_schema(): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('dok_import_datei', 'liest_seit', "DATETIME NULL");   // additiv (beta)
     ensure_column('dok_import_datei', 'dok_hash', "CHAR(64) NULL");     // additiv (beta)
+    ensure_column('dok_import_datei', 'lieferant_id', "INT NULL");      // zugeordneter Lieferant (Aussteller der CoA/Spec)
+    ensure_column('dok_import_datei', 'lieferant_name', "VARCHAR(190) NULL");   // von der KI erkannter Aussteller-Name (Anzeige/Fallback)
 
     // lieferant_alias: viele Lieferantennamen aus den Preislisten sind Kontakt-/Agenten-Namen
     // (Maggi, Diane, Amy ...), die in Wahrheit fuer eine Firma stehen (z. B. Maggi = Wellgreen).
@@ -9745,6 +9747,46 @@ function rezeptur_loeschen(int $id): array {
         $pdo->rollBack();
         return ['ok' => false, 'fehler' => 'Löschen abgebrochen: ' . $e->getMessage()];
     }
+    return ['ok' => true];
+}
+
+// Einen ROHSTOFF löschen (z. B. Import-Dublette). Abgesichert: blockiert, wenn er echt verwendet wird
+// (Rezeptur, Reservierung, Bestand/Chargen mit Menge, Produktion, Bestellung, Angebot). Sonst werden die
+// reinen Nebendaten (Wirkstoffe/Kennwerte/Grenzwerte, leere Chargen + Analysen + Gebinde, interne Dokumente,
+// Lieferantenpreise) mitgelöscht. Rückgabe ['ok'=>bool, 'fehler'=>string]. Für Bereinigung gedacht; wenn
+// Daten erhalten/verschoben werden sollen, stattdessen „Mit anderem Artikel zusammenführen" (artikel_merge).
+function rohstoff_loeschen(int $id): array {
+    $id = (int)$id;
+    $it = $id > 0 ? one("SELECT id, name, kategorie FROM item WHERE id=?", [$id]) : null;
+    if (!$it) return ['ok' => false, 'fehler' => 'Artikel nicht gefunden.'];
+    if ((string)$it['kategorie'] !== 'rohstoff') return ['ok' => false, 'fehler' => 'Hier lassen sich nur Rohstoffe löschen.'];
+    $cnt = fn(string $sql, array $p = []) => (int) scalar($sql, $p);
+    $blocker = [];
+    if ($cnt("SELECT COUNT(*) FROM rezeptur_zutat WHERE item_id=?", [$id])) $blocker[] = 'in Rezeptur(en) verwendet';
+    if (table_exists('reservierung') && $cnt("SELECT COUNT(*) FROM reservierung WHERE item_id=?", [$id])) $blocker[] = 'reserviert';
+    if ($cnt("SELECT COUNT(*) FROM charge WHERE item_id=? AND COALESCE(menge_verfuegbar,0)>0", [$id])) $blocker[] = 'Chargen mit Bestand';
+    if (table_exists('produktion_verbrauch') && $cnt("SELECT COUNT(*) FROM produktion_verbrauch v JOIN charge c ON c.id=v.charge_id WHERE c.item_id=?", [$id])) $blocker[] = 'in Produktion verbraucht';
+    if (table_exists('bestellung_position') && column_exists('bestellung_position', 'item_id') && $cnt("SELECT COUNT(*) FROM bestellung_position WHERE item_id=?", [$id])) $blocker[] = 'in Bestellung(en)';
+    foreach (['item_id', 'rohstoff_id'] as $spalte)
+        if (table_exists('angebot_position') && column_exists('angebot_position', $spalte) && $cnt("SELECT COUNT(*) FROM angebot_position WHERE `$spalte`=?", [$id])) { $blocker[] = 'in Angebot(en)'; break; }
+    if ($blocker) return ['ok' => false, 'fehler' => 'Nicht löschbar – ' . implode(', ', array_unique($blocker)) . '. Stattdessen „Mit anderem Artikel zusammenführen".'];
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        foreach (['item_wirkstoff', 'item_kennwert', 'item_grenzwert'] as $t) if (table_exists($t)) q("DELETE FROM $t WHERE item_id=?", [$id]);
+        if (table_exists('charge_analyse')) q("DELETE FROM charge_analyse WHERE charge_id IN (SELECT id FROM (SELECT id FROM charge WHERE item_id=?) x)", [$id]);
+        if (table_exists('charge_gebinde')) q("DELETE FROM charge_gebinde WHERE charge_id IN (SELECT id FROM (SELECT id FROM charge WHERE item_id=?) x)", [$id]);
+        q("DELETE FROM charge WHERE item_id=?", [$id]);
+        if (table_exists('lieferant_preis')) q("DELETE FROM lieferant_preis WHERE item_id=?", [$id]);
+        q("DELETE FROM dokument WHERE objekt_typ='item' AND objekt_id=?", [$id]);
+        q("DELETE FROM item WHERE id=?", [$id]);
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'fehler' => 'Löschen abgebrochen: ' . $e->getMessage()];
+    }
+    log_aktivitaet('item', $id, 'team', 'Rohstoff „' . (string)$it['name'] . '" gelöscht (Bereinigung/Import-Dublette).', 'notiz');
     return ['ok' => true];
 }
 

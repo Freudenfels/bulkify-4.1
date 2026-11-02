@@ -101,6 +101,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($akt === 'unskip') { dokimport_ueberspringen((int)($_POST['datei_id'] ?? 0), false); header('Location: ' . $ret); exit; }
     if ($akt === 'clear')  { dokimport_zuordnung_loeschen((int)($_POST['datei_id'] ?? 0)); $_SESSION['dim_flash'] = ['ok', 'Zuordnung entfernt – du kannst jetzt neu zuordnen oder einen neuen Rohstoff anlegen.']; header('Location: ' . $ret); exit; }
 
+    if ($akt === 'lief_setzen') {
+        dokimport_lieferant_setzen((int)($_POST['datei_id'] ?? 0), (int)($_POST['lieferant_id'] ?? 0));
+        $_SESSION['dim_flash'] = ['ok', (int)($_POST['lieferant_id'] ?? 0) ? 'Lieferant zugeordnet.' : 'Lieferant entfernt.'];
+        header('Location: ' . $ret); exit;
+    }
+    if ($akt === 'lief_alle') {
+        $n = dokimport_lieferant_alle((int)($_POST['job_id'] ?? 0), (int)($_POST['lieferant_id'] ?? 0), !empty($_POST['nur_leere']));
+        $_SESSION['dim_flash'] = ['ok', $n . ' Datei(en) diesem Lieferanten zugeordnet.'];
+        header('Location: ' . $ret); exit;
+    }
+
     if ($akt === 'neu_anlegen') {
         $iid = dokimport_neu_anlegen((int)($_POST['datei_id'] ?? 0));
         $_SESSION['dim_flash'] = $iid ? ['ok', 'Neuer Rohstoff angelegt und zugeordnet.'] : ['fehler', 'Konnte keinen Rohstoff anlegen.'];
@@ -223,6 +234,15 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
     /* ---------- Zustand 3: Match-Vorschau ---------- */
     dokimport_hashes_nachtragen($jobId);        // Inhalts-Hashes nachtragen (aeltere Jobs)
     $zeilen = dokimport_zeilen($jobId);
+    // Lieferanten (Aussteller) für die Zuordnung. Durchsuchbares Dropdown (rscombo).
+    $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+    $liefSelect = function ($selId, string $name = 'lieferant_id') use ($lieferanten) {
+        $out = '<select name="' . $name . '" class="rscombo" data-ph="Lieferant suchen…" style="min-width:190px;font-size:12px"><option value="0">– kein Lieferant –</option>';
+        foreach ($lieferanten as $l) {
+            $out .= '<option value="' . (int)$l['id'] . '"' . ((int)$selId === (int)$l['id'] ? ' selected' : '') . '>' . h((string)$l['firma']) . '</option>';
+        }
+        return $out . '</select>';
+    };
     $importierbar = 0; $ohneTreffer = 0; $dubletten = 0;
     foreach ($zeilen as $z) {
         if ($z['status'] === 'gelesen' && (int)$z['item_id'] > 0) $importierbar++;
@@ -248,6 +268,11 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
             <button class="btn btn-ghost" type="submit" data-busy="lege an…">Alle <?= $ohneTreffer ?> ohne Treffer neu anlegen</button>
           </form>
         <?php endif; ?>
+        <form method="post" style="margin:0;display:flex;gap:6px;align-items:center" title="Setzt den Lieferanten für alle Dateien, bei denen die KI keinen erkannt hat.">
+          <input type="hidden" name="aktion" value="lief_alle"><input type="hidden" name="job_id" value="<?= $jobId ?>"><input type="hidden" name="nur_leere" value="1">
+          <?= $liefSelect(0) ?>
+          <button class="btn btn-ghost" type="submit" data-busy="…">Lieferant für Rest setzen</button>
+        </form>
         <form method="post" style="margin:0" onsubmit="return confirm('<?= $importierbar ?> Dokument(e) übernehmen und an den zugeordneten Rohstoffen hinterlegen?');">
           <input type="hidden" name="aktion" value="import"><input type="hidden" name="job_id" value="<?= $jobId ?>">
           <button class="btn btn-primary" type="submit" data-busy="übernehme…" <?= $importierbar > 0 ? '' : 'disabled' ?>>Alle <?= $importierbar ?> übernehmen</button>
@@ -262,7 +287,7 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
     <div class="bx-panel">
       <div class="bx-tablewrap"><table class="bx-table">
         <thead><tr>
-          <th>Datei</th><th>Typ</th><th>KI-Sicherheit</th><th>Zuordnung (Rohstoff)</th><th>Aktion</th>
+          <th>Datei</th><th>Typ</th><th>KI-Sicherheit</th><th>Zuordnung (Rohstoff)</th><th>Lieferant (Aussteller)</th><th>Aktion</th>
         </tr></thead>
         <tbody>
         <?php foreach ($zeilen as $z):
@@ -315,6 +340,24 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
                     <button class="btn btn-ghost btn-sm" type="submit" data-busy="…" title="Neuen Rohstoff aus den erkannten Stammdaten anlegen">+ Neuer Rohstoff</button>
                   </form>
                 </div>
+              <?php endif; ?>
+            </td>
+            <td style="max-width:230px">
+              <?php if (in_array($st, ['gelesen', 'uebersprungen'], true)): ?>
+                <?php if (!empty($z['lieferant_name']) && (int)$z['lieferant_id'] === 0): ?>
+                  <div class="muted" style="font-size:11px">erkannt: <?= h((string)$z['lieferant_name']) ?><span style="color:var(--warn)"> · kein Treffer</span></div>
+                <?php elseif (!empty($z['lieferant_name'])): ?>
+                  <div class="muted" style="font-size:11px">erkannt: <?= h((string)$z['lieferant_name']) ?></div>
+                <?php endif; ?>
+                <form method="post" style="margin:4px 0 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                  <input type="hidden" name="aktion" value="lief_setzen"><input type="hidden" name="datei_id" value="<?= (int)$z['id'] ?>">
+                  <?= $liefSelect((int)$z['lieferant_id']) ?>
+                  <button class="btn btn-ghost btn-sm" type="submit" data-busy="…">setzen</button>
+                </form>
+              <?php elseif ((int)$z['lieferant_id'] > 0): ?>
+                <?= h((string)$z['lieferant_firma']) ?>
+              <?php else: ?>
+                <span class="muted">–</span>
               <?php endif; ?>
             </td>
             <td style="white-space:nowrap">

@@ -148,3 +148,7 @@ Neuer read-only-Panel im Reiter Lager: **Schwund-Übersicht** (`item_schwund_lis
 Geschrieben wird `schwund` über `schwund_erfassen()` (core/schema.php): protokolliert die Differenz und benachrichtigt – **blind** – Nico nach Plausibilität (gewogen > rechnerisch → immer Hinweis; Schwund > `schwund_grenze_kg` → Hinweis; darunter stiller Eintrag; immer gebucht). Hinweis läuft über die zentrale Admin-Benachrichtigung (Art „wiegen", wichtig) + `mail_team()`. **Noch nicht verdrahtet** in den Werk-Rückgabe-Ablauf (Sub-App) – siehe docs/bericht-2026-10-30.md.
 
 Außerdem neu (Grundlage): Tabelle `charge_gebinde` + `charge_gebinde_liste()` (Gebinde je Charge; Alt-Chargen ohne Gebinde = ein virtuelles Gebinde mit aktueller Menge).
+
+## Zusammenführen / Löschen (Admin, unten im Detail)
+- **Mit anderem Artikel zusammenführen** (`artikel_merge`): Chargen + Reservierungen wandern aufs Ziel, dieser Artikel wird **deaktiviert** (gesperrt + `zusammengefuehrt_in`), nicht gelöscht. Einheiten müssen gleich sein.
+- **Rohstoff löschen** (`rohstoff_loeschen` in core/schema.php): endgültiges Löschen (z. B. Import-Dublette). **Blockiert**, wenn der Rohstoff in Rezeptur/Bestellung/Angebot/Produktion oder mit Bestand verwendet wird – dann „zusammenführen". Sonst werden Wirkstoffe/Kennwerte/Grenzwerte, leere Chargen (+ Analysen/Gebinde), interne Dokumente und Lieferantenpreise mitgelöscht (Transaktion). Nur Admin.

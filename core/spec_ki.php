@@ -72,6 +72,7 @@ Gib NUR dieses JSON zurück:
   "wirkstoffe": [ { "name": "", "gehalt_prozent": null } ],
   "kennwerte": [ { "parameter": "", "wert": "" } ],
   "cas_vorschlag": null,
+  "lieferant_vorschlag": null,
   "charge": { "charge_nr": null, "mhd": null, "herstelldatum": null, "menge": null, "einheit": null },
   "werte": [ { "parameter": "", "spezifikation": "", "ergebnis": "", "methode": "" } ],
   "hinweise": [ "kurze Anmerkungen, z. B. unleserliche Stellen" ]
@@ -89,6 +90,7 @@ Regeln, an die du dich halten musst:
 - "wirkstoffe": die standardisierten Wirk-/Leitsubstanzen mit ihrem Gehalt. Der Assay bzw. die Standardisierung gehört hierher (z. B. "Assay [Content of Iron] NLT 3.0% NMT 5.0%", "Standardisation: Iron content" -> name "Eisen", gehalt_prozent 3.0). Bei einer Spanne den unteren Wert (NLT/min) als gehalt_prozent nehmen. Bei "name" den gebräuchlichen DEUTSCHEN bzw. international etablierten Substanznamen verwenden – KEINEN chinesischen/fremdsprachigen Text (z. B. 白藜芦醇 -> "Resveratrol", 维生素C -> "Vitamin C", "Iron" -> "Eisen"). WICHTIG: Entspricht der Wirkstoff einem dieser offiziellen NRV-Nährstoffe, nimm GENAU dessen Schreibweise aus dieser Liste (damit die NRV-Berechnung greift): $nrvNamen. Nur wenn keiner passt, einen eigenen Namen. Keine Verunreinigungen/Trägerstoffe, keine Excipients. Steht kein Gehalt, gehalt_prozent null. Nichts gefunden -> leere Liste.
 - "kennwerte": WENIGE, den Rohstoff identifizierende/standardisierende Kennwerte als Parameter+Wert-Paare – KEINE lange Analysetabelle hier. Der Gehalt/Assay der Leitsubstanz (z. B. bei Ashwagandha die Withanolide, bei Traubenkern OPC) ist der WIRKSTOFFGEHALT und gehört AUSSCHLIESSLICH zu "wirkstoffe" (daraus entsteht die Etikett-/Nährwertzeile "davon Withanolide 5 %"). NICHT als Kennwert aufnehmen – also KEINE Zeile wie "Gehalt (Withanolide)" oder "Assay" in den Kennwerten. Erlaubt als Kennwert: Assay-Spanne/Standardisierung, Extraktverhältnis/DEV (z. B. "10:1"), Trägerstoff, Aussehen/Farbe, pH, Schüttdichte, Partikelgröße/Mesh, Wassergehalt/Loss on Drying, Löslichkeit. NICHT aufnehmen: Sicherheits-/Analysewerte (Schwermetalle, Mikrobiologie, Mykotoxine, Pestizide, Lösungsmittelreste) UND NICHT Nährstoff-/Mineralgehalte (Magnesium, Calcium, Natrium, Kalium, Eisen, Zink, Phosphor …) – AUSSER der Rohstoff IST genau dieser Stoff (dann steht sein Gehalt ohnehin bei "wirkstoffe"). Im Zweifel WEGLASSEN – lieber 2–4 echte Kennwerte als zehn belanglose. "parameter" und "wert" auf DEUTSCH mit lateinischen Zahlen/Einheiten – KEIN chinesischer/fremdsprachiger Text und keine fremde Schrift. Fremdsprachige Bezeichnungen und Werte sinngemäß übersetzen (z. B. Parameter "含量" -> "Gehalt", "目数" -> "Partikelgröße (Mesh)"; Wert "95% 以上通过 40 目筛" -> "95 % passieren 40 mesh"). Substanznamen im Parameter wie bei den Wirkstoffen eindeutschen ("Gehalt (Resveratrol)", nicht 白藜芦醇). Zahlen und Grenzzeichen (≥, ≤, %, :) unverändert lassen (z. B. "≥ 50 %", "10:1").
 - "cas_vorschlag": NUR füllen, wenn im Dokument KEINE CAS-Nummer steht (oder dort "TBA"/"n/a") UND der Rohstoff ein eindeutiger Reinstoff mit allgemein bekannter CAS ist (z. B. Vitamine, definierte Salze/Verbindungen). Dann die bekannte CAS als Vorschlag. Bei Pflanzenextrakten, Mischungen oder Unsicherheit: null. Wenn gesetzt, in "hinweise" vermerken, dass die CAS aus Fachwissen kommt und geprüft werden muss.
+- "lieferant_vorschlag": der Name des AUSSTELLENDEN Unternehmens dieses Dokuments – also der Hersteller/Lieferant, dessen Briefkopf/Logo/Firmenangabe oben oder in der Fußzeile steht (z. B. "Xi'an XYZ Biotech Co., Ltd."). Nur der reine Firmenname, ohne Adresse/Kontakt. Firmenname UNVERÄNDERT lassen (nicht übersetzen, lateinische Schrift beibehalten). Steht kein klarer Aussteller da: null.
 - "werte": jede Zeile der Analysetabelle. "spezifikation" ist der Grenzwert (z. B. "≤ 3 ppm"), "ergebnis" der gemessene Wert. Steht nur eins von beidem, lass das andere leer.
 - Gebräuchliche Parameternamen, wenn sie passen: $params. Sonst den Namen aus dem Dokument.
 - Bei "sicherheit": "niedrig", wenn das Dokument schlecht lesbar ist oder du viel raten müsstest.
@@ -147,6 +149,9 @@ function spec_ki_lesen(string $pfad): array {
     }
     $casVorschlag = trim((string)($d['cas_vorschlag'] ?? ''));
     if ($casVorschlag !== '') $casVorschlag = mb_substr($casVorschlag, 0, 30);
+    // Aussteller/Lieferant (Firmenname) – ohne Backslash (crasht LIKE live), für den Abgleich mit lieferanten.firma.
+    $liefVorschlag = trim(str_replace('\\', '', (string)($d['lieferant_vorschlag'] ?? '')));
+    if ($liefVorschlag !== '') $liefVorschlag = mb_substr($liefVorschlag, 0, 190);
     $charge = [];
     foreach (['charge_nr', 'mhd', 'herstelldatum', 'menge', 'einheit'] as $k) {
         $v = $d['charge'][$k] ?? null;
@@ -162,6 +167,7 @@ function spec_ki_lesen(string $pfad): array {
         'wirkstoffe'  => $wirkstoffe,
         'kennwerte'   => $kennwerte,
         'cas_vorschlag' => $casVorschlag,
+        'lieferant_vorschlag' => $liefVorschlag,
         'charge'      => $charge,
         'werte'       => $werte,
         'hinweise'    => array_slice(array_map(fn($h) => mb_substr(trim((string)$h), 0, 300), (array)($d['hinweise'] ?? [])), 0, 8),

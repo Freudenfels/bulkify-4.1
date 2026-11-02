@@ -98,9 +98,15 @@ function dokimport_worker(int $job_id): void {
               [mb_substr((string)($r['fehler'] ?? 'KI-Fehler'), 0, 255), $datei_id]);
         } else {
             $m = spec_ki_match_item($r);
-            q("UPDATE dok_import_datei SET status='gelesen', typ=?, sicherheit=?, item_id=?, quelle=?, ki_json=?, fehler=NULL WHERE id=?",
+            // Aussteller/Lieferant aus dem Dokument gegen die vorhandenen Lieferanten abgleichen (ek_lieferant_id,
+            // unscharf über lieferanten.firma). Treffer wird vorbelegt; der Name bleibt zur Anzeige/Korrektur stehen.
+            $liefName = trim((string)($r['lieferant_vorschlag'] ?? ''));
+            require_once BX_ROOT . '/core/ek_ki.php';
+            $liefId = ($liefName !== '' && function_exists('ek_lieferant_id')) ? ek_lieferant_id($liefName) : null;
+            q("UPDATE dok_import_datei SET status='gelesen', typ=?, sicherheit=?, item_id=?, quelle=?, lieferant_id=?, lieferant_name=?, ki_json=?, fehler=NULL WHERE id=?",
               [(string)($r['typ'] ?? 'unklar'), (string)($r['sicherheit'] ?? 'mittel'),
-               $m['item_id'] ?: null, $m['quelle'], json_encode($r, JSON_UNESCAPED_UNICODE), $datei_id]);
+               $m['item_id'] ?: null, $m['quelle'], $liefId ?: null, ($liefName !== '' ? mb_substr($liefName, 0, 190) : null),
+               json_encode($r, JSON_UNESCAPED_UNICODE), $datei_id]);
         }
     }
     // Fortschritt zaehlen.
@@ -130,7 +136,7 @@ function dokimport_aktiver_job(): ?array {
 //  dup_vorher> 0: dieselbe Datei kam in DIESEM Stapel bereits frueher vor (Dublette im Upload)
 function dokimport_zeilen(int $job_id): array {
     return all(
-        "SELECT di.*, it.name AS item_name, it.artikelnummer AS item_nr,
+        "SELECT di.*, it.name AS item_name, it.artikelnummer AS item_nr, lf.firma AS lieferant_firma,
                 (SELECT COUNT(*) FROM dokument dk
                    WHERE di.dok_hash IS NOT NULL AND dk.datei_hash = di.dok_hash) AS dup_dok,
                 (SELECT COUNT(*) FROM dok_import_datei d2
@@ -138,6 +144,7 @@ function dokimport_zeilen(int $job_id): array {
                      AND d2.job_id = di.job_id AND d2.id < di.id) AS dup_vorher
          FROM dok_import_datei di
          LEFT JOIN item it ON it.id = di.item_id
+         LEFT JOIN lieferanten lf ON lf.id = di.lieferant_id
          WHERE di.job_id=? ORDER BY di.id",
         [$job_id]
     );
@@ -163,6 +170,20 @@ function dokimport_duplikate_ueberspringen(int $job_id): int {
         }
     }
     return $n;
+}
+
+// Einer Zeile einen Lieferanten (Aussteller der CoA/Spec) zuordnen bzw. entfernen (0 = entfernen).
+function dokimport_lieferant_setzen(int $datei_id, int $lieferant_id): void {
+    if ($datei_id <= 0) return;
+    q("UPDATE dok_import_datei SET lieferant_id=? WHERE id=?", [$lieferant_id ?: null, $datei_id]);
+}
+// Einen Lieferanten auf ALLE Zeilen eines Jobs setzen (nur noch nicht importierte). $nur_leere=true: nur dort,
+// wo noch kein Lieferant steht (die KI-Erkennung nicht überschreiben). Rueckgabe: Anzahl gesetzter Zeilen.
+function dokimport_lieferant_alle(int $job_id, int $lieferant_id, bool $nur_leere = false): int {
+    if ($job_id <= 0 || $lieferant_id <= 0) return 0;
+    $sql = "UPDATE dok_import_datei SET lieferant_id=? WHERE job_id=? AND status IN ('offen','liest','gelesen')"
+         . ($nur_leere ? " AND (lieferant_id IS NULL OR lieferant_id=0)" : "");
+    return q($sql, [$lieferant_id, $job_id])->rowCount();
 }
 
 // Eine Zeile manuell einem Rohstoff zuordnen (Name oder Artikelnummer). Rueckgabe: true bei Treffer.
@@ -292,12 +313,13 @@ function dokimport_import(int $job_id): array {
         $datei = basename((string)$z['pfad']);               // liegt bereits in data/uploads
         $titel = ($typ === 'coa' ? 'CoA' : 'Spezifikation') . ' (Import)';
         $hash  = (string)($z['dok_hash'] ?? '') ?: null;   // damit der Inhalt kuenftig als Duplikat erkannt wird
-        q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar,datei_hash) VALUES ('item',?,?,?,?,?,0,?)",
-          [$item_id, $typ, $titel, $datei, mb_substr((string)$z['dateiname'], 0, 255), $hash]);
+        $liefId = (int)($z['lieferant_id'] ?? 0) ?: null;  // Aussteller (erkannt/zugeordnet)
+        q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar,datei_hash,lieferant_id) VALUES ('item',?,?,?,?,?,0,?,?)",
+          [$item_id, $typ, $titel, $datei, mb_substr((string)$z['dateiname'], 0, 255), $hash, $liefId]);
         $dok_id = (int) insert_id();
 
-        spec_ki_merken($dok_id, $ki);          // Rohvorschlag am Dokument (nachvollziehbar)
-        spec_ki_anwenden($item_id, $ki);       // Charge/Grenzwerte/Kennwerte/Wirkstoffe am Rohstoff (additiv)
+        spec_ki_merken($dok_id, $ki);              // Rohvorschlag am Dokument (nachvollziehbar)
+        spec_ki_anwenden($item_id, $ki, $liefId);  // Charge (mit Lieferant)/Grenzwerte/Kennwerte/Wirkstoffe, additiv
 
         q("UPDATE dok_import_datei SET status='importiert' WHERE id=?", [(int)$z['id']]);
         $importiert++;

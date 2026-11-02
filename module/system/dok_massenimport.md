@@ -26,5 +26,13 @@ automatisch wieder an (nur wenn nichts „in Arbeit", aber noch „wartend" ist)
 - Kein Treffer = Zeile bleibt offen (kein automatisches Neuanlegen von Rohstoffen).
 - Braucht die KI (nur auf Server/beta/live eingerichtet); lokal ist der Upload deaktiviert.
 
+## Lieferant (Aussteller)
+Eigene Spalte „Lieferant (Aussteller)" in der Vorschau. Die KI erkennt den Aussteller (`lieferant_vorschlag`),
+der Import gleicht ihn mit den vorhandenen Lieferanten ab (`ek_lieferant_id`) und belegt das Dropdown (rscombo)
+vor; „erkannt: …" zeigt den Rohnamen, „· kein Treffer" wenn keiner passte. Pro Zeile korrigierbar
+(`lief_setzen`), oben „Lieferant für Rest setzen" (`lief_alle`, nur Zeilen ohne Zuordnung). Beim Import wandert
+die Zuordnung auf Dokument + Charge. Details: `core/dokimport.md`.
+
 ## PRG-Aktionen
-`upload`, `zuordnen`, `skip`/`unskip`, `import`, `abbrechen` – alle mit Redirect auf `?p=dok_massenimport`.
+`upload`, `zuordnen`, `skip`/`unskip`, `lief_setzen`, `lief_alle`, `neu_anlegen`/`neu_alle` (mit Dubletten-Schutz),
+`import`, `abbrechen` – alle mit Redirect auf `?p=dok_massenimport`.
