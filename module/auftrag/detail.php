@@ -135,12 +135,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 // einkaufbar, bei Nachbestellung wiederverwendet.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'verpackung_kundenspezifisch') {
     if (!(has_role('admin') || has_role('sales'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
-    $pid   = (int) scalar("SELECT COALESCE(produkt_id,0) FROM auftrag WHERE id=?", [$id]);
-    $basis = (int) scalar("SELECT COALESCE(NULLIF(a.verpackung_id,0), (SELECT verpackung_id FROM produkt WHERE id=a.produkt_id)) FROM auftrag a WHERE a.id=?", [$id]);
-    if ($pid > 0 && function_exists('verpackung_kundenspezifisch_sicherstellen')) {
-        $vpk = verpackung_kundenspezifisch_sicherstellen($pid, (int)$basis);
-        if ($vpk > 0) q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vpk, $id]);
-    }
+    // Gleiche Logik wie bei der Annahme: bedruckten Behälter anlegen (Name einmalig, Artikelnummer, Lieferant, EK-Staffel)
+    // und an Auftrag UND Produktionsauftrag binden.
+    if (function_exists('auftrag_verpackung_kundenspezifisch_binden')) auftrag_verpackung_kundenspezifisch_binden($id);
     if (function_exists('bedarf_bump')) bedarf_bump();
     header('Location: ?p=auftrag&id=' . $id . '&vpok=1'); exit;
 }

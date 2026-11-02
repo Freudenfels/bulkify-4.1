@@ -9029,21 +9029,52 @@ function verpackung_kundenspezifisch_sicherstellen(int $produkt_id, int $basis_i
     if (!$b) return 0;
     if (!empty($b['kundenspezifisch']) && (int)($b['produkt_id'] ?? 0) === $produkt_id) return (int)$b['id']; // schon der richtige
     $pname = trim((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$produkt_id])) ?: ('Produkt ' . $produkt_id);
-    $label = trim((string)$b['name']) . ' · bedruckt · ' . $pname;
-    q("INSERT INTO item (name, kategorie, form, verpackungsart, material, volumen_ml, farbe, einheit, ek_preis, preis_bezug,
+    // Name EINMALIG: Der Produktname enthält oft schon den neutralen Behälter („… · TEST Beutel Kraft neutral") –
+    // den Behälter-Namen daraus streichen und „neutral" aus dem Basisnamen nehmen, sonst steht alles doppelt im Namen.
+    $basisName = trim((string)$b['name']);
+    $kern  = trim((string) preg_replace('/\s*\bneutral\b\s*/iu', ' ', $basisName));
+    $pRest = trim((string) preg_replace('/\s*·\s*$|^\s*·\s*/u', '', trim(str_ireplace([$basisName, $kern], '', $pname))));
+    $pRest = trim((string) preg_replace('/(\s*·\s*){2,}/u', ' · ', $pRest), " ·");
+    $label = $kern . ' bedruckt' . ($pRest !== '' ? ' · ' . $pRest : '');
+    $label = mb_substr($label, 0, 190);
+    // Artikelnummer (VP-…) wie bei jedem Verpackungsartikel + Hauptlieferant vom neutralen Behälter übernehmen.
+    $anr = naechste_nummer(item_prefix('verpackung'));
+    q("INSERT INTO item (artikelnummer, name, kategorie, form, verpackungsart, material, volumen_ml, farbe, einheit, ek_preis, preis_bezug,
                          verpackung_rolle, karton_item_id, max_fuellgewicht_g, etikett_format, etikett_druck, etikett_final,
-                         hoehe_mm, durchmesser_mm, breite_mm, tiefe_mm, gewicht_g, produkt_id, kundenspezifisch, notiz)
-       VALUES (?, 'verpackung', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
-      [$label, $b['form'] ?? 'pulver', $b['verpackungsart'] ?? null, $b['material'] ?? null, $b['volumen_ml'] ?? null,
+                         hoehe_mm, durchmesser_mm, breite_mm, tiefe_mm, gewicht_g, haupt_lieferant_id, produkt_id, kundenspezifisch, notiz)
+       VALUES (?, ?, 'verpackung', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+      [$anr, $label, $b['form'] ?? 'pulver', $b['verpackungsart'] ?? null, $b['material'] ?? null, $b['volumen_ml'] ?? null,
        $b['farbe'] ?? null, $b['einheit'] ?? 'Stk', $b['ek_preis'] ?? 0, $b['preis_bezug'] ?? 'Stück', $b['verpackung_rolle'] ?? 'primaer',
        $b['karton_item_id'] ?? null, $b['max_fuellgewicht_g'] ?? null, $b['etikett_format'] ?? null, $b['etikett_druck'] ?? null,
        $b['etikett_final'] ?? null, $b['hoehe_mm'] ?? null, $b['durchmesser_mm'] ?? null, $b['breite_mm'] ?? null,
-       $b['tiefe_mm'] ?? null, $b['gewicht_g'] ?? null, $produkt_id,
-       'Bedruckter, kundenspezifischer Behälter zu Produkt ' . $pname]);
+       $b['tiefe_mm'] ?? null, $b['gewicht_g'] ?? null, $b['haupt_lieferant_id'] ?? null, $produkt_id,
+       'Bedruckter, kundenspezifischer Behälter zu Produkt ' . $pname . '. EK-Staffel vom neutralen Behälter ' . ($b['artikelnummer'] ?? ('#' . $b['id'])) . ' als STARTWERT übernommen – bitte auf den Druckpreis anpassen.']);
     $nid = (int) insert_id();
+    // EK-Staffeln (Behälter-EK je Bestellmenge + Lieferantenpreise) als Startwert kopieren, damit der Artikel sofort einkaufbar ist.
+    foreach (all("SELECT menge_ab, ek_preis, lieferant_id FROM pack_ek_staffel WHERE item_id=?", [(int)$b['id']]) as $st)
+        q("INSERT INTO pack_ek_staffel (item_id, menge_ab, ek_preis, lieferant_id) VALUES (?,?,?,?)", [$nid, (int)$st['menge_ab'], $st['ek_preis'], $st['lieferant_id']]);
+    if (table_exists('lieferant_preis'))
+        foreach (all("SELECT lieferant_id, menge_ab, preis, waehrung, lieferant_name FROM lieferant_preis WHERE item_id=?", [(int)$b['id']]) as $lp)
+            q("INSERT INTO lieferant_preis (item_id, lieferant_id, menge_ab, preis, waehrung, stand, lieferant_name, quelle) VALUES (?,?,?,?,?,CURDATE(),?,'kopie_neutral')",
+              [$nid, $lp['lieferant_id'], $lp['menge_ab'], $lp['preis'], $lp['waehrung'] ?: 'EUR', $lp['lieferant_name']]);
     q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$nid, $produkt_id]);
     if (function_exists('bedarf_bump')) bedarf_bump();
     return $nid;
+}
+// Den bedruckten, kundenspezifischen Behälter an den AUFTRAG binden – inkl. seines Produktionsauftrags (sonst blieben
+// PA, Laufzettel und Werk-App auf dem neutralen Beutel). Gemeinsam für Annahme-Hook UND den manuellen Knopf am Auftrag.
+// Rückgabe: item-id des bedruckten Behälters (0 = nichts getan).
+function auftrag_verpackung_kundenspezifisch_binden(int $auftrag_id): int {
+    $a = one("SELECT COALESCE(produkt_id,0) AS pid, COALESCE(verpackung_id,0) AS vp FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$a || (int)$a['pid'] <= 0) return 0;
+    $basis = (int)$a['vp'] ?: (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$a['pid']]);
+    $vpk = verpackung_kundenspezifisch_sicherstellen((int)$a['pid'], $basis);
+    if ($vpk > 0) {
+        q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vpk, $auftrag_id]);
+        q("UPDATE produktionsauftrag SET verpackung_id=? WHERE auftrag_id=? AND status NOT IN ('erledigt','storniert')", [$vpk, $auftrag_id]);
+        if (function_exists('bedarf_bump')) bedarf_bump();
+    }
+    return $vpk;
 }
 // Nach einer Etikett-Freigabe aufrufen: bindet das freigegebene Design an die aktuelle Version – oder legt
 // bei einem NEUEN Design (abweichende Signatur) eine neue Version an und sperrt die alte. Bindet den Auftrag
@@ -10007,14 +10038,17 @@ function auftrag_name_snapshot(int $auftrag_id): void {
 // Angebots als „bedruckt, kundenspezifisch" markiert, entsteht erst JETZT ein eigener Behälter-Lagerartikel am
 // Produkt (wie Glas + Etikett) – getrennt vom Standard-Beutel, einkaufbar, bei Nachbestellung wiederverwendet.
 // Idempotent. Rückgabe: die (ggf. neue) verpackung_id des Auftrags.
-function auftrag_annahme_etikett_verpackung(int $auftrag_id, int $angebot_id, int $produkt_id, int $kunde_id, int $verp_id): int {
+// $gruppe: gewählte Angebots-Option (Positions-Weg) – nur deren Verpackungs-Position + gruppenlose zählen.
+function auftrag_annahme_etikett_verpackung(int $auftrag_id, int $angebot_id, int $produkt_id, int $kunde_id, int $verp_id, ?string $gruppe = null): int {
     if ($auftrag_id <= 0 || $produkt_id <= 0) return $verp_id;
     $etId = kundenetikett_sicherstellen($produkt_id, $kunde_id ?: null, $verp_id);
     if ($etId > 0) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$etId, $auftrag_id]);
-    $kspez = (int) scalar("SELECT COALESCE(MAX(kundenspezifisch),0) FROM angebot_position WHERE angebot_id=? AND quelle='verpackung'", [$angebot_id]);
+    $grp = ($gruppe !== null && $gruppe !== '') ? " AND (TRIM(COALESCE(gruppe,''))=? OR TRIM(COALESCE(gruppe,''))='')" : '';
+    $kspez = (int) scalar("SELECT COALESCE(MAX(kundenspezifisch),0) FROM angebot_position WHERE angebot_id=? AND quelle='verpackung'" . $grp,
+                          $grp !== '' ? [$angebot_id, $gruppe] : [$angebot_id]);
     if ($kspez === 1) {
-        $vpk = verpackung_kundenspezifisch_sicherstellen($produkt_id, $verp_id);
-        if ($vpk > 0) { q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vpk, $auftrag_id]); $verp_id = $vpk; }
+        $vpk = auftrag_verpackung_kundenspezifisch_binden($auftrag_id);   // Auftrag + Produktionsauftrag + Name/Nr./Lieferant/EK
+        if ($vpk > 0) $verp_id = $vpk;
     }
     return $verp_id;
 }
@@ -11331,6 +11365,11 @@ function auftrag_aus_positionen(int $angebot_id, ?string $gruppe = null): ?int {
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$pid, (int)($a['kunde_id'] ?? 0))) as $i => $station)
         q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+    // Annahme-Hook (wie auftrag_aus_angebot): Kundenetikett v1 (je Produkt+KUNDE) entsteht JETZT bei der Annahme –
+    // nicht erst bei der Freigabe – und ein als „bedruckt, kundenspezifisch" markierter Behälter wird angelegt und an
+    // Auftrag UND Produktionsauftrag gebunden (nach dem PA-Insert, damit auch dessen verpackung_id umgestellt wird).
+    auftrag_annahme_etikett_verpackung((int)$aid, $angebot_id, (int)$pid, (int)$a['kunde_id'],
+                                       $herst['verpackung_id'] ? (int)$herst['verpackung_id'] : 0, $gruppe);
 
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'kunde',
         'Angebot ' . $a['nummer'] . ' angenommen – Produkt ' . scalar("SELECT nummer FROM produkt WHERE id=?", [$pid])
@@ -11380,6 +11419,8 @@ function auftrag_aus_zelle(int $angebot_id, int $stueck, int $verp_id, int $best
       [naechste_nummer('PR'), $aid, $a['kunde_id'], $bestellt, $menge, $stueck, $verp_id, 'fremd', 'vorbereitung']);
     $paid = insert_id();
     foreach (produktionsschritte_fuer($form, true, false, produktion_wege_aufloesen((int)$bestellt, (int)($a['kunde_id'] ?? 0))) as $i => $station) q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$paid, $station, $i]);
+    // Annahme-Hook (wie auftrag_aus_angebot): Kundenetikett v1 je Produkt+KUNDE + ggf. bedruckter Behälter bei der Annahme.
+    auftrag_annahme_etikett_verpackung((int)$aid, $angebot_id, (int)$bestellt, (int)$a['kunde_id'], (int)$verp_id);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Angebot bestätigt (' . $stueck . ' Stück/Pkg × ' . $menge . '), Auftrag + Rechnung + Produktion erzeugt.', 'auftrag', 'auftrag', $aid);
     return $aid;
 }
