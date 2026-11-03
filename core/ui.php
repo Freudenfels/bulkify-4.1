@@ -126,7 +126,9 @@ function bx_tabs(array $tabs, string $aktiv, string $baseUrl): void {
  Liste rendern.
  $cols: ['key' => ['label'=>..,'sort'=>bool,'num'=>bool,'render'=>fn($row)=>string]]
  $rows: array of assoc rows
- $opts: ['baseUrl'=>?p=..., 'sort'=>aktuelleSpalte, 'dir'=>'asc|desc', 'rowUrl'=>fn($row)=>href, 'empty'=>text]
+ $opts: ['baseUrl'=>?p=..., 'sort'=>aktuelleSpalte, 'dir'=>'asc|desc', 'rowUrl'=>fn($row)=>href, 'empty'=>text,
+         'group'=>fn($row)=>HTML-Zwischenüberschrift (optional; neue Überschrift, sobald sich der Wert ändert –
+                  Zeilen müssen dafür schon nach der Gruppe sortiert sein)]
 */
 function bx_table(array $cols, array $rows, array $opts = []): void {
     $baseUrl = $opts['baseUrl'] ?? '';
@@ -154,7 +156,15 @@ function bx_table(array $cols, array $rows, array $opts = []): void {
     if (!$rows) {
         echo '<tr><td colspan="' . count($cols) . '" class="muted">' . h($opts['empty'] ?? 'Keine Einträge.') . '</td></tr>';
     }
+    $group = $opts['group'] ?? null; $lastGroup = null;
     foreach ($rows as $row) {
+        if ($group) {
+            $g = (string) $group($row);
+            if ($g !== $lastGroup) {
+                echo '<tr class="bx-grouprow"><td colspan="' . count($cols) . '" style="background:var(--panel-2);padding-top:14px">' . $g . '</td></tr>';
+                $lastGroup = $g;
+            }
+        }
         $href = $rowUrl ? $rowUrl($row) : null;
         echo '<tr' . ($href ? ' style="cursor:pointer" onclick="location.href=\'' . h($href) . '\'"' : '') . '>';
         foreach ($cols as $key => $c) {

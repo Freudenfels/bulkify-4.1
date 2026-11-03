@@ -6,10 +6,13 @@ require_once BX_ROOT . '/core/schema.php';
 seed_produkt_if_empty();
 
 $q    = trim($_GET['q'] ?? '');
-$sort = $_GET['sort'] ?? 'aktualisiert';
-$dir  = $_GET['dir']  ?? 'desc';
+// Standard: nach Rezeptur gruppiert (alle Größen/Verpackungen einer Rezeptur untereinander). Ein Klick auf eine
+// Spaltenüberschrift sortiert die Liste flach wie bisher.
+$sort = $_GET['sort'] ?? 'rezeptur';
+$dir  = $_GET['dir']  ?? 'asc';
+$gruppiert = $sort === 'rezeptur';
 
-$rows = all("SELECT p.*, k.firma AS kunde_firma, r.name AS rezeptur_name, v.name AS verpackung_name
+$rows = all("SELECT p.*, k.firma AS kunde_firma, r.name AS rezeptur_name, r.nummer AS rezeptur_nummer, v.name AS verpackung_name
              FROM produkt p
              LEFT JOIN kunden k ON k.id=p.kunde_id
              LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
@@ -23,7 +26,15 @@ if ($q !== '') {
         return false;
     });
 }
-$rows = bx_sort_rows($rows, $sort, $dir);
+if ($gruppiert) {
+    // Rezeptur (Name, dann Nummer), darin Einheiten/Packung, Verpackung, Nummer. Produkte ohne Rezeptur ans Ende.
+    usort($rows, fn($a, $b) =>
+        [empty($a['rezeptur_id']), mb_strtolower((string)$a['rezeptur_name']), (string)$a['rezeptur_nummer'], (float)$a['einheiten_pro_packung'], mb_strtolower((string)$a['verpackung_name']), (string)$a['nummer']]
+        <=>
+        [empty($b['rezeptur_id']), mb_strtolower((string)$b['rezeptur_name']), (string)$b['rezeptur_nummer'], (float)$b['einheiten_pro_packung'], mb_strtolower((string)$b['verpackung_name']), (string)$b['nummer']]);
+} else {
+    $rows = bx_sort_rows($rows, $sort, $dir);
+}
 
 $statusBadge = function($r) {
     return match ($r['status']) {
@@ -55,6 +66,7 @@ if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="paddi
   <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Nummer, Produkt, Kunde …">
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
   <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=produkte">zurücksetzen</a><?php endif; ?>
+  <?php if (!$gruppiert): ?><a class="btn btn-ghost btn-sm" href="?p=produkte<?= $q !== '' ? '&q=' . h(urlencode($q)) : '' ?>">Nach Rezeptur gruppieren</a><?php endif; ?>
 </form>
 <?php
 bx_table($cols, array_values($rows), [
@@ -63,5 +75,8 @@ bx_table($cols, array_values($rows), [
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=produkt&id=' . $r['id'],
     'empty'   => 'Keine Produkte gefunden.',
+    'group'   => $gruppiert ? fn($r) => !empty($r['rezeptur_id'])
+        ? '<span class="muted" style="font-family:var(--mono)">' . h((string)$r['rezeptur_nummer']) . '</span> &nbsp;' . h((string)$r['rezeptur_name'])
+        : '<span class="muted">Ohne Rezeptur</span>' : null,
 ]);
 render_footer();
