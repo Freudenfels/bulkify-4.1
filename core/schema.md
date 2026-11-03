@@ -350,3 +350,5 @@ an den Beutel (`item.etikett_dokument_id`/`etikett_datei_sig`) statt eine Etiket
 Beutel (`bedarf_aggregiert()['druck']`) ist erst bestellbar, wenn alle Aufträge mit ihm freigegeben sind.
 
 `produkt_verpackung_items()`: bei bedrucktem Behälter (vollbedruckter Beutel) keine Etikett-Position – auch nicht automatisch aus dem Behälter abgeleitet (03.11.2026).
+
+`produkt_verpackung_items()`: steht im Etikett-Slot ein **Kundenetikett** (Lagerartikel je Produkt + Kunde, ohne eigenen Preis – evtl. eines anderen Kunden), wird für Preis, Angebotspositionen und PPWR das neutrale **Maß-Etikett** genommen (`etikett_vorlage_id`, sonst `etikett_id_fuer_behaelter()`). Vorher wurde das Etikett dann mit 0 € gerechnet (03.11.2026).

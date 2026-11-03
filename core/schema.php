@@ -4935,6 +4935,12 @@ function produkt_verpackung_items(int $produkt_id, ?int $verp_override = null): 
     if ($verp_override) $p['verpackung_id'] = $verp_override;
     // Vollbedruckter Behälter: der Druck ersetzt das Etikett -> keine Etikett-Position/kein Etikett-Preis (03.11.2026).
     if (!empty($p['verpackung_id']) && verpackung_ist_bedruckt((int)$p['verpackung_id'])) $p['etikett_id'] = null;
+    // Kundenetikett im Slot (Lagerartikel je Produkt + Kunde, OHNE eigenen Preis, evtl. sogar eines anderen Kunden):
+    // für Preis/Positionen/PPWR gilt das neutrale Maß-Etikett mit seiner EK-Staffel – die Vorlage des Kundenetiketts,
+    // sonst das passende Etikett zum Behälter. Sonst würde das Etikett mit 0 € gerechnet (03.11.2026).
+    elseif (!empty($p['etikett_id']) && ($ke = one("SELECT etikett_vorlage_id FROM item WHERE id=? AND verpackung_rolle='etikett' AND produkt_id IS NOT NULL", [(int)$p['etikett_id']]))) {
+        $p['etikett_id'] = (int)($ke['etikett_vorlage_id'] ?? 0) ?: (!empty($p['verpackung_id']) ? (etikett_id_fuer_behaelter((int)$p['verpackung_id']) ?: null) : null);
+    }
     // Kein Etikett am Produkt hinterlegt? Passendes Etikett automatisch aus dem Behälter ableiten (Maße/Endformat
     // am Behälter, wie v3) – so erscheint das Etikett als Position + Preis, ohne es am Produkt pflegen zu müssen.
     elseif (empty($p['etikett_id']) && !empty($p['verpackung_id'])) {
