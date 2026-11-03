@@ -129,3 +129,5 @@ Gleiche Zahl wie Material-Übersicht (Auftragsseite) und `produktion_bereitschaf
 
 ## Quarantäne statt „fehlt" (Nacht 1)
 Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … – freigeben" (wartet auf QM) statt rot „fehlt". Reicht die Quarantäne nicht, bleibt „fehlt" mit Hinweis auf den Quarantäne-Teil. Dashboard-Helfer `bx_fehlt_quar()` (core/ui.php). Produktion bleibt bis zur Freigabe blockiert.
+
+Pulver-Panel (03.11.2026): Die Kontrollzeile heißt jetzt „≈ N Tagesdosen à x g (Rezeptur = 1 Tagesdosis)“ (`tagesdosen_txt()`) statt Portionen. Sie ist nur Info, gerechnet wird mit der Füllmenge in g.

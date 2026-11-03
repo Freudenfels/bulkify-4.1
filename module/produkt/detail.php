@@ -415,7 +415,8 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
       else                                                  { $epLbl = 'Einheiten je Packung'; $epHint = 'z. B. 120 Kapseln je Dose'; }
     ?>
     <div class="bx-field"><label><span id="einhLabel"><?= h($epLbl) ?></span> <?= bx_hint($epHint) ?></label><input type="number" name="einheiten_pro_packung" id="einheiten" value="<?= $v('einheiten_pro_packung') ?>"></div>
-    <div class="bx-field"><label><span id="intakeLbl">Verzehr je Tag</span> <?= bx_hint('Empfehlung – Basis für % NRV pro Tag und Reichweite. Bei Pulver: Anzahl Portionen pro Tag (Portionsgröße = Rezeptur je Einheit).') ?></label><input type="number" step="0.5" name="einnahme_pro_tag" id="intake" value="<?= $v('einnahme_pro_tag') ?>"></div>
+    <div class="bx-field" id="intakeFeld"><label>Verzehr je Tag <?= bx_hint('Empfehlung – Basis für % NRV pro Tag und Reichweite. Bei Pulver entfällt das Feld: die Rezeptur ist die Tagesdosis.') ?></label><input type="number" step="0.5" name="einnahme_pro_tag" id="intake" value="<?= $v('einnahme_pro_tag') ?>"></div>
+    <div class="bx-field" id="tdFeld" style="display:none"><label>Tagesdosis <?= bx_hint('Bei Pulver/Granulat ist die Rezeptur genau eine Tagesdosis. Der Kunde gibt die g je Packung an; wie viele Tagesdosen das sind, ist nur eine Info. Gerechnet wird nach Gewicht.') ?></label><div id="tdInfo" style="padding-top:8px">–</div></div>
   </div>
   <div class="bx-grid">
     <div class="bx-field"><label>Haltbarkeit <?= bx_hint('Mindesthaltbarkeit des Fertigprodukts, z. B. „24 Monate". Kann per Spec-Upload automatisch gefüllt werden.') ?></label><input type="text" name="haltbarkeit" value="<?= $v('haltbarkeit') ?>" placeholder="z. B. 24 Monate"></div>
@@ -525,7 +526,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
     <h2>Kalkulation &amp; Tages-Deklaration</h2>
     <div class="bx-cards" style="margin-bottom:16px">
       <div class="bx-card"><div class="k">Kosten / Packung</div><div class="v" id="k_kosten">–</div></div>
-      <div class="bx-card"><div class="k">Reichweite</div><div class="v" id="k_reichweite">–</div></div>
+      <div class="bx-card"><div class="k" id="k_reichweite_lbl">Reichweite</div><div class="v" id="k_reichweite">–</div></div>
       <div class="bx-card"><div class="k" id="k_gewicht_lbl">Gewicht / Einheit</div><div class="v" id="k_gewicht">–</div></div>
       <div class="bx-card"><div class="k">Verpackung</div><div class="v" id="k_verp" style="font-size:15px">–</div></div>
     </div>
@@ -708,8 +709,8 @@ function verpCheck(rz, vp, einh, kV, vh){
     return;
   }
   if (form==='pulver' || form==='granulat' || form==='stick'){
-    if (!rz.weight){ set('–','',''); return; }
-    var g = rz.weight*einh/1000;
+    if (form==='stick' && !rz.weight){ set('–','',''); return; }
+    var g = form==='stick' ? rz.weight*einh/1000 : einh;   // Pulver/Granulat: Füllmenge in g je Packung (Nico 03.11.2026)
     if (!vp){ set('– keine –','','Füllgewicht je Packung: '+nf(g,1)+' g. Bitte Verpackung wählen.'); return; }
     if (vp.max_g===null||vp.max_g===undefined){ set('kein Füllgewicht','var(--warn)','Verpackung hat kein max. Füllgewicht hinterlegt (benötigt: '+nf(g,1)+' g).'); return; }
     if (g<=vp.max_g){ set('passt','var(--gruen)',nf(g,1)+' g von max. '+nf(vp.max_g,0)+' g.'); return; }
@@ -760,20 +761,26 @@ function recalc(){
   var intake = parseFloat((document.getElementById('intake').value||'').replace(',','.'))||0;
   var kK=document.getElementById('k_kosten'), kR=document.getElementById('k_reichweite'), kG=document.getElementById('k_gewicht'), tb=document.getElementById('deklaration');
   var kV=document.getElementById('k_verp'), vh=document.getElementById('verp_hinweis');
-  // Pulver/Granulat: eine Einheit der Rezeptur = eine Portion -> Beschriftung „Portionen pro Tag (à 9 g)", Portionsgröße in g.
+  // Pulver/Granulat (Nico 03.11.2026): die Rezeptur IST die Tagesdosis, die Packung hat g. Kein „Verzehr je Tag",
+  // gerechnet wird nach Gewicht; „≈ N Tagesdosen je Packung" ist nur Info.
   var pulv = !!rz && (rz.form==='pulver' || rz.form==='granulat');
-  var portG = (pulv && rz.weight) ? nf(rz.weight/1000, (rz.weight%1000)?1:0)+' g' : '';
-  document.getElementById('intakeLbl').textContent = pulv ? ('Portionen pro Tag'+(portG?' (à '+portG+')':'')) : 'Verzehr je Tag';
-  document.getElementById('k_gewicht_lbl').textContent = pulv ? 'Portionsgröße' : 'Gewicht / Einheit';
-  document.getElementById('intakeLabel').textContent = intake
-    ? (pulv ? '(bei '+nf(intake,intake%1?1:0)+' '+(intake===1?'Portion':'Portionen')+'/Tag'+(portG?' à '+portG:'')+')' : '(bei '+nf(intake,intake%1?1:0)+' Einheiten/Tag)') : '';
+  var tdG = (pulv && rz.weight) ? nf(rz.weight/1000, (rz.weight%1000)?1:0)+' g' : '';
+  var tdN = (pulv && rz.weight && einh) ? Math.floor(einh*1000/rz.weight+1e-9) : 0;
+  if (pulv) intake = 1;
+  document.getElementById('intakeFeld').style.display = pulv ? 'none' : '';
+  document.getElementById('tdFeld').style.display = pulv ? '' : 'none';
+  document.getElementById('tdInfo').textContent = pulv ? ((tdG ? tdG+' (= Rezeptur)' : '–')+(tdN ? ' · ≈ '+nf(tdN,0)+' Tagesdosen je Packung' : '')) : '';
+  document.getElementById('k_gewicht_lbl').textContent = pulv ? 'Tagesdosis' : 'Gewicht / Einheit';
+  document.getElementById('k_reichweite_lbl').textContent = pulv ? 'Tagesdosen je Packung' : 'Reichweite';
+  document.getElementById('intakeLabel').textContent = pulv ? (tdG ? '(1 Tagesdosis = '+tdG+')' : '') : (intake ? '(bei '+nf(intake,intake%1?1:0)+' Einheiten/Tag)' : '');
   // EK der ganzen Stückliste (alle Slots)
   var ekVerp=0; SLOTS.forEach(function(id){ var s=getVerp(id); if(s) ekVerp+=s.ek; });
   if (!rz){ kK.textContent='–'; kR.textContent='–'; kG.textContent='–'; kV.textContent='–'; kV.style.color=''; vh.textContent=''; tb.innerHTML='<tr><td colspan="3" class="muted">Rezeptur wählen …</td></tr>'; return; }
-  var costPack = rz.cost*einh + ekVerp;
+  // Pulver: Kosten nach Gewicht = Kosten je g (Rezeptur-Kosten ÷ Rezeptur-Gewicht) × g je Packung.
+  var costPack = (pulv ? (rz.weight ? rz.cost/(rz.weight/1000)*einh : 0) : rz.cost*einh) + ekVerp;
   kK.textContent = einh ? nf(costPack,2)+' €' : '–';
-  kR.textContent = (einh && intake) ? nf(einh/intake,0)+' Tage' : '–';
-  kG.textContent = rz.weight ? (pulv ? portG : nf(rz.weight,0)+' mg') : '–';
+  kR.textContent = pulv ? (tdN ? '≈ '+nf(tdN,0) : '–') : ((einh && intake) ? nf(einh/intake,0)+' Tage' : '–');
+  kG.textContent = rz.weight ? (pulv ? tdG : nf(rz.weight,0)+' mg') : '–';
   verpCheck(rz, vp, einh, kV, vh);
   if (!rz.nutrients.length){ tb.innerHTML='<tr><td colspan="3" class="muted">Diese Rezeptur hat keine deklarierbaren Wirkstoffe.</td></tr>'; return; }
   tb.innerHTML = rz.nutrients.map(function(n){

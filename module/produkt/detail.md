@@ -86,4 +86,15 @@ Bei Pulver/Granulat (eine Rezeptur-Einheit = eine Portion):
 - Die Tagesdosis steht als „(bei 1 Portion/Tag à 9 g)“.
 - „Füllmenge je Packung (g)“ bleibt.
 
-Die Rechnung ist unverändert. Offen bei Nico: Kosten/Packung, Reichweite und Füllgewicht-Prüfung nehmen bei Pulver die Füllmenge (g) noch als Portionszahl.
+Abgelöst durch den Abschnitt unten (Rezeptur = Tagesdosis).
+
+## Pulver/Granulat: Rezeptur = Tagesdosis, Rechnung nach Gewicht (03.11.2026, Nico)
+- Das Feld „Verzehr je Tag“ ist bei Pulver ausgeblendet; der gespeicherte Wert bleibt, wird aber nicht genutzt.
+- Stattdessen steht dort „Tagesdosis: 5 g (= Rezeptur) · ≈ 60 Tagesdosen je Packung“ (nur Info).
+- Kalkulation:
+  - Kosten/Packung = Kosten je g (Rezeptur-Kosten ÷ Rezeptur-Gewicht) × g je Packung.
+  - Kachel „Tagesdosen je Packung ≈ 60“ statt „Reichweite … Tage“.
+  - Kachel „Tagesdosis 5 g“.
+  - Füllgewicht-Prüfung mit den g je Packung selbst (vorher fälschlich Rezeptur-Gewicht × g).
+  - Nährwerte je 1 Tagesdosis.
+- Sticks/Kapseln/Tabletten unverändert.

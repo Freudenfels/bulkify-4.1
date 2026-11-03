@@ -375,11 +375,10 @@ if ($istFuellGewicht && has_role('admin')):
     $portionMg = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=(SELECT rezeptur_id FROM produkt WHERE id=?)", [(int)$pa['produkt_id']]);
     if ($portionMg <= 0) $portionMg = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [(int)($pa['rezeptur_id'] ?? 0)]);
     $portionG = $portionMg > 0 ? $portionMg / 1000.0 : 0.0;
-    $portionen = ($portionG > 0 && $einhProP > 0) ? $einhProP / $portionG : 0.0;
 ?>
   <div class="bx-panel" style="border-left:3px solid var(--gruen)">
     <div style="font-weight:600">Füllmenge je Packung (Pulver)</div>
-    <div class="muted" style="font-size:13px;margin:4px 0 10px">Bei Pulver wird nach <strong>Gewicht</strong> gerechnet: aktuell <strong><?= number_format($einhProP, 0, ',', '.') ?> g</strong> je Packung<?php if ($portionG > 0): ?> &middot; das sind bei <?= rtrim(rtrim(number_format($portionG, 3, ',', '.'), '0'), ',') ?> g je Portion rund <strong><?= rtrim(rtrim(number_format($portionen, 1, ',', '.'), '0'), ',') ?> Portionen</strong><?php endif; ?>. Steht hier versehentlich eine Portionszahl (Alt-/v3-Auftrag), hier die echte Füllmenge in Gramm eintragen.</div>
+    <div class="muted" style="font-size:13px;margin:4px 0 10px">Bei Pulver wird nach <strong>Gewicht</strong> gerechnet: aktuell <strong><?= number_format($einhProP, 0, ',', '.') ?> g</strong> je Packung<?php if ($portionG > 0 && ($tdTxt = tagesdosen_txt((float)$einhProP, $portionMg)) !== ''): ?> &middot; nur zur Kontrolle: <?= h($tdTxt) ?> (Rezeptur = 1 Tagesdosis)<?php endif; ?>. Steht hier versehentlich eine Zahl von Tagesdosen/Portionen (Alt-/v3-Auftrag), hier die echte Füllmenge in Gramm eintragen.</div>
     <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
       <input type="hidden" name="aktion" value="pulver_fuellmenge">
       <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Füllmenge je Packung (g)
