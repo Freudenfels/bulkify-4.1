@@ -4643,12 +4643,41 @@ portal_head('Kundenportal · ' . $k['firma']);
             if ($hit(($p['nummer'] ?? '') . ' ' . ($p['betreff'] ?? '')))
                 $add('Anfrage', ($p['nummer'] ?? '') . ' – ' . (($p['betreff'] ?? '') ?: ucfirst((string)$p['typ'])), 'Anfrage (' . h((string)$p['typ']) . ')', $portalLink('meine_anfragen'), $p['angelegt'] ?? null, '');
         }
+        // Produkte: P-Nummer, Name und Inhaltsstoffe (Rezeptur-Zutat bzw. Rohstoffname, z. B. „Magnesium") – nur Produkte,
+        // die der Kunde auch öffnen darf (gleiche Sichtbarkeit wie die Produktseite).
+        $likeQ = '%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], $q) . '%';
+        $likeK = '%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], $qk) . '%';
+        foreach (all("SELECT DISTINCT p.id, p.nummer, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS name
+                      FROM produkt p LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
+                      LEFT JOIN rezeptur_zutat z ON z.rezeptur_id=p.rezeptur_id LEFT JOIN item i ON i.id=z.item_id
+                      WHERE ((? = 1 AND p.status='aktiv' AND (p.exklusiv=0 OR p.kunde_id=?)) OR p.kunde_id=?
+                             OR EXISTS(SELECT 1 FROM auftrag a WHERE a.produkt_id=p.id AND a.kunde_id=?)
+                             OR EXISTS(SELECT 1 FROM produkt_kundenpreis pk WHERE pk.produkt_id=p.id AND pk.kunde_id=?))
+                        AND (p.nummer LIKE ? ESCAPE '=' OR REPLACE(LOWER(p.nummer),'-','') LIKE ? ESCAPE '=' OR p.name LIKE ? ESCAPE '='
+                             OR p.kundenname LIKE ? ESCAPE '=' OR pkn.name LIKE ? ESCAPE '=' OR z.bezeichnung LIKE ? ESCAPE '=' OR i.name LIKE ? ESCAPE '=')
+                      ORDER BY p.nummer LIMIT 30",
+                     [(int)!empty($k['portal_produkte']), $kid, $kid, $kid, $kid, $likeQ, $likeK, $likeQ, $likeQ, $likeQ, $likeQ, $likeQ]) as $pr)
+            $add('Produkt', (string)$pr['nummer'] . ' – ' . (string)$pr['name'], 'Produkt', $portalLink('produkt') . '&pid=' . (int)$pr['id'], null, 'ok');
         usort($hits, fn($x, $y) => strcmp((string)($y['datum'] ?? ''), (string)($x['datum'] ?? '')));
+        // Stichworte -> passende Seite (Report 9): „Charge", „MHD", „CoA", „Analyse", „Lieferschein", „Rechnung", „Zertifikat" …
+        $stich = [
+            ['w' => ['charge', 'chargen', 'mhd', 'mindesthaltbar', 'haltbarkeit'], 't' => 'Charge & MHD', 's' => 'Je Bestellung unter „Charge & Qualität" und in den Dokumenten', 'h' => $portalLink('dokumente')],
+            ['w' => ['coa', 'analyse', 'analysen', 'labor', 'laboranalyse', 'labortest', 'informationsdokument', 'produktionsbericht', 'bericht'], 't' => 'Dokumente', 's' => 'Informationsdokument, Laboranalysen und Produktionsbericht je Bestellung', 'h' => $portalLink('dokumente')],
+            ['w' => ['lieferschein', 'sendung', 'sendungsnummer', 'tracking', 'versand', 'paket'], 't' => 'Lieferschein & Sendung', 's' => 'Lieferscheine und Sendungsverfolgung je Bestellung', 'h' => $portalLink('dokumente')],
+            ['w' => ['rechnung', 'rechnungen', 'zahlung', 'offen'], 't' => 'Rechnungen', 's' => 'Alle Rechnungen und offene Beträge', 'h' => $portalLink('rechnungen')],
+            ['w' => ['zertifikat', 'zertifikate', 'ifs', 'haccp', 'bio', 'registrierung', 'haftpflicht'], 't' => 'Herstellerzertifikate', 's' => 'Unsere Zertifikate als Hersteller unter Info & Tools', 'h' => $portalLink('info') . '#zertifikate'],
+            ['w' => ['pib', 'produktinfo', 'produktinformation', 'etikett', 'etiketten'], 't' => 'Etiketten & PIB', 's' => 'Etikett-Designs und Produktinformation (PIB) je Bestellung', 'h' => $portalLink('etiketten')],
+            ['w' => ['angebot', 'angebote', 'anfrage', 'anfragen'], 't' => 'Angebote & Anfragen', 's' => 'Offene Angebote und Ihre Anfragen', 'h' => $portalLink('meine_anfragen') . '&oatab=zubestaetigen'],
+        ];
+        $seiten = [];
+        foreach ($stich as $st) foreach ($st['w'] as $w)
+            if ($ql === $w || (mb_strlen($ql) >= 3 && str_starts_with($w, $ql))) { $seiten[] = ['typ' => 'Seite', 'titel' => $st['t'], 'sub' => $st['s'], 'href' => $st['h'], 'datum' => null, 'bfarbe' => '']; break; }
+        $hits = array_merge($seiten, $hits);
     }
 ?>
   <h1 style="margin-bottom:4px">Suche</h1>
   <?php if ($q === ''): ?>
-    <div class="bx-panel"><div class="muted">Tippen Sie oben einen Begriff ein – z. B. eine Bestellnummer, ein Produkt, eine <strong>Chargennummer</strong>, ein <strong>MHD</strong>, ein Angebot oder eine Rechnung.</div></div>
+    <div class="bx-panel"><div class="muted">Tippen Sie oben einen Begriff ein – z. B. eine Bestellnummer, ein Produkt oder eine P-Nummer, einen Inhaltsstoff (z. B. Magnesium), eine <strong>Chargennummer</strong>, ein <strong>MHD</strong> oder Stichworte wie CoA, Lieferschein, Rechnung, Zertifikat.</div></div>
   <?php elseif (!$hits): ?>
     <div class="bx-panel"><div class="muted">Keine Treffer für „<?= h($q) ?>". Versuchen Sie eine Bestellnummer, ein Produkt, eine Charge oder ein Datum (z. B. 03.2028).</div></div>
   <?php else: ?>

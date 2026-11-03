@@ -400,3 +400,5 @@ Filter Produkt, Charge, Bestelldatum von/bis; leerer Zustand mit Erklärung. Inf
 Dokumente“ -> Etiketten) und „Etiketten“ getrennt.
 
 **Herstellerzertifikate (Report 8):** Info & Tools zeigt die sichtbar geschalteten Zertifikate (`zertifikate()`) als Download (`v=zertifikat&id=`, nur objekt_typ='firma', typ='zertifikat', kunde_sichtbar=1).
+
+**Suche mit Stichworten (Report 9, 03.11.2026):** Zusätzlich zu Bestellung/Charge/MHD/Angebot/Rechnung/Anfrage: Produkte über P-Nummer (auch ohne Bindestrich), Name und Inhaltsstoffe (Rezeptur-Zutat/Rohstoffname) – nur sichtbare Produkte (wie Produktseite; LIKE mit ESCAPE '='). Stichworte (Charge, MHD, CoA, Analyse, Lieferschein, Sendung, Rechnung, Zertifikat, PIB, Etikett, Angebot …) liefern oben einen Treffer „Seite“ mit Link auf Dokumente, Rechnungen, Info & Tools (Zertifikate), Etiketten bzw. Angebote.
