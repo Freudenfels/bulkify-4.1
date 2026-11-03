@@ -25,3 +25,5 @@ Wandelt einen Statuswert aus der Datenbank in lesbares Deutsch **mit Umlauten**:
 Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … – freigeben" (wartet auf QM) statt rot „fehlt". Reicht die Quarantäne nicht, bleibt „fehlt" mit Hinweis auf den Quarantäne-Teil. Dashboard-Helfer `bx_fehlt_quar()` (core/ui.php). Produktion bleibt bis zur Freigabe blockiert.
 
 `kunde_nachricht_panel($kunde_id, $auftrag_id, $angebot_id, $dataPanel)`: Verlauf der Kunden-Nachrichten + Antwortformular (aktion=kunde_nachricht) für Auftrag/Angebot.
+
+Dark Mode (03.11.2026): Die Chat-Blasen von `bx_chat()` sind im Dark Mode dunkel getönt (Team grün, Gegenstelle lime) mit heller Schrift. Auch verlinkte Einträge (↗) und das Datum sind lesbar (`public/assets/app.css`). Vorher blieben die Flächen hell, Links nutzten die helle Dark-Mode-Schrift.

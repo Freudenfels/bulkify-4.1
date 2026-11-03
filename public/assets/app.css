@@ -239,8 +239,14 @@ hr.bx{border:none;border-top:1px solid var(--line);margin:var(--sp-5) 0}
 /* Kontrast-Fixes: Elemente, die fest Dunkelgrün nutzen */
 :root[data-theme="dark"] .bx-card .v{color:var(--text)}
 :root[data-theme="dark"] .settabs a.on{color:var(--lime)}
-/* Chat-Bubbles: helle Flächen behalten dunklen Text */
-:root[data-theme="dark"] .bx-msg .bubble{color:#17251b}
+/* Chat-Bubbles im Dark Mode: dunkle, leicht getönte Flächen mit hellem Text – auch Links (↗) und Datum lesbar.
+   Vorher blieben die Flächen hell, Links/Datum nutzten aber die helle Dark-Mode-Schrift (unlesbar). */
+:root[data-theme="dark"] .bx-msg .bubble{color:var(--text)}
+:root[data-theme="dark"] .bx-msg.team .bubble{background:rgba(29,158,117,.16);border-color:rgba(29,158,117,.45)}
+:root[data-theme="dark"] .bx-msg.gegen .bubble{background:rgba(192,242,78,.10);border-color:rgba(192,242,78,.35)}
+:root[data-theme="dark"] .bx-msg .bx-actlink{color:var(--text)}
+:root[data-theme="dark"] .bx-msg .bx-actlink:hover{color:var(--lime)}
+:root[data-theme="dark"] .bx-msg .bx-actlink::after{color:var(--lime)}
 /* Theme-Umschalter (in der dunkelgrünen Sidebar) */
 .bx-themebtn{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--lime);cursor:pointer;padding:6px 0;font:inherit}
 .bx-themebtn:hover{text-decoration:underline}
