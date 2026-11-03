@@ -433,7 +433,7 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
   </div>
 </div>
 
-<?php // Etikettenrollen: je Rolle ein Inventaraufkleber (7 Ziffern) + Menge, optional einem Auftrag zugeordnet.
+<?php // Etikettenrollen: je Rolle ein Inventaraufkleber (8 Ziffern) + Menge, optional einem Auftrag zugeordnet.
 $rollen = function_exists('erp_charge_rollen') ? erp_charge_rollen($id) : [];
 if ($rollen): ?>
 <div class="bx-panel" style="margin-bottom:var(--sp-5)">

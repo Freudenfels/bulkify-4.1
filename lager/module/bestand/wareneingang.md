@@ -15,8 +15,8 @@ Ein Bereich für alles, was reinkommt. Ablauf:
    **Anzahl Rollen**. Begründung (Nico): Beim Wareneingang sieht man nicht, wie viele Etiketten auf welcher Rolle
    sind – deshalb **keine Menge je Rolle und keine Summenprüfung** mehr. Das System **verteilt die Gesamtmenge
    gleichmäßig** auf die Rollen (Rest auf die letzte Rolle; z. B. 1.100 auf 2 = 550+550). Je Rolle lässt sich
-   **optional** ein Maniso-Inventaraufkleber (7 Ziffern) scannen (Enter springt weiter); **leer = Nummer wird
-   automatisch vergeben** (reserviertes Band 9000000–9999999, kollidiert nicht mit physischen Aufklebern).
+   **optional** ein Maniso-Inventaraufkleber (8 Ziffern) scannen (Enter springt weiter); **leer = Nummer wird
+   automatisch vergeben** (reserviertes Band 90000000–99999999, kollidiert nicht mit physischen Aufklebern).
    Blinker/Charge/MHD/Pakete sind ausgeblendet. POST-Felder `p_rollen_zahl[<key>]` (Anzahl) + optional
    `p_rolle_nr[<key>][]` (gescannte Nummern), zugeordnet über `p_key[]`. Beim Buchen: eine Charge (Verpackung,
    frei) + je Rolle ein `charge_gebinde`-Datensatz mit `inventar_nr` und berechneter Menge

@@ -10,4 +10,4 @@ Liefert das Karton-Etikett als PDF (inline). Erzeugung zentral in
 
 Für lautlosen Direktdruck → `?p=druck_job` (Warteschlange) + kombinierte Brücke (SumatraPDF).
 
-**Rollen:** Bei Etikettenrollen (Gebinde mit 7-stelliger Inventarnummer) steht die Nummer jetzt gross und als scanbarer Barcode auf dem Aufkleber (siehe `lager/core/etikett_pdf.md`).
+**Rollen:** Bei Etikettenrollen (Gebinde mit 8-stelliger Inventarnummer) steht die Nummer jetzt gross und als scanbarer Barcode auf dem Aufkleber (siehe `lager/core/etikett_pdf.md`).

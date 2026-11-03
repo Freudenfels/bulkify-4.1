@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             }
         }
 
-        // --- Etikett (Rolle): kein Blinker – je Rolle ein Inventaraufkleber (7 Ziffern) ---------------
+        // --- Etikett (Rolle): kein Blinker – je Rolle ein Inventaraufkleber (8 Ziffern) ---------------
         if ($warenart === 'etikett') {
             if (!$item_id && $name !== '') $item_id = (int) erp_item_anlegen($name, 'verpackung', $einheit ?: 'Stk', 'etikett');
             if (!$item_id) { $fehler[] = 'Zeile ' . ($i + 1) . ': kein Artikel.'; continue; }
@@ -761,7 +761,7 @@ if ($gebucht):
       rollenListe.innerHTML='';
       for(var k=0;k<n;k++){
         var row=document.createElement('div'); row.className='bx-row'; row.style.gap='8px'; row.style.flexWrap='wrap';
-        row.innerHTML='<input type="text" class="we-rolle-nr lg-code" name="p_rolle_nr['+rowKey+'][]" autocomplete="off" inputmode="numeric" maxlength="7" placeholder="Rolle '+(k+1)+': Inventaraufkleber scannen (optional)" value="'+esc(cur[k]!==undefined?cur[k]:'')+'" style="flex:1 1 260px">';
+        row.innerHTML='<input type="text" class="we-rolle-nr lg-code" name="p_rolle_nr['+rowKey+'][]" autocomplete="off" inputmode="numeric" maxlength="8" placeholder="Rolle '+(k+1)+': Aufkleber scannen (8 Ziffern) – leer = System legt Nummer + Aufkleber an" value="'+esc(cur[k]!==undefined?cur[k]:'')+'" style="flex:1 1 260px">';
         rollenListe.appendChild(row);
       }
       var nrs=rollenListe.querySelectorAll('.we-rolle-nr');

@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rolle
     weiter('?p=gebinde&inv=' . rawurlencode((string)($_POST['inv'] ?? '')));
 }
 
-// --- Modus I: Inventaraufkleber (7 Ziffern) auflösen -> Etikettenrolle -------------------------
+// --- Modus I: Inventaraufkleber (8 Ziffern, Altdaten 7) auflösen -> Etikettenrolle -------------------------
 $inv = function_exists('erp_inventar_norm') ? erp_inventar_norm((string)($_GET['inv'] ?? '')) : preg_replace('/\D+/', '', (string)($_GET['inv'] ?? ''));
 if (($_GET['inv'] ?? '') !== '') {
     $r = function_exists('erp_rolle_per_inventar') ? erp_rolle_per_inventar((string)$_GET['inv']) : null;

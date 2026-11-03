@@ -47,7 +47,7 @@ if (!$out && function_exists('leiste_per_code') && function_exists('erp_charge_v
     }
 }
 
-// Inventaraufkleber (genau 7 Ziffern) -> Etikettenrolle direkt öffnen (kein Blinker, sondern eine Rolle).
+// Inventaraufkleber (8 Ziffern, Altdaten 7) -> Etikettenrolle direkt öffnen (kein Blinker, sondern eine Rolle).
 if (!$out && function_exists('erp_inventar_norm')) {
     $inv = erp_inventar_norm($q);
     if ($inv !== '') {

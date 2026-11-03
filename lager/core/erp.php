@@ -1295,7 +1295,8 @@ function erp_charge_gebinde_anlegen(int $charge_id, int $anzahl): int {
 }
 
 // --- Etikettenrollen: Inventaraufkleber statt Blinker (Spec Etiketten) ------------------------
-// Eine Etikettenrolle = ein charge_gebinde-Datensatz mit der gescannten 7-stelligen Maniso-Nummer.
+// Eine Etikettenrolle = ein charge_gebinde-Datensatz mit der 8-stelligen Inventarnummer (Aufkleber in der Rolle;
+// gescannt oder vom System vergeben und gedruckt). Altdaten: 7-stellig (frühere Auto-Nummern bzw. gekürzte Scans).
 // charge_gebinde ist eine GETEILTE Dashboard-Tabelle; die Zusatzspalten legt das Dashboard an. Fehlt die
 // Spalte noch (frischer Deploy, bevor das Dashboard-Schema lief), degradieren die Funktionen sauber.
 function erp_gebinde_spalte_da(string $spalte): bool {
@@ -1304,10 +1305,11 @@ function erp_gebinde_spalte_da(string $spalte): bool {
     return $cache[$spalte] = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='charge_gebinde' AND COLUMN_NAME=?", [$spalte]) > 0;
 }
-// Inventarnummer normalisieren: nur Ziffern, genau 7 Stellen – sonst leer (ungültig).
+// Inventarnummer normalisieren: nur Ziffern, 8 Stellen (Aufkleber) – 7 Stellen nur noch für Altdaten (frühere
+// Auto-Nummern 9xxxxxx bzw. Scans, die das alte 7er-Feld abgeschnitten hat). Sonst leer (ungültig).
 function erp_inventar_norm(string $s): string {
     $d = preg_replace('/\D+/', '', trim($s));
-    return (strlen($d) === 7) ? $d : '';
+    return (strlen($d) === 8 || strlen($d) === 7) ? $d : '';
 }
 // Ist die Inventarnummer noch frei (keine aktive = nicht leere Rolle trägt sie bereits)? $ausser = eigene id ignorieren.
 function erp_inventar_frei(string $nr, int $ausser = 0): bool {
@@ -1331,7 +1333,7 @@ function erp_etikett_rollen_anlegen(int $charge_id, array $rollen): array {
     foreach ($rollen as $r) {
         $nr = erp_inventar_norm((string)($r['nr'] ?? ''));
         $menge = (float)($r['menge'] ?? 0);
-        if ($nr === '')            { $fehler[] = 'Ungültige Inventarnummer (7 Ziffern).'; continue; }
+        if ($nr === '')            { $fehler[] = 'Ungültige Inventarnummer (8 Ziffern).'; continue; }
         if (!erp_inventar_frei($nr)) { $fehler[] = 'Inventarnummer ' . $nr . ' ist schon vergeben.'; continue; }
         $k++;
         q("INSERT INTO charge_gebinde (charge_id,nummer,anzahl_gesamt,menge,menge_verfuegbar,einheit,standort,status,inventar_nr,angelegt)
@@ -1342,24 +1344,24 @@ function erp_etikett_rollen_anlegen(int $charge_id, array $rollen): array {
     if ($angelegt > 0) q("UPDATE charge_gebinde SET anzahl_gesamt=(SELECT COUNT(*) FROM (SELECT id FROM charge_gebinde WHERE charge_id=?) t) WHERE charge_id=?", [$charge_id, $charge_id]);
     return ['ok' => $angelegt > 0, 'angelegt' => $angelegt, 'fehler' => $fehler];
 }
-// Nächste freie Auto-Inventarnummer. Reserviertes Band 9000000–9999999, damit die automatisch
-// vergebenen Nummern nicht mit physischen Maniso-Aufklebern (darunter) kollidieren. $benutzt = in
-// diesem Durchlauf schon vergebene Nummern (noch nicht in der DB).
+// Nächste freie Auto-Inventarnummer (8-stellig, Band 90000000–99999999). Das System legt sie an, wenn beim Wareneingang
+// kein Aufkleber gescannt wird, und druckt sie als Aufkleber für die Rolle. Jede Nummer wird gegen alle aktiven Rollen
+// geprüft (keine Doppelnummer). $benutzt = in diesem Durchlauf schon vergebene Nummern (noch nicht in der DB).
 function erp_inventar_naechste(array $benutzt = []): string {
-    $start = 9000000;
+    $start = 90000000;
     if (tabelle_da('charge_gebinde') && erp_gebinde_spalte_da('inventar_nr')) {
-        $max = (int) scalar("SELECT COALESCE(MAX(CAST(inventar_nr AS UNSIGNED)),0) FROM charge_gebinde WHERE inventar_nr REGEXP '^9[0-9]{6}$'");
+        $max = (int) scalar("SELECT COALESCE(MAX(CAST(inventar_nr AS UNSIGNED)),0) FROM charge_gebinde WHERE inventar_nr REGEXP '^9[0-9]{7}$'");
         if ($max >= $start) $start = $max + 1;
     }
-    for ($nr = $start; $nr <= 9999999; $nr++) {
-        $s = str_pad((string)$nr, 7, '0', STR_PAD_LEFT);
+    for ($nr = $start; $nr <= 99999999; $nr++) {
+        $s = (string)$nr;
         if (!isset($benutzt[$s]) && erp_inventar_frei($s)) return $s;
     }
     for ($t = 0; $t < 50; $t++) {   // Band voll (sehr unwahrscheinlich) -> zufällig
-        $s = str_pad((string)random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT);
+        $s = (string)random_int(10000000, 99999999);
         if (!isset($benutzt[$s]) && erp_inventar_frei($s)) return $s;
     }
-    return str_pad((string)random_int(1000000, 9999999), 7, '0', STR_PAD_LEFT);
+    return (string)random_int(10000000, 99999999);
 }
 // Etikettenrollen anlegen aus Gesamtmenge + Rollenzahl: Menge gleichmäßig verteilen (Rest auf die
 // letzte Rolle), Inventarnummer je Rolle aus $nummern (gescannt) ODER automatisch vergeben. Kein
@@ -1382,7 +1384,7 @@ function erp_etikett_rollen_verteilen(int $charge_id, float $gesamt, int $anzahl
             $nr = erp_inventar_naechste($benutzt);
         } else {
             $nr = erp_inventar_norm($roh);
-            if ($nr === '') { $fehler[] = 'Inventarnummer „' . $roh . '" hat nicht 7 Ziffern – automatisch vergeben.'; $nr = erp_inventar_naechste($benutzt); }
+            if ($nr === '' || strlen($nr) !== 8) { $fehler[] = 'Inventarnummer „' . $roh . '" hat nicht 8 Ziffern – automatisch vergeben.'; $nr = erp_inventar_naechste($benutzt); }
             elseif (isset($benutzt[$nr]) || !erp_inventar_frei($nr)) { $fehler[] = 'Inventarnummer ' . $nr . ' schon vergeben – automatisch vergeben.'; $nr = erp_inventar_naechste($benutzt); }
         }
         $benutzt[$nr] = 1;
@@ -1416,7 +1418,9 @@ function erp_rolle_per_inventar(string $nr): ?array {
                 JOIN item i   ON i.id=c.item_id"
              . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "")
              . ($auf  ? " LEFT JOIN auftrag a ON a.id=g.auftrag_id" : "") . "
-                WHERE g.inventar_nr=? ORDER BY (g.status<>'leer') DESC, g.id DESC LIMIT 1", [$nr]);
+                WHERE g.inventar_nr IN (?, ?) ORDER BY (g.inventar_nr=?) DESC, (g.status<>'leer') DESC, g.id DESC LIMIT 1",
+             // Altdaten: das frühere 7er-Eingabefeld hat 8-stellige Scans auf 7 Ziffern gekürzt -> auch die ersten 7 finden.
+             [$nr, strlen($nr) === 8 ? substr($nr, 0, 7) : $nr, $nr]);
 }
 // Freie Etikettenrollen für ein Etikett-Item (für die Produktions-Auswahl „welche Rolle nimmst du").
 // $auftrag_id>0: nur Rollen, die frei sind ODER bereits diesem Auftrag zugeordnet wurden.

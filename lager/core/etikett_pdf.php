@@ -59,7 +59,7 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
                 $erste = false;
                 $c['menge_anzeige'] = (float)($g['menge_verfuegbar'] ?? ($g['menge'] ?? 0));
                 $c['menge_label']   = 'Menge/Karton';
-                $c['inventar_nr']   = (string)($g['inventar_nr'] ?? '');   // Etikettenrolle: 7-stellige Nummer auf den Aufkleber (S-20)
+                $c['inventar_nr']   = (string)($g['inventar_nr'] ?? '');   // Etikettenrolle: 8-stellige Nummer (Altdaten 7) auf den Aufkleber (S-20)
                 if (!empty($g['einheit'])) $c['einheit'] = $g['einheit'];
                 $gurl = $scheme . '://' . $host . '/lager/?p=gebinde&bg=' . (int)$g['id'];
                 $knr  = (int)($g['nummer'] ?? ($gi + 1));
@@ -154,7 +154,7 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
     $pdf->textCenter($qx + $qrArea / 2, $qy + $qrArea + $mm(6), 'Karton ' . $karton . ' / ' . $gesamt, 11, true, $dark);
     // Etikettenrolle: 7-stellige Inventarnummer groß + scanbarer Barcode unter dem QR (rechte Spalte).
     $invK = trim((string)($c['inventar_nr'] ?? ''));
-    if (preg_match('/^\d{7}$/', $invK)) {
+    if (preg_match('/^\d{7,8}$/', $invK)) {
         $pdf->textCenter($qx + $qrArea / 2, $qy + $qrArea + $mm(10.5), 'Inventar-Nr.', 6.5, false, $muted);
         $pdf->textCenter($qx + $qrArea / 2, $qy + $qrArea + $mm(15.5), $invK, 12, true, $dark);
         lg_barcode128($pdf, $qx - $mm(1), $qy + $qrArea + $mm(17.5), $qrArea + $mm(2), $mm(7), $invK, $dark);
@@ -205,7 +205,7 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
     // Etikettenrolle (7-stellige Inventarnummer): QR kleiner links, daneben Inventar-Block (Nummer groß + scanbarer
     // Barcode) und „Karton X / N". Ohne Inventarnummer bleibt das Layout wie bisher.
     $inv = trim((string)($c['inventar_nr'] ?? ''));
-    $mitInv = (bool) preg_match('/^\d{7}$/', $inv);
+    $mitInv = (bool) preg_match('/^\d{7,8}$/', $inv);
     $qrArea = $mm($mitInv ? 36 : 52); $qx = $mitInv ? $mm(6) : ($W - $qrArea) / 2; $qy = $mm(12);
     $m = qr_matrix($url);
     if ($m) {

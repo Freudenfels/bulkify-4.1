@@ -11,5 +11,5 @@ Verwalten geht auf der **Charge-Seite** ([../bestand/charge.md](../bestand/charg
 `erp_chargen_suche` (eigener Bestand / Lager 1); Auflösung Blinker/Kiste über `blinker_fuer_charge`.
 Lager 2 hat sein eigenes Finden ([../bestand/l2_finden.md](../bestand/l2_finden.md)).
 
-Scannt/tippt man einen **7-stelligen Inventaraufkleber** einer Etikettenrolle, liefert `?p=suche` einen Treffer
+Scannt/tippt man einen **8-stelligen Inventaraufkleber** einer Etikettenrolle, liefert `?p=suche` einen Treffer
 mit `href` – der wird als Link gerendert und öffnet die Rolle (`?p=gebinde&inv=<nr>`) statt einen Blinker klingeln zu lassen.
