@@ -263,7 +263,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   </div>
   <p class="muted" style="margin:6px 0 12px"><?= h($c['info']) ?></p>
   <?php if ($ERG[$k]['fehler'] !== ''): ?>
-    <div style="color:#8f231b">Abfrage fehlgeschlagen: <?= h($ERG[$k]['fehler']) ?></div>
+    <div style="color:var(--err)">Abfrage fehlgeschlagen: <?= h($ERG[$k]['fehler']) ?></div>
   <?php elseif (!$rows): ?>
     <div class="muted"><?= $leerOk ? 'Keine Treffer.' : 'Niemand hat diese Rolle.' ?></div>
   <?php else: ?>
@@ -293,7 +293,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   <?php if ($c['korrektur'] !== ''): ?>
     <div style="margin-top:14px">
       <div class="muted" style="font-size:12px;margin-bottom:4px"><?= $fix ? 'Korrektur, die „Beheben" für die angehakten Zeilen ausführt' : 'Dokumentierte Korrektur (wird hier nicht ausgeführt)' ?></div>
-      <pre style="margin:0;padding:10px 12px;background:var(--bg-soft,#f5f5f2);border-radius:8px;white-space:pre-wrap;font-size:12px"><?= h($c['korrektur']) ?></pre>
+      <pre style="margin:0;padding:10px 12px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-family:var(--mono);border-radius:8px;white-space:pre-wrap;font-size:12px"><?= h($c['korrektur']) ?></pre>
     </div>
   <?php endif; ?>
   <?php if (!empty($c['ohne_fix'])): ?><p class="muted" style="font-size:12px;margin:10px 0 0"><?= h($c['ohne_fix']) ?></p><?php endif; ?>
@@ -304,6 +304,6 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   <h2 style="margin:0 0 8px">Protokoll der Kundenetikett-Migration</h2>
   <p class="muted" style="margin:0 0 12px">Etiketten Teil 2, geschrieben beim ersten Aufruf nach dem Deploy.</p>
   <?php if ($migr === ''): ?><div class="muted">Kein Protokoll vorhanden.</div>
-  <?php else: ?><pre style="margin:0;padding:10px 12px;background:var(--bg-soft,#f5f5f2);border-radius:8px;white-space:pre-wrap;font-size:12px"><?= h($migr) ?></pre><?php endif; ?>
+  <?php else: ?><pre style="margin:0;padding:10px 12px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-family:var(--mono);border-radius:8px;white-space:pre-wrap;font-size:12px"><?= h($migr) ?></pre><?php endif; ?>
 </div>
 <?php render_footer();
