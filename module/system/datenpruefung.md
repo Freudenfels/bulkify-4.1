@@ -15,7 +15,7 @@ Die Seite führt die Prüf-Abfragen aus der Liste „Nicos manuelle Live-DB-Aufg
 | S-10 Pulver-Fremdpreise mit Einheit „Stk" | ja: `einheit='kg'` |
 | Fertigware-Altchargen ohne Auftrag | ja: `auftrag_id` aus dem Produktionsauftrag (nur Zeilen mit Vorschlag) |
 | S-16 Fremdlager-Altbestand: Chargen ohne Besitzer | ja (Freigabe Nico 03.11.): `fremd_kunde_id` = Kunde des Produkts, `standort='lager2'` |
-| S-16 Aufträge „ins Fremdlager" ohne Lieferschein | **nein, bewusst**: wird separat geklärt |
+| S-16 Aufträge „ins Fremdlager" ohne Lieferschein | ja (Freigabe Nico 03.11.): die **eine** Fertigware-Charge am Auftrag (direkt oder über dessen PA, gleiches Produkt) bekommt `fremd_kunde_id` = Kunde des Auftrags und `standort='lager2'`. Keine Buchung, kein Lieferschein. Keine oder mehrere Chargen bzw. Charge eines anderen Kunden = „nicht automatisch behebbar" (kein Haken). Aufträge, deren Chargen schon dem Kunden gehören, fallen aus der Liste (idempotent). |
 | Zukauf „fertig" mit alten Schritten | nein (am Auftrag Zukauf-Art neu speichern) |
 | Wer hat die Rolle QM (labor)? | nein (Warnung, wenn niemand) |
 | Doppelte Nummern | nein (Einzelentscheidung, freigegebene Rechnungen nie umnummerieren) |
@@ -28,5 +28,6 @@ Die Seite führt die Prüf-Abfragen aus der Liste „Nicos manuelle Live-DB-Aufg
 ## Beheben
 - Je Prüfung mit dokumentierter Korrektur gibt es einen Haken je Zeile (plus „alle") und den Knopf „Angehakte beheben" mit Bestätigung.
 - Ausgeführt wird genau die angezeigte Korrektur, nur für die angehakten Zeilen. Die Bedingungen der Prüfung stehen immer mit in der WHERE, und die IDs werden vor dem Ausführen gegen die aktuelle Trefferliste geprüft. Eine veraltete Auswahl ändert also nichts Falsches.
+- Technisch: `fix.ziel` = Spalte mit der ID des geänderten Datensatzes (Standard: die Zeile selbst), `fix.params` = Werte je Zeile (z. B. Kunde des Auftrags).
 - Alles läuft in einer Transaktion. Jede geänderte Spalte wird mit alt/neu, Person und Route `datenpruefung` ins Feld-Änderungsprotokoll (`aenderung_log`) geschrieben. Ansicht: Protokoll → Feld-Änderungen.
 - Fehlt auf einer Datenbank eine Spalte, zeigt die jeweilige Prüfung den Fehler an, statt die Seite abzubrechen.

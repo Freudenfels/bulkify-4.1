@@ -113,15 +113,49 @@ $CHECKS = [
     ],
     's16_auftraege' => [
         'titel' => 'S-16: Aufträge schon „ins Fremdlager" übergeben',
-        'info'  => 'Versendete Aufträge von Fulfillment-Kunden ohne Lieferschein: Die Ware blieb unser Bestand.',
-        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, a.kunde_id, k.firma, a.menge, i.id AS item_id
-                    FROM auftrag a JOIN kunden k ON k.id = a.kunde_id AND k.nutzt_fulfillment = 1
-                    JOIN item i ON i.produkt_id = a.produkt_id AND i.kategorie = 'verkaufsfertig'
-                    WHERE a.status = 'versendet' AND NOT EXISTS (SELECT 1 FROM beleg b WHERE b.auftrag_id = a.id AND b.typ = 'lieferschein')
-                    ORDER BY a.id DESC",
-        'korrektur' => '',
-        'ohne_fix'  => 'Wird separat geklärt – bewusst kein Beheben-Knopf.',
-        'fix'   => null,
+        'info'  => 'Versendete Aufträge von Fulfillment-Kunden ohne Lieferschein: Die Ware blieb unser Bestand. Beheben ordnet die Fertigware-Charge des Auftrags dem Kunden zu (Fremdlager). '
+                 . 'Es wird nichts gebucht und kein Lieferschein erzeugt. Aufträge, deren Charge schon dem Kunden gehört, erscheinen nicht mehr. Ohne eindeutige Charge bitte von Hand prüfen.',
+        // Chargen am Auftrag = verkaufsfertige Charge desselben Produkts, direkt (charge.auftrag_id) oder über den PA des Auftrags.
+        'sql'   => "SELECT x._id, x._link, x.nummer, x.kunde_id, x.firma, x.menge, x.chargen,
+                           IF(x._n = 1 AND x._n_offen = 1, x._kand, NULL) AS _charge_id,
+                           IF(x._n = 1, CONCAT('?p=chargen&id=', x._kand_alle), NULL) AS _link_chargen,
+                           CASE WHEN x._n = 1 AND x._n_offen = 1 THEN 'behebbar'
+                                WHEN x._n = 0 THEN 'nicht automatisch behebbar: keine Fertigware-Charge am Auftrag'
+                                WHEN x._n > 1 THEN 'nicht automatisch behebbar: mehrere Fertigware-Chargen'
+                                ELSE 'nicht automatisch behebbar: Charge gehört einem anderen Kunden' END AS behebbar
+                    FROM (
+                      SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, a.kunde_id, k.firma, a.menge,
+                             (SELECT GROUP_CONCAT(c.charge_nr ORDER BY c.id SEPARATOR ', ') FROM charge c JOIN item ci ON ci.id = c.item_id
+                               WHERE ci.kategorie = 'verkaufsfertig' AND ci.produkt_id = a.produkt_id
+                                 AND (c.auftrag_id = a.id OR c.pa_id IN (SELECT pa.id FROM produktionsauftrag pa WHERE pa.auftrag_id = a.id))) AS chargen,
+                             (SELECT COUNT(*) FROM charge c JOIN item ci ON ci.id = c.item_id
+                               WHERE ci.kategorie = 'verkaufsfertig' AND ci.produkt_id = a.produkt_id
+                                 AND (c.auftrag_id = a.id OR c.pa_id IN (SELECT pa.id FROM produktionsauftrag pa WHERE pa.auftrag_id = a.id))) AS _n,
+                             (SELECT COUNT(*) FROM charge c JOIN item ci ON ci.id = c.item_id
+                               WHERE ci.kategorie = 'verkaufsfertig' AND ci.produkt_id = a.produkt_id AND c.fremd_kunde_id IS NULL
+                                 AND (c.auftrag_id = a.id OR c.pa_id IN (SELECT pa.id FROM produktionsauftrag pa WHERE pa.auftrag_id = a.id))) AS _n_offen,
+                             (SELECT COUNT(*) FROM charge c JOIN item ci ON ci.id = c.item_id
+                               WHERE ci.kategorie = 'verkaufsfertig' AND ci.produkt_id = a.produkt_id AND c.fremd_kunde_id = a.kunde_id
+                                 AND (c.auftrag_id = a.id OR c.pa_id IN (SELECT pa.id FROM produktionsauftrag pa WHERE pa.auftrag_id = a.id))) AS _n_markiert,
+                             (SELECT MIN(c.id) FROM charge c JOIN item ci ON ci.id = c.item_id
+                               WHERE ci.kategorie = 'verkaufsfertig' AND ci.produkt_id = a.produkt_id AND c.fremd_kunde_id IS NULL
+                                 AND (c.auftrag_id = a.id OR c.pa_id IN (SELECT pa.id FROM produktionsauftrag pa WHERE pa.auftrag_id = a.id))) AS _kand,
+                             (SELECT MIN(c.id) FROM charge c JOIN item ci ON ci.id = c.item_id
+                               WHERE ci.kategorie = 'verkaufsfertig' AND ci.produkt_id = a.produkt_id
+                                 AND (c.auftrag_id = a.id OR c.pa_id IN (SELECT pa.id FROM produktionsauftrag pa WHERE pa.auftrag_id = a.id))) AS _kand_alle
+                      FROM auftrag a JOIN kunden k ON k.id = a.kunde_id AND k.nutzt_fulfillment = 1
+                      WHERE a.status = 'versendet' AND NOT EXISTS (SELECT 1 FROM beleg b WHERE b.auftrag_id = a.id AND b.typ = 'lieferschein')
+                        AND EXISTS (SELECT 1 FROM item i WHERE i.produkt_id = a.produkt_id AND i.kategorie = 'verkaufsfertig')
+                    ) x
+                    WHERE NOT (x._n > 0 AND x._n_markiert = x._n)
+                    ORDER BY x._id DESC",
+        'korrektur' => "-- je angehaktem Auftrag, nur bei genau EINER Fertigware-Charge am Auftrag, die noch keinen Besitzer hat:\nUPDATE charge SET fremd_kunde_id = <Kunde des Auftrags>, standort = 'lager2'\n WHERE id = <Fertigware-Charge des Auftrags> AND fremd_kunde_id IS NULL;",
+        'ohne_fix'  => 'Freigegeben von Nico am 03.11.2026. Keine Bestandsbuchung, kein Lieferschein. Zeilen „nicht automatisch behebbar" bitte von Hand prüfen.',
+        // Zeile = Auftrag, geändert wird dessen Charge (ziel) mit dem Kunden der Zeile (params je Zeile).
+        'fix'   => ['tabelle' => 'charge', 'typ' => 'charge', 'ziel' => '_charge_id',
+                    'waehlbar' => fn(array $r) => !empty($r['_charge_id']),
+                    'update' => "UPDATE charge SET fremd_kunde_id = ?, standort = 'lager2' WHERE id = ? AND fremd_kunde_id IS NULL",
+                    'params' => fn(array $r) => [(int)$r['kunde_id'], (int)$r['_charge_id']]],
     ],
     'zukauf_fertig' => [
         'titel' => 'Zukauf „fertig" mit alten Schritten',
@@ -184,11 +218,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
     if (!$c || empty($c['fix'])) { header('Location: ?p=datenpruefung&err=' . rawurlencode('Für diese Prüfung gibt es keinen Beheben-Knopf.')); exit; }
     $fix = $c['fix'];
     // Nur IDs, die die Prüfung JETZT noch liefert und die behebbar sind.
+    // ziel: Spalte mit der ID des zu ändernden Datensatzes (Standard _id = die Zeile selbst).
     $erlaubt = [];
     foreach (dp_laden($c)['rows'] as $r)
-        if (!isset($fix['waehlbar']) || ($fix['waehlbar'])($r)) $erlaubt[(int)$r['_id']] = true;
-    $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), fn($i) => isset($erlaubt[$i]))));
-    if (!$ids) { header('Location: ?p=datenpruefung&err=' . rawurlencode('Keine (gültige) Zeile angehakt – nichts geändert.') . '#' . $key); exit; }
+        if (!isset($fix['waehlbar']) || ($fix['waehlbar'])($r)) $erlaubt[(int)$r['_id']] = $r;
+    $sel = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), fn($i) => isset($erlaubt[$i]))));
+    if (!$sel) { header('Location: ?p=datenpruefung&err=' . rawurlencode('Keine (gültige) Zeile angehakt – nichts geändert.') . '#' . $key); exit; }
+    $zielSp = $fix['ziel'] ?? '_id';
+    $ids = array_values(array_unique(array_map(fn($i) => (int)$erlaubt[$i][$zielSp], $sel)));
     $tab = $fix['tabelle'];
     $ph  = implode(',', array_fill(0, count($ids), '?'));
     $pdo = db();
@@ -196,7 +233,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
     try {
         $vorher = [];
         foreach (all("SELECT * FROM `$tab` WHERE id IN ($ph)", $ids) as $r) $vorher[(int)$r['id']] = $r;
-        q(str_replace('{IDS}', $ph, $fix['update']), $ids);
+        if (isset($fix['params'])) { foreach ($sel as $i) q($fix['update'], ($fix['params'])($erlaubt[$i])); }   // je Zeile eigene Werte
+        else q(str_replace('{IDS}', $ph, $fix['update']), $ids);
         $felder = 0; $zeilen = 0;
         foreach (all("SELECT * FROM `$tab` WHERE id IN ($ph)", $ids) as $r) {
             if (!isset($vorher[(int)$r['id']])) continue;
