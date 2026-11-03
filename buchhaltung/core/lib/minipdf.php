@@ -103,10 +103,28 @@ class MiniPDF
             } else {
                 if ($cur !== '') { $lines[] = $cur; }
                 $cur = $word;
+                // Ein einzelnes Wort ist breiter als die Spalte (lange Artikelnummer, Name ohne Leerzeichen): in Stücke
+                // teilen statt aus der Spalte laufen bzw. abgeschnitten werden – bevorzugt nach „-", „/" oder „·".
+                while ($cur !== '' && $this->strwidth($cur, $size, $bold) > $maxw) {
+                    [$teil, $rest] = $this->wortTeilen($cur, $maxw, $size, $bold);
+                    $lines[] = $teil; $cur = $rest;
+                }
             }
         }
         if ($cur !== '') { $lines[] = $cur; }
         return $lines;
+    }
+
+    // Längstes Anfangsstück eines Wortes, das in $maxw passt (mindestens 1 Zeichen); bricht bevorzugt nach - / ·.
+    private function wortTeilen(string $w, float $maxw, float $size, bool $bold): array
+    {
+        $z = preg_split('//u', $w, -1, PREG_SPLIT_NO_EMPTY);
+        $n = 1;
+        while ($n < count($z) && $this->strwidth(implode('', array_slice($z, 0, $n + 1)), $size, $bold) <= $maxw) $n++;
+        for ($k = $n; $k > max(1, (int) floor($n / 2)); $k--) {
+            if (in_array($z[$k - 1], ['-', '/', '·', '_', '.'], true)) { $n = $k; break; }
+        }
+        return [implode('', array_slice($z, 0, $n)), implode('', array_slice($z, $n))];
     }
 
     private function col(array $c): string

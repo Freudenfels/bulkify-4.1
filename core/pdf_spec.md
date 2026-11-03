@@ -29,3 +29,5 @@ Im Panel **Analysenwerte je Charge** gibt es **Werte vorschlagen**: Das hochgela
 
 ## Untertitel umbrechen (Aufräumen 6)
 `spec_kopf()` bricht einen langen Untertitel (z. B. langer Produktname im PIB) auf bis zu 3 zentrierte Zeilen um, statt über den Rand zu laufen. Die folgenden Inhalte rücken entsprechend nach unten.
+
+`spec_grid()` (03.11.2026): Die Bezeichnung links wird umgebrochen statt mit „…“ gekürzt (z. B. „Nettofüllmenge je Packung (für die Verpackung)“ im PIB). Die Zeilenhöhe richtet sich nach der längeren Seite. Lange Einzelwörter teilt `wrap()`.

@@ -34,3 +34,6 @@ Farben als `[r,g,b]` (0–255). Sonderzeichen werden nach Windows-1252 übersetz
 
 Bei Bedarf können weitere PDF-Builder (z. B. Auftragsbestätigung, Produktionsauftrag)
 denselben Generator verwenden.
+
+## Lange Wörter umbrechen (03.11.2026)
+`wrap()` teilt ein einzelnes Wort, das breiter als die Spalte ist (lange Artikelnummer, Name ohne Leerzeichen), in Stücke. Es bricht bevorzugt nach „-“, „/“, „·“, „_“ oder „.“. Vorher lief es aus der Spalte bzw. wurde abgeschnitten (abgeschnittene Texte in PIB-Tabellen).

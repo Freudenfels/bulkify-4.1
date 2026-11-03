@@ -80,12 +80,13 @@ function spec_grid(MiniPDF $p, float $y, array $rows): float {
         $avail = $W - $lw - 14;
         $vlines = $p->wrap(((string)$r[1] !== '' ? (string)$r[1] : '–'), $avail, 9, false);
         if (!$vlines) $vlines = ['–'];
-        // Sicherung: ein einzelnes zu langes Wort hart kappen, damit es nicht aus der Spalte läuft.
-        foreach ($vlines as $li => $ln) if ($p->strwidth($ln, 9, false) > $avail) $vlines[$li] = $p->fit($ln, $avail, 9, false);
-        $rH = 18 + (count($vlines) - 1) * $lh;
+        // Bezeichnung links ebenfalls umbrechen (vorher mit „…" gekürzt, z. B. „Nettofüllmenge je Packung (für die …").
+        // Zu lange Einzelwörter teilt wrap() selbst, nichts wird mehr abgeschnitten.
+        $llines = $p->wrap((string)$r[0], $lw - 14, 8.5, true) ?: [(string)$r[0]];
+        $rH = 18 + (max(count($vlines), count($llines)) - 1) * $lh;
         if ($y + $rH > 800) { $p->rectStroke($L, $y0, $W, $y - $y0, 0.6, SPEC_LINE); $p->line($L + $lw, $y0, $L + $lw, $y, 0.4, SPEC_LINE); $p->addPage(); $y = 48; $y0 = $y; }
         $p->rect($L, $y, $lw, $rH, SPEC_LABEL);
-        $p->text($L + 8, $y + 12, $p->fit((string)$r[0], $lw - 14, 8.5, true), 8.5, true, [70, 70, 68]);
+        foreach ($llines as $li => $ln) $p->text($L + 8, $y + 12 + $li * $lh, $ln, 8.5, true, [70, 70, 68]);
         foreach ($vlines as $li => $ln) $p->text($L + $lw + 8, $y + 12 + $li * $lh, $ln, 9, false, SPEC_INK);
         $p->line($L, $y + $rH, $R, $y + $rH, 0.3, SPEC_LINE);
         $y += $rH;
