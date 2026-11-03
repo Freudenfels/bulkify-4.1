@@ -294,32 +294,51 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
 }
 ?>
 <?php if (!$neu): ?>
-<div id="prodTabs" class="bx-row" style="gap:8px;margin:0 0 14px;flex-wrap:wrap">
-  <button type="button" class="btn btn-ghost btn-sm on" data-ptab="stamm">Stammdaten &amp; Verpackung</button>
-  <button type="button" class="btn btn-ghost btn-sm js-mfg" data-ptab="preise">Preise</button>
-  <button type="button" class="btn btn-ghost btn-sm" data-ptab="dokumente">Dokumente</button>
+<div class="settabs" id="prodTabs" style="margin-bottom:16px">
+  <a href="#" class="on" data-tab="stamm">Stammdaten &amp; Verpackung</a>
+  <a href="#" data-tab="preise">Preise</a>
+  <a href="#" data-tab="dokumente">Dokumente</a>
 </div>
 <?php endif; ?>
 <form id="nfCheckForm" method="post"></form>
-<form method="post" class="bx-form" data-ppanel="stamm">
-  <?php // Art des Produkts: steuert, was angezeigt wird. „Nur Fulfillment" blendet Rezeptur/Produktion/Preise aus. ?>
-  <div class="bx-panel" style="border-left:3px solid var(--lime, #C0F24E)">
-    <div style="font-weight:600;margin-bottom:8px">Art des Produkts</div>
-    <div class="bx-row" style="gap:24px;flex-wrap:wrap">
-      <label class="bx-check" style="gap:8px;margin:0;cursor:pointer"><input type="radio" name="extern" value="0" <?= $istExtern ? '' : 'checked' ?>> Eigenes Produkt – Herstellung bei bulkify <span class="muted" style="font-weight:400">(Rezeptur, Produktion, Preise)</span></label>
-      <label class="bx-check" style="gap:8px;margin:0;cursor:pointer"><input type="radio" name="extern" value="1" <?= $istExtern ? 'checked' : '' ?>> Nur Fulfillment – Kundenware, wir versenden nur <span class="muted" style="font-weight:400">(ohne Rezeptur/Produktion)</span></label>
-    </div>
-    <div class="muted bx-keepinfo" id="externHint" style="font-size:13px;margin-top:10px<?= $istExtern ? '' : ';display:none' ?>">Ware, die der Kunde woanders herstellen ließ und die wir nur lagern/versenden. Gehört dem gewählten <strong>Kunden</strong> (exklusiv) und ist danach im <a href="?p=lager2">Fremdlager</a> einbuchbar. Rezeptur, Stückliste, Kalkulation und Preise werden ausgeblendet.</div>
-    <label class="bx-check" id="handelswareBox" style="gap:8px;margin:12px 0 0;cursor:pointer<?= $istExtern ? ';display:none' : '' ?>">
-      <input type="checkbox" name="handelsware" value="1" <?= (int)($p['handelsware'] ?? 0) === 1 ? 'checked' : '' ?>>
-      <span>Handelsware – als <strong>Fertigware zugekauft</strong> &amp; weiterverkauft <span class="muted" style="font-weight:400">(kein Produktionsauftrag beim Bestellen – versendet aus dem Bestand)</span></span>
-    </label>
-  </div>
-  <script>(function(){var rs=document.querySelectorAll('input[name=extern]'),hb=document.getElementById('handelswareBox');function upd(){var ext=document.querySelector('input[name=extern]:checked');if(hb)hb.style.display=(ext&&ext.value==='1')?'none':'';}rs.forEach(function(r){r.addEventListener('change',upd);});upd();})();</script>
-  <div class="bx-panel"><div class="bx-grid">
+<form method="post" class="bx-form" id="prodStamm" data-ppanel="stamm">
+  <div class="bx-panel">
+    <div style="font-weight:600;margin-bottom:8px">Identität</div>
+    <div class="bx-grid">
     <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
+    <div class="bx-field"><label>Synonyme / frühere Namen <?= bx_hint('Alternative oder alte Namen (z. B. wenn der Kunde umbenennt). Intern bekannt und überall mitsuchbar; laufende/abgeschlossene Aufträge behalten ihren Namen. Beim Umbenennen wird der alte Name automatisch ergänzt. Eine Zeile oder Komma je Name.') ?></label><textarea name="synonyme" rows="1" style="min-height:0;font-size:13px" placeholder="z. B. alter Produktname"><?= $v('synonyme') ?></textarea></div>
+    <?php if ($neu): // Neuanlage hat noch keinen Reiter „Preise" – der Fallback-Name bleibt dann hier. ?>
     <div class="bx-field"><label>Standard-Name für den Kunden <?= bx_hint('Fallback-Name beim Kunden (Portal/Belege), wenn für einen Kunden KEIN eigener Name hinterlegt ist. Kundenspezifische Namen pflegst du unten im Block „Kundenspezifische Namen". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
-    <div class="bx-field" style="grid-column:1/-1"><label>Synonyme / frühere Namen <?= bx_hint('Alternative oder alte Namen (z. B. wenn der Kunde umbenennt). Intern bekannt und überall mitsuchbar; laufende/abgeschlossene Aufträge behalten ihren Namen. Beim Umbenennen wird der alte Name automatisch ergänzt. Eine Zeile oder Komma je Name.') ?></label><textarea name="synonyme" rows="2" placeholder="z. B. alter Produktname"><?= $v('synonyme') ?></textarea></div>
+    <?php endif; ?>
+    </div>
+  </div>
+  <?php // Art des Produkts: steuert, was angezeigt wird. „Nur Fulfillment" blendet Rezeptur/Produktion/Preise aus. ?>
+  <div class="bx-panel" style="padding:12px 16px">
+    <div class="bx-row" style="gap:14px;align-items:center;flex-wrap:wrap">
+      <span class="muted" style="font-size:13px">Art des Produkts</span>
+      <div class="prod-seg">
+        <label title="Rezeptur, Produktion, Preise"><input type="radio" name="extern" value="0" <?= $istExtern ? '' : 'checked' ?>><span>Eigenes Produkt</span></label>
+        <label title="Kundenware, wir lagern und versenden nur (ohne Rezeptur/Produktion)"><input type="radio" name="extern" value="1" <?= $istExtern ? 'checked' : '' ?>><span>Nur Fulfillment</span></label>
+      </div>
+      <label class="bx-check" id="handelswareBox" style="gap:8px;margin:0;cursor:pointer;font-size:13px<?= $istExtern ? ';display:none' : '' ?>">
+        <input type="checkbox" name="handelsware" value="1" <?= (int)($p['handelsware'] ?? 0) === 1 ? 'checked' : '' ?>>
+        <span>Handelsware <?= bx_hint('Als Fertigware zugekauft und weiterverkauft: kein Produktionsauftrag beim Bestellen, versendet aus dem Bestand.') ?></span>
+      </label>
+    </div>
+    <div class="muted bx-keepinfo" id="externHint" style="font-size:13px;margin-top:8px<?= $istExtern ? '' : ';display:none' ?>">Ware, die der Kunde woanders herstellen ließ und die wir nur lagern/versenden. Gehört dem gewählten Kunden (exklusiv) und ist danach im <a href="?p=lager2">Fremdlager</a> einbuchbar. Rezeptur, Stückliste, Kalkulation und Preise werden ausgeblendet.</div>
+  </div>
+  <style>
+    .prod-seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;background:var(--panel-2)}
+    .prod-seg label{margin:0;cursor:pointer}
+    .prod-seg input{position:absolute;opacity:0;pointer-events:none}
+    .prod-seg span{display:inline-block;padding:5px 14px;border-radius:999px;font-size:13px;color:var(--muted);white-space:nowrap}
+    .prod-seg input:checked + span{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+    .prod-seg input:focus-visible + span{outline:2px solid var(--gruen);outline-offset:1px}
+  </style>
+  <script>(function(){var rs=document.querySelectorAll('input[name=extern]'),hb=document.getElementById('handelswareBox');function upd(){var ext=document.querySelector('input[name=extern]:checked');if(hb)hb.style.display=(ext&&ext.value==='1')?'none':'';}rs.forEach(function(r){r.addEventListener('change',upd);});upd();})();</script>
+  <div class="bx-panel">
+    <div style="font-weight:600;margin-bottom:8px">Zuordnung</div>
+    <div class="bx-grid">
     <div class="bx-field"><label>Kunde <?= bx_hint('nur bei exklusiven Produkten der Besitzer. Ohne Häkchen „exklusiv" bleibt das Produkt ein Katalogprodukt und der Kunde wird beim Speichern entfernt.') ?></label>
       <select name="kunde_id">
         <option value="">– Katalogprodukt –</option>
@@ -369,7 +388,9 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
     <?php endif; ?>
   </div></div>
 
-  <div class="bx-panel js-mfg"><div class="bx-grid">
+  <div class="bx-panel js-mfg">
+    <div style="font-weight:600;margin-bottom:8px">Rezeptur &amp; Verpackung</div>
+    <div class="bx-grid">
     <div class="bx-field"><label>Rezeptur</label>
       <select name="rezeptur_id" id="rezeptur">
         <option value="">– wählen –</option>
@@ -400,7 +421,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   </div>
 
   <div class="bx-panel js-mfg">
-    <div style="font-weight:600;margin-bottom:8px">Stückliste – weitere Verpackung</div>
+    <div style="font-weight:600;margin-bottom:8px">Stückliste</div>
     <div class="bx-grid">
       <?= verp_slot('Verschluss/Deckel', 'verschluss_id', $VERP_ROLLE['verschluss'], $p['verschluss_id'] ?? '') ?>
       <?= verp_slot('Etikett', 'etikett_id', $VERP_ROLLE['etikett'], $p['etikett_id'] ?? '') ?>
@@ -430,7 +451,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
                       WHERE i.verpackung_rolle='etikett' AND i.produkt_id=? AND COALESCE(i.gesperrt,0)=0
                       ORDER BY k.firma, i.etikett_version DESC", [(int)$id]);
         if ($__kes): ?>
-      <div class="bx-field" style="grid-column:1/-1">
+      <div class="bx-field" style="grid-column:1/-1;min-width:0">
         <label>Kundenetiketten je Kunde <?= bx_hint('Das Etikett gehört zu Produkt + Kunde: jeder Kunde hat seine eigene Versionskette (v1, v2 …) und seinen eigenen Bestand. Eine neue Freigabe sperrt nur die Version desselben Kunden.') ?></label>
         <div class="bx-tablewrap"><table class="bx-table">
           <thead><tr><th>Kunde</th><th>Version</th><th>Design</th><th class="bx-num">physisch</th><th class="bx-num">bezahlt</th></tr></thead>
@@ -649,7 +670,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
     </div>
   <?php endforeach; endif; ?>
 </div>
-<div id="dok"><?php dokument_panel('produkt', (int)$id, $lieferanten); ?></div>
+<div id="dok" data-ppanel="dokumente"><?php dokument_panel('produkt', (int)$id, $lieferanten); ?></div>
 <?php endif; ?>
 
 <script>
@@ -763,9 +784,14 @@ recalc();
 <?php if (!$neu): ?>
 <?php // Kundenspezifische Produktnamen: dasselbe Produkt heißt bei jedem Kunden anders. Interner Name bleibt.
       $kundennamen = $neu ? [] : produkt_kundennamen((int)$id); ?>
-<div class="bx-panel js-mfg" id="kundennamen" data-ppanel="preise">
+<div class="bx-panel" id="kundennamen" data-ppanel="preise">
   <h2 style="margin-top:0">Kundenspezifische Namen <?= bx_hint('Dasselbe Produkt heißt bei verschiedenen Kunden unterschiedlich (z. B. „MagnaVeda" / „Magnesium-Komplex"). Der Kunde sieht ÜBERALL seinen Namen (Angebot, AB, Rechnung, Lieferschein, Etikett, PIB, Portal). Der interne Produktname bleibt unverändert. Kein Eintrag = es gilt der „Standard-Name für den Kunden" bzw. der interne Name.') ?></h2>
   <?php if (isset($_GET['knok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Kundenname gespeichert.</div><?php endif; ?>
+  <?php // Fallback-Name gehört zum Stammdaten-Formular (form="prodStamm"), steht aber hier bei den Kundennamen. ?>
+  <div class="bx-row" style="align-items:flex-end;gap:10px;flex-wrap:wrap;margin:0 0 14px">
+    <div class="bx-field" style="margin:0;min-width:240px;flex:1"><label>Standard-Name für alle Kunden (Fallback) <?= bx_hint('Gilt beim Kunden (Portal/Belege), wenn für ihn KEIN eigener Name unten hinterlegt ist. Leer = interner Name.') ?></label><input type="text" name="kundenname" form="prodStamm" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
+    <button class="btn btn-ghost btn-sm" type="submit" form="prodStamm">Standard-Name speichern</button>
+  </div>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Kunde</th><th>Name beim Kunden</th><th></th></tr></thead>
     <tbody>
@@ -886,38 +912,46 @@ if (!$neu):
 <?php endif; ?>
 <script>
 (function(){
-  var tabs=document.getElementById('prodTabs'); if(!tabs) return;
-  var panels=document.querySelectorAll('[data-ppanel]');
-  var btns=tabs.querySelectorAll('[data-ptab]');
-  function show(key){
-    panels.forEach(function(p){ p.style.display = (p.getAttribute('data-ppanel')===key) ? '' : 'none'; });
-    btns.forEach(function(b){ b.className='btn btn-sm '+(b.getAttribute('data-ptab')===key?'btn-primary':'btn-ghost'); });
-    try{ localStorage.setItem('bx-prodtab', key); }catch(e){}
-  }
-  btns.forEach(function(b){ b.addEventListener('click', function(){ show(b.getAttribute('data-ptab')); }); });
-  var start='stamm'; try{ var s=localStorage.getItem('bx-prodtab'); if(s && document.querySelector('[data-ppanel="'+s+'"]')) start=s; }catch(e){}
-  show(start);
-})();
-</script>
-<script>
-(function(){
-  // „Art des Produkts": Nur Fulfillment blendet alle Fertigungs-/Preis-Bereiche (.js-mfg) aus.
-  var radios = document.querySelectorAll('input[name="extern"]');
-  if (!radios.length) return;
+  // Zwei getrennte Zustände: der aktive Reiter (data-ppanel) und „Nur Fulfillment" (.js-mfg).
+  // Ein Element ist sichtbar, wenn es zum aktiven Reiter gehört UND nicht durch Fulfillment ausgeblendet ist.
+  var nav = document.getElementById('prodTabs');
+  var tabs = nav ? nav.querySelectorAll('a[data-tab]') : [];
+  var panes = document.querySelectorAll('[data-ppanel]');
   var mfg = document.querySelectorAll('.js-mfg');
+  var radios = document.querySelectorAll('input[name="extern"]');
   var hint = document.getElementById('externHint');
   var exkl = document.getElementById('f_exkl');
-  function aktuell(){ var r = document.querySelector('input[name="extern"]:checked'); return r ? r.value : '0'; }
+  var aktiv = 'stamm';
+  function extern(){ var r = document.querySelector('input[name="extern"]:checked'); return !!r && r.value === '1'; }
   function anwenden(){
-    var extern = aktuell() === '1';
-    mfg.forEach(function(el){ el.style.display = extern ? 'none' : ''; });
-    if (hint) hint.style.display = extern ? '' : 'none';
-    // Fulfillment = Kundenware: exklusiv automatisch setzen (gehört dem Kunden).
-    if (extern && exkl && !exkl.checked) exkl.checked = true;
+    var ext = extern();
+    if (nav) panes.forEach(function(p){ p.classList.toggle('bx-tab-aus', p.getAttribute('data-ppanel') !== aktiv); });
+    mfg.forEach(function(el){ el.classList.toggle('bx-mfg-aus', ext); });
+    tabs.forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-tab') === aktiv); });
+    if (hint) hint.style.display = ext ? '' : 'none';
   }
-  radios.forEach(function(r){ r.addEventListener('change', anwenden); });
-  anwenden();
+  function zeigen(key){
+    var ok = false; tabs.forEach(function(t){ if (t.getAttribute('data-tab') === key) ok = true; });
+    aktiv = ok ? key : 'stamm';
+    try { localStorage.setItem('bx-prodtab', aktiv); } catch(e){}
+    anwenden();
+  }
+  tabs.forEach(function(t){ t.addEventListener('click', function(e){ e.preventDefault(); zeigen(t.getAttribute('data-tab')); }); });
+  radios.forEach(function(r){ r.addEventListener('change', function(){
+    // Fulfillment = Kundenware: exklusiv automatisch setzen (gehört dem Kunden).
+    if (extern() && exkl && !exkl.checked) exkl.checked = true;
+    anwenden();
+  }); });
+  var start = 'stamm';
+  try { var st = localStorage.getItem('bx-prodtab'); if (st) start = st; } catch(e){}
+  // Direktlinks mit Anker (z. B. #kundennamen nach dem Speichern) öffnen den passenden Reiter.
+  var h = (location.hash || '').replace('#', '');
+  var ziel = h ? document.getElementById(h) : null;
+  if (ziel) { var pp = ziel.closest('[data-ppanel]'); if (pp) start = pp.getAttribute('data-ppanel'); }
+  zeigen(start);
+  if (ziel) ziel.scrollIntoView();
 })();
 </script>
+<style>.bx-tab-aus,.bx-mfg-aus{display:none !important}</style>
 <?php
 render_footer();
