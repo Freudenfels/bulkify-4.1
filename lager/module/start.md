@@ -11,3 +11,5 @@ Landing-Seite des Lagers (Standard-Route nach Login). Gibt einen Überblick:
 
 Dashboard-Zahlen über die Naht `erp.php`; Lager-eigenes (Bewegungen/Batterie) direkt. Default-Route in
 `public/lager/index.php`; Menüeintrag „Übersicht" zuoberst in `core/layout.php`.
+
+Knopf **„Etiketten einbuchen“** neben „Einbuchen“ → `?p=we&weg=etikett` (öffnet direkt den Etiketten-Weg im Wareneingang).

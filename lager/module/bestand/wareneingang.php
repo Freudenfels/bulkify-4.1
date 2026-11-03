@@ -82,6 +82,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rstic
     exit;
 }
 
+// --- AJAX: Etiketten einbuchen – Produkt gewählt -> Kundenetiketten (Kunde/Version, Design, Maße) -----
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_produkt') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => true, 'etiketten' => erp_etikett_zu_produkt((int)($_POST['produkt_id'] ?? 0))], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // --- Buchen: alle Positionen ------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buchen') {
     $ziel     = ($_POST['ziel'] ?? 'l1') === 'l2' ? 'l2' : 'l1';
@@ -249,6 +256,7 @@ $items   = erp_items_eingang();
 $rezepturen = function_exists('erp_rezeptur_liste') ? erp_rezeptur_liste() : [];   // für Fertigware/Bulk: Rezeptur-Picker
 $ki      = lg_ki_bereit();
 $erwartet = erp_erwartete_lieferungen();   // für Kachel "aus Liste wählen"
+$etProdukte = erp_etikett_produkte();       // für Kachel "Etiketten einbuchen"
 $heute    = date('Y-m-d');
 
 // Nach dem Buchen: Erfolgspanel mit Sammel-Etikett.
@@ -316,6 +324,10 @@ if ($gebucht):
       <div class="we-kachel-t">Rezepturnummer-Aufkleber</div>
       <div class="we-kachel-s">R-Code scannen – Rezeptur/Produkt wird erkannt</div>
     </button>
+    <button type="button" class="we-kachel" data-weg="etikett">
+      <div class="we-kachel-t">Etiketten einbuchen</div>
+      <div class="we-kachel-s">Produkt wählen – Design und Maße prüfen, dann Rollen buchen</div>
+    </button>
   </div>
 
   <!-- Arbeitsbereich nach Kachel-Wahl -->
@@ -376,6 +388,34 @@ if ($gebucht):
       <div id="weRstickerInfo" class="muted" style="margin-top:var(--sp-2)">Kein Tippen von Chargen-/Rezepturnummern – nur scannen (Spec 5.2).</div>
     </div>
 
+    <!-- Methode: Etiketten einbuchen – Produkt wählen, Design + Maße prüfen, dann Rollen buchen -->
+    <div class="bx-panel we-weg" data-w="etikett" hidden>
+      <h2 style="margin-top:0">Etiketten einbuchen</h2>
+      <div class="bx-field" style="margin:0;max-width:560px">
+        <label>Produkt</label>
+        <input type="text" id="weEtProdukt" list="weEtProdList" autocomplete="off" placeholder="Produktname tippen, z. B. Magnesium">
+        <datalist id="weEtProdList">
+          <?php foreach ($etProdukte as $ep): ?><option value="<?= h(trim(($ep['nummer'] ? $ep['nummer'] . ' · ' : '') . $ep['name'])) ?>"><?= $ep['kundenname'] !== '' ? h($ep['kundenname']) : '' ?></option><?php endforeach; ?>
+        </datalist>
+      </div>
+      <div id="weEtInfo" class="muted" style="margin-top:var(--sp-2)"><?= $etProdukte ? 'Produkt wählen – danach erscheinen das Etikett-Design und die Maße zum Abgleich mit der gelieferten Rolle.' : 'Es gibt noch kein Produkt mit Etikett.' ?></div>
+      <div id="weEtWahl" class="we-et-wahl"></div>
+      <div id="weEtPruef" class="we-et-pruef" hidden>
+        <div class="we-et-vorschau" id="weEtVorschau"></div>
+        <div class="we-et-daten">
+          <div class="muted" style="font-size:13px">Größe</div>
+          <div class="we-et-mass" id="weEtMass">–</div>
+          <div class="we-et-zeile"><span class="muted">Material</span> <span id="weEtMaterial">–</span></div>
+          <div class="we-et-zeile"><span class="muted">Version</span> <span id="weEtVersion">–</span></div>
+          <div class="we-et-zeile"><span class="muted">Kunde</span> <span id="weEtKunde">–</span></div>
+          <div class="we-et-zeile"><span class="muted">Artikel</span> <span id="weEtArtikel">–</span></div>
+          <div id="weEtWarn" class="we-et-warn" hidden></div>
+          <div class="muted" style="font-size:13px;margin-top:var(--sp-3)">Design und Größe mit der gelieferten Rolle vergleichen. Passt etwas nicht: nicht einbuchen und Rücksprache halten.</div>
+          <button type="button" class="btn btn-primary" id="weEtOk" style="margin-top:var(--sp-3)">Design und Größe stimmen – Menge erfassen</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Methode: aus Liste wählen -->
     <div class="bx-panel we-weg" data-w="liste" hidden>
       <h2 style="margin-top:0">Ankommende Sendung wählen</h2>
@@ -400,7 +440,7 @@ if ($gebucht):
     </div>
 
     <!-- Ziel (Default Lager 1) + Lieferant, kompakt nebeneinander -->
-    <div class="bx-panel">
+    <div class="bx-panel" id="weKopf">
       <div class="bx-row" style="gap:var(--sp-4);flex-wrap:wrap;align-items:flex-end">
         <div class="bx-field" style="margin:0">
           <label>Ziel-Lager</label>
@@ -440,7 +480,7 @@ if ($gebucht):
     </div>
 
     <!-- Positionen -->
-    <div class="bx-panel">
+    <div class="bx-panel" id="wePosPanel">
       <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">
         <h2 style="margin:0">Positionen</h2>
         <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
@@ -497,7 +537,20 @@ if ($gebucht):
   .we-scan-grid{display:flex;gap:var(--sp-4);flex-wrap:wrap;align-items:flex-start;margin-top:var(--sp-3)}
   .we-scan-cam{flex:1 1 340px;max-width:560px}
   .we-scan-side{flex:1 1 300px;min-width:240px}
+  .we-et-wahl{display:flex;flex-wrap:wrap;gap:8px;margin-top:var(--sp-3)}
+  .we-et-wahl:empty{display:none}
+  .we-et-opt{text-align:left;border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:var(--panel-2);color:var(--text);cursor:pointer;line-height:1.35}
+  .we-et-opt.on{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen)}
+  .we-et-pruef{display:flex;flex-wrap:wrap;gap:var(--sp-4);margin-top:var(--sp-4);align-items:flex-start}
+  .we-et-vorschau{flex:1 1 300px;min-width:0;max-width:560px}
+  .we-et-daten{flex:1 1 240px;min-width:0}
+  .we-et-mass{font-size:30px;font-weight:600;line-height:1.15;margin:2px 0 var(--sp-3)}
+  .we-et-zeile{margin:4px 0;overflow-wrap:anywhere}
+  .we-et-daten .btn{white-space:normal;max-width:100%;text-align:center}
+  .we-et-warn{margin-top:var(--sp-3);padding:10px 12px;border-radius:8px;border:1px solid var(--warn);color:var(--text)}
+  .we-kacheln[hidden],.we-et-pruef[hidden],.we-et-warn[hidden],#weKopf[hidden],#wePosPanel[hidden]{display:none}
 </style>
+<script src="/assets/etikett_vorschau.js"></script>
 
 <script>
 (function(){
@@ -934,11 +987,78 @@ if ($gebucht):
     rst.addEventListener('change',rstSuchen);
   }
 
-  // --- 4 Kacheln: Methode wählen -> passender Weg öffnet sich ---
+  // --- Etiketten einbuchen: Produkt -> Kunde/Version -> Design + Maße prüfen -> erst dann Menge/Rollen ---
+  var ET_PROD = <?= json_encode(array_map(fn($ep)=>['id'=>(int)$ep['id'],'n'=>trim(($ep['nummer'] ? $ep['nummer'] . ' · ' : '') . $ep['name'])], $etProdukte), JSON_UNESCAPED_UNICODE) ?>;
+  var kopfP=document.getElementById('weKopf'), posP=document.getElementById('wePosPanel'), buchBtn=document.getElementById('weBuchen'),
+      etProd=document.getElementById('weEtProdukt'), etInfo=document.getElementById('weEtInfo'), etWahl=document.getElementById('weEtWahl'),
+      etPruef=document.getElementById('weEtPruef'), etOk=document.getElementById('weEtOk'), etGewaehlt=null, etLetzt='';
+  var BUCH_TXT=buchBtn?buchBtn.textContent:'';
+  function etMasse(e){
+    function z(x){ return (Math.round(Number(x)*10)/10).toString().replace('.',','); }
+    if(e.breite && e.hoehe) return z(e.breite)+' × '+z(e.hoehe)+' mm';
+    return e.format||'';
+  }
+  function etPanels(sichtbar){ if(kopfP) kopfP.hidden=!sichtbar; if(posP) posP.hidden=!sichtbar; }
+  function etZeigen(e){
+    etGewaehlt=e;
+    etWahl.querySelectorAll('.we-et-opt').forEach(function(b){ b.classList.toggle('on', +b.getAttribute('data-id')===e.id); });
+    var m=etMasse(e);
+    document.getElementById('weEtMass').textContent = m || 'Maße nicht hinterlegt';
+    document.getElementById('weEtMaterial').textContent = e.material || '–';
+    document.getElementById('weEtVersion').textContent = e.kundenetikett ? ('v'+e.version) : 'Standard-Etikett';
+    document.getElementById('weEtKunde').textContent = e.kunde || '–';
+    document.getElementById('weEtArtikel').textContent = e.name;
+    var warn=document.getElementById('weEtWarn'), hinw=[];
+    var vz=document.getElementById('weEtVorschau');
+    if(e.dok){ bxEtikettVorschau(vz, '?p=dok&id='+e.dok, e.pdf); }
+    else { vz.innerHTML='<div class="we-et-warn" style="margin:0">Kein freigegebenes Etikett-Design hinterlegt.</div>'; hinw.push('Ohne freigegebenes Design lässt sich nur die Größe prüfen.'); }
+    if(!m) hinw.push('Für dieses Etikett sind keine Maße hinterlegt.');
+    warn.hidden=!hinw.length; warn.textContent=hinw.join(' ');
+    etPruef.hidden=false; etPanels(false);
+    if(etOk) etOk.disabled=false;
+  }
+  function etWaehle(liste){
+    etWahl.innerHTML=''; etPruef.hidden=true; etGewaehlt=null; etPanels(false);
+    if(!liste.length){ etInfo.textContent='Zu diesem Produkt gibt es keinen Etikett-Artikel.'; return; }
+    etInfo.textContent = liste.length>1 ? 'Mehrere Etiketten – bitte Kunde/Version wählen:' : 'Etikett gefunden:';
+    liste.forEach(function(e){
+      var b=document.createElement('button'); b.type='button'; b.className='we-et-opt'; b.setAttribute('data-id',e.id);
+      b.innerHTML='<strong>'+esc(e.kunde||'ohne Kunde')+'</strong> · '+(e.kundenetikett?('v'+e.version):'Standard')+'<br><span class="muted" style="font-size:12px">'+esc(etMasse(e)||'Maße fehlen')+(e.dok?'':' · kein Design')+'</span>';
+      b.addEventListener('click', function(){ etZeigen(e); });
+      etWahl.appendChild(b);
+    });
+    if(liste.length===1) etZeigen(liste[0]);
+  }
+  function etProduktSuchen(){
+    var v=(etProd.value||'').trim().toLowerCase(); if(v===etLetzt) return;
+    var m=ET_PROD.filter(function(p){ return p.n.toLowerCase()===v; })[0];
+    if(!m){ etLetzt=''; return; }
+    etLetzt=v; etInfo.textContent='Lade Etiketten …';
+    var fd=new FormData(); fd.append('aktion','etikett_produkt'); fd.append('produkt_id', m.id);
+    fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();})
+      .then(function(j){ etWaehle((j&&j.etiketten)||[]); })
+      .catch(function(){ etInfo.textContent='Netzwerk-/Serverfehler.'; etLetzt=''; });
+  }
+  if(etProd){ etProd.addEventListener('input', etProduktSuchen); etProd.addEventListener('change', etProduktSuchen); }
+  if(etOk) etOk.addEventListener('click', function(){
+    if(!etGewaehlt) return;
+    rows.innerHTML='';
+    var card=addRow({item_id:etGewaehlt.id, item_name:etGewaehlt.name, verpackung_rolle:'etikett', einheit:'Stk'});
+    etPanels(true); etOk.disabled=true;
+    var mg=card&&card.querySelector('input[name="p_menge[]"]');
+    if(posP) posP.scrollIntoView({behavior:'smooth',block:'start'});
+    if(mg) setTimeout(function(){ mg.focus(); }, 300);
+  });
+
+  // --- Kacheln: Methode wählen -> passender Weg öffnet sich ---
   var startBox=document.getElementById('weStart'), arbeit=document.getElementById('weArbeit');
   function zeigeWeg(w){
     startBox.hidden=true; arbeit.hidden=false;
     document.querySelectorAll('.we-weg').forEach(function(p){ p.hidden = p.getAttribute('data-w')!==w; });
+    // Etiketten einbuchen: Ziel/Positionen erst nach der Sichtprüfung (Design + Größe) zeigen.
+    etPanels(w!=='etikett');
+    if(buchBtn) buchBtn.textContent = w==='etikett' ? 'Etiketten buchen' : BUCH_TXT;
+    if(w==='etikett'){ etProd.value=''; etLetzt=''; etWahl.innerHTML=''; etPruef.hidden=true; etGewaehlt=null; setTimeout(function(){ etProd.focus(); },60); }
     rows.innerHTML=''; addRow();   // frische, leere Position
     var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value='';   // kein Lieferungsbezug bei manuellem/Scan-Weg
     if(w==='tracking'){ var t=document.getElementById('weTrack'); if(t) setTimeout(function(){t.focus();},60); }
@@ -965,6 +1085,9 @@ if ($gebucht):
       }).catch(function(){ if(linfo) linfo.textContent='Serverfehler.'; });
     });
   });
+
+  // Direkter Einstieg (z. B. Startseite „Etiketten einbuchen"): ?p=we&weg=etikett öffnet den Etiketten-Weg.
+  (function(){ var m=/[?&]weg=([a-z]+)/.exec(location.search); if(m && document.querySelector('.we-weg[data-w="'+m[1]+'"]')) zeigeWeg(m[1]); })();
 
   // Aus „Erwartete Lieferungen -> Einbuchen": ?lieferung=ID öffnet „Aus Liste wählen" und lädt die Lieferung sofort.
   (function(){

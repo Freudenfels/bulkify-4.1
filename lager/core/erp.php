@@ -581,6 +581,55 @@ function erp_items_eingang(): array {
                 ORDER BY name");
 }
 
+// --- Etiketten einbuchen: Produkt -> Kundenetiketten (Design + Masse zum Abgleich) --------------
+// Produkte, zu denen es einen Etikett-Artikel gibt (Kundenetikett je Produkt+Kunde oder Etikett-Slot am Produkt).
+function erp_etikett_produkte(): array {
+    if (!tabelle_da('produkt') || !tabelle_da('item')) return [];
+    return all("SELECT p.id, p.nummer, p.name, COALESCE(NULLIF(p.kundenname,''),'') AS kundenname
+                FROM produkt p
+                WHERE EXISTS (SELECT 1 FROM item i WHERE i.verpackung_rolle='etikett' AND COALESCE(i.gesperrt,0)=0
+                              AND (i.produkt_id=p.id OR i.id=p.etikett_id))
+                ORDER BY p.name");
+}
+// Etikett-Artikel eines Produkts: je Kunde die aktuelle (nicht gesperrte) Version, dazu der Etikett-Slot des Produkts,
+// falls er kein Kundenetikett ist. Masse/Material vom Artikel, sonst von der Mass-Vorlage (etikett_vorlage_id).
+// 'dok' = freigegebenes Design (item.etikett_dokument_id), 'pdf' = ob es ein PDF ist.
+function erp_etikett_zu_produkt(int $produkt_id): array {
+    if ($produkt_id <= 0 || !tabelle_da('item')) return [];
+    $slot = (int) scalar("SELECT COALESCE(etikett_id,0) FROM produkt WHERE id=?", [$produkt_id]);
+    $rows = all("SELECT i.id, i.name, i.kunde_id, COALESCE(i.etikett_version,1) AS version, i.etikett_dokument_id AS dok,
+                        COALESCE(NULLIF(i.etikett_format,''), v.etikett_format) AS format,
+                        COALESCE(i.breite_mm, v.breite_mm) AS breite, COALESCE(i.hoehe_mm, v.hoehe_mm) AS hoehe,
+                        COALESCE(NULLIF(i.material,''), v.material) AS material, i.produkt_id,
+                        k.firma, d.datei, d.datei_orig
+                 FROM item i
+                 LEFT JOIN item v ON v.id=i.etikett_vorlage_id
+                 LEFT JOIN kunden k ON k.id=i.kunde_id
+                 LEFT JOIN dokument d ON d.id=i.etikett_dokument_id
+                 WHERE i.verpackung_rolle='etikett' AND COALESCE(i.gesperrt,0)=0 AND (i.produkt_id=? OR i.id=?)
+                 ORDER BY (i.produkt_id IS NULL), k.firma, i.etikett_version DESC", [$produkt_id, $slot]);
+    $out = [];
+    foreach ($rows as $r) {
+        $dok = (int)($r['dok'] ?? 0);
+        $datei = (string)($r['datei_orig'] ?: $r['datei'] ?? '');
+        $out[] = [
+            'id'       => (int)$r['id'],
+            'name'     => (string)$r['name'],
+            'kunde'    => (string)($r['firma'] ?? ''),
+            'kunde_id' => (int)($r['kunde_id'] ?? 0),
+            'version'  => (int)$r['version'],
+            'kundenetikett' => (int)($r['produkt_id'] ?? 0) === $produkt_id,
+            'dok'      => $dok > 0 && (string)($r['datei'] ?? '') !== '' ? $dok : 0,
+            'pdf'      => $datei === '' || strtolower(pathinfo($datei, PATHINFO_EXTENSION)) === 'pdf',
+            'format'   => trim((string)($r['format'] ?? '')),
+            'breite'   => $r['breite'] !== null ? (float)$r['breite'] : null,
+            'hoehe'    => $r['hoehe'] !== null ? (float)$r['hoehe'] : null,
+            'material' => trim((string)($r['material'] ?? '')),
+        ];
+    }
+    return $out;
+}
+
 // Typen fuer die Lager-2-Einbuchung -> item.kategorie (+ Verpackungs-Rolle + Verpackungsart) + ob "neu anlegen" erlaubt.
 // Verkaufsprodukte werden hier NICHT neu angelegt (gehoeren zum Produkt-Lebenszyklus im Dashboard).
 // 'art' = item.verpackungsart (beutel/stick …) – trennt Pouchbag von Rollenware (beide rolle=primaer).

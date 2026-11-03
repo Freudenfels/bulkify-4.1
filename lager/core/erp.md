@@ -89,3 +89,7 @@ Neue letzte Station **„Wareneingang bei bulkify"** (`eingegangen`, de/en/zh). 
 
 `erp_qm_freigabe_melden($charge_id)`: nach einer Freigabe quarantaene -> frei in `erp_charge_status_setzen()` meldet die Lager-App
 das per Loopback `?p=api_qm_freigabe` ans Dashboard (Token wie api_einlager) -> dort Produktionsbericht + CoA für den Kunden.
+
+## Etiketten einbuchen (03.11.2026)
+- `erp_etikett_produkte()` – Produkte mit Etikett-Artikel (Kundenetikett `item.produkt_id` oder Slot `produkt.etikett_id`), für die Produktsuche.
+- `erp_etikett_zu_produkt($produkt_id)` – je Kunde die aktuelle (nicht gesperrte) Etikett-Version + Slot. Liefert id, name, kunde, version, kundenetikett, dok (freigegebenes Design), pdf, format, breite, hoehe und material (mit Fallback auf die Maß-Vorlage `etikett_vorlage_id`). Liest nur.

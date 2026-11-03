@@ -86,3 +86,12 @@ Etikett/Verpackung/Rohstoff einbuchen will – der Artikel wird dadurch nicht me
 
 ## Teillieferung (Nacht 1c)
 `bestellung_position.geliefert_menge` (neu, additiv) zählt, was je Position schon eingebucht ist. Der Wareneingang mit Bestellbezug ruft `bestellung_lieferung_erfassen($bestellung_id, $charge_ids)` (Lager-App: `erp_bestellung_lieferung_erfassen`): die Chargen werden auf die Positionen verteilt (gleicher Artikel, sonst Freitext-Position; g/kg und ml/l werden umgerechnet). **Geschlossen** (angekommen_am, Status geliefert) wird die Bestellung erst, wenn alle Positionen zu mind. 98 % geliefert sind. Vorher bleibt sie offen, und „unterwegs" zählt nur den Rest (`bp_rest_sql()`, auch in `bulk_position_basis_sql()`), es entsteht also kein doppelter Bedarf. Der Knopf „liefern" (`bestellung_wareneingang`) setzt alle Positionen voll.
+
+## Etiketten einbuchen (03.11.2026)
+Eigene Kachel **„Etiketten einbuchen“** (`data-weg="etikett"`), direkt erreichbar auch per `?p=we&weg=etikett` (Knopf auf der Startseite neben „Einbuchen“).
+1. **Produkt wählen** per Textsuche (datalist aus `erp_etikett_produkte()`: Produkte mit Kundenetikett oder Etikett-Slot).
+2. AJAX `aktion=etikett_produkt` → `erp_etikett_zu_produkt()`: je Kunde die aktuelle, nicht gesperrte Version (dazu der Etikett-Slot des Produkts, falls er kein Kundenetikett ist). Mehrere → Auswahl Kunde/Version, eines → sofort gezeigt.
+3. **Prüfen:** Das freigegebene Design (`item.etikett_dokument_id`, über `?p=dok`) erscheint als Vorschau (`/assets/etikett_vorschau.js`: PDF Seite 1 per pdf.js als Bild, damit es auch am Handy/PWA sichtbar ist). Daneben groß die Maße (`breite_mm × hoehe_mm`, sonst `etikett_format`), Material, Version, Kunde und Artikel. Fehlende Maße/Material kommen von der Maß-Vorlage (`etikett_vorlage_id`). Ohne Design steht ein klarer Hinweis: „Kein freigegebenes Etikett-Design hinterlegt“.
+4. Erst nach **„Design und Größe stimmen – Menge erfassen“** erscheinen Ziel/Lieferant und die Position. Der Etikett-Artikel ist vorbelegt, die Warenart steht auf Etikett (Rolle), sichtbar sind nur Gesamtmenge und Anzahl Rollen. Gebucht wird unverändert (`erp_etikett_rollen_verteilen`).
+
+Nebenbei behoben: Die Start-Kacheln blieben nach der Wahl eines Wegs sichtbar (`display:grid` schlug `hidden`).
