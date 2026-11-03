@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         }
         if (!isset($info[$key])) continue;
         $a = $info[$key];
-        if (!empty($a['etikett']) && empty($a['etikett_ok'])) continue;   // Sperre: ohne Etikett-Design nicht bestellen
+        if ((!empty($a['etikett']) || !empty($a['druck'])) && empty($a['etikett_ok'])) continue;   // Sperre: ohne freigegebenes Etikett-/Beutel-Design nicht bestellen
         $menge = $ovMenge($key) ?? (float)$a['zu_bestellen'];   // Einkauf darf die Menge anheben (z. B. 1000 -> 2000)
         $pos = ['item_id'=>(int)$a['item_id'], 'menge'=>$menge, 'auftrag_id'=>(int)($a['auftrag_id'] ?? 0)];
         if ($online) $groups[0]['pos'][] = $pos; else $einzel[] = ['sup'=>$sup, 'pos'=>$pos];
@@ -353,11 +353,11 @@ if ($ohneFestlegung): ?>
       <?php foreach ($aggTab as $a):
           $istEtikett = !empty($a['etikett']);
           $key = $istEtikett ? ('etikett:' . (int)$a['item_id'] . ':' . (int)$a['auftrag_id']) : ('item:' . (int)$a['item_id']);
-          $gesperrt = $istEtikett && empty($a['etikett_ok']);
+          $gesperrt = ($istEtikett || !empty($a['druck'])) && empty($a['etikett_ok']);   // Etikett bzw. vollbedruckter Beutel ohne Design-Freigabe
           $ei = $istEtikett ? etikett_info((int)$a['auftrag_id']) : null;
       ?>
         <tr<?= $gesperrt ? ' style="opacity:.75"' : '' ?>>
-          <td><?php if ($gesperrt): ?><span title="Etikett noch nicht vom Kunden freigegeben">gesperrt</span><?php else: ?><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"><?php endif; ?></td>
+          <td><?php if ($gesperrt): ?><span title="<?= !empty($a['druck']) ? 'Beutel-Design noch nicht vom Kunden freigegeben' : 'Etikett noch nicht vom Kunden freigegeben' ?>">gesperrt</span><?php else: ?><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"><?php endif; ?></td>
           <td><?= h($a['name']) ?>
             <?php if ($istEtikett): ?>
               <?php if ($gesperrt): ?> <?= bx_badge('wartet auf Kunden-Freigabe','warn') ?>

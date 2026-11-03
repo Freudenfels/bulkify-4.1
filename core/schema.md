@@ -340,3 +340,11 @@ Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route,
 `kundenspezifisch=1`. Bedruckter Behälter = der Druck ersetzt das Etikett: `verpackung_ist_bedruckt()` / `auftrag_vollbedruckt()`
 -> kein Kundenetikett, `auftrag_braucht_etikett()` = nein (keine Freigabe-Sperre, kein Etikett im Portal), kein Etikett im
 Bedarf/Einkauf, `produktion_etikett_entnehmen()` bucht nichts. Der Schritt „Etikettieren“ bleibt (Charge/MHD-Kennzeichnung).
+
+**Beutel-Design-Freigabe (Nico 03.11.2026):** Der vollbedruckte Beutel braucht wie das Etikett die Design-Freigabe des
+Kunden VOR der Produktion. `auftrag_braucht_etikett()` = „braucht Design-Freigabe“ (auch vollbedruckt), derselbe Ablauf
+(Upload + Freigabe am Auftrag/Portal, `produktion_etikett_sperre()`, Teilmenge 0 bis zur Freigabe). Material bleibt getrennt:
+vollbedruckt = kein Kundenetikett/kein Etikett im Bedarf (`auftrag_vollbedruckt()`). `auftrag_design_label()` liefert
+„Etikett“ bzw. „Beutel-Design“ für die Texte. `kundenetikett_nach_freigabe()` hängt das freigegebene Design bei vollbedruckt
+an den Beutel (`item.etikett_dokument_id`/`etikett_datei_sig`) statt eine Etikett-Version anzulegen. Einkauf: der bedruckte
+Beutel (`bedarf_aggregiert()['druck']`) ist erst bestellbar, wenn alle Aufträge mit ihm freigegeben sind.

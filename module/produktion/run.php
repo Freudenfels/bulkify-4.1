@@ -54,13 +54,14 @@ if (!$id) {
           $done = (int)$o['n_done']; $tot = max(1, (int)$o['n_total']);
           $ber  = produktion_bereitschaft((int)$o['id'])['status'];   // bereit|wartet|laeuft|fertig
           // Etikett: Produkt mit Etikett-Slot braucht die KUNDENFREIGABE (nicht nur ein Design), sonst gesperrt.
-          $etNoetig  = !empty($o['etikett_id']) && !empty($o['auftrag_id']);
+          $etNoetig  = !empty($o['auftrag_id']) && (!empty($o['etikett_id']) || auftrag_braucht_etikett((int)$o['auftrag_id']));   // auch vollbedruckter Beutel (Design-Freigabe)
+          $etLbl     = $etNoetig ? auftrag_design_label((int)$o['auftrag_id']) : 'Etikett';
           $etFrei    = $etNoetig && etikett_freigegeben((int)$o['auftrag_id']);
           $etFehlt   = $etNoetig && !$etFrei;
           $etDesignDa = $etNoetig && etikett_vorhanden((int)$o['auftrag_id']);
           $machbar = ($ber !== 'wartet') && !$etFehlt;
           if ($ber === 'wartet')      { $mLbl = bx_badge('wartet auf Material','warn'); }
-          elseif ($etFehlt)           { $mLbl = bx_badge($etDesignDa ? 'Etikett nicht freigegeben' : 'Etikett fehlt','warn'); }
+          elseif ($etFehlt)           { $mLbl = bx_badge($etDesignDa ? $etLbl . ' nicht freigegeben' : $etLbl . ' fehlt','warn'); }
           elseif ($ber === 'laeuft')  { $mLbl = bx_badge('in Produktion','info'); }
           else                        { $mLbl = bx_badge('produzierbar','ok'); }
           $statusLbl = $done > 0 ? bx_badge('läuft','warn') : bx_badge('offen','info');

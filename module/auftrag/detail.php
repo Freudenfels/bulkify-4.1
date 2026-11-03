@@ -654,7 +654,8 @@ $glasName = $glasId ? (string) scalar("SELECT name FROM item WHERE id=?", [$glas
 $fehltCard = fn($txt) => '<span style="color:var(--warn)">' . h($txt) . '</span>';
 // Die Kennzahl-Kacheln stehen jetzt IM Reiter „Details" (siehe unten, data-panel="details"), nicht mehr
 // über den Reitern. Als Closure vorbereitet, damit sie dort an der richtigen Stelle gerendert werden.
-$kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCard, $einhProP, $gesamtStk, $groesseLbl, $istFremd, $etikettBadge, $eur, $istFuellG) {
+$designLbl = auftrag_design_label((int)$a['id']);   // „Etikett" bzw. „Beutel-Design" (vollbedruckter Beutel)
+$kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCard, $einhProP, $gesamtStk, $groesseLbl, $istFremd, $etikettBadge, $eur, $istFuellG, $designLbl) {
     echo '<div class="bx-cards" style="margin-bottom:16px">';
     echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . number_format((int)$a['menge'], 0, ',', '.') . '</div></div>';
@@ -670,7 +671,7 @@ $kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCar
     if ($groesseLbl !== '') { $grK = match((string)($rezeptur['darreichungsform'] ?? '')) { 'kapsel','softgel'=>'Kapselgröße', 'tablette'=>'Tablettenform', 'gummi','stick','pulver','gel','fluessig','oel'=>'Größe je Einheit', default=>'Größe/Form' };
         echo '<div class="bx-card"><div class="k">' . $grK . '</div><div class="v">' . h($groesseLbl) . '</div></div>'; }
     echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Etikett</div><div class="v">' . $etikettBadge . '</div></div>';
+    echo '<div class="bx-card"><div class="k">' . h($designLbl) . '</div><div class="v">' . $etikettBadge . '</div></div>';
     echo '<div class="bx-card"><div class="k">VK / Packung (gesamt)</div><div class="v">' . $eur(auftrag_vk_gesamt($a)) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $eur($a['gesamt_netto']) . '</div></div>';
     if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
@@ -852,7 +853,7 @@ if (has_role('admin') || has_role('sales')):
 <?php // Reiter „Verpackung": Etikett-Verwaltung (Team/Admin) – hochladen/ersetzen (Last-Minute), Freigabe im Namen des Kunden, entfernen.
 if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $etDokA = etikett_datei($id); ?>
 <div class="bx-panel" data-panel="material">
-  <h2 style="margin-top:0">Etikett</h2>
+  <h2 style="margin-top:0"><?= auftrag_vollbedruckt($id) ? 'Beutel-Design (vollbedruckt, statt Etikett)' : 'Etikett' ?></h2>
   <?php if (isset($_GET['etikettok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Etikett aktualisiert.</div><?php endif; ?>
   <p class="muted" style="margin-top:0">Admin/Vertrieb kann hier ein Etikett für den Kunden hochladen (z.&nbsp;B. Last-Minute-Änderung) und die Freigabe im Namen des Kunden bestätigen.</p>
   <p style="margin:0 0 10px">

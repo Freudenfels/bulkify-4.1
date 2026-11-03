@@ -696,8 +696,11 @@ function erp_etikett_sperre(int $pa_id): string {
     $r = one("SELECT a.verpackung_id AS a_vp, a.etikett_freigegeben, p.etikett_id, p.verpackung_id AS p_vp
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$aid]);
     if (!$r) return '';
-    $braucht = !erp_vollbedruckt($pa_id) && ((int)($r['etikett_id'] ?? 0) > 0 || ((int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0)) > 0);
+    $braucht = (int)($r['etikett_id'] ?? 0) > 0 || ((int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0)) > 0;
     if (!$braucht || (int)($r['etikett_freigegeben'] ?? 0) === 1) return '';
+    if (erp_vollbedruckt($pa_id))   // vollbedruckter Beutel: Design-Freigabe wie beim Etikett (Nico 03.11.2026)
+        return erp_etikett_datei($pa_id) !== null ? 'Das Beutel-Design (vollbedruckt) ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
+                                                 : 'Es fehlt noch das Beutel-Design (vollbedruckt) bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
     return erp_etikett_datei($pa_id) !== null ? 'Das Etikett ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
                                              : 'Es fehlt noch das Etikett-Design bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
 }

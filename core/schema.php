@@ -7830,7 +7830,7 @@ function pa_vorbereitung_checks(int $pa_id): array {
     // 2) Etikett freigegeben (Kunde/Team) – nur wenn das Produkt ein Etikett braucht.
     if (function_exists('auftrag_braucht_etikett') && $aid && auftrag_braucht_etikett($aid)) {
         $frei = function_exists('etikett_freigegeben') && etikett_freigegeben($aid);
-        $checks[] = ['key'=>'etikett', 'label'=>'Etikett freigegeben', 'kritisch'=>true,
+        $checks[] = ['key'=>'etikett', 'label'=>auftrag_design_label($aid) . ' freigegeben', 'kritisch'=>true,
                      'ok'=>(bool)$frei, 'wert'=>$frei ? 'freigegeben' : 'noch nicht freigegeben'];
     }
     // 3) Material: Rohstoffe/Bulk angekommen, genug Gläser, Kartons … – je Rolle aus der Stückliste.
@@ -8514,7 +8514,8 @@ function produktion_teilmenge_machbar(int $pa_id): array {
     $frei      = $brauchtEt && etikett_freigegeben($aid);
     // Komplett fertig: ohne Etikett = wie vor_etikett; mit Etikett = zusätzlich Etikettenbestand + Freigabe.
     if (!$brauchtEt)      { $komplett = $vorEtikett; $limitKomplett = $limitVor; }
-    elseif (!$frei)       { $komplett = 0;           $limitKomplett = 'Etikett nicht freigegeben'; }
+    elseif (!$frei)       { $komplett = 0;           $limitKomplett = auftrag_design_label($aid) . ' nicht freigegeben'; }
+    elseif (auftrag_vollbedruckt($aid)) { $komplett = $vorEtikett; $limitKomplett = $limitVor; }   // vollbedruckt: kein Etikett-Material
     else {
         $etM = max(0, (int)($etikettMachbar ?? 0));
         $komplett = min($vorEtikett, $etM);
@@ -9032,7 +9033,8 @@ function etikett_del(int $auftrag_id): void {
 // --- Etikettenfreigabe (Kunde) -------------------------------------------------
 // Bedruckter Behälter (z. B. vollbedruckter Standbodenbeutel): der Druck ERSETZT das Etikett (Nico 03.11.2026 –
 // Standbodenbeutel vollbedruckt = Standard, „Blanko + Etikett" = Ausnahme). Dann gibt es kein Kundenetikett, kein
-// Etikett im Bedarf/Einkauf, keine Etikett-Entnahme und keine Etikett-Freigabe-Sperre.
+// Etikett im Bedarf/Einkauf und keine Etikett-Entnahme. Die DESIGN-FREIGABE bleibt wie beim Etikett Pflicht vor der
+// Produktion (derselbe Ablauf: Upload + Freigabe am Auftrag, Sperre bis zur Freigabe) – nur heißt es „Beutel-Design".
 function verpackung_ist_bedruckt(int $item_id): bool {
     return $item_id > 0 && (int) scalar("SELECT COALESCE(kundenspezifisch,0) FROM item WHERE id=?", [$item_id]) === 1;
 }
@@ -9041,12 +9043,16 @@ function auftrag_vollbedruckt(int $auftrag_id): bool {
     $vp = (int) scalar("SELECT COALESCE(NULLIF(a.verpackung_id,0), p.verpackung_id, 0) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
     return verpackung_ist_bedruckt($vp);
 }
-// Braucht dieser Auftrag überhaupt ein Etikett? (nur Produkte mit Etikett-Slot). Ohne Produkt/Slot = nein.
+// Bezeichnung des freizugebenden Designs je Auftrag (Texte in Portal/Auftrag/Sperre).
+function auftrag_design_label(int $auftrag_id): string {
+    return auftrag_vollbedruckt($auftrag_id) ? 'Beutel-Design' : 'Etikett';
+}
+// Braucht dieser Auftrag eine Design-Freigabe (Etikett bzw. Beutel-Design bei vollbedrucktem Behälter)?
+// Ohne Produkt/Behälter = nein. Ob ETIKETT-MATERIAL nötig ist, entscheidet zusätzlich auftrag_vollbedruckt().
 function auftrag_braucht_etikett(int $auftrag_id): bool {
     $r = one("SELECT a.verpackung_id AS a_vp, p.etikett_id, p.verpackung_id AS p_vp
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
     if (!$r) return false;
-    if (verpackung_ist_bedruckt((int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0))) return false;   // vollbedruckt: kein Etikett
     if ((int)($r['etikett_id'] ?? 0) > 0) return true;           // expliziter Etikett-Slot am Produkt
     // Etikett ist Standard: jedes VERPACKTE Produkt (Glas/Dose) bekommt ein Etikett. Behälter des Auftrags
     // hat Vorrang (Admin kann je Auftrag ein anderes Glas setzen), sonst der des Produkts. Das Etikett (inkl.
@@ -9368,6 +9374,15 @@ function kundenetikett_nach_freigabe(int $auftrag_id): void {
     if ($pid <= 0 || !auftrag_braucht_etikett($auftrag_id)) return;
     $dok = etikett_datei($auftrag_id);         // nach Freigabe gibt es IMMER eine eigene Datei (ggf. aus Vorbestellung kopiert)
     if (!$dok) return;
+    // Vollbedruckter Beutel: kein Kundenetikett – das freigegebene Design gehört an den bedruckten Beutel (Druckvorlage
+    // für Einkauf/Drucker, nachvollziehbar je Kunde).
+    if (auftrag_vollbedruckt($auftrag_id)) {
+        $vpk = (int)($au['vp'] ?? 0);
+        if (verpackung_ist_bedruckt($vpk))
+            q("UPDATE item SET etikett_dokument_id=?, etikett_datei_sig=? WHERE id=?", [(int)$dok['id'], kundenetikett_datei_sig((string)$dok['datei']), $vpk]);
+        if (function_exists('bedarf_bump')) bedarf_bump();
+        return;
+    }
     $sig = kundenetikett_datei_sig((string)$dok['datei']);
     // Die Versionskette gilt je PRODUKT + KUNDE: ein anderer Kunde desselben Katalogprodukts hat seine eigene Kette
     // und wird durch diese Freigabe weder gesperrt noch umgebunden.
@@ -9575,6 +9590,10 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
             $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id']]);
             $a['zu_bestellen'] = max(0.0, $a['need'] - $a['stock'] - $a['quarantaene'] - $a['bestellt']);
             $a['etikett_ok'] = true;
+            // Bedruckter Behälter (vollbedruckter Beutel): wie das Etikett erst bestellbar, wenn der Kunde das Design
+            // freigegeben hat – bei ALLEN Aufträgen, die ihn brauchen (Nico 03.11.2026).
+            $a['druck'] = verpackung_ist_bedruckt((int)$a['item_id']);
+            if ($a['druck']) foreach ($a['orders'] as $o) if (!etikett_freigegeben((int)$o['auftrag_id'])) { $a['etikett_ok'] = false; break; }
         }
         $a['haupt_lieferant'] = (int) scalar("SELECT haupt_lieferant_id FROM item WHERE id=?", [$a['item_id']]);
     }
@@ -10175,6 +10194,9 @@ function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?i
 function produktion_etikett_sperre(int $pa_id): string {
     $aid = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if ($aid <= 0 || !auftrag_braucht_etikett($aid) || etikett_freigegeben($aid)) return '';
+    if (auftrag_vollbedruckt($aid))
+        return etikett_vorhanden($aid) ? 'Das Beutel-Design (vollbedruckt) ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
+                                       : 'Es fehlt noch das Beutel-Design (vollbedruckt) bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
     return etikett_vorhanden($aid) ? 'Das Etikett ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
                                    : 'Es fehlt noch das Etikett-Design bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
 }

@@ -4075,11 +4075,11 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:13px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
         <span class="muted" style="font-size:13px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : (!$trackA ? 'In Bearbeitung' : 'Schritt ' . ($curIdx + 1) . '/' . $totalA . ': ' . h((string)($trackA[$curIdx]['label'] ?? ''))) ?></span>
-        <?php if ($etMiss): ?><?= bx_badge('Etikett fehlt', 'err') ?><?php endif; ?>
+        <?php if ($etMiss): ?><?= bx_badge(auftrag_design_label((int)$a['id']) . ' fehlt', 'err') ?><?php endif; ?>
         <?= $aufBadge($a) ?><?php $kontStorno = ($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']);
             $zst = $kontStorno ? '' : ($zahlMapBest[(int)$a['id']] ?? (!empty($a['bezahlt_am']) ? 'bezahlt' : '')); if ($zst): ?> <?= $reBadge($zst) ?><?php endif; ?><span class="muted" style="font-size:18px;line-height:1">&#8250;</span></div>
     </div>
-    <?php if ($etMiss): ?><div style="margin-top:8px;color:#8f231b;font-size:13px;font-weight:600">Etikett fehlt – bitte Etikett-Design hochladen und freigeben (Bestellung öffnen).</div><?php endif; ?>
+    <?php if ($etMiss): $dlbl = auftrag_design_label((int)$a['id']); ?><div style="margin-top:8px;color:#8f231b;font-size:13px;font-weight:600"><?= h($dlbl) ?> fehlt – bitte <?= $dlbl === 'Etikett' ? 'Etikett-Design' : 'Beutel-Design' ?> hochladen und freigeben (Bestellung öffnen).</div><?php endif; ?>
     <ul class="bx-steps" style="margin-top:12px">
       <?php foreach ($trackA as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
           $sub = $t['date'] ? fmt_zeit($t['date'], 'd.m.Y') : ($t['sub'] ?? ''); ?>
@@ -4341,7 +4341,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       $etFrei    = etikett_freigegeben((int)$a['id']);
       $etVorlage = etikett_druckvorlage_datei((int)($a['produkt_id'] ?? 0));
       ob_start(); ?>
-      <h2 style="margin:0 0 12px;font-size:16px">Ihr Etikett</h2>
+      <h2 style="margin:0 0 12px;font-size:16px"><?= auftrag_vollbedruckt((int)$a['id']) ? 'Ihr Beutel-Design (vollbedruckt)' : 'Ihr Etikett' ?></h2>
       <?php $__etbK = etikett_bestand_info((int)($a['produkt_id'] ?? 0), (int)$k['id']);
             if (!empty($__etbK['hat_etikett']) && $__etbK['bezahlt'] > 0): ?>
         <p class="muted" style="font-size:12px;margin:0 0 8px">Ihre Etiketten im Lager: <strong><?= number_format($__etbK['kunde_sichtbar'], 0, ',', '.') ?></strong> von <?= number_format($__etbK['bezahlt'], 0, ',', '.') ?> bestellten</p>

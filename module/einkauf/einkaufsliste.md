@@ -69,3 +69,6 @@ In der Rohstoff-/Verpackungszeile zeigte die Unterzeile fälschlich `Bedarf = zu
 
 ## Fertigware / Handelsware (S-15)
 Zeilen aus `bedarf_bulk()` mit `art='fertig'` heißen „Fertigware: …", Mengen in Packungen, Preise je Packung (`produkt_lieferant_preise_pkg()`); Handelsware-Aufträge ohne Produktionsauftrag verlinken auf den Auftrag und sind als „Handelsware" markiert.
+
+**Vollbedruckter Beutel (03.11.2026):** wie Etiketten gesperrt („gesperrt“, kein Haken), bis der Kunde das Beutel-Design
+aller Aufträge mit diesem Beutel freigegeben hat (`druck` + `etikett_ok` aus `bedarf_aggregiert()`).
