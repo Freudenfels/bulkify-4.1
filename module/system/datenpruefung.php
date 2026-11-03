@@ -273,6 +273,54 @@ $CHECKS = [
         'ohne_fix'  => 'Nur Anzeige – Beheben-Knopf erst nach Freigabe.',
         'fix'   => null,
     ],
+    'pulver_kundenpreis' => [
+        'titel' => 'Pulver: Kundenpreis mit Portionen statt g je Packung',
+        'info'  => 'Bei Pulver/Granulat ist die Menge je Packung die Füllmenge in g. Alte Zeilen (v3) tragen die Portionszahl (z. B. 31 statt 275 g). Treffer: Menge kleiner als die Füllmenge des Produkts UND Menge × Portionsgröße liegt höchstens 25 % neben der Füllmenge (dann sind es Portionen). Korrektur: Menge = Füllmenge des Produkts.',
+        'sql'   => "SELECT k.id AS _id, CONCAT('?p=produkt&id=', p.id) AS _link, p.nummer, p.name AS produkt, kd.firma AS kunde,
+                           k.menge_pro_vpe AS menge_jetzt, ROUND(x.mg/1000, 2) AS portion_g, ROUND(k.menge_pro_vpe*x.mg/1000) AS als_portionen_g,
+                           p.einheiten_pro_packung AS fuellmenge_g, k.preis, k.notiz,
+                           (SELECT k2.id FROM produkt_kundenpreis k2 WHERE k2.produkt_id=k.produkt_id AND k2.kunde_id=k.kunde_id
+                              AND k2.menge_pro_vpe=p.einheiten_pro_packung AND k2.id<>k.id LIMIT 1) AS _konflikt
+                    FROM produkt_kundenpreis k
+                    JOIN produkt p ON p.id = k.produkt_id
+                    JOIN rezeptur r ON r.id = p.rezeptur_id
+                    JOIN (SELECT rezeptur_id, SUM(menge_mg) AS mg FROM rezeptur_zutat GROUP BY rezeptur_id) x ON x.rezeptur_id = r.id
+                    LEFT JOIN kunden kd ON kd.id = k.kunde_id
+                    WHERE r.darreichungsform IN ('pulver','granulat') AND x.mg > 0 AND k.menge_pro_vpe > 0
+                      AND p.einheiten_pro_packung > k.menge_pro_vpe
+                      AND ABS(k.menge_pro_vpe*x.mg/1000 - p.einheiten_pro_packung) <= 0.25*p.einheiten_pro_packung
+                    ORDER BY p.id, k.id",
+        'zeilen' => function (array $rows): array {
+            foreach ($rows as &$r) $r['aenderung'] = $r['_konflikt'] ? 'nicht automatisch: Zeile mit ' . $r['fuellmenge_g'] . ' g gibt es schon (#' . $r['_konflikt'] . ')' : 'menge ' . $r['menge_jetzt'] . ' -> ' . $r['fuellmenge_g'] . ' g';
+            return $rows;
+        },
+        'korrektur' => "-- je angehakter Zeile: Menge je Packung = Füllmenge des Produkts (g), nur wenn die Menge noch die alte ist\nUPDATE produkt_kundenpreis SET menge_pro_vpe = <fuellmenge_g> WHERE id = <Zeile> AND menge_pro_vpe = <menge_jetzt>;",
+        'ohne_fix'  => 'Zeilen, deren Zielgröße es für Produkt + Kunde schon gibt, sind nicht anwählbar (nichts zusammenlegen, nichts löschen) – dort die alte Zeile auf der Produktseite entfernen.',
+        'fix'   => ['tabelle' => 'produkt_kundenpreis', 'typ' => 'produkt_kundenpreis',
+                    'waehlbar' => fn(array $r) => empty($r['_konflikt']),
+                    'update' => "UPDATE produkt_kundenpreis SET menge_pro_vpe = ? WHERE id = ? AND menge_pro_vpe = ?",
+                    'params' => fn(array $r) => [(int)$r['fuellmenge_g'], (int)$r['_id'], (int)$r['menge_jetzt']]],
+    ],
+    'pulver_auftrag' => [
+        'titel' => 'Pulver: Auftrag mit Portionen statt g je Packung (Kontrolle)',
+        'info'  => 'Gleiche Regel für auftrag.stueck: v3-Pulveraufträge tragen teils die Portionszahl. Dann rechnet der Bedarf zu niedrig und die Kundenpreis-Liste zeigt z. B. „31 g". Korrigieren über den Produktionsauftrag, Panel „Füllmenge je Packung (Pulver)“. Es setzt Produkt, Auftrag und PA zusammen.',
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, a.status, p.nummer AS produkt_nr, p.name AS produkt, kd.firma AS kunde,
+                           a.stueck AS stueck_jetzt, ROUND(x.mg/1000, 2) AS portion_g, ROUND(a.stueck*x.mg/1000) AS als_portionen_g, p.einheiten_pro_packung AS fuellmenge_g,
+                           (SELECT pa.id FROM produktionsauftrag pa WHERE pa.auftrag_id=a.id ORDER BY pa.id LIMIT 1) AS pa_id,
+                           (SELECT CONCAT('?p=produktionsauftrag&id=', pa.id) FROM produktionsauftrag pa WHERE pa.auftrag_id=a.id ORDER BY pa.id LIMIT 1) AS _link_pa_id
+                    FROM auftrag a
+                    JOIN produkt p ON p.id = a.produkt_id
+                    JOIN rezeptur r ON r.id = p.rezeptur_id
+                    JOIN (SELECT rezeptur_id, SUM(menge_mg) AS mg FROM rezeptur_zutat GROUP BY rezeptur_id) x ON x.rezeptur_id = r.id
+                    LEFT JOIN kunden kd ON kd.id = a.kunde_id
+                    WHERE r.darreichungsform IN ('pulver','granulat') AND x.mg > 0 AND a.stueck > 0 AND a.status <> 'storniert'
+                      AND p.einheiten_pro_packung > a.stueck
+                      AND ABS(a.stueck*x.mg/1000 - p.einheiten_pro_packung) <= 0.25*p.einheiten_pro_packung
+                    ORDER BY a.id DESC",
+        'korrektur' => "-- je Auftrag über den PA: Panel „Füllmenge je Packung (Pulver)“ (aktion=pulver_fuellmenge) setzt produkt.einheiten_pro_packung, auftrag.stueck und pa.stueck",
+        'ohne_fix'  => 'Nur Anzeige – Korrektur am Produktionsauftrag (dort sieht man die Portionen zur Kontrolle).',
+        'fix'   => null,
+    ],
 ];
 
 // Artikelnummer für ein Kundenetikett: dieselbe Logik wie kundenetikett_version_anlegen() (Aufräumen 17) –

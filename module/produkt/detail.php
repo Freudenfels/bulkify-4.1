@@ -68,7 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kp_ad
     $kpp = (float) str_replace(',', '.', (string)($_POST['kp_preis'] ?? '0'));   // Preis je Packung (ohne Verpackung)
     $kpn = trim((string)($_POST['kp_notiz'] ?? ''));
     if ($kpk > 0 && $kpp > 0) {
-        q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,preis,notiz) VALUES (?,?,?,?,?,?)",
+        // Gibt es für diesen Kunden schon eine Zeile dieser Größe (Produkt + Kunde + Menge je Packung), wird sie aktualisiert
+        // statt eine zweite anzulegen (gleicher Schlüssel wie kundenpreis_setzen()).
+        $kpEx = $kpm ? (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? LIMIT 1", [(int)$id, $kpk, $kpm]) : 0;
+        if ($kpEx) q("UPDATE produkt_kundenpreis SET anzahl_vpe=?, preis=?, notiz=? WHERE id=?", [$kpa, $kpp, $kpn ?: null, $kpEx]);
+        else q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,preis,notiz) VALUES (?,?,?,?,?,?)",
           [(int)$id, $kpk, $kpm, $kpa, $kpp, $kpn ?: null]);
         log_aktivitaet('produkt', (int)$id, 'team', 'Kundenpreis gesetzt: ' . number_format($kpp, 2, ',', '.') . ' € je Packung' . ($kpm ? ' (' . $kpm . ' je VPE)' : '') . '.', 'notiz');
     }
@@ -818,13 +822,14 @@ recalc();
   <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Vereinbarter VK je Packung (ohne Verpackung) pro Kunde. Sobald hier ein Preis steht, sieht DIESER Kunde das Produkt in seinem Portal mit „ab xy €" statt „Preis auf Anfrage". Mehrere Zeilen je Kunde möglich – der günstigste Preis ist der „ab"-Preis.') ?></h2>
   <?php if (isset($_GET['kpok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Kundenpreis gespeichert.</div><?php endif; ?>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Kunde</th><th class="bx-num">Kapseln/Stk je Verpackung</th><th class="bx-num">Anzahl Verpackungen</th><th class="bx-num">Preis je Verpackung</th><th>Notiz</th><th></th></tr></thead>
+    <?php $kpG = form_groessen_einheit((string)$pForm); // Pulver/Granulat: g je Packung, Flüssig/Gel: ml ?>
+    <thead><tr><th>Kunde</th><th class="bx-num"><?= $kpG !== '' ? 'Füllmenge je Verpackung' : 'Kapseln/Stk je Verpackung' ?></th><th class="bx-num">Anzahl Verpackungen</th><th class="bx-num">Preis je Verpackung</th><th>Notiz</th><th></th></tr></thead>
     <tbody>
       <?php if (!$kundenpreise): ?><tr><td colspan="6" class="muted">Noch keine Kundenpreise. Unten eintragen – danach sieht der Kunde „ab xy €" im Portal.</td></tr><?php endif; ?>
       <?php foreach ($kundenpreise as $kp): ?>
         <tr>
           <td><?= h($kp['firma']) ?></td>
-          <td class="bx-num"><?= $kp['menge_pro_vpe'] !== null ? (int)$kp['menge_pro_vpe'] : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $kp['menge_pro_vpe'] !== null ? h(form_groessen_label((string)$pForm, (float)$kp['menge_pro_vpe'])) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $kp['anzahl_vpe'] !== null ? number_format((int)$kp['anzahl_vpe'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $kp['preis'] !== null ? '<strong>' . number_format((float)$kp['preis'], 2, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
           <td class="muted" style="font-size:12px"><?= $kp['notiz'] ? h($kp['notiz']) : ($kp['verpackung'] ? h($kp['verpackung']) : '') ?></td>
@@ -837,7 +842,7 @@ recalc();
     <input type="hidden" name="aktion" value="kp_add">
     <div class="bx-field" style="margin:0;min-width:200px"><label>Kunde</label>
       <select name="kp_kunde" required><option value="">– wählen –</option><?php foreach ($kunden as $kc): ?><option value="<?= (int)$kc['id'] ?>" <?= (int)($p['kunde_id'] ?? 0)===(int)$kc['id']?'selected':'' ?>><?= h($kc['firma']) ?></option><?php endforeach; ?></select></div>
-    <div class="bx-field" style="margin:0;width:150px"><label>Kapseln/Stk je Verpackung</label><input type="number" min="0" step="1" name="kp_menge" placeholder="z. B. 120"></div>
+    <div class="bx-field" style="margin:0;width:150px"><label><?= $kpG !== '' ? 'Füllmenge je Verpackung (' . $kpG . ')' : 'Kapseln/Stk je Verpackung' ?></label><input type="number" min="0" step="1" name="kp_menge" placeholder="<?= $kpG === 'g' ? 'z. B. 275' : ($kpG === 'ml' ? 'z. B. 250' : 'z. B. 120') ?>"></div>
     <div class="bx-field" style="margin:0;width:140px"><label>Anzahl Verpackungen</label><input type="text" name="kp_anzahl" placeholder="z. B. 1.490"></div>
     <div class="bx-field" style="margin:0;width:130px"><label>Preis je Verpackung (€)</label><input type="text" name="kp_preis" required placeholder="z. B. 4,05"></div>
     <div class="bx-field" style="margin:0;width:170px"><label>Notiz (optional)</label><input type="text" name="kp_notiz" placeholder="z. B. ohne Verpackung"></div>

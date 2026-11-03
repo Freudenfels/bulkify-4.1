@@ -75,3 +75,6 @@ Im Reiter Verpackung steht unter dem Etikett-Slot die Tabelle **Kundenetiketten 
 - **Reiter Preise:** Preis-Matrix, Lieferantenpreise (Zukauf), Kundenspezifische Namen mit dem **Standard-Namen für alle Kunden (Fallback)** ganz oben, Kundenpreise, In Angeboten & Rechnungen. Das Fallback-Feld `kundenname` gehört per `form="prodStamm"` weiter zum Stammdaten-Formular (gleicher POST); „Standard-Name speichern" schickt dieses Formular ab. Bei der Neuanlage (noch keine Reiter) steht das Feld im Block Identität.
 - **Reiter Dokumente:** PIB, Spezifikation & CoA (KI-Auswertung) und die Dokumentablage (`#dok`, stand vorher auf jedem Reiter).
 - Hinweis: Ändert sich der Fallback-Name, merkt die bestehende Umbenennen-Logik den bisherigen Anzeigenamen automatisch als Synonym.
+
+## Kundenpreis hinzufügen = gleiche Größe aktualisieren (03.11.2026)
+`kp_add` legt keine zweite Zeile derselben Größe mehr an: Gibt es für Produkt + Kunde schon eine Zeile mit dieser Menge je Packung, werden Anzahl, Preis und Notiz dort aktualisiert (gleicher Schlüssel wie `kundenpreis_setzen()`). Bei Pulver/Granulat heißen Spalte und Feld „Füllmenge je Verpackung (g)“, die Werte stehen mit Einheit (z. B. 275 g).

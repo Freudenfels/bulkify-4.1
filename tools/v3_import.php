@@ -339,8 +339,11 @@ if ($WRITE) {
             $pnotiz = $conf ? ('bestätigt ' . $p['bestaetigt_at']) : null;
             $exP = one("SELECT id FROM produkt_kundenpreis WHERE v3_id=?", [(int)$p['id']]);
             if ($exP) {
-                q("UPDATE produkt_kundenpreis SET produkt_id=?,kunde_id=?,menge_pro_vpe=?,anzahl_vpe=?,verpackung=?,preis=?,notiz=? WHERE id=?",
-                  [$pid, $v4kid, $mv, $av, $verp, $preis, cut($pnotiz,255), (int)$exP['id']]); $w2['preis_upd']++;
+                // Pulver/Granulat: v3 führt hier die PORTIONEN, v4 die Füllmenge in g. Eine (per Datenprüfung/Preisliste)
+                // korrigierte Menge darf ein erneuter Import nicht auf die Portionszahl zurücksetzen.
+                $mvPulver = form_groessen_einheit((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$v4rid])) === 'g' ? 1 : 0;
+                q("UPDATE produkt_kundenpreis SET produkt_id=?,kunde_id=?,menge_pro_vpe=IF(?=1 AND COALESCE(menge_pro_vpe,0)>0, menge_pro_vpe, ?),anzahl_vpe=?,verpackung=?,preis=?,notiz=? WHERE id=?",
+                  [$pid, $v4kid, $mvPulver, $mv, $av, $verp, $preis, cut($pnotiz,255), (int)$exP['id']]); $w2['preis_upd']++;
             } else {
                 q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,verpackung,preis,notiz,v3_id) VALUES (?,?,?,?,?,?,?,?)",
                   [$pid, $v4kid, $mv, $av, $verp, $preis, cut($pnotiz,255), (int)$p['id']]); $w2['preis_neu']++;

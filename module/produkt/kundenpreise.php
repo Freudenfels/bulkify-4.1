@@ -81,13 +81,30 @@ function kp_auftraege_fuellen(array $r, float $preis): int {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speichern') {
     $alle = kp_zeilen();
     $nur  = (string)($_POST['nur'] ?? '');
-    $gesp = 0; $gefuellt = 0; $fehler = [];
-    foreach ((array)($_POST['preis'] ?? []) as $k => $roh) {
+    $gesp = 0; $gefuellt = 0; $mengeGes = 0; $fehler = [];
+    $mengen = (array)($_POST['stk'] ?? []);
+    foreach (array_unique(array_merge(array_keys((array)($_POST['preis'] ?? [])), array_keys($mengen))) as $k) {
         $k = (string)$k;
         if ($nur !== '' && $k !== $nur) continue;
-        if (!isset($alle[$k]) || trim((string)$roh) === '') continue;   // nur Zeilen aus der aktuellen Liste
+        if (!isset($alle[$k])) continue;   // nur Zeilen aus der aktuellen Liste
         $r = $alle[$k];
-        $preis = zahl_lesen((string)$roh);
+        // Menge je Packung ändern (bei Pulver g je Packung): DIESELBE Kundenpreis-Zeile umstellen, keine neue anlegen.
+        // Gibt es die Zielgröße für Produkt + Kunde schon als eigene Zeile, wird nichts zusammengelegt (Hinweis statt Doppelzeile).
+        $neuStk = trim((string)($mengen[$k] ?? '')) !== '' ? (int) preg_replace('/\D+/', '', (string)$mengen[$k]) : $r['stk'];
+        if ($r['kp_id'] && $neuStk !== $r['stk']) {
+            $wer = $r['firma'] . ' / ' . $r['produkt'] . ': ';
+            if ($neuStk <= 0) { $fehler[] = $wer . 'Menge je Packung muss größer 0 sein'; continue; }
+            $dup = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND id<>? LIMIT 1", [$r['pid'], $r['kid'], $neuStk, $r['kp_id']]);
+            if ($dup) { $fehler[] = $wer . form_groessen_label($r['form'], $neuStk) . ' gibt es schon als eigene Zeile – Menge nicht geändert'; continue; }
+            $vorM = one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: [];
+            q("UPDATE produkt_kundenpreis SET menge_pro_vpe=? WHERE id=? AND menge_pro_vpe=?", [$neuStk, $r['kp_id'], $r['stk']]);
+            $nachM = one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: [];
+            if ($vorM && aenderung_protokollieren('produkt_kundenpreis', $r['kp_id'], $vorM, $nachM, 'kundenpreise') > 0) $mengeGes++;
+            $r['stk'] = $neuStk;
+        }
+        $roh = (string)($_POST['preis'][$k] ?? '');
+        if (trim($roh) === '') continue;
+        $preis = zahl_lesen($roh);
         if ($preis <= 0) { $fehler[] = $r['firma'] . ' / ' . $r['produkt'] . ': Preis muss größer 0 sein'; continue; }
         if ($r['preis'] !== null && abs($r['preis'] - round($preis, 4)) < 1e-6) continue;   // unverändert
         $vor = $r['kp_id'] ? (one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: []) : [];
@@ -101,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
         $gesp++;
         if ($fuellen) $gefuellt += kp_auftraege_fuellen($r, $preis);
     }
-    $msg = $gesp . ' Kundenpreis(e) gespeichert' . ($fuellen ? ', ' . $gefuellt . ' Auftrag/Aufträge mit Preis gefüllt' : '') . '.';
+    $msg = $gesp . ' Kundenpreis(e) gespeichert' . ($mengeGes ? ', ' . $mengeGes . ' Menge(n) je Packung geändert' : '') . ($fuellen ? ', ' . $gefuellt . ' Auftrag/Aufträge mit Preis gefüllt' : '') . '.';
     $qs = http_build_query(array_filter(['ohne' => $_POST['f_ohne'] ?? '', 'kunde' => $_POST['f_kunde'] ?? '', 'produkt' => $_POST['f_produkt'] ?? '', 'q' => $_POST['f_q'] ?? '']));
     header('Location: ?p=kundenpreise' . ($qs !== '' ? '&' . $qs : '') . '&ok=' . rawurlencode($msg) . ($fehler ? '&err=' . rawurlencode(implode('; ', $fehler)) : '')); exit;
 }
@@ -168,7 +185,9 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
         <td class="kp-txt"><?= kunde_link($r['kid'], $r['firma']) ?></td>
         <td class="kp-txt"><a href="?p=produkt&id=<?= $r['pid'] ?>"><?= h($r['rezeptur'] !== '' ? $r['rezeptur'] : $r['produkt']) ?></a>
             <div class="muted" style="font-size:12px"><?= h($r['produkt_nr']) ?><?= $r['preis'] === null ? ' · ' . bx_badge('ohne Preis', 'warn') : '' ?></div></td>
-        <td class="bx-num" style="white-space:nowrap"><?= h(form_groessen_label($r['form'], (float)$r['stk'])) ?></td>
+        <td class="bx-num" style="white-space:nowrap"><?php if ($r['kp_id']): $einhS = form_groessen_einheit($r['form']) ?: form_plural($r['form']); ?>
+            <input type="text" inputmode="numeric" data-tausender name="stk[<?= h($k) ?>]" value="<?= number_format($r['stk'], 0, ',', '.') ?>" class="kp-stk" style="width:72px;text-align:right" title="Menge je Packung<?= form_groessen_einheit($r['form']) === 'g' ? ' in g (Füllmenge, nicht Portionen)' : '' ?>"> <?= h($einhS) ?>
+          <?php else: ?><?= h(form_groessen_label($r['form'], (float)$r['stk'])) ?><div class="muted" style="font-size:12px">aus Auftrag</div><?php endif; ?></td>
         <td class="kp-txt"><?= $r['verpackung'] !== '' ? h($r['verpackung']) : '<span class="muted">–</span>' ?><?= $r['vollbedruckt'] ? '<div class="muted" style="font-size:12px">vollbedruckt</div>' : '' ?></td>
         <td class="kp-txt" style="font-size:13px"><?= $r['mengen'] ? h(implode(', ', array_map(fn($m) => number_format($m, 0, ',', '.'), $r['mengen']))) . ' Stk' : ($r['anzahl'] ? h(number_format($r['anzahl'], 0, ',', '.')) . ' Stk' : '<span class="muted">–</span>') ?>
             <?php if ($r['ohne_preis_auftraege']): ?><div style="font-size:12px;color:#8f231b"><?= count($r['ohne_preis_auftraege']) ?> Auftrag/Aufträge ohne Preis: <?php foreach ($r['ohne_preis_auftraege'] as $i => $a): ?><?= $i ? ', ' : '' ?><a href="?p=auftrag&id=<?= (int)$a['id'] ?>"><?= h($a['nummer']) ?></a><?php endforeach; ?></div><?php endif; ?></td>
@@ -190,6 +209,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   function zahl(s){ s=(s||'').replace(/[\s ']/g,''); if(s==='') return NaN;
     if(s.indexOf(',')>=0){ s=s.replace(/\./g,'').replace(',','.'); } return parseFloat(s); }
   function eur(v){ return v.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+  document.querySelectorAll('input[data-tausender]').forEach(function(el){ var g=function(){ var d=(el.value||'').replace(/\D/g,''); el.value=d?d.replace(/\B(?=(\d{3})+(?!\d))/g,'.'):''; }; g(); el.addEventListener('blur',g); });
   document.querySelectorAll('.kp-row').forEach(function(tr){
     var inp=tr.querySelector('.kp-preis'); if(!inp) return;
     inp.addEventListener('input',function(){

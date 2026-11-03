@@ -40,3 +40,6 @@ oder geändert.**
 Packungsgröße und Kunde, keine Staffel nach Bestellmenge.
 
 Hinweis „ohne Etikett-Preis“: Der Behälter braucht ein Etikett, es ist aber kein Maß-Etikett (Etikett-Endformat am Behälter) mit Preis hinterlegt – das Etikett steckt dann nicht im VK.
+
+## Menge je Packung ändern (03.11.2026)
+Bei Zeilen mit eigenem Kundenpreis ist „Menge je Pkg“ ein Eingabefeld (bei Pulver/Granulat in g = Füllmenge, nicht Portionen; Tausenderpunkt). Beim Speichern wird **dieselbe** Zeile `produkt_kundenpreis` umgestellt (`UPDATE … WHERE id=? AND menge_pro_vpe=<alt>`, Feld-Protokoll), es entsteht keine neue Zeile. Gibt es die Zielgröße für Produkt + Kunde schon als eigene Zeile, bleibt die Menge unverändert, und ein Hinweis erscheint (nichts wird zusammengelegt oder gelöscht). Zeilen „aus Auftrag“ (noch ohne Kundenpreis) zeigen die Menge des Auftrags nur an. Ist sie bei Pulver eine Portionszahl, über die Datenprüfung „Pulver: Auftrag mit Portionen …“ bzw. das PA-Panel korrigieren.

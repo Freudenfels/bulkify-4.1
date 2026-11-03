@@ -37,3 +37,7 @@ Die Seite führt die Prüf-Abfragen aus der Liste „Nicos manuelle Live-DB-Aufg
 
 ## zeilen (Nachbereitung)
 Optional `zeilen => fn(array $rows): array` ergänzt Spalten, die sich nicht in SQL rechnen lassen – z. B. der neutrale Basis-Behälter (`dp_neutral_herleitung()` über `verpackung_neutrale_basis()`). Beheben prüft gegen dieselbe nachbereitete Liste.
+
+## Pulver: Portionen statt g je Packung (03.11.2026)
+- **pulver_kundenpreis:** `produkt_kundenpreis` bei Pulver/Granulat, deren `menge_pro_vpe` kleiner als die Füllmenge des Produkts ist UND Menge × Portionsgröße (Summe Rezeptur-mg) höchstens 25 % neben der Füllmenge liegt, also eine Portionszahl (v3), z. B. 31 statt 275 g. Beheben je Zeile: `menge_pro_vpe = produkt.einheiten_pro_packung`, nur wenn der alte Wert noch steht. Nicht anwählbar, wenn es die Zielgröße für Produkt + Kunde schon gibt.
+- **pulver_auftrag:** dieselbe Regel für `auftrag.stueck`, nur Anzeige. Korrektur über das PA-Panel „Füllmenge je Packung (Pulver)“ (setzt Produkt, Auftrag und PA).
