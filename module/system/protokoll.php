@@ -29,7 +29,8 @@ $tabs = '<div class="bx-row" style="gap:8px;margin:0 0 12px">'
       . '<a class="btn btn-sm ' . ($ansicht === 'aktivitaet' ? 'btn-primary' : 'btn-ghost') . '" href="?p=protokoll">Aktivitäten</a>'
       . '<a class="btn btn-sm ' . ($ansicht === 'felder' ? 'btn-primary' : 'btn-ghost') . '" href="?p=protokoll&ansicht=felder">Feld-Änderungen</a></div>';
 if ($ansicht === 'felder') {
-    $OBJF = $OBJ + ['produktionsauftrag' => 'Produktionsauftrag', 'kontingent' => 'Kontingent', 'dienstleistung' => 'Dienstleistung', 'benutzer' => 'Benutzer'];
+    $OBJF = $OBJ + ['produktionsauftrag' => 'Produktionsauftrag', 'kontingent' => 'Kontingent', 'dienstleistung' => 'Dienstleistung', 'benutzer' => 'Benutzer',
+             'bestellung_position' => 'Bestellposition', 'rezeptur_lief_angebot' => 'Lieferanten-Preis', 'charge' => 'Charge'];
     $LINKF = $LINK + ['produktionsauftrag' => 'produktionsauftrag', 'kontingent' => 'kontingent', 'dienstleistung' => 'dienstleistung', 'benutzer' => 'benutzer_detail'];
     $oid = (int)($_GET['oid'] ?? 0);
     $w = '1=1'; $a = [];

@@ -159,6 +159,7 @@ function route_rollen_map(): array {
         'benachrichtigungen' => [],   // Team-Postfach (enthält Kunden/Preise) – Freigabe für weitere Rollen offen, siehe Rückmeldung
         'suche'              => [],
         'protokoll'          => [],
+        'datenpruefung'      => [],   // Datenprüfung: nur Admin (Beheben ändert Daten)
         'durchlaufzeiten'    => [],
         'angebot_import'     => [],
         'db_import'          => [],

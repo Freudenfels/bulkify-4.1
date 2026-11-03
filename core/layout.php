@@ -42,7 +42,7 @@ function bx_nav_default(): array {
             'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'lief_nachrichten' => 'Nachrichten', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
         'Import'       => ['angebot_import' => 'Angebots-Import', 'lager2_import' => 'Lager-2 Bestände'],
-        'System'       => ['benachrichtigungen' => 'Benachrichtigungen', 'einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
+        'System'       => ['benachrichtigungen' => 'Benachrichtigungen', 'einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'datenpruefung' => 'Datenprüfung', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
         'Assistent'    => ['fastaction' => 'Fastaction'],
     ];
 }

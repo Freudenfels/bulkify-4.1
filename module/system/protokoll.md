@@ -16,3 +16,5 @@ Aktionen sind drin; weitere Bearbeitungs-/Speicher-Pfade lassen sich bei Bedarf 
 
 ## Feld-Änderungsprotokoll (Aufräumen 8)
 Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route, erstellt). `public/index.php` ruft bei jedem POST `aenderung_beobachten($route, $id)` auf: Der Hauptdatensatz der Seite (`aenderung_routen()`: Auftrag, Angebot, Produkt, Rezeptur, Kunde, Lieferant, Bestellung, Artikel, Produktionsauftrag, Kontingent, Dienstleistung, Benutzer) wird vorher gelesen und nach der Antwort (auch nach Redirect) verglichen. Jedes geänderte Feld wird mit alt/neu, Person und Zeit protokolliert (`aenderung_protokollieren()`). Technische und geheime Felder (Zeitstempel, Token, Passwort-Hash, Caches) sind ausgenommen. Anzeige: `?p=protokoll&ansicht=felder`, filterbar nach Bereich, Objekt-ID und Text. Positionen und Untertabellen werden nicht erfasst.
+
+Auch die Admin-Seite **Datenprüfung** (`?p=datenpruefung`) schreibt hierher: Jede Korrektur über „Beheben" landet je Feld mit Route `datenpruefung` (Bereiche zusätzlich: Bestellposition, Lieferanten-Preis, Charge).
