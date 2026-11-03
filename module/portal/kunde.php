@@ -352,6 +352,24 @@ if ($k && ($_GET['v'] ?? '') === 'lieferschein_pdf') {
     exit;
 }
 // Hochgeladene Original-Rechnung (Alt-Import) ausliefern: nur eigene, freigegebene Rechnung.
+// Rechnung als PDF direkt über die Rechnung (nicht über die Bestellung): auch für freie/manuelle Rechnungen ohne
+// Auftrag und DL-Rechnungen (DR-) am DL-Auftrag, der nicht unter „Bestellungen" steht (03.11.2026). Nur eigene,
+// freigegebene, nicht stornierte Rechnungen; PDF = exakt der Buchhaltungs-Generator. Alt-Belege ohne Positionen:
+// Rückfall auf das Bestellungs-PDF.
+if ($k && ($_GET['v'] ?? '') === 'rechnung_beleg') {
+    $bid = (int)($_GET['id'] ?? 0);
+    $b = $bid ? one("SELECT id, nummer, auftrag_id FROM beleg WHERE id=? AND kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND status<>'storniert'", [$bid, (int)$k['id']]) : null;
+    if (!$b) { http_response_code(404); echo 'Rechnung nicht gefunden.'; exit; }
+    require_once BX_ROOT . '/core/pdf_rechnung.php';
+    $pdfBuch = rechnung_pdf_bauen((int)$b['id']);
+    if ($pdfBuch === null && !empty($b['auftrag_id'])) { header('Location: ?p=portal&token=' . $token . '&v=rechnung_pdf&aid=' . (int)$b['auftrag_id']); exit; }
+    if ($pdfBuch === null) { http_response_code(404); echo 'Für diese Rechnung liegt noch kein PDF vor – bitte melden Sie sich bei uns.'; exit; }
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="Rechnung_' . preg_replace('/[^A-Za-z0-9_-]/', '', (string)$b['nummer']) . '.pdf"');
+    header('Content-Length: ' . strlen($pdfBuch));
+    header('Cache-Control: private, max-age=0, must-revalidate');
+    echo $pdfBuch; exit;
+}
 if ($k && ($_GET['v'] ?? '') === 'rechnung_datei') {
     $bid = (int)($_GET['id'] ?? 0);
     $b = $bid ? one("SELECT original_datei, original_orig FROM beleg WHERE id=? AND kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND original_datei IS NOT NULL", [$bid, (int)$k['id']]) : null;
@@ -5490,7 +5508,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php $rz = $reZahl[(int)$r['id']] ?? ['rest'=>0.0,'status'=>(string)($r['status']??'')]; ?>
         <?php $rProd = $reProdukt($r); ?>
         <tr><td><?= h($r['nummer']) ?></td><td><?= $r['datum']?h(date('d.m.Y',strtotime($r['datum']))):'' ?></td><td><?= $rProd !== '' ? h($rProd) : '<span class="muted">–</span>' ?></td><td class="bx-num"><?= $eur($r['brutto']) ?></td><td class="bx-num"><?= $rz['rest'] > 0.005 ? '<strong>' . $eur($rz['rest']) . '</strong>' : '<span class="muted">–</span>' ?></td><td><?= $reBadge($rz['status']) ?></td>
-          <td class="bx-num" style="white-space:nowrap"><?php if (!empty($r['original_datei'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_datei') ?>&id=<?= (int)$r['id'] ?>">Rechnung (PDF)</a><?php elseif (!empty($r['auftrag_id'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$r['auftrag_id'] ?>">Rechnung (PDF)</a><?php endif; ?></td></tr>
+          <td class="bx-num" style="white-space:nowrap"><?php if (!empty($r['original_datei'])): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_datei') ?>&id=<?= (int)$r['id'] ?>">Rechnung (PDF)</a><?php else: ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('rechnung_beleg') ?>&id=<?= (int)$r['id'] ?>">Rechnung (PDF)</a><?php endif; ?></td></tr>
         <?php if ($impPos): $tl=['produkt'=>'Produkt','verpackung'=>'Verpackung','etikett'=>'Etikett']; ?>
         <tr><td colspan="7" style="padding-top:0">
           <details><summary class="muted" style="cursor:pointer;font-size:13px">Leistungsumfang anzeigen</summary>

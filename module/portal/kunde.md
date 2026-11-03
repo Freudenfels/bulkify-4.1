@@ -425,3 +425,8 @@ verfügbar, Ware versendet, Rechnung erstellt; max. 8, neueste zuerst). Leere Zu
 - **Anfrage:** Der Kunde gibt die „Füllmenge pro Verpackung (g)“ an. Je Staffel-Zeile erscheint live „≈ N Tagesdosen à x g“ (JS `bxTdHint`, PHP `$tdHintJs()`; Dosis = Rezeptur-mg). Das gilt für die Produktseite, „Produkt anfragen“ (Option `data-dosis`) und „Menge ändern“. Reine Info, nichts wird damit gerechnet.
 - **Produktseite:** „Füllmenge je Packung 300 g (≈ 60 Tagesdosen à 5 g)“, „Menge/Nährwerte je Tagesdosis“, Größen mit Tagesdosen-Info. `$einheitWortP()`: Pulver = Tagesdosis, Stick = Portion, sonst Einheit (auch Rezeptur-Detail/Weiterentwickeln/Bestellung).
 - **PIB an der Bestellung:** Bei Pulver gibt es keine Wahl „pro Tag“ mehr (td=1, Rezeptur = Tagesdosis).
+
+## Rechnungs-PDF je Rechnung (03.11.2026)
+`?v=rechnung_beleg&id=<beleg>`: PDF direkt über die Rechnung (nur eigene, freigegebene, nicht stornierte), erzeugt mit `rechnung_pdf_bauen()` wie in der Buchhaltung. Die Rechnungsliste verlinkt jede Rechnung so (Original-Upload weiter über `rechnung_datei`).
+- Vorher hing der Knopf am Auftrag (`rechnung_pdf&aid=`): Manuelle Rechnungen ohne Auftrag hatten keinen Knopf, DL-Rechnungen (DR-) am DL-Auftrag liefen in 404, weil DL-Aufträge nicht unter Bestellungen stehen.
+- Alt-Belege ohne Positionen fallen auf das Bestellungs-PDF zurück.
