@@ -54,7 +54,7 @@ $offene = all("SELECT a.id, a.nummer, a.menge, a.stueck, a.status, a.angelegt,
                ORDER BY k.firma, a.id DESC");
 
 render_header('auftraege', 'Aufträge ohne Preis');
-bx_head('Aufträge ohne Preis', count($offene) . ' ' . (count($offene) === 1 ? 'Auftrag' : 'Aufträge') . ' ohne hinterlegten Preis – Rechnung je Zeile hochladen, Preis wird aufgeschlüsselt übernommen', bx_btn('Zurück zu Aufträgen', '?p=auftraege', 'ghost'));
+bx_head('Aufträge ohne Preis', count($offene) . ' ' . (count($offene) === 1 ? 'Auftrag' : 'Aufträge') . ' ohne hinterlegten Preis – Rechnung je Zeile hochladen, Preis wird aufgeschlüsselt übernommen', bx_btn('Preise zentral nachtragen', '?p=kundenpreise&ohne=1', 'ghost') . ' ' . bx_btn('Zurück zu Aufträgen', '?p=auftraege', 'ghost'));
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($fehler) . '</div>';
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Preis übernommen' . (isset($_GET['netto']) ? ' (' . h((string)$_GET['netto']) . ' € netto)' : '') . ' – Auftrag <a href="?p=auftrag&id=' . (int)$_GET['ok'] . '">öffnen</a>. Positionen (Etikett/Glas/Kapsel) sind als Rechnung hinterlegt.</div>';
 $kiBereit = (function(){ require_once BX_ROOT . '/core/ki.php'; return ki_bereit(); })();

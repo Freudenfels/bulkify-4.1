@@ -16,3 +16,5 @@
 
 ## Auftrags-Art je Kunde (Aufräumen 9)
 „Nachbestellung" heißt: **derselbe Kunde** hat das Produkt schon bestellt. Hat nur ein anderer Kunde es bestellt, steht „Neues Produkt" (für diesen Kunden neu). Gleiche Regel in der Liste (`$erstProdKunde`) und am Auftrag (`auftrag_art()`).
+
+Neben „Aufträge ohne Preis“: „Preise nachtragen“ -> `?p=kundenpreise&ohne=1`.

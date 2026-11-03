@@ -12,3 +12,5 @@
 4. Tabelle: **Nummer · Produkt · Kunde · Rezeptur · Verpackung · Einh./Pack · Status.**
    - Klick öffnet das Produkt (`?p=produkt&id=...`).
 5. Button „Neues Produkt" (Nummer P-… automatisch).
+
+Knopf „Kundenpreise“ öffnet die zentrale Kundenpreis-Liste (`?p=kundenpreise`).

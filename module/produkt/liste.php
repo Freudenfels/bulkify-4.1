@@ -58,7 +58,7 @@ $cols = [
 ];
 
 render_header('produkte', 'Produkte');
-bx_head('Produkte', count($rows) . ' Einträge', bx_btn('Neues Produkt', '?p=produkt&id=neu', 'primary'));
+bx_head('Produkte', count($rows) . ' Einträge', bx_btn('Kundenpreise', '?p=kundenpreise', 'ghost') . ' ' . bx_btn('Neues Produkt', '?p=produkt&id=neu', 'primary'));
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produkt gelöscht.</div>';
 ?>
 <form class="bx-listbar" method="get">

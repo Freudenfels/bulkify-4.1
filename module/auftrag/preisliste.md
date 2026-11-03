@@ -23,3 +23,5 @@ $positionen, $opt, $datei, $orig)` (verknüpfte Rechnung + Preis). Siehe auch [r
 ## Route & Rechte
 `?p=auftrag_preise` → `public/index.php`; Rollen **sales, finance**. Verlinkt aus der Aufträge-Liste
 (Knopf „Aufträge ohne Preis (N)", erscheint nur wenn es welche gibt). Braucht die KI (Einstellungen → KI).
+
+Knopf „Preise zentral nachtragen“ öffnet `?p=kundenpreise&ohne=1` (Herstellungspreis je Kunde × Produkt eintippen).

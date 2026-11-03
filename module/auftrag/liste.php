@@ -181,7 +181,7 @@ $TABCOUNT = ['offen' => $anzOffen, 'freigabe' => $anzWartet, 'abgeschlossen' => 
 render_header('auftraege', 'Aufträge');
 $ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('finance') || has_role('sales')))
     ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status<>'storniert' AND COALESCE(gesamt_netto,0) <= 0") : 0;
-$kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') : '';
+$kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') . ' ' . bx_btn('Preise nachtragen', '?p=kundenpreise&ohne=1', 'ghost') : '';
 $tabWort = match ($tab) { 'freigabe' => 'warten auf Freigabe', 'abgeschlossen' => 'abgeschlossene (versendet)', 'storniert' => 'stornierte', default => 'offene' };
 bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer unter „' . h((string)($TABS[$tab] ?? ucfirst($tab))) . '" (andere Reiter separat durchsuchen)' : count($rows) . ' ' . $tabWort, $kopfAktion);
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag' . (isset($_GET['nr']) ? ' ' . h((string)$_GET['nr']) : '') . ' gelöscht.</div>';

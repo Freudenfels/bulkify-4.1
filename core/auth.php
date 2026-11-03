@@ -55,6 +55,7 @@ function route_rollen_map(): array {
         'auftraege'          => ['sales', 'finance', 'production', 'fulfillment'],
         'nachbestellungen'   => ['sales', 'finance'],   // Eingang Portal-Nachbestellungen (Preisprüfung/Freigabe)
         'auftrag_preise'     => ['sales', 'finance'],
+        'kundenpreise'       => ['sales', 'finance'],
         'auftrag'            => ['sales', 'finance', 'production', 'fulfillment', 'labor'],   // + QM: Freigaben/QK am Auftrag (St-10)
         'auftrag_pdf'        => ['sales', 'finance', 'production', 'fulfillment'],
         'lieferschein_pdf'   => ['sales', 'finance', 'production', 'fulfillment', 'labor'],   // Lieferschein drucken (Lager/Versand, St-10)
