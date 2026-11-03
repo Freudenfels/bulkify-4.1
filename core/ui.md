@@ -15,7 +15,7 @@ Wandelt einen Statuswert aus der Datenbank in lesbares Deutsch **mit Umlauten**:
 - `bx_tabs($tabs, $aktiv, $baseUrl)` – Reiter, die per Link umschalten.
 - `bx_table($cols, $rows, $opts)` – **die Listen-Tabelle**: definiert Spalten (Label, sortierbar, eigene Darstellung), macht Kopfzeilen anklickbar zum Sortieren, Zeilen anklickbar zum Öffnen. Optional `group` (fn($row) => HTML): Zwischenüberschrift je Gruppe, sobald sich der Wert ändert (Zeilen vorher nach der Gruppe sortieren) – z. B. Produkte je Rezeptur.
 - `bx_sort_rows($rows, $key, $dir)` – sortiert Daten für die Tabelle.
-- `bx_chat($eintraege, $gegenName)` – der **Aktivitäts-Chat** (links = wir, rechts = Gegenstelle: Kunde **oder** Lieferant). Verknüpfte Einträge werden über `aktivitaet_link()` anklickbar.
+- `bx_chat($eintraege, $gegenName)` – der **Aktivitätsverlauf als Tabelle** (seit 03.11.2026, vorher Chat). Neueste zuerst; Spalten Datum · Ereignis (verlinkt über `aktivitaet_link()`) · Produkt · Von (bulkify · Benutzer / Gegenstelle / System) · Bereich, darüber ein Suchfeld (filtert im Browser). Produkt über `aktivitaet_produkt()` aus dem Bezug (Auftrag, Angebot, Rezeptur, Produkt, Rechnung, Bestellung, Artikel, Dokument) oder einer Belegnummer im Text. Angezeigt kompakt als „Rezeptur · Größe“, der volle Name als Tooltip. Genutzt bei Kunde, Lieferant, Partner, Bestellung und Verpackung.
 - `aktivitaet_link($ref_typ, $ref_id)` – wandelt einen Bezug (z. B. `angebot` 1001) in eine Ziel-URL um. Sobald das Modul existiert, springt der Link automatisch dorthin.
 
 **Wichtig / Regel:**

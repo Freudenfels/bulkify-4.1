@@ -216,27 +216,96 @@ function aktivitaet_link(?string $ref_typ, $ref_id): ?string {
     return '?p=' . $map[$ref_typ] . '&id=' . $ref_id;
 }
 
-// Aktivitätsverlauf als Chat rendern. links = team (wir), rechts = Gegenstelle (Kunde/Lieferant), mittig = system.
+// Produkt (bzw. Artikel/Rezeptur) zu einem Verlaufs-Eintrag – für die Spalte „Produkt" im Aktivitätsverlauf.
+// Über den Bezug (ref_typ/ref_id); ohne Bezug über eine Belegnummer im Text (AB-/AN-/PR-/RE-/DR-…). Je Bezug gecacht.
+function aktivitaet_produkt(?string $ref_typ, $ref_id, string $text = ''): string {
+    static $cache = [];
+    $ref_id = (int)$ref_id;
+    if ((!$ref_typ || $ref_id <= 0) && preg_match('/\b(AB|AN|PR|RE|DR|DB|DA)-\d+(?:\.\w+)?\b/u', $text, $m)) {
+        $nr = preg_replace('/\..*$/', '', $m[0]);
+        $tab = ['AB' => 'auftrag', 'DB' => 'auftrag', 'AN' => 'angebot', 'DA' => 'angebot', 'PR' => 'produktionsauftrag', 'RE' => 'beleg', 'DR' => 'beleg'][$m[1]];
+        $key = 'nr:' . $nr;
+        if (!array_key_exists($key, $cache)) {
+            $id = (int) scalar("SELECT id FROM `$tab` WHERE nummer=? ORDER BY id DESC LIMIT 1", [$nr]);
+            $cache[$key] = $id ? aktivitaet_produkt($tab, $id) : '';
+        }
+        return $cache[$key];
+    }
+    if (!$ref_typ || $ref_id <= 0) return '';
+    $key = $ref_typ . ':' . $ref_id;
+    if (array_key_exists($key, $cache)) return $cache[$key];
+    $n = '';
+    try {
+    switch ($ref_typ) {
+        case 'auftrag':
+            $n = (string) scalar("SELECT COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, d.name, '') FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+                                  LEFT JOIN dienstleistung d ON d.id=a.dienstleistung_id WHERE a.id=?", [$ref_id]);
+            break;
+        case 'produktionsauftrag':
+            $n = (string) scalar("SELECT COALESCE(p.name, '') FROM produktionsauftrag pa LEFT JOIN produkt p ON p.id=pa.produkt_id WHERE pa.id=?", [$ref_id]);
+            break;
+        case 'angebot':
+            $n = (string) scalar("SELECT COALESCE(
+                       (SELECT p.name FROM produkt p WHERE p.id=a.produkt_id),
+                       (SELECT p.name FROM angebot_produkt ap JOIN produkt p ON p.id=ap.produkt_id WHERE ap.angebot_id=a.id ORDER BY ap.produkt_id LIMIT 1),
+                       (SELECT r.name FROM angebot_position x JOIN rezeptur r ON r.id=x.rezeptur_id WHERE x.angebot_id=a.id AND x.quelle='herstellung' ORDER BY x.id LIMIT 1),
+                       (SELECT x.bezeichnung FROM angebot_position x WHERE x.angebot_id=a.id ORDER BY x.id LIMIT 1), '')
+                   FROM angebot a WHERE a.id=?", [$ref_id]);
+            break;
+        case 'rezeptur':  $n = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$ref_id]); break;
+        case 'produkt':   $n = (string) scalar("SELECT name FROM produkt WHERE id=?", [$ref_id]); break;
+        case 'item':      $n = (string) scalar("SELECT name FROM item WHERE id=?", [$ref_id]); break;
+        case 'beleg':
+            $aid = (int) scalar("SELECT COALESCE(auftrag_id,0) FROM beleg WHERE id=?", [$ref_id]);
+            $n = $aid ? aktivitaet_produkt('auftrag', $aid) : (string) scalar("SELECT bezeichnung FROM beleg_position WHERE beleg_id=? ORDER BY sort, id LIMIT 1", [$ref_id]);
+            break;
+        case 'bestellung':
+            $pos = all("SELECT COALESCE(NULLIF(bp.bezeichnung,''), i.name) AS n FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id WHERE bp.bestellung_id=? ORDER BY bp.id", [$ref_id]);
+            $n = $pos ? (string)$pos[0]['n'] . (count($pos) > 1 ? ' +' . (count($pos) - 1) : '') : '';
+            break;
+        case 'dokument':
+            $d = one("SELECT objekt_typ, objekt_id FROM dokument WHERE id=?", [$ref_id]);
+            $n = $d ? aktivitaet_produkt((string)$d['objekt_typ'], (int)$d['objekt_id']) : '';
+            break;
+    }
+    } catch (\Throwable $ex) { $n = ''; }   // Anzeige-Hilfe: nie die Seite sprengen
+    return $cache[$key] = trim((string)$n);
+}
+
+// Aktivitätsverlauf als TABELLE (Nico 03.11.2026 – der Chat war unübersichtlich): neueste zuerst, je Zeile Datum,
+// Ereignis (verlinkt), Produkt, Von (bulkify mit Benutzer / Gegenstelle / System) und Bereich. Darüber ein Suchfeld,
+// das die Zeilen im Browser filtert (Produkt, Ereignis, Nummer …). Name bleibt bx_chat (überall eingebunden).
 function bx_chat(array $eintraege, string $gegenName = 'Gegenstelle'): void {
     if (!$eintraege) { echo '<div class="muted">Noch keine Aktivitäten.</div>'; return; }
-    echo '<div class="bx-chat">';
+    $bereich = ['auftrag' => 'Auftrag', 'angebot' => 'Angebot', 'rezeptur' => 'Rezeptur', 'produkt' => 'Produkt', 'anfrage' => 'Anfrage',
+                'beleg' => 'Rechnung', 'bestellung' => 'Bestellung', 'dokument' => 'Dokument', 'item' => 'Artikel', 'etikett' => 'Etikett',
+                'lieferant_anfrage' => 'Lieferanten-Anfrage', 'notiz' => 'Notiz', 'kunde' => 'Kunde'];
+    // Produkt kompakt: „Rezeptur · Größe" ohne den Behälter-Teil (voller Name als Tooltip).
+    $kurz = function (string $n): string { $t = explode(' · ', $n); return count($t) > 2 ? $t[0] . ' · ' . $t[1] : $n; };
+    usort($eintraege, fn($x, $y) => [(string)($y['erstellt'] ?? ''), (int)($y['id'] ?? 0)] <=> [(string)($x['erstellt'] ?? ''), (int)($x['id'] ?? 0)]);
+    $uid = 'vl' . substr(md5(uniqid('', true)), 0, 6);
+    echo '<div class="bx-verlauf">';
+    echo '<input type="search" class="bx-search" id="' . $uid . 'q" placeholder="Verlauf durchsuchen: Produkt, Ereignis, Nummer …" style="max-width:420px;margin:0 0 10px">';
+    echo '<div class="bx-tablewrap"><table class="bx-table" id="' . $uid . '"><thead><tr><th style="width:130px">Datum</th><th>Ereignis</th><th>Produkt</th><th>Von</th><th>Bereich</th></tr></thead><tbody>';
     foreach ($eintraege as $e) {
-        $akteur = $e['akteur'] ?? 'system';
-        // Seite bestimmen: team = links, system = mittig, alles andere = rechts (Gegenstelle)
-        $side = $akteur === 'team' ? 'team' : ($akteur === 'system' ? 'system' : 'gegen');
-        $who  = $akteur === 'team' ? 'bulkify (wir)' : ($akteur === 'system' ? 'System' : $gegenName);
-        $link = aktivitaet_link($e['ref_typ'] ?? null, $e['ref_id'] ?? 0);
-        echo '<div class="bx-msg ' . $side . '">';
-        if ($akteur !== 'system') echo '<div class="who">' . h($who) . '</div>';
-        echo '<div class="bubble">';
-        if ($link) echo '<a class="bx-actlink" href="' . h($link) . '">' . h($e['text']) . '</a>';
-        else       echo h($e['text']);
-        $meta = [];
-        if (!empty($e['typ']))      $meta[] = $e['typ'];
-        if (!empty($e['erstellt'])) $meta[] = fmt_zeit($e['erstellt']);
-        if ($meta) echo '<div class="meta">' . h(implode(' · ', $meta)) . '</div>';
-        echo '</div></div>';
+        $akteur = (string)($e['akteur'] ?? 'system');
+        $wer = trim((string)($e['benutzer'] ?? ''));
+        $von = $akteur === 'team' ? 'bulkify' . ($wer !== '' ? ' · ' . $wer : '') : ($akteur === 'system' ? 'System' : $gegenName . ($wer !== '' ? ' · ' . $wer : ''));
+        $ref = (string)($e['ref_typ'] ?? '');
+        $typ = (string)($e['typ'] ?? '');
+        $ber = $bereich[$ref] ?? ($bereich[$typ] ?? ($typ !== '' ? ucfirst($typ) : '–'));
+        $prod = aktivitaet_produkt($ref !== '' ? $ref : null, $e['ref_id'] ?? 0, (string)($e['text'] ?? ''));
+        $link = aktivitaet_link($ref !== '' ? $ref : null, $e['ref_id'] ?? 0);
+        echo '<tr class="' . ($akteur === 'team' ? 'vl-team' : ($akteur === 'system' ? 'vl-system' : 'vl-gegen')) . '">'
+           . '<td style="white-space:nowrap">' . (!empty($e['erstellt']) ? h(fmt_zeit((string)$e['erstellt'], 'd.m.Y H:i')) : '–') . '</td>'
+           . '<td style="white-space:normal;min-width:280px">' . ($link ? '<a class="bx-actlink" href="' . h($link) . '">' . h((string)$e['text']) . '</a>' : h((string)$e['text'])) . '</td>'
+           . '<td style="white-space:normal;min-width:160px;max-width:280px"' . ($prod !== '' ? ' title="' . h($prod) . '"' : '') . '>' . ($prod !== '' ? h($kurz($prod)) : '<span class="muted">–</span>') . '</td>'
+           . '<td style="white-space:nowrap">' . h($von) . '</td>'
+           . '<td style="white-space:nowrap">' . h($ber) . '</td></tr>';
     }
+    echo '</tbody></table></div>';
+    echo '<script>(function(){var q=document.getElementById("' . $uid . 'q"),t=document.getElementById("' . $uid . '");if(!q||!t)return;'
+       . 'q.addEventListener("input",function(){var s=q.value.trim().toLowerCase();t.querySelectorAll("tbody tr").forEach(function(r){r.style.display=(!s||r.textContent.toLowerCase().indexOf(s)>=0)?"":"none";});});})();</script>';
     echo '</div>';
 }
 
