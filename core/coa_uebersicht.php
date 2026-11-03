@@ -2,22 +2,22 @@
 // Zusammenfassendes CoA einer FERTIGWARE-Charge (Nico 03.11.2026): eine Übersicht aus den Analysen der tatsächlich
 // eingesetzten Rohstoff-Chargen und den Produktdaten – NICHT am Fertigprodukt gemessen. Die Rohstoffe werden stich-
 // probenhaft geprüft; eine Fertigprodukt-Laboranalyse ist ein separater Zusatz. Pflicht (nicht wegkonfigurierbar):
-// ehrliche Kennzeichnung im Kopf, Methode je berechneter Zeile, Quellchargen genannt, claims-neutral.
-//  - Schwermetalle (Pb, Cd, Hg, As): Massenbilanz auf das Füllgut = Σ (Rohstoffwert × Massenanteil der Zutat).
-//    Rohstoffwert = Messwert der verbrauchten Charge (charge_analyse; mehrere Chargen -> der höchste), sonst der
-//    Rohstoff-Grenzwert (item_grenzwert, „Grenzwert/worst case"). Fehlt für eine Zutat beides -> „nicht berechenbar"
-//    (kein geschönter Teilwert).
+// Hinweis im Kleingedruckten (nicht am Fertigprodukt gemessen), Quellchargen genannt, claims-neutral.
+//  - Schwermetalle mit NEM-Höchstgehalt (Pb, Cd, Hg): Massenbilanz auf das Füllgut = Σ (Rohstoffwert × Massenanteil der Zutat).
+//    Rohstoffwert = Messwert der verbrauchten Charge (charge_analyse; mehrere Chargen -> der höchste), sonst der Wert aus der
+//    Rohstoff-Spezifikation (item_grenzwert). Auf dem Dokument steht nur die Bewertung „konform". Fehlt für EINE Zutat jede
+//    Angabe, entfällt der Parameter ganz (Nico: nur reinschreiben, wenn die Infos da sind).
 //  - Mikrobiologie/prozessabhängige Werte: NIE hochgerechnet – nur als Rohstoff-Stichprobe je Rohstoff-Charge.
 // Ein echtes, am Fertigprodukt gemessenes CoA hat immer Vorrang (coa_fertig_gemessen_vorhanden()).
 require_once __DIR__ . '/pdf_spec.php';
 
-// Kanonische Kontaminanten der Massenbilanz: Schlüssel => [Anzeige, Regex, Höchstgehalt NEM (VO (EU) 2023/915) als Referenz]
+// Kanonische Kontaminanten der Massenbilanz: Schlüssel => [Anzeige, Regex, Höchstgehalt NEM (VO (EU) 2023/915) als Text, als Zahl mg/kg].
+// Nur Parameter MIT gesetzlichem NEM-Höchstgehalt (Arsen hat keinen) – bewertet wird „konform" gegen diesen Wert (Nico 03.11.2026).
 function coa_uebersicht_kontaminanten(): array {
     return [
-        'pb' => ['Blei (Pb)',        '/\b(blei|lead|pb)\b/u',        '3,0 mg/kg'],
-        'cd' => ['Cadmium (Cd)',     '/\b(cadmium|cd)\b/u',          '1,0 mg/kg'],
-        'hg' => ['Quecksilber (Hg)', '/\b(quecksilber|mercury|hg)\b/u', '0,10 mg/kg'],
-        'as' => ['Arsen (As)',       '/\b(arsen|arsenic|as)\b/u',    '–'],
+        'pb' => ['Blei (Pb)',        '/\b(blei|lead|pb)\b/u',        '3,0 mg/kg',  3.0],
+        'cd' => ['Cadmium (Cd)',     '/\b(cadmium|cd)\b/u',          '1,0 mg/kg',  1.0],
+        'hg' => ['Quecksilber (Hg)', '/\b(quecksilber|mercury|hg)\b/u', '0,10 mg/kg', 0.10],
     ];
 }
 // Mikrobiologische Parameter (nur als Rohstoff-Stichprobe ausweisen).
@@ -100,16 +100,19 @@ function coa_uebersicht_daten(int $charge_id): ?array {
         $mikro = array_merge($mikro, $mikroZ);
         $quellen[] = ['zutat' => (string)$z['name'], 'mg' => (float)$z['menge_mg'], 'anteil' => $anteil,
                       'chargen' => implode(', ', array_map(fn($ch) => (string)$ch['charge_nr'], $chs)) ?: '–',
-                      'basis' => $quelleTxt ? (isset($quelleTxt['Grenzwert']) && count($quelleTxt) === 1 ? 'Grenzwert (worst case)' : (isset($quelleTxt['Grenzwert']) ? 'Analyse + Grenzwert' : 'Analyse der Charge')) : 'keine Werte'];
+                      'basis' => $quelleTxt ? (isset($quelleTxt['Grenzwert']) && count($quelleTxt) === 1 ? 'Spezifikation' : (isset($quelleTxt['Grenzwert']) ? 'Analyse + Spezifikation' : 'Analyse der Charge')) : 'keine Werte'];
     }
-    $ergebnis = [];
-    foreach ($K as $k => [$lbl, $rx, $hg]) {
+    // Bewertung je Parameter: „konform", wenn der berechnete Wert (Obergrenze) den NEM-Höchstgehalt einhält. Der Zahlenwert
+    // bleibt intern (wert), auf dem Dokument steht nur die Bewertung. Überschreitung -> ueberschritten=true (Dokument nicht auto-sichtbar).
+    $ergebnis = []; $ueber = false;
+    foreach ($K as $k => [$lbl, $rx, $hg, $hgZahl]) {
         $b = $beitrag[$k];
-        if (!$zut) { $erg = 'nicht berechenbar (keine Rezeptur)'; }
-        elseif ($b['fehlt']) { $erg = 'nicht berechenbar – keine Werte für: ' . implode(', ', $b['fehlt']); }
-        else { $erg = ($b['grenze'] ? 'max. ' : '') . coa_uebersicht_zahl($b['summe']) . ' mg/kg'; }   // „max." statt „≤" (PDF-Schrift)
-        $ergebnis[] = ['parameter' => $lbl, 'referenz' => $hg, 'ergebnis' => $erg, 'ok' => $zut && !$b['fehlt'],
-                       'methode' => 'aus Rohstoff-Analysen (Massenbilanz)' . ($b['gw'] && !$b['fehlt'] ? ', teils Grenzwert/worst case' : '')];
+        $ok = $zut && !$b['fehlt'];
+        $konform = $ok && $b['summe'] <= $hgZahl + 1e-9;
+        if ($ok && !$konform) $ueber = true;
+        $ergebnis[] = ['parameter' => $lbl, 'referenz' => $hg, 'ok' => $ok, 'wert' => $ok ? round($b['summe'], 4) : null,
+                       'ergebnis' => !$ok ? 'nicht berechenbar' : ($konform ? 'konform' : 'Höchstgehalt überschritten'),
+                       'methode' => 'aus Rohstoff-Analysen'];
     }
     // Novel-Food-Status je Zutat (gespeicherter Abgleich mit Datum, wie im PIB) + Gesamtstatus des Produkts.
     // Beim Erzeugen frisch abgleichen (Datum = heute), sofern der EU-Katalog geladen ist – sonst gilt der gespeicherte Stand.
@@ -123,7 +126,7 @@ function coa_uebersicht_daten(int $charge_id): ?array {
     $nfSnap = $pid && function_exists('produkt_novelfood_snapshot') ? produkt_novelfood_snapshot($pid) : ['status' => 'unklar', 'geprueft_am' => null, 'ungeprueft' => 0, 'auffaellig' => []];
     $form = (string)($rez['darreichungsform'] ?? '');
     return ['charge' => $c, 'pa' => $pa, 'produkt' => $prod, 'rezeptur' => $rez, 'name' => $name, 'form' => $form,
-            'zutaten' => $zut, 'fuell_mg' => $summe, 'ergebnis' => $ergebnis, 'mikro' => $mikro, 'quellen' => $quellen, 'novelfood' => $nf, 'nf_snap' => $nfSnap,
+            'zutaten' => $zut, 'fuell_mg' => $summe, 'ergebnis' => $ergebnis, 'ueberschritten' => $ueber, 'mikro' => $mikro, 'quellen' => $quellen, 'novelfood' => $nf, 'nf_snap' => $nfSnap,
             'herstellung' => (string)($c['angelegt'] ?? ''), 'freigabe_am' => (string)($c['qm_freigabe_am'] ?? ''), 'freigabe_von' => (string)($c['qm_freigabe_von'] ?? '')];
 }
 
@@ -157,7 +160,7 @@ function build_coa_uebersicht_pdf(int $charge_id): ?string {
     $y = spec_grid($p, $y, $kopf);
 
     $abschnitt('Eingesetzte Rohstoffe und Quellchargen');
-    $y = spec_table($p, $y, [[$L, 'Zutat'], [230, 'mg je Einheit'], [310, 'Anteil Füllgut'], [390, 'Rohstoff-Charge(n)'], [480, 'Datenbasis']],
+    $y = spec_table($p, $y, [[$L, 'Zutat'], [215, 'mg je Einheit'], [290, 'Anteil Füllgut'], [360, 'Rohstoff-Charge(n)'], [445, 'Datenbasis']],
                     array_map(fn($q) => [$q['zutat'], coa_uebersicht_zahl($q['mg']), number_format($q['anteil'] * 100, 1, ',', '.') . ' %', $q['chargen'], $q['basis']], $d['quellen']));
 
     // Novel-Food-Status je Zutat (gespeicherter automatischer Abgleich, mit Datum).
@@ -176,10 +179,10 @@ function build_coa_uebersicht_pdf(int $charge_id): ?string {
     // Kontaminanten: nur Parameter, die sich für ALLE Zutaten aus Messwerten/Grenzwerten berechnen lassen.
     $berechnet = array_values(array_filter($d['ergebnis'], fn($e) => !empty($e['ok'])));
     if ($berechnet) {
-        $abschnitt('Kontaminanten (berechnet, bezogen auf das Füllgut ohne Kapselhülle)', 160);
-        $y = spec_table($p, $y, [[$L, 'Parameter'], [170, 'Höchstgehalt NEM (Referenz)'], [300, 'Ergebnis'], [430, 'Methode']],
+        $abschnitt('Kontaminanten', 140);
+        $y = spec_table($p, $y, [[$L, 'Parameter'], [190, 'Höchstgehalt NEM'], [330, 'Bewertung'], [430, 'Grundlage']],
                         array_map(fn($e) => [$e['parameter'], $e['referenz'], $e['ergebnis'], $e['methode']], $berechnet));
-        $klein('Referenz: Höchstgehalte für Nahrungsergänzungsmittel nach VO (EU) 2023/915. „max.“ = berechnete Obergrenze (Rohstoffwert als „kleiner als“ angegeben oder Grenzwert/worst case).');
+        $klein('Höchstgehalte für Nahrungsergänzungsmittel nach VO (EU) 2023/915; bewertet aus den Analysen bzw. Spezifikationen der eingesetzten Rohstoffe, bezogen auf das Füllgut.');
         $y += 6;
     }
 

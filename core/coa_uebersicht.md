@@ -41,3 +41,9 @@ je Charge nur einmal; Schalter `app_meta coa_uebersicht_auto` (Standard 0 = aus,
 - Kontaminanten nur für Parameter, die für alle Zutaten berechenbar sind (sonst entfällt die Zeile bzw. der Abschnitt).
 - **Kein** Unterschrift-/Stempelblock; die Fußzeile (`spec_fuss`) bringt Haftungsausschluss und „maschinell erstellt, ohne Unterschrift gültig“.
 - Abschnitts-Überschriften brechen nie allein am Seitenende um.
+
+**Bewertung „konform“ (Nico 03.11.2026):** Kein „worst case“/„max.“ und kein Zahlenwert auf dem Dokument. Kontaminanten nur noch
+Pb, Cd, Hg (mit NEM-Höchstgehalt; Arsen entfällt) mit Bewertung „konform“. Ein Parameter steht nur drin, wenn für **alle** Zutaten
+ein Wert vorliegt (Messwert der Charge oder Rohstoff-Spezifikation) – sonst entfällt er ganz. Datenbasis-Spalte: „Analyse der Charge“
+bzw. „Spezifikation“. Sicherheitsnetz: liegt die Rechnung über einem Höchstgehalt, steht „Höchstgehalt überschritten“, das Dokument
+wird **nicht** für den Kunden sichtbar abgelegt und das Team bekommt einen Verlaufseintrag am Auftrag.

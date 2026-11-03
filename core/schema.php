@@ -10440,13 +10440,17 @@ function fertigware_qm_freigabe_nach(int $charge_id, string $wer = ''): array {
         // Schalter app_meta coa_uebersicht_auto (Standard 0): erst nach dem Gegenlesen des Muster-CoA durch QM (Tabea) einschalten.
         if ((string) meta_get('coa_uebersicht_auto', '0') === '1' && $aid > 0 && !$schonDa && !coa_fertig_gemessen_vorhanden($charge_id)) {
             $pdf = build_coa_uebersicht_pdf($charge_id);
+            // Rechnerisch über einem NEM-Höchstgehalt: Dokument entsteht, bleibt aber für den Kunden unsichtbar + Hinweis ans Team.
+            $cud = coa_uebersicht_daten($charge_id);
+            $sicht = empty($cud['ueberschritten']) ? 1 : 0;
+            if (!$sicht) log_aktivitaet('auftrag', $aid, 'system', 'Informationsdokument zu Charge ' . $c['charge_nr'] . ' NICHT freigegeben: rechnerisch über einem NEM-Höchstgehalt – bitte prüfen.', 'qm', 'auftrag', $aid);
             if ($pdf) {
                 if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
                 $fn = 'coa_uebersicht_' . $charge_id . '_' . bin2hex(random_bytes(5)) . '.pdf';
                 if (@file_put_contents(BX_UPLOADS . '/' . $fn, $pdf) !== false) {
                     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von,charge_nr,dok_datum)
-                       VALUES ('auftrag',?,'analyse',?,?,?,1,'coa_ueb',?,CURDATE())",
-                      [$aid, 'Informationsdokument zum Produkt · Charge ' . $c['charge_nr'], $fn, 'Informationsdokument_' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)$c['charge_nr']) . '.pdf', (string)$c['charge_nr']]);
+                       VALUES ('auftrag',?,'analyse',?,?,?,?,'coa_ueb',?,CURDATE())",
+                      [$aid, 'Informationsdokument zum Produkt · Charge ' . $c['charge_nr'], $fn, 'Informationsdokument_' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)$c['charge_nr']) . '.pdf', $sicht, (string)$c['charge_nr']]);
                     $out['coa'] = (int) insert_id();
                 }
             }
