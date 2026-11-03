@@ -658,6 +658,32 @@ function erp_etikett_artikel(int $item_id): array {
     $r = one(erp_etikett_sql('i.id=?'), [$item_id]);
     return $r ? [erp_etikett_eintrag($r, (int)($r['produkt_id'] ?? 0))] : [];
 }
+// Maß „B x H" aus einem Format-Text lesen -> [breite, hoehe] oder null.
+function erp_etikett_masse(?string $s): ?array {
+    if (!$s || !preg_match('/(\d+(?:[.,]\d+)?)\s*[x×*]\s*(\d+(?:[.,]\d+)?)/iu', $s, $m)) return null;
+    return [(float) str_replace(',', '.', $m[1]), (float) str_replace(',', '.', $m[2])];
+}
+// Maßgebliches Etikett-**Endformat (B x H mm) eines Produkts AUS DEM BEHÄLTER** (Glas/Dose). Das ist die
+// Größe, gegen die ein geliefertes Etikett geprüft werden muss – NICHT die am Etikett-Artikel gespeicherte
+// Größe. Behälter = jüngster Auftrags-Behälter (hat Vorrang, Admin kann je Auftrag ein anderes Glas setzen),
+// sonst der am Produkt hinterlegte; das Endformat steht als item.etikett_final am Behälter. Read-only
+// Spiegel von produkt_etikettmass() (ohne die Beutel-Neutralisierung, die für Etiketten nicht greift).
+function erp_produkt_etikettmass(int $produkt_id): ?array {
+    if ($produkt_id <= 0 || !tabelle_da('produkt') || !tabelle_da('item')) return null;
+    $bid = 0;
+    if (tabelle_da('auftrag')) $bid = (int) scalar("SELECT verpackung_id FROM auftrag WHERE produkt_id=? AND verpackung_id IS NOT NULL ORDER BY id DESC LIMIT 1", [$produkt_id]);
+    if (!$bid) $bid = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$bid) return null;
+    $b = one("SELECT name, etikett_final FROM item WHERE id=?", [$bid]);
+    if (!$b) return null;
+    $m = erp_etikett_masse((string)($b['etikett_final'] ?? ''));
+    return [
+        'breite' => $m ? $m[0] : null,
+        'hoehe'  => $m ? $m[1] : null,
+        'name'   => (string)($b['name'] ?? ''),
+        'format' => trim((string)($b['etikett_final'] ?? '')),
+    ];
+}
 
 // Etikett von Hand anlegen (Lager „Etiketten einbuchen“ -> „Anderes Etikett anlegen“, Nico 03.11.2026): Kunde und
 // Produkt wählbar, beide optional. Mit Produkt gilt dieselbe Regel wie im Dashboard (Kundenetikett je Produkt +

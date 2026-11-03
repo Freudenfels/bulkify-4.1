@@ -86,14 +86,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rstic
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_produkt') {
     header('Content-Type: application/json; charset=utf-8');
     $iid = (int)($_POST['item_id'] ?? 0);   // Etikett ohne Produkt (Eintrag direkt am Artikel)
-    echo json_encode(['ok' => true, 'etiketten' => $iid ? erp_etikett_artikel($iid) : erp_etikett_zu_produkt((int)($_POST['produkt_id'] ?? 0))], JSON_UNESCAPED_UNICODE);
+    $pid = (int)($_POST['produkt_id'] ?? 0);
+    echo json_encode([
+        'ok' => true,
+        'etiketten' => $iid ? erp_etikett_artikel($iid) : erp_etikett_zu_produkt($pid),
+        'glas' => $pid > 0 ? erp_produkt_etikettmass($pid) : null,   // maßgebliches Endformat aus dem Behälter
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 // --- AJAX: Anderes Etikett von Hand anlegen (Kunde/Produkt optional) -> direkt zur Sichtprüfung --------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_anlegen') {
     header('Content-Type: application/json; charset=utf-8');
     $r = erp_etikett_anlegen($_POST);
-    if (!empty($r['ok'])) $r['etiketten'] = erp_etikett_artikel((int)$r['id']);
+    if (!empty($r['ok'])) {
+        $r['etiketten'] = erp_etikett_artikel((int)$r['id']);
+        $pid = (int)($_POST['produkt_id'] ?? 0);
+        $r['glas'] = $pid > 0 ? erp_produkt_etikettmass($pid) : null;
+    }
     echo json_encode($r, JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -438,8 +447,9 @@ if ($gebucht):
       <div id="weEtPruef" class="we-et-pruef" hidden>
         <div class="we-et-vorschau" id="weEtVorschau"></div>
         <div class="we-et-daten">
-          <div class="muted" style="font-size:13px">Größe</div>
+          <div class="muted" style="font-size:13px">Größe <span id="weEtMassQuelle" class="muted" style="font-weight:normal"></span></div>
           <div class="we-et-mass" id="weEtMass">–</div>
+          <div class="we-et-zeile"><span class="muted">Glas / Behälter</span> <span id="weEtGlas">–</span></div>
           <div class="we-et-zeile"><span class="muted">Material</span> <span id="weEtMaterial">–</span></div>
           <div class="we-et-zeile"><span class="muted">Version</span> <span id="weEtVersion">–</span></div>
           <div class="we-et-zeile"><span class="muted">Kunde</span> <span id="weEtKunde">–</span></div>
@@ -1032,19 +1042,25 @@ if ($gebucht):
   var ET_ALLE = <?= json_encode(array_map(fn($pp)=>['id'=>(int)$pp['id'],'n'=>trim(($pp['nummer'] ? $pp['nummer'] . ' · ' : '') . $pp['name'])], $etAlleProd), JSON_UNESCAPED_UNICODE) ?>;
   var kopfP=document.getElementById('weKopf'), posP=document.getElementById('wePosPanel'), buchBtn=document.getElementById('weBuchen'),
       etProd=document.getElementById('weEtProdukt'), etInfo=document.getElementById('weEtInfo'), etWahl=document.getElementById('weEtWahl'),
-      etPruef=document.getElementById('weEtPruef'), etOk=document.getElementById('weEtOk'), etGewaehlt=null, etLetzt='';
+      etPruef=document.getElementById('weEtPruef'), etOk=document.getElementById('weEtOk'), etGewaehlt=null, etLetzt='', etGlas=null;
   var BUCH_TXT=buchBtn?buchBtn.textContent:'';
+  function zmm(x){ return (Math.round(Number(x)*10)/10).toString().replace('.',','); }
   function etMasse(e){
-    function z(x){ return (Math.round(Number(x)*10)/10).toString().replace('.',','); }
-    if(e.breite && e.hoehe) return z(e.breite)+' × '+z(e.hoehe)+' mm';
+    if(e.breite && e.hoehe) return zmm(e.breite)+' × '+zmm(e.hoehe)+' mm';
     return e.format||'';
   }
+  function glasMasse(g){ return (g && g.breite && g.hoehe) ? (zmm(g.breite)+' × '+zmm(g.hoehe)+' mm') : ''; }
   function etPanels(sichtbar){ if(kopfP) kopfP.hidden=!sichtbar; if(posP) posP.hidden=!sichtbar; }
   function etZeigen(e){
     etGewaehlt=e;
     etWahl.querySelectorAll('.we-et-opt').forEach(function(b){ b.classList.toggle('on', +b.getAttribute('data-id')===e.id); });
-    var m=etMasse(e);
-    document.getElementById('weEtMass').textContent = m || 'Maße nicht hinterlegt';
+    var em=etMasse(e), gm=glasMasse(etGlas);
+    // Maßgeblich ist das Endformat AUS DEM GLAS/BEHÄLTER (aus dem Auftrag/Produkt), nicht das am
+    // Etikett-Artikel gespeicherte Maß. Ist ein Glas da, zeigen wir dessen Endformat als „Größe".
+    document.getElementById('weEtMass').textContent = gm || em || 'Maße nicht hinterlegt';
+    document.getElementById('weEtMassQuelle').textContent = gm ? '(aus dem Glas im Auftrag)' : (em ? '(am Etikett hinterlegt – kein Glas gefunden)' : '');
+    document.getElementById('weEtGlas').textContent = etGlas && etGlas.name
+      ? (etGlas.name + (etGlas.format ? ' · ' + etGlas.format + ' mm' : '')) : '– (kein Behälter am Auftrag/Produkt)';
     document.getElementById('weEtMaterial').textContent = e.material || '–';
     document.getElementById('weEtVersion').textContent = e.kundenetikett ? ('v'+e.version) : 'Standard-Etikett';
     document.getElementById('weEtKunde').textContent = e.kunde || '–';
@@ -1053,7 +1069,12 @@ if ($gebucht):
     var vz=document.getElementById('weEtVorschau');
     if(e.dok){ bxEtikettVorschau(vz, '?p=dok&id='+e.dok, e.pdf); }
     else { vz.innerHTML='<div class="we-et-warn" style="margin:0">Kein freigegebenes Etikett-Design hinterlegt.</div>'; hinw.push('Ohne freigegebenes Design lässt sich nur die Größe prüfen.'); }
-    if(!m) hinw.push('Für dieses Etikett sind keine Maße hinterlegt.');
+    if(!gm && !em) hinw.push('Für dieses Etikett sind keine Maße hinterlegt.');
+    // Abweichung: hinterlegtes Etikett-Maß vs. Glas-Endformat (Toleranz 2 mm) -> klarer Warnhinweis.
+    if(etGlas && etGlas.breite && etGlas.hoehe && e.breite && e.hoehe
+       && (Math.abs(e.breite-etGlas.breite)>2 || Math.abs(e.hoehe-etGlas.hoehe)>2)){
+      hinw.push('Achtung: Das am Etikett hinterlegte Maß ('+em+') weicht vom Glas-Endformat ('+gm+(etGlas.name?', '+etGlas.name:'')+') ab. Nicht einbuchen – bitte prüfen/Rücksprache.');
+    }
     warn.hidden=!hinw.length; warn.textContent=hinw.join(' ');
     etPruef.hidden=false; etPanels(false);
     if(etOk) etOk.disabled=false;
@@ -1079,7 +1100,7 @@ if ($gebucht):
     etLetzt=v; etInfo.textContent='Lade Etiketten …';
     var fd=new FormData(); fd.append('aktion','etikett_produkt'); fd.append('produkt_id', m.id); fd.append('item_id', m.i||0);
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();})
-      .then(function(j){ etWaehle((j&&j.etiketten)||[], m.i?null:m.k); })
+      .then(function(j){ etGlas=(j&&j.glas)||null; etWaehle((j&&j.etiketten)||[], m.i?null:m.k); })
       .catch(function(){ etInfo.textContent='Netzwerk-/Serverfehler.'; etLetzt=''; });
   }
   if(etProd){ etProd.addEventListener('input', etProduktSuchen); etProd.addEventListener('change', etProduktSuchen); }
@@ -1110,6 +1131,7 @@ if ($gebucht):
       btn.disabled=false;
       if(!j||!j.ok){ etNF.hidden=false; etNF.textContent=(j&&j.fehler)||'Anlegen fehlgeschlagen.'; return; }
       etNeu.hidden=true; etNeuAuf.hidden=false;
+      etGlas=j.glas||null;
       etWaehle(j.etiketten||[]);
       etInfo.textContent = j.vorhanden ? 'Für Produkt und Kunde gibt es dieses Etikett schon – es wird verwendet:' : 'Etikett angelegt:';
     }).catch(function(){ btn.disabled=false; etNF.hidden=false; etNF.textContent='Netzwerk-/Serverfehler.'; });
