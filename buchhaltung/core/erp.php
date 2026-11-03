@@ -333,12 +333,36 @@ function produkt_name_versioniert(string $name, int $exclude_id = 0): string {
 
 // Produkt zu (Rezeptur x Packungsgröße + Behälter) finden oder anlegen. Liest/schreibt GETEILTE produkt.
 // HINWEIS: ohne Preismatrix (produkt_matrix_generieren ist Dashboard-Domäne) – im Dashboard nacherzeugbar.
+// Katalogprodukt ist kundenneutral (Blocker 1, Spiegel von produkt_slots_neutral() im Dashboard): bedruckter Behälter ->
+// sein neutraler Standard-Behälter (basis_item_id, sonst Artikelnummer aus der Notiz; nicht bestimmbar -> leer),
+// Kundenetikett / kundenspezifischer Deckel, Karton, Beipack -> leer.
+function erp_produkt_slots_neutral(?int $verp_id, ?array $v): array {
+    if ($verp_id) {
+        $i = one("SELECT * FROM item WHERE id=?", [$verp_id]);
+        if ($i && (int)($i['kundenspezifisch'] ?? 0) === 1) {
+            $b = (int)($i['basis_item_id'] ?? 0);
+            if ($b <= 0 && preg_match('/vom neutralen Behälter (#?)(\S+)/u', (string)($i['notiz'] ?? ''), $m)) {
+                $ids = $m[1] === '#' ? [['id' => (int)$m[2]]] : all("SELECT id FROM item WHERE artikelnummer=? AND kategorie='verpackung'", [$m[2]]);
+                $b = count($ids) === 1 ? (int)$ids[0]['id'] : 0;
+            }
+            $ok = $b > 0 ? one("SELECT id, kundenspezifisch FROM item WHERE id=? AND kategorie='verpackung'", [$b]) : null;
+            $verp_id = ($ok && (int)($ok['kundenspezifisch'] ?? 0) === 0) ? $b : null;
+        }
+    }
+    if ($v) foreach (['verschluss_id', 'etikett_id', 'karton_id', 'beipack_id'] as $sp) {
+        $iid = (int)($v[$sp] ?? 0);
+        if ($iid > 0 && (int) scalar("SELECT 1 FROM item WHERE id=? AND (COALESCE(kundenspezifisch,0)=1 OR kunde_id IS NOT NULL
+                                       OR (verpackung_rolle='etikett' AND produkt_id IS NOT NULL))", [$iid])) $v[$sp] = null;
+    }
+    return [$verp_id, $v];
+}
 function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int $vorlage_produkt_id = null): ?int {
     if ($rezeptur_id <= 0 || $stueck <= 0) return null;
+    $v = $vorlage_produkt_id ? one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]) : null;
+    [$verp_id, $v] = erp_produkt_slots_neutral($verp_id, $v);
     $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 ORDER BY id LIMIT 1",
                    [$rezeptur_id, $stueck, $verp_id]);
     if ($treffer) return (int)$treffer['id'];
-    $v = $vorlage_produkt_id ? one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]) : null;
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]) ?: 'kapsel';
     $rez  = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rezeptur_id]) ?: 'Produkt';
     $behName = $verp_id ? (string) scalar("SELECT name FROM item WHERE id=?", [$verp_id]) : '';

@@ -132,9 +132,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&vpok=1'); exit;
 }
 
-// Punkt 6: Bedruckten, kundenspezifischen Behälter als eigenen Lagerartikel AM PRODUKT anlegen (wie Glas +
-// Etikett) und diesem Auftrag zuweisen. Kein kundeneigener Auftrags-Artikel mehr; getrennt vom Standard-Beutel,
-// einkaufbar, bei Nachbestellung wiederverwendet.
+// Punkt 6 / Blocker 1: Bedruckten Behälter als eigenen Lagerartikel je (Produkt + Kunde des Auftrags) anlegen
+// (wie das Kundenetikett) und diesem Auftrag zuweisen. Ein Katalogprodukt behält den neutralen Behälter;
+// getrennt vom Standard-Beutel, einkaufbar, bei Nachbestellung wiederverwendet.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'verpackung_kundenspezifisch') {
     if (!(has_role('admin') || has_role('sales'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
     // Gleiche Logik wie bei der Annahme: bedruckten Behälter anlegen (Name einmalig, Artikelnummer, Lieferant, EK-Staffel)
@@ -810,8 +810,10 @@ if (($a['status'] ?? '') !== 'storniert'):
 
 <?php // Behälter/Verpackung am Auftrag wählen (setzt auftrag.verpackung_id). Vor allem für alte v3-Aufträge ohne Produkt-Verpackung.
 if (has_role('admin') || has_role('sales')):
-    $vpListe  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
     $aVp      = (int)($a['verpackung_id'] ?? 0);
+    // Bedruckte Behälter nur die dieses Kunden (Blocker 1) – nie den Beutel eines anderen Kunden anbieten.
+    $vpListe  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0
+                     AND (COALESCE(kundenspezifisch,0)=0 OR kunde_id=? OR id=?) ORDER BY name", [(int)($a['kunde_id'] ?? 0), $aVp]);
     $pVp      = !empty($a['produkt_id']) ? (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : 0;
     $effVp    = $aVp ?: $pVp;
     $effFinal = $effVp ? (string) scalar("SELECT etikett_final FROM item WHERE id=?", [$effVp]) : '';
@@ -833,12 +835,12 @@ if (has_role('admin') || has_role('sales')):
   <?php if ($effVp): ?>
     <div class="muted" style="font-size:12px;margin-top:8px">Aktueller Behälter: <strong><?= h($effName) ?></strong><?= $aVp ? '' : ' (vom Produkt übernommen)' ?> · Etikett-Endformat: <?= trim($effFinal) !== '' ? '<strong>' . h($effFinal) . '</strong>' : '<span style="color:var(--warn)">nicht hinterlegt – am Behälter unter Lager → Verpackungen pflegen</span>' ?></div>
     <?php if ($effKspez): ?>
-      <div style="font-size:12px;margin-top:6px"><?= bx_badge('bedruckt · kundenspezifisch','info') ?> <span class="muted">Eigener Behälter-Artikel am Produkt – getrennt vom Standard-Beutel, im Einkauf bestellbar, bei Nachbestellung wiederverwendet.</span></div>
+      <div style="font-size:12px;margin-top:6px"><?= bx_badge('bedruckt · kundenspezifisch','info') ?> <span class="muted">Eigener Behälter-Artikel dieses Kunden (je Produkt + Kunde) – getrennt vom Standard-Beutel, im Einkauf bestellbar, bei Nachbestellung wiederverwendet.</span></div>
     <?php elseif (!empty($a['produkt_id'])): ?>
-      <form method="post" style="margin:10px 0 0" onsubmit="return confirm('Aus dem aktuellen Standard-Behälter einen bedruckten, kundenspezifischen Behälter am Produkt anlegen und diesem Auftrag zuweisen? Er wird getrennt vom Standard geführt und bei Nachbestellungen wiederverwendet.');">
+      <form method="post" style="margin:10px 0 0" onsubmit="return confirm('Aus dem aktuellen Standard-Behälter einen bedruckten Behälter für diesen Kunden anlegen und diesem Auftrag zuweisen? Er gehört dem Kunden (je Produkt + Kunde), wird getrennt vom Standard geführt und bei Nachbestellungen wiederverwendet.');">
         <input type="hidden" name="aktion" value="verpackung_kundenspezifisch">
         <button class="btn btn-ghost btn-sm" type="submit">Bedruckten, kundenspezifischen Behälter anlegen</button>
-        <span class="muted" style="font-size:12px;display:block;margin-top:4px">Für einen bedruckten Kundenbeutel, der kein Standard-Basic ist: legt einen eigenen Lagerartikel am Produkt an (wie Glas + Etikett) – im Einkauf bestellbar, im Lager getrennt vom Standard-Beutel.</span>
+        <span class="muted" style="font-size:12px;display:block;margin-top:4px">Für einen bedruckten Kundenbeutel, der kein Standard-Basic ist: legt einen eigenen Lagerartikel je Produkt + Kunde an (wie das Kundenetikett), das Produkt behält den neutralen Behälter – im Einkauf bestellbar, im Lager getrennt vom Standard-Beutel.</span>
       </form>
     <?php endif; ?>
   <?php else: ?>

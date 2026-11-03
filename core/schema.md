@@ -183,7 +183,27 @@ einen eigenen Behälter-Lagerartikel AM PRODUKT an (Kopie des Standard-Behälter
 Marker im Angebot: `angebot_position.kundenspezifisch` (Checkbox „bedruckt/kundenspezifisch" an der
 Verpackungs-Position). Hook: `auftrag_aus_angebot()` erzeugt den Artikel erst **bei Annahme**.
 
-**Annahme-Hook für ALLE Annahmewege (Paket Etiketten, Teilfix 3):** `auftrag_annahme_etikett_verpackung($auftrag_id,$angebot_id,$produkt_id,$kunde_id,$verp_id[,$gruppe])` wird von `auftrag_aus_angebot`, `auftrag_aus_positionen` (Rezeptur-Weg) und `auftrag_aus_zelle` aufgerufen. Er legt das Kundenetikett v1 (je Produkt+Kunde) bei der **Annahme** an und bindet es – vorher entstand es auf dem Positions-Weg erst bei der Freigabe, weil dort der Hook fehlte. Ist die Verpackungs-Position „bedruckt, kundenspezifisch" markiert, entsteht der bedruckte Behälter über `auftrag_verpackung_kundenspezifisch_binden()`: Artikel anlegen **und** an Auftrag **und** Produktionsauftrag binden (sonst blieben PA, Laufzettel und Werk-App auf dem neutralen Beutel). `verpackung_kundenspezifisch_sicherstellen()` legt den Artikel jetzt sauber an: **Name einmalig** („Beutel … bedruckt · Produkt“; „neutral“ und der im Produktnamen schon enthaltene Behältername entfallen), **Artikelnummer** (VP-…), **Hauptlieferant** und **EK-Staffel** (`pack_ek_staffel` + `lieferant_preis`) vom neutralen Behälter als **Startwert** (Hinweis in der Notiz: auf den Druckpreis anpassen). Der manuelle Knopf am Auftrag („Bedruckten, kundenspezifischen Behälter anlegen“) nutzt dieselbe Funktion (idempotent). Offen: der bedruckte Behälter gehört weiter zum PRODUKT (nicht je Kunde) – bei einem Katalogprodukt mit mehreren Kunden und je eigenem Druck wäre das nachzuziehen.
+**Annahme-Hook für ALLE Annahmewege (Paket Etiketten, Teilfix 3):** `auftrag_annahme_etikett_verpackung($auftrag_id,$angebot_id,$produkt_id,$kunde_id,$verp_id[,$gruppe])` wird von `auftrag_aus_angebot`, `auftrag_aus_positionen` (Rezeptur-Weg) und `auftrag_aus_zelle` aufgerufen. Er legt das Kundenetikett v1 (je Produkt+Kunde) bei der **Annahme** an und bindet es – vorher entstand es auf dem Positions-Weg erst bei der Freigabe, weil dort der Hook fehlte. Ist die Verpackungs-Position „bedruckt, kundenspezifisch" markiert, entsteht der bedruckte Behälter über `auftrag_verpackung_kundenspezifisch_binden()`: Artikel anlegen **und** an Auftrag **und** Produktionsauftrag binden (sonst blieben PA, Laufzettel und Werk-App auf dem neutralen Beutel). `verpackung_kundenspezifisch_sicherstellen()` legt den Artikel jetzt sauber an: **Name einmalig** („Beutel … bedruckt · Produkt“; „neutral“ und der im Produktnamen schon enthaltene Behältername entfallen), **Artikelnummer** (VP-…), **Hauptlieferant** und **EK-Staffel** (`pack_ek_staffel` + `lieferant_preis`) vom neutralen Behälter als **Startwert** (Hinweis in der Notiz: auf den Druckpreis anpassen). Der manuelle Knopf am Auftrag („Bedruckten, kundenspezifischen Behälter anlegen“) nutzt dieselbe Funktion (idempotent). Erledigt mit Blocker 1 (siehe unten): der bedruckte Behälter gehört jetzt je (Produkt + Kunde).
+
+**Blocker 1 (2026-11-03) – Eigentümer-Modell Rezeptur / Produkt / Druck:** Rezeptur gehört niemandem (außer `exklusiv=1`),
+das Produkt (Rezeptur x Menge x neutraler Behältertyp) ist kundenneutral und teilbar, der **Druck** (bedruckter Beutel,
+Etikettdesign) gehört dem Kunden. Darum:
+- `verpackung_kundenspezifisch_sicherstellen($produkt_id, $basis_item_id, $kunde_id)` legt den bedruckten Behälter je
+  (Produkt + **Kunde**) an: `item.kunde_id`, `item.basis_item_id` (= neutraler Standard-Behälter), Name mit Firma.
+  „Vorhanden“-Suche über `verpackung_kundenspezifisch_aktuell($produkt_id, $kunde_id)` – nie der Beutel eines anderen
+  Kunden; Altbestand ohne `kunde_id` zählt nur, wenn ihn ausschließlich Aufträge dieses Kunden nutzen.
+- **Kein** `produkt.verpackung_id` mehr auf einem Katalogprodukt; nur ein exklusives Produkt desselben Kunden bekommt den
+  Beutel in den Slot. Gebunden wird am Auftrag + PA (`auftrag_verpackung_kundenspezifisch_binden()` reicht `auftrag.kunde_id` durch).
+- `verpackung_neutrale_basis($item_id)`: neutraler Behälter zu einem bedruckten (basis_item_id, sonst Artikelnummer aus der
+  Notiz „vom neutralen Behälter VP-…“, sonst der eindeutige neutrale Behälter aus den Angeboten der Aufträge mit
+  diesem Beutel), 0 = nicht eindeutig (nicht raten).
+- Gürtel: `produkt_slots_neutral()` in `produkt_aus_rezeptur()` / `produkt_variante_id()` (nur kundenneutraler Zweig) –
+  bedruckter Behälter -> neutraler, Kundenetikett/kundenspezifischer Deckel/Karton/Beipack -> leer. Gleiche Regel in der
+  Buchhaltungs-Kopie (`erp_produkt_slots_neutral()`).
+- `produkt_behaelter_id()` (PIB/Etikettmaß) nimmt beim Auftrags-Behälter den neutralen Basis-Behälter.
+- Produktion: `erp_pa_fehlbedarf()` und `erp_pa()` lösen den Behälter PA -> Auftrag -> Produkt auf; Auftrag-Dropdown zeigt
+  bedruckte Behälter nur des eigenen Kunden.
+- Rezepturanfrage bleibt unverändert: Rezeptur mit `kunde_id`, ohne `exklusiv` (Kunden hängen sich bewusst an).
 Der frühere „kundeneigen/Beistellung"-Weg (`item.kundeneigen`, `auftrag.verpackung_beistellung`,
 `verpackung_kundeneigen_sicherstellen()`) wurde **entfernt**.
 

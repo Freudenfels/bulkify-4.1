@@ -202,7 +202,7 @@ function erp_pa(int $id): ?array {
                 LEFT JOIN produkt p  ON p.id=pa.produkt_id
                 LEFT JOIN rezeptur r ON r.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
                 LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id
-                LEFT JOIN item vp    ON vp.id=COALESCE(pa.verpackung_id, p.verpackung_id, a.verpackung_id)
+                LEFT JOIN item vp    ON vp.id=COALESCE(pa.verpackung_id, a.verpackung_id, p.verpackung_id)   -- PA → Auftrag (bedruckter Kundenbeutel) → Produkt
                 LEFT JOIN kunden k   ON k.id=pa.kunde_id
                 WHERE pa.id=?", [$id]);
 }
@@ -639,8 +639,10 @@ function erp_pa_fehlbedarf(int $pa_id): array {
         if ($need > 0 && $verf + 0.0001 < $need)
             $fehlend[] = ['name'=> scalar("SELECT name FROM item WHERE id=?", [$kid]), 'benoetigt'=>$need, 'verfuegbar'=>$verf, 'fehlt'=>$need-$verf, 'einheit'=>'Stk'];
     }
-    // Verpackung (1 je Packung)
-    $vid = (int) (scalar("SELECT verpackung_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: 0);
+    // Verpackung (1 je Packung): der am PA/Auftrag gebundene Behälter (z. B. bedruckter Beutel des Kunden), sonst der des Produkts.
+    $vid = (int) (scalar("SELECT COALESCE(NULLIF(pa.verpackung_id,0), NULLIF(a.verpackung_id,0), p.verpackung_id)
+                          FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN produkt p ON p.id=pa.produkt_id
+                          WHERE pa.id=?", [$pa_id]) ?: 0);
     if ($vid) {
         $need = max(0.0, min((float)$pa['menge'] * erp_rest_faktor($pa_id), (float)$pa['menge'] - erp_verbraucht($pa_id, $vid)));   // Rest (St-08)
         $verf = erp_item_bestand($vid);

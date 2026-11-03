@@ -1890,7 +1890,8 @@ function init_schema(): void {
     // Kundenetikett gehört zu (Produkt + KUNDE): item.kunde_id (nur an Etikett-Artikeln mit produkt_id gesetzt). Die Versionen
     // v1/v2/… zählen je Produkt+Kunde und verdrängen sich nicht mehr gegenseitig. Siehe kundenetikett_je_kunde_migrieren().
     ensure_column('item', 'kunde_id', "INT NULL");
-    ensure_column('item', 'kundenspezifisch', "TINYINT(1) NOT NULL DEFAULT 0"); // Verpackung: bedruckter, kundenspezifischer Behälter (eigener Lagerartikel am Produkt, getrennt vom Standard-Basic)
+    ensure_column('item', 'kundenspezifisch', "TINYINT(1) NOT NULL DEFAULT 0"); // Verpackung: bedruckter, kundenspezifischer Behälter (eigener Lagerartikel je Produkt + Kunde, getrennt vom Standard-Basic)
+    ensure_column('item', 'basis_item_id', "INT NULL");                         // bedruckter Behälter: der neutrale Standard-Behälter, aus dem er kopiert wurde (Blocker 1)
     ensure_column('kunden', 'nutzt_fulfillment', "TINYINT NOT NULL DEFAULT 0"); // Kunde nutzt unser Fulfillment → hat ein Lager 2
     ensure_column('kunden', 'eigener_dhl', "TINYINT NOT NULL DEFAULT 0"); // Kunde hat eigenen DHL-Vertrag → Monatsabrechnung ohne Paketzeilen, nur Fulfillment-Service
     // Betriebsmittel (Kartons/Verbrauchsgüter/Inventar/Maschinen/Sonstiges): einfacher Bestand + Geräteprüfung.
@@ -4693,6 +4694,18 @@ function behaelter_fuer_groesse(int $vorlage_produkt_id, int $stueck, ?string $t
     if ($eigen && in_array($eigen, $ids, true)) return $eigen;
     return $ids[0];
 }
+// Slots für ein KUNDENNEUTRALES Produkt (Katalog) bereinigen: bedruckter Behälter -> sein neutraler Standard-Behälter
+// (nicht bestimmbar -> leer), Kundenetikett / kundenspezifischer Deckel, Karton, Beipack -> leer (das Etikett leitet
+// sich dann wie üblich aus dem Behälter ab bzw. wird je Kunde aufgelöst). Rückgabe [verp_id, Vorlage-Zeile].
+function produkt_slots_neutral(?int $verp_id, ?array $v): array {
+    if ($verp_id) $verp_id = verpackung_neutrale_basis($verp_id) ?: null;
+    if ($v) foreach (['verschluss_id', 'etikett_id', 'karton_id', 'beipack_id'] as $sp) {
+        $iid = (int)($v[$sp] ?? 0);
+        if ($iid > 0 && (int) scalar("SELECT 1 FROM item WHERE id=? AND (COALESCE(kundenspezifisch,0)=1 OR kunde_id IS NOT NULL
+                                       OR (verpackung_rolle='etikett' AND produkt_id IS NOT NULL))", [$iid])) $v[$sp] = null;
+    }
+    return [$verp_id, $v];
+}
 // Das Produkt zu (Rezeptur x Packungsgröße + Behälter) finden – oder anlegen. Ohne Vorlage-Produkt:
 // genau der Fall „Kunde hat eine Rezeptur, daraus soll ein Produkt werden". Katalogprodukt (nicht exklusiv).
 // $vorlage_produkt_id (optional) liefert Deckel/Etikett/Karton/Beipack und die Verzehrempfehlung.
@@ -4706,6 +4719,8 @@ function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int
     // Produkt mit GLEICHEM Flag wiederverwendet (sonst würde ein Eigenproduktions-Produkt derselben Rezeptur getroffen).
     $v  = $vorlage_produkt_id ? one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]) : null;
     $hw = (int)($v['handelsware'] ?? 0) === 1 ? 1 : 0;
+    // Katalogprodukt ist kundenneutral: nie ein bedruckter Behälter / Kundenetikett im Slot (Blocker 1).
+    if ($exKid === 0) [$verp_id, $v] = produkt_slots_neutral($verp_id, $v);
     if ($exKid > 0) {
         $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=1 AND kunde_id=? AND handelsware=? ORDER BY id LIMIT 1",
                        [$rezeptur_id, $stueck, $verp_id, $exKid, $hw]);
@@ -4740,6 +4755,8 @@ function produkt_variante_id(int $vorlage_produkt_id, int $stueck, ?int $verp_id
     // Ist das Vorlage-Produkt exklusiv (gehört einem Kunden), erbt die Variante Kunde + Exklusivität (S-02) –
     // sonst würde ein kundenloses Katalogprodukt mit der Zusammensetzung des Kunden entstehen.
     $exKid = ((int)($v['exklusiv'] ?? 0) === 1 && (int)($v['kunde_id'] ?? 0) > 0) ? (int)$v['kunde_id'] : 0;
+    // Katalogprodukt ist kundenneutral: nie ein bedruckter Behälter / Kundenetikett im Slot (Blocker 1).
+    if ($exKid === 0) [$verp_id, $v] = produkt_slots_neutral($verp_id, $v);
     // Vorhandenes Produkt mit genau dieser Kombination wiederverwenden (Katalog oder dasselbe Vorlage-Produkt)
     if ($exKid > 0) {
         $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=?
@@ -6928,6 +6945,8 @@ function produkt_behaelter_id(int $produkt_id): ?int {
     // Auftrags-Behälter hat Vorrang (Admin kann je Auftrag ein anderes Glas setzen – das treibt dann
     // auch Produktion/Einkauf/PIB). Nur wenn kein Auftrag einen Behälter nennt, gilt der am Produkt.
     $a = (int) scalar("SELECT verpackung_id FROM auftrag WHERE produkt_id=? AND verpackung_id IS NOT NULL ORDER BY id DESC LIMIT 1", [$produkt_id]);
+    // Bedruckter Beutel eines Kunden gehört nicht in die Produktsicht (PIB/Etikettmaß) -> neutraler Basis-Behälter.
+    if ($a > 0) $a = verpackung_neutrale_basis($a);
     if ($a > 0) return $a;
     $v = (int) scalar("SELECT verpackung_id FROM produkt WHERE id=?", [$produkt_id]);
     return $v > 0 ? $v : null;
@@ -9212,43 +9231,92 @@ function kundenetikett_sicherstellen(int $produkt_id, ?int $kunde_id = null, int
     return kundenetikett_version_anlegen($produkt_id, 1, null, '', $kunde_id);
 }
 
-// Bedruckter, KUNDENSPEZIFISCHER Behälter als eigenen Lagerartikel AM PRODUKT sicherstellen – analog zum
-// Kundenetikett (Punkt 6). Im Angebot steht nur ein Merkmal „bedruckt, kundenspezifisch"; erst bei Annahme
-// entsteht hieraus ein eigener Artikel: Kopie des Standard-(Basic-)Behälters, markiert kundenspezifisch=1,
-// über item.produkt_id ans Produkt gebunden; produkt.verpackung_id zeigt dann darauf. Der Artikel ist normal
-// einkaufbar und lagerführend, liegt aber GETRENNT vom Standard-Beutel und wird bei Nachbestellung
-// wiederverwendet. Idempotent: existiert schon einer, wird er (erneut) als Produkt-Behälter gesetzt.
-// Rückgabe item-id (0 = nichts getan). $basis_item_id = Standard-Behälter als Vorlage (sonst Produkt-Behälter).
-function verpackung_kundenspezifisch_sicherstellen(int $produkt_id, int $basis_item_id = 0): int {
+// Bedruckter, KUNDENSPEZIFISCHER Behälter – spiegelbildlich zum Kundenetikett (Blocker 1): Das Produkt ist
+// kundenneutral (Rezeptur x Menge x neutraler Behältertyp), der DRUCK gehört dem Kunden. Darum ist der bedruckte
+// Behälter ein eigener Lagerartikel je (Produkt + KUNDE): item.produkt_id + item.kunde_id, kundenspezifisch=1,
+// basis_item_id = neutraler Standard-Behälter. Gebunden wird er am AUFTRAG (+ PA); Bestand, Einkauf, PA, Laufzettel
+// und Werk-App ziehen auftrag/produktionsauftrag.verpackung_id. Nur ein EXKLUSIVES Produkt (gehört genau diesem
+// Kunden) trägt ihn zusätzlich im Produkt-Slot – ein Katalogprodukt behält immer den neutralen Behälter.
+
+// Neutraler Standard-Behälter zu einem (evtl. bedruckten) Behälter. Nicht bedruckt -> er selbst. Bedruckt ->
+// basis_item_id, sonst (Altbestand vor Blocker 1) die Artikelnummer aus der Notiz „… vom neutralen Behälter VP-… …",
+// sonst der eindeutige neutrale Behälter aus den Angeboten der Aufträge mit diesem Beutel.
+// 0 = nicht eindeutig bestimmbar (dann nicht raten).
+function verpackung_neutrale_basis(int $item_id): int {
+    $i = $item_id > 0 ? one("SELECT id, kundenspezifisch, basis_item_id, notiz FROM item WHERE id=?", [$item_id]) : null;
+    if (!$i) return 0;
+    if ((int)($i['kundenspezifisch'] ?? 0) !== 1) return (int)$i['id'];
+    $b = (int)($i['basis_item_id'] ?? 0);
+    if ($b > 0 && (int) scalar("SELECT 1 FROM item WHERE id=? AND kategorie='verpackung' AND COALESCE(kundenspezifisch,0)=0", [$b])) return $b;
+    if (preg_match('/vom neutralen Behälter (#?)(\S+)/u', (string)($i['notiz'] ?? ''), $m)) {
+        if ($m[1] === '#') {
+            $b = (int)$m[2];
+            return (int) scalar("SELECT id FROM item WHERE id=? AND kategorie='verpackung' AND COALESCE(kundenspezifisch,0)=0", [$b]);
+        }
+        $ids = all("SELECT id FROM item WHERE artikelnummer=? AND kategorie='verpackung' AND COALESCE(kundenspezifisch,0)=0", [$m[2]]);
+        if (count($ids) === 1) return (int)$ids[0]['id'];
+    }
+    // Sehr alter Bestand (Notiz ohne Basis-Nummer): der neutrale Behälter, den die Angebote der Aufträge mit diesem
+    // Beutel konfiguriert hatten (Herstellungs-/Verpackungszeile) – nur wenn genau EINER.
+    $ids = all("SELECT DISTINCT ap.verpackung_id AS id FROM auftrag a JOIN angebot_position ap ON ap.angebot_id=a.angebot_id
+                JOIN item n ON n.id=ap.verpackung_id AND n.kategorie='verpackung' AND COALESCE(n.kundenspezifisch,0)=0
+                WHERE a.verpackung_id=? AND ap.quelle IN ('herstellung','verpackung')", [(int)$i['id']]);
+    return count($ids) === 1 ? (int)$ids[0]['id'] : 0;
+}
+// Aktueller bedruckter Behälter von (Produkt + Kunde) – nie der eines anderen Kunden. Altbestand ohne Besitzer
+// (item.kunde_id leer, vor Blocker 1) zählt nur, wenn ihn ausschließlich Aufträge DIESES Kunden nutzen. 0 = keiner.
+function verpackung_kundenspezifisch_aktuell(int $produkt_id, ?int $kunde_id): int {
+    if ($produkt_id <= 0 || !$kunde_id) return 0;
+    $w = "COALESCE(kundenspezifisch,0)=1 AND produkt_id=? AND kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0";
+    $id = (int) scalar("SELECT id FROM item WHERE $w AND kunde_id=? ORDER BY id LIMIT 1", [$produkt_id, $kunde_id]);
+    if ($id) return $id;
+    foreach (all("SELECT id FROM item WHERE $w AND kunde_id IS NULL ORDER BY id", [$produkt_id]) as $r) {
+        $kd = all("SELECT DISTINCT kunde_id FROM auftrag WHERE verpackung_id=?", [(int)$r['id']]);
+        if (count($kd) === 1 && (int)$kd[0]['kunde_id'] === (int)$kunde_id) return (int)$r['id'];
+    }
+    return 0;
+}
+// Bedruckten Behälter für (Produkt + Kunde) sicherstellen: vorhandenen wiederverwenden (Nachbestellung), sonst aus dem
+// neutralen Standard-Behälter kopieren. Rückgabe item-id (0 = nichts getan). $basis_item_id = Behälter des Auftrags
+// (sonst Produkt-Behälter); ist er selbst bedruckt, wird auf seinen neutralen Basis-Behälter zurückgegangen.
+// Ohne Kunde nur bei einem exklusiven Produkt (dessen Besitzer) – ein Katalogprodukt hat keinen Besitzer für den Druck.
+function verpackung_kundenspezifisch_sicherstellen(int $produkt_id, int $basis_item_id = 0, ?int $kunde_id = null): int {
     if ($produkt_id <= 0) return 0;
-    $vorhanden = (int) scalar("SELECT id FROM item WHERE COALESCE(kundenspezifisch,0)=1 AND produkt_id=? AND kategorie='verpackung'
-                               AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY id LIMIT 1", [$produkt_id]);
-    if ($vorhanden) { q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vorhanden, $produkt_id]); return $vorhanden; }
+    $prod = one("SELECT exklusiv, kunde_id FROM produkt WHERE id=?", [$produkt_id]);
+    if (!$prod) return 0;
+    $exKid = ((int)$prod['exklusiv'] === 1 && (int)$prod['kunde_id'] > 0) ? (int)$prod['kunde_id'] : 0;
+    $kunde_id = $kunde_id ?: ($exKid ?: null);
+    if (!$kunde_id) return 0;
+    // Produkt-Slot nur, wenn das Produkt genau diesem Kunden gehört (exklusiv) – nie beim Katalogprodukt.
+    $slot = $exKid > 0 && $exKid === (int)$kunde_id;
+    $vorhanden = verpackung_kundenspezifisch_aktuell($produkt_id, $kunde_id);
+    if ($vorhanden) { if ($slot) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vorhanden, $produkt_id]); return $vorhanden; }
     $basis = $basis_item_id > 0 ? $basis_item_id : (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$produkt_id]);
+    $basis = $basis > 0 ? verpackung_neutrale_basis($basis) : 0;   // bedruckt (z. B. eines anderen Kunden) -> neutraler Standard
     $b = $basis > 0 ? one("SELECT * FROM item WHERE id=? AND kategorie='verpackung'", [$basis]) : null;
     if (!$b) return 0;
-    if (!empty($b['kundenspezifisch']) && (int)($b['produkt_id'] ?? 0) === $produkt_id) return (int)$b['id']; // schon der richtige
     $pname = trim((string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$produkt_id])) ?: ('Produkt ' . $produkt_id);
+    $firma = trim((string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$kunde_id]));
     // Name EINMALIG: Der Produktname enthält oft schon den neutralen Behälter („… · TEST Beutel Kraft neutral") –
     // den Behälter-Namen daraus streichen und „neutral" aus dem Basisnamen nehmen, sonst steht alles doppelt im Namen.
     $basisName = trim((string)$b['name']);
     $kern  = trim((string) preg_replace('/\s*\bneutral\b\s*/iu', ' ', $basisName));
     $pRest = trim((string) preg_replace('/\s*·\s*$|^\s*·\s*/u', '', trim(str_ireplace([$basisName, $kern], '', $pname))));
     $pRest = trim((string) preg_replace('/(\s*·\s*){2,}/u', ' · ', $pRest), " ·");
-    $label = $kern . ' bedruckt' . ($pRest !== '' ? ' · ' . $pRest : '');
+    $label = $kern . ' bedruckt' . ($pRest !== '' ? ' · ' . $pRest : '') . ($firma !== '' ? ' · ' . $firma : '');
     $label = mb_substr($label, 0, 190);
     // Artikelnummer (VP-…) wie bei jedem Verpackungsartikel + Hauptlieferant vom neutralen Behälter übernehmen.
     $anr = naechste_nummer(item_prefix('verpackung'));
     q("INSERT INTO item (artikelnummer, name, kategorie, form, verpackungsart, material, volumen_ml, farbe, einheit, ek_preis, preis_bezug,
                          verpackung_rolle, karton_item_id, max_fuellgewicht_g, etikett_format, etikett_druck, etikett_final,
-                         hoehe_mm, durchmesser_mm, breite_mm, tiefe_mm, gewicht_g, haupt_lieferant_id, produkt_id, kundenspezifisch, notiz)
-       VALUES (?, ?, 'verpackung', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+                         hoehe_mm, durchmesser_mm, breite_mm, tiefe_mm, gewicht_g, haupt_lieferant_id, produkt_id, kunde_id, basis_item_id, kundenspezifisch, notiz)
+       VALUES (?, ?, 'verpackung', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
       [$anr, $label, $b['form'] ?? 'pulver', $b['verpackungsart'] ?? null, $b['material'] ?? null, $b['volumen_ml'] ?? null,
        $b['farbe'] ?? null, $b['einheit'] ?? 'Stk', $b['ek_preis'] ?? 0, $b['preis_bezug'] ?? 'Stück', $b['verpackung_rolle'] ?? 'primaer',
        $b['karton_item_id'] ?? null, $b['max_fuellgewicht_g'] ?? null, $b['etikett_format'] ?? null, $b['etikett_druck'] ?? null,
        $b['etikett_final'] ?? null, $b['hoehe_mm'] ?? null, $b['durchmesser_mm'] ?? null, $b['breite_mm'] ?? null,
-       $b['tiefe_mm'] ?? null, $b['gewicht_g'] ?? null, $b['haupt_lieferant_id'] ?? null, $produkt_id,
-       'Bedruckter, kundenspezifischer Behälter zu Produkt ' . $pname . '. EK-Staffel vom neutralen Behälter ' . ($b['artikelnummer'] ?? ('#' . $b['id'])) . ' als STARTWERT übernommen – bitte auf den Druckpreis anpassen.']);
+       $b['tiefe_mm'] ?? null, $b['gewicht_g'] ?? null, $b['haupt_lieferant_id'] ?? null, $produkt_id, (int)$kunde_id, (int)$b['id'],
+       'Bedruckter, kundenspezifischer Behälter zu Produkt ' . $pname . ($firma !== '' ? ' für ' . $firma : '') . '. EK-Staffel vom neutralen Behälter ' . ($b['artikelnummer'] ?? ('#' . $b['id'])) . ' als STARTWERT übernommen – bitte auf den Druckpreis anpassen.']);
     $nid = (int) insert_id();
     // EK-Staffeln (Behälter-EK je Bestellmenge + Lieferantenpreise) als Startwert kopieren, damit der Artikel sofort einkaufbar ist.
     foreach (all("SELECT menge_ab, ek_preis, lieferant_id FROM pack_ek_staffel WHERE item_id=?", [(int)$b['id']]) as $st)
@@ -9257,18 +9325,19 @@ function verpackung_kundenspezifisch_sicherstellen(int $produkt_id, int $basis_i
         foreach (all("SELECT lieferant_id, menge_ab, preis, waehrung, lieferant_name FROM lieferant_preis WHERE item_id=?", [(int)$b['id']]) as $lp)
             q("INSERT INTO lieferant_preis (item_id, lieferant_id, menge_ab, preis, waehrung, stand, lieferant_name, quelle) VALUES (?,?,?,?,?,CURDATE(),?,'kopie_neutral')",
               [$nid, $lp['lieferant_id'], $lp['menge_ab'], $lp['preis'], $lp['waehrung'] ?: 'EUR', $lp['lieferant_name']]);
-    q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$nid, $produkt_id]);
+    if ($slot) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$nid, $produkt_id]);
     if (function_exists('bedarf_bump')) bedarf_bump();
     return $nid;
 }
 // Den bedruckten, kundenspezifischen Behälter an den AUFTRAG binden – inkl. seines Produktionsauftrags (sonst blieben
 // PA, Laufzettel und Werk-App auf dem neutralen Beutel). Gemeinsam für Annahme-Hook UND den manuellen Knopf am Auftrag.
+// Der Beutel gehört dem Kunden des Auftrags (Gegenstück zu etikett_item_fuer_auftrag()).
 // Rückgabe: item-id des bedruckten Behälters (0 = nichts getan).
 function auftrag_verpackung_kundenspezifisch_binden(int $auftrag_id): int {
-    $a = one("SELECT COALESCE(produkt_id,0) AS pid, COALESCE(verpackung_id,0) AS vp FROM auftrag WHERE id=?", [$auftrag_id]);
+    $a = one("SELECT COALESCE(produkt_id,0) AS pid, COALESCE(verpackung_id,0) AS vp, COALESCE(kunde_id,0) AS kid FROM auftrag WHERE id=?", [$auftrag_id]);
     if (!$a || (int)$a['pid'] <= 0) return 0;
     $basis = (int)$a['vp'] ?: (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$a['pid']]);
-    $vpk = verpackung_kundenspezifisch_sicherstellen((int)$a['pid'], $basis);
+    $vpk = verpackung_kundenspezifisch_sicherstellen((int)$a['pid'], $basis, (int)$a['kid'] ?: null);
     if ($vpk > 0) {
         q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vpk, $auftrag_id]);
         q("UPDATE produktionsauftrag SET verpackung_id=? WHERE auftrag_id=? AND status NOT IN ('erledigt','storniert')", [$vpk, $auftrag_id]);

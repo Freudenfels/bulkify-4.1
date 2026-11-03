@@ -168,7 +168,9 @@ Zahl. „unterwegs" kommt weiter aus `item_unterwegs()`; „mit Lieferung" = fre
 Der Haken „vom Kunden beigestellt (kundeneigen)" ist entfernt. Stattdessen: Reiter Verpackung zeigt bei
 einem bedruckten, kundenspezifischen Behälter ein Badge „bedruckt · kundenspezifisch"; sonst ein Knopf
 „Bedruckten, kundenspezifischen Behälter anlegen" (Aktion `verpackung_kundenspezifisch` →
-`verpackung_kundenspezifisch_sicherstellen()` am Produkt, bindet den Auftrag). Einkaufbar, getrennt vom Standard.
+`verpackung_kundenspezifisch_sicherstellen()` je Produkt + Kunde des Auftrags, bindet den Auftrag). Einkaufbar, getrennt vom Standard.
+Blocker 1: das Produkt behält den neutralen Behälter (bei Katalogprodukten); das Behälter-Dropdown zeigt bedruckte
+Behälter nur dieses Kunden.
 
 ## Reiter Material + „Produktion" (Punkt 1+2, 2026-11-02)
 Neuer Reiter **Material**: Material-Übersicht, Verpackung (Behälter) + Etikett (früher eigener Reiter
