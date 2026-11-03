@@ -398,3 +398,5 @@ Rechnung (wenn freigegeben), Angebot, Lieferschein(e), PIB, Verpackungs-Konformi
 Produktionsbericht (wenn freigegeben), Informationsdokument/Laboranalyse. Darunter „Zu Ihren Produkten“ (Analysen ohne Bestellbezug).
 Filter Produkt, Charge, Bestelldatum von/bis; leerer Zustand mit Erklärung. Info & Tools: Karte „Dokumente“ (statt „Etiketten &
 Dokumente“ -> Etiketten) und „Etiketten“ getrennt.
+
+**Herstellerzertifikate (Report 8):** Info & Tools zeigt die sichtbar geschalteten Zertifikate (`zertifikate()`) als Download (`v=zertifikat&id=`, nur objekt_typ='firma', typ='zertifikat', kunde_sichtbar=1).

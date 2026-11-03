@@ -312,6 +312,18 @@ if ($k && ($_GET['v'] ?? '') === 'analyse_datei') {
     header('Content-Length: ' . filesize($pf));
     readfile($pf); exit;
 }
+// Herstellerzertifikat herunterladen (Report 8): global für alle Kunden, nur sichtbar geschaltete.
+if ($k && ($_GET['v'] ?? '') === 'zertifikat') {
+    $zd = one("SELECT * FROM dokument WHERE id=? AND objekt_typ='firma' AND typ='zertifikat' AND kunde_sichtbar=1", [(int)($_GET['id'] ?? 0)]);
+    $pf = $zd ? BX_UPLOADS . '/' . basename((string)$zd['datei']) : '';
+    if (!$zd || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Herstellerzertifikat heruntergeladen: ' . mb_substr((string)$zd['titel'], 0, 120), 'zertifikat');
+    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+    header('Content-Type: ' . (['pdf' => 'application/pdf', 'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg'][$ext] ?? 'application/octet-stream'));
+    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($zd['datei_orig'] ?: 'Zertifikat.' . $ext)) . '"');
+    header('X-Content-Type-Options: nosniff'); header('Content-Length: ' . filesize($pf));
+    readfile($pf); exit;
+}
 // Lieferschein als PDF (Report 4, 03.11.2026): nur Lieferscheine zu EIGENEN Bestellungen. Charge auf dem Lieferschein = Fertigware (St-06).
 if ($k && ($_GET['v'] ?? '') === 'lieferschein_pdf') {
     $lid = (int)($_GET['lid'] ?? 0);
@@ -5267,6 +5279,18 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php endforeach; ?>
     </div>
   </div>
+
+  <?php $zertL = zertifikate(true); if ($zertL): ?>
+  <div class="bx-panel" id="zertifikate">
+    <h2 style="margin-top:0">Herstellerzertifikate</h2>
+    <p class="muted" style="margin:0 0 10px;font-size:14px">Unsere Zertifikate und Nachweise als Hersteller – z. B. für Ihren Händler oder Marktplatz.</p>
+    <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+      <?php foreach ($zertL as $z): ?>
+      <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="<?= $portalLink('zertifikat') ?>&id=<?= (int)$z['id'] ?>"><?= h((string)$z['titel']) ?><?= $z['dok_datum'] ? ' · gültig bis ' . h(date('d.m.Y', strtotime((string)$z['dok_datum']))) : '' ?></a>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <div class="bx-panel">
     <h2 style="margin-top:0">Noch Fragen? Wir sind für Sie da.</h2>

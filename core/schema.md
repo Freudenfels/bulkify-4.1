@@ -368,3 +368,5 @@ der Lager-App (`lg_versand` über Positionen mit Fertigware-Chargen des Auftrags
 `portal_liefertermin_aktiv()`: zentraler Schalter (app_meta portal_liefertermin, Standard 0) für die Termin-Anzeige im Portal.
 
 `produkt_kapselhuelle_mg($produkt_id)`: Hüllengewicht wie im PIB (Leerkapsel-Artikel am Produkt, sonst Standard der Kapselgröße).
+
+`zertifikat_arten()`, `zertifikate($nurSichtbar)`: globale Herstellerzertifikate (dokument objekt_typ='firma', typ='zertifikat').

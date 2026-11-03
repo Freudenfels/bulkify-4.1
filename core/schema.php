@@ -2771,6 +2771,15 @@ function produkt_kapselhuelle_mg(int $produkt_id): float {
     if ($mg <= 0 && !empty($p['rezeptur_id'])) { $kg = rezeptur_kapselgroesse((int)$p['rezeptur_id']); $mg = (float)($kg['leergewicht_mg'] ?? 0); }
     return max(0.0, $mg);
 }
+// Herstellerzertifikate (Report 8, 03.11.2026): global für alle Kunden, im Dashboard (Einstellungen → Firma) gepflegt, im Portal
+// unter Info & Tools als Download. Ablage: dokument objekt_typ='firma', objekt_id=0, typ='zertifikat', titel = Art, kunde_sichtbar.
+function zertifikat_arten(): array {
+    return ['ifs_haccp' => 'IFS / HACCP', 'bio' => 'Bio-Kontrollnummer / Bio-Zertifikat', 'registrierung' => 'Registrierung als Lebensmittelbetrieb',
+            'haftpflicht' => 'Haftpflichtnachweis', 'sonstiges' => 'Sonstiges Zertifikat'];
+}
+function zertifikate(bool $nurSichtbar = true): array {
+    return all("SELECT * FROM dokument WHERE objekt_typ='firma' AND typ='zertifikat'" . ($nurSichtbar ? " AND kunde_sichtbar=1" : "") . " ORDER BY kunde_sichtbar DESC, titel, id DESC");
+}
 function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     $gid = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
     if ($gid > 0) { $kg = one("SELECT * FROM kapselgroesse WHERE id=?", [$gid]); if ($kg) return $kg; }

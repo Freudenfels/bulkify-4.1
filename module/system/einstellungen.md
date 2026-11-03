@@ -37,3 +37,5 @@ Reiter **Preise & Margen**, Abschnitt „Zusatzleistung Laboranalyse" (`preise_s
 Textfeld `mail_signatur_vorlage` (app_meta) im E-Mail-Block: zentrale HTML-Signatur mit Platzhaltern {name} {position} {telefon} {email} {logo}. Leer = eingebauter bulkify-Standard (core/mail.php `mail_signatur_vorlage()`). Wird für neue Mitarbeiter befüllt und (Phase 2) unter die vom Dashboard verschickten Mails gesetzt.
 
 **Liefertermin im Kundenportal (03.11.2026):** Schalter „Voraussichtlichen Liefertermin im Kundenportal anzeigen“ (`app_meta portal_liefertermin`, Standard aus – lieber kein Datum als ein falsches). Gilt für alle Kunden; am Auftrag bleibt der Termin intern pflegbar.
+
+**Herstellerzertifikate (Reiter Firma, 03.11.2026):** Upload je Art (IFS/HACCP, Bio, Registrierung Lebensmittelbetrieb, Haftpflicht, Sonstiges) mit Bezeichnung und „gültig bis“; Ausblenden/Wieder anzeigen statt Löschen. Global für alle Kunden (Portal Info & Tools). Ablage `dokument` objekt_typ='firma', typ='zertifikat'.

@@ -33,6 +33,31 @@ if (!isset($TABS[$tab]) && $tab !== 'crmdemo') $tab = 'firma';   // 'crmdemo' = 
 
 $aktion = $_POST['aktion'] ?? '';
 
+// --- Herstellerzertifikate (für alle Kunden im Portal unter Info & Tools) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'zertifikat_upload') {
+    $art = (string)($_POST['art'] ?? '');
+    $titel = trim(mb_substr((string)($_POST['titel'] ?? ''), 0, 190)) ?: (zertifikat_arten()[$art] ?? 'Zertifikat');
+    $f = $_FILES['datei'] ?? null; $ok = false;
+    if ($f && (int)$f['error'] === UPLOAD_ERR_OK) {
+        $ext = strtolower(preg_replace('/[^a-z0-9]/i', '', pathinfo((string)$f['name'], PATHINFO_EXTENSION)));
+        if (in_array($ext, ['pdf', 'jpg', 'jpeg', 'png'], true)) {
+            if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+            $fn = 'zertifikat_' . bin2hex(random_bytes(6)) . '.' . $ext;
+            if (move_uploaded_file((string)$f['tmp_name'], BX_UPLOADS . '/' . $fn)) {
+                $gb = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST['gueltig_bis'] ?? '')) ? (string)$_POST['gueltig_bis'] : null;
+                q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von,dok_datum) VALUES ('firma',0,'zertifikat',?,?,?,1,'team',?)",
+                  [$titel, $fn, mb_substr((string)$f['name'], 0, 255), $gb]);
+                $ok = true;
+            }
+        }
+    }
+    header('Location: ?p=einstellungen&tab=firma&' . ($ok ? 'zertok=1' : 'zertfehler=1') . '#zertifikate'); exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'zertifikat_sichtbar') {
+    q("UPDATE dokument SET kunde_sichtbar=? WHERE id=? AND objekt_typ='firma' AND typ='zertifikat'", [!empty($_POST['sichtbar']) ? 1 : 0, (int)($_POST['dok_id'] ?? 0)]);
+    header('Location: ?p=einstellungen&tab=firma#zertifikate'); exit;
+}
+
 // --- Firma speichern ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
     foreach (['firma_name','firma_strasse','firma_hausnr','firma_plz','firma_ort','firma_land','firma_ustid','firma_eori','firma_email','firma_tel','firma_gf','firma_web',
@@ -342,6 +367,34 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <script>function bankAdd(){var t=document.getElementById('bankTpl');document.getElementById('bankListe').appendChild(t.content.cloneNode(true));}</script>
 
     <div style="margin-top:12px"><button class="btn btn-primary" type="submit">Speichern</button></div>
+  </form>
+</div>
+
+<div class="bx-panel" id="zertifikate">
+  <h2 style="margin-top:0">Herstellerzertifikate <?= bx_hint('Für ALLE Kunden gleich: erscheinen im Kundenportal unter „Info & Tools“ als Download (Händler/Marktplätze verlangen sie vom Markeninhaber). Neue Fassung hochladen und die alte ausblenden – nichts wird gelöscht.') ?></h2>
+  <?php if (isset($_GET['zertok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Zertifikat hochgeladen – für Kunden sichtbar.</div><?php endif; ?>
+  <?php if (isset($_GET['zertfehler'])): ?><div style="color:var(--err);margin-bottom:10px">Upload fehlgeschlagen (PDF, JPG oder PNG).</div><?php endif; ?>
+  <?php $zl = zertifikate(false); if ($zl): ?>
+  <div class="bx-tablewrap" style="margin-bottom:14px"><table class="bx-table">
+    <thead><tr><th>Zertifikat</th><th>Datei</th><th>Gültig bis</th><th>Im Portal</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($zl as $z): ?>
+      <tr><td><?= h((string)$z['titel']) ?></td><td><a href="?p=dokument&id=<?= (int)$z['id'] ?>" target="_blank"><?= h((string)$z['datei_orig']) ?></a></td>
+          <td><?= $z['dok_datum'] ? h(date('d.m.Y', strtotime((string)$z['dok_datum']))) : '<span class="muted">–</span>' ?></td>
+          <td><?= (int)$z['kunde_sichtbar'] ? bx_badge('sichtbar', 'ok') : bx_badge('ausgeblendet') ?></td>
+          <td style="text-align:right"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="zertifikat_sichtbar"><input type="hidden" name="dok_id" value="<?= (int)$z['id'] ?>">
+            <input type="hidden" name="sichtbar" value="<?= (int)$z['kunde_sichtbar'] ? '' : '1' ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= (int)$z['kunde_sichtbar'] ? 'Ausblenden' : 'Wieder anzeigen' ?></button></form></td></tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:0">
+    <input type="hidden" name="aktion" value="zertifikat_upload">
+    <select name="art" required><?php foreach (zertifikat_arten() as $zk => $zn): ?><option value="<?= h($zk) ?>"><?= h($zn) ?></option><?php endforeach; ?></select>
+    <input type="text" name="titel" placeholder="Bezeichnung (optional, z. B. mit Kontrollnummer)" style="min-width:280px">
+    <span class="muted" style="white-space:nowrap">gültig bis</span><input type="date" name="gueltig_bis">
+    <input type="file" name="datei" accept=".pdf,.jpg,.jpeg,.png" required>
+    <button class="btn btn-primary btn-sm" type="submit">Hochladen</button>
   </form>
 </div>
 
