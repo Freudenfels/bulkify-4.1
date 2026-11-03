@@ -1463,8 +1463,8 @@ $hatNachbestell = !empty($k['portal_produkte']) && (int) scalar("SELECT COUNT(*)
 if ($hatNachbestell) $L['nachbestellen'] = 'Nachbestellen';
 // Etiketten-Datenbank: dauerhafter Menüpunkt (auch ohne Etiketten – dann mit leerem Zustand + Erklärung).
 $L['etiketten'] = 'Etiketten';
-// Labortest: alle freigegebenen Laboranalysen zu gekauften Produkten/Bestellungen (dauerhafter Menüpunkt).
-$L['labortest'] = 'Labortest';
+// Dokumente (ersetzt „Labortest", 03.11.2026): alle Unterlagen je Bestellung + Produkt-Dokumente (dauerhafter Menüpunkt).
+$L['dokumente'] = 'Dokumente';
 // „Mein Lager": nur für Fulfillment-Kunden (Ware liegt intern im Fremdlager Lager 2). Kundensicht heißt nur „Mein Lager".
 if (!empty($k['nutzt_fulfillment'])) $L['fremdprodukte'] = 'Mein Lager';
 // Mein Konto: eigene Stammdaten + Adressen pflegen (dauerhafter Menüpunkt).
@@ -1475,7 +1475,7 @@ $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
     'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
-    'Vorgänge'  => ['nachbestellen', 'kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'labortest', 'fremdprodukte'],
+    'Vorgänge'  => ['nachbestellen', 'kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'dokumente', 'fremdprodukte'],
     'Konto'     => ['konto'],
     'Hilfe'     => ['info'],
 ];
@@ -1497,6 +1497,7 @@ $detailParent['anfrage_ansehen'] = 'meine_anfragen';   // eigene Rezepturanfrage
 if (!empty($k['portal_rezeptur_ableiten'])) $detailParent['rezeptur_ableiten'] = 'rezepturen';   // Katalog weiterentwickeln (kein Menuepunkt)
 $detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite (Fussleiste + Bestaetigungsdialog)
 $view = $_GET['v'] ?? 'start';
+if ($view === 'labortest') $view = 'dokumente';   // alter Menüpunkt/Links (Mails) -> neue Dokumente-Seite
 if (!isset($L[$view]) && !isset($detailParent[$view])) $view = 'start';
 $activeItem = $detailParent[$view] ?? $view;
 
@@ -4863,41 +4864,89 @@ portal_head('Kundenportal · ' . $k['firma']);
   })();
   </script>
 
-<?php elseif ($view === 'labortest'):
-    // Labortest: alle freigegebenen Laboranalysen (CoA) zu Produkten, die der Kunde gekauft hat, sowie zu
-    // einzelnen Bestellungen (Charge). Zwei Sortierungen: nach Datum (Standard) und nach Produkt (alphabetisch).
+<?php elseif ($view === 'dokumente'):
+    // Dokumente (Report 2, 03.11.2026 – ersetzt „Labortest"): je Bestellung alle vorhandenen Unterlagen an EINER Stelle –
+    // Auftragsbestätigung, Rechnung, Angebot, Lieferschein, PIB, PPWR, Etikett, Produktionsbericht, Informationsdokument/CoA.
+    // Dazu Dokumente zu Produkten (ohne Bestellbezug). Filter: Produkt, Charge, Datum. Nur Links auf bestehende, geprüfte Handler.
     require_once BX_ROOT . '/core/laboranalyse.php';
-    $labs = laboranalysen_fuer_kunde((int)$k['id']);
-    $sort = ($_GET['sort'] ?? 'datum') === 'produkt' ? 'produkt' : 'datum';
-    if ($sort === 'produkt') usort($labs, fn($a,$b) => [strcasecmp((string)$a['produkt'], (string)$b['produkt']), strcmp((string)$b['datum'], (string)$a['datum'])] <=> [0,0]);
-    else usort($labs, fn($a,$b) => strcmp((string)$b['datum'], (string)$a['datum']) ?: strcasecmp((string)$a['produkt'], (string)$b['produkt']));
+    $dkProd = (int)($_GET['dprod'] ?? 0); $dkCh = trim((string)($_GET['dcharge'] ?? ''));
+    $dkVon = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['dvon'] ?? '')) ? (string)$_GET['dvon'] : '';
+    $dkBis = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['dbis'] ?? '')) ? (string)$_GET['dbis'] : '';
+    $dkProdOpt = [];
+    foreach ($auftraege as $x) if (!empty($x['produkt_id'])) $dkProdOpt[(int)$x['produkt_id']] = (string)($x['produkt_name'] ?: $x['produkt_bezeichnung']);
+    asort($dkProdOpt, SORT_NATURAL | SORT_FLAG_CASE);
+    $dkLabs = laboranalysen_fuer_kunde((int)$k['id']);
+    $dkListe = array_values(array_filter($auftraege, function ($x) use ($dkProd, $dkCh, $dkVon, $dkBis, $auftragChargen) {
+        if (($x['status'] ?? '') === 'storniert') return false;
+        if ($dkProd && (int)($x['produkt_id'] ?? 0) !== $dkProd) return false;
+        $tag = substr((string)$x['angelegt'], 0, 10);
+        if ($dkVon !== '' && $tag < $dkVon) return false;
+        if ($dkBis !== '' && $tag > $dkBis) return false;
+        if ($dkCh !== '') {
+            $nrs = array_map(fn($c) => mb_strtolower($c['nr']), $auftragChargen[(int)$x['id']] ?? []);
+            if (!array_filter($nrs, fn($n) => str_contains($n, mb_strtolower($dkCh)))) return false;
+        }
+        return true;
+    }));
+    $dkBtn = fn(string $href, string $lbl) => '<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="' . h($href) . '">' . h($lbl) . '</a>';
+    $dkFilter = $dkProd || $dkCh !== '' || $dkVon !== '' || $dkBis !== '';
     ?>
-    <style>
-      .lt-tabs { display:flex; gap:8px; margin:0 0 14px }
-      .lt-tabs a { padding:6px 14px; border:1px solid var(--line); border-radius:999px; text-decoration:none; color:inherit; font-size:13px }
-      .lt-tabs a.aktiv { background:var(--gruen,#2f6f4f); color:#fff; border-color:transparent }
-    </style>
-    <div class="bx-head-portal"><h1 style="margin:0">Labortest</h1></div>
-    <p class="muted" style="margin-top:0">Analysenzertifikate (CoA) und Labortests zu Ihren Produkten und Bestellungen.</p>
-    <div class="lt-tabs">
-      <a href="<?= $portalLink('labortest') ?>&sort=datum" class="<?= $sort==='datum'?'aktiv':'' ?>">nach Datum</a>
-      <a href="<?= $portalLink('labortest') ?>&sort=produkt" class="<?= $sort==='produkt'?'aktiv':'' ?>">nach Produkt</a>
-    </div>
-    <?php if (!$labs): ?>
-      <div class="bx-panel"><div class="muted">Es liegen noch keine freigegebenen Laboranalysen vor. Sobald wir für Ihre Produkte einen Labortest hinterlegen, erscheint er hier.</div></div>
-    <?php else: ?>
+    <div class="bx-head-portal"><h1 style="margin:0">Dokumente</h1></div>
+    <p class="muted" style="margin-top:0">Alle Unterlagen zu Ihren Bestellungen an einer Stelle: Auftragsbestätigung, Rechnung, Lieferschein, Produktinformation (PIB), Verpackungs-Konformität, Etikett, Produktionsbericht und Informationsdokument bzw. Laboranalyse.</p>
+    <form method="get" class="bx-row" style="gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px">
+      <input type="hidden" name="p" value="portal"><input type="hidden" name="token" value="<?= h($token) ?>"><input type="hidden" name="v" value="dokumente">
+      <select name="dprod" style="width:260px;flex:0 0 auto"><option value="">Alle Produkte</option><?php foreach ($dkProdOpt as $pid_ => $pn_): ?><option value="<?= (int)$pid_ ?>" <?= $dkProd === (int)$pid_ ? 'selected' : '' ?>><?= h($pn_) ?></option><?php endforeach; ?></select>
+      <input type="text" name="dcharge" value="<?= h($dkCh) ?>" placeholder="Charge" style="width:130px;flex:0 0 auto">
+      <span class="muted" style="font-size:13px;white-space:nowrap">Bestellt von</span><input type="date" name="dvon" value="<?= h($dkVon) ?>" style="width:160px;flex:0 0 auto">
+      <span class="muted" style="font-size:13px">bis</span><input type="date" name="dbis" value="<?= h($dkBis) ?>" style="width:160px;flex:0 0 auto">
+      <button class="btn btn-ghost btn-sm" type="submit">Filtern</button>
+      <?php if ($dkFilter): ?><a class="btn btn-ghost btn-sm" href="<?= $portalLink('dokumente') ?>">zurücksetzen</a><?php endif; ?>
+    </form>
+    <?php if (!$dkListe): ?>
+      <div class="bx-panel"><div class="muted"><?= $dkFilter
+          ? 'Für diese Auswahl gibt es keine Bestellung. Bitte den Filter anpassen.'
+          : 'Noch keine Dokumente. Sobald Sie bestellen, finden Sie hier je Bestellung die Auftragsbestätigung; Rechnung, Lieferschein, Produktionsbericht und Informationsdokument kommen hinzu, sobald sie vorliegen.' ?></div></div>
+    <?php endif; ?>
+    <?php foreach ($dkListe as $x): $xid = (int)$x['id'];
+        $xCh = $auftragChargen[$xid] ?? [];
+        $xRe = (int) scalar("SELECT COUNT(*) FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND status<>'storniert'", [$xid]) > 0;
+        $xLs = all("SELECT id, nummer FROM beleg WHERE auftrag_id=? AND typ='lieferschein' ORDER BY id", [$xid]);
+        $xPb = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE auftrag_id=? AND bericht_freigegeben_am IS NOT NULL", [$xid]) > 0;
+        $xAna = array_values(array_filter($dkLabs, fn($l) => (string)($l['auftrag_nr'] ?? '') === (string)$x['nummer']));
+        $xIstDl = ($x['kategorie'] ?? '') === 'dienstleistung';
+        $xEt = !$xIstDl && !empty($x['produkt_id']) && function_exists('etikett_datei') && etikett_datei($xid);
+        $xVorl = !$xIstDl && !empty($x['produkt_id']) && etikett_druckvorlage_datei((int)$x['produkt_id']); ?>
+      <div class="bx-panel">
+        <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">
+          <div><strong><?= h($x['nummer']) ?></strong> · <?= h((string)($x['produkt_name'] ?: $x['produkt_bezeichnung'] ?: 'Bestellung')) ?>
+            <span class="muted" style="font-size:13px">· bestellt am <?= h(fmt_zeit((string)$x['angelegt'], 'd.m.Y')) ?><?= $xCh ? ' · Charge ' . h(implode(', ', array_map(fn($c) => $c['nr'], $xCh))) : '' ?></span></div>
+          <a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= $xid ?>">Zur Bestellung</a>
+        </div>
+        <div class="bx-row" style="gap:8px;flex-wrap:wrap;margin-top:10px">
+          <?= $dkBtn($portalLink('ab_pdf') . '&aid=' . $xid, 'Auftragsbestätigung') ?>
+          <?= $xRe ? $dkBtn($portalLink('rechnung_pdf') . '&aid=' . $xid, 'Rechnung') : '' ?>
+          <?= !empty($x['angebot_id']) ? $dkBtn($portalLink('angebot_pdf') . '&aid=' . (int)$x['angebot_id'], 'Angebot') : '' ?>
+          <?php foreach ($xLs as $l) echo $dkBtn($portalLink('lieferschein_pdf') . '&lid=' . (int)$l['id'], 'Lieferschein ' . $l['nummer']); ?>
+          <?= !$xIstDl && !empty($x['produkt_id']) ? $dkBtn($portalLink('pib') . '&aid=' . $xid, 'Produktinfo (PIB)') : '' ?>
+          <?= !$xIstDl && !empty($x['produkt_id']) ? $dkBtn($portalLink('ppwr_pdf') . '&aid=' . $xid, 'Verpackungs-Konformität') : '' ?>
+          <?= $xEt ? $dkBtn($portalLink('etikett_datei') . '&aid=' . $xid, auftrag_design_label($xid) . '-Design') : '' ?>
+          <?= $xVorl ? $dkBtn($portalLink('druckvorlage') . '&aid=' . $xid, 'Etikett-Druckvorlage') : '' ?>
+          <?= $xPb ? '<a class="btn btn-ghost btn-sm" href="' . h($portalLink('produktionsbericht') . '&aid=' . $xid) . '">Produktionsbericht</a>' : '' ?>
+          <?php foreach ($xAna as $l) echo $dkBtn($portalLink('analyse_datei') . '&id=' . (int)$l['id'], ($l['quelle'] ?? '') === 'coa_ueb' ? 'Informationsdokument zum Produkt' : 'Laboranalyse' . ($l['charge_nr'] ? ' ' . $l['charge_nr'] : '')); ?>
+        </div>
+      </div>
+    <?php endforeach; ?>
+    <?php $dkProdLabs = array_values(array_filter($dkLabs, fn($l) => empty($l['auftrag_nr']) && (!$dkProd || (int)($l['produkt_id'] ?? 0) === $dkProd)));
+          if ($dkProdLabs): ?>
+      <h2 style="margin:22px 0 10px;font-size:16px">Zu Ihren Produkten</h2>
       <div class="bx-tablewrap"><table class="bx-table">
-        <thead><tr><th>Datum</th><th>Produkt</th><th>Charge</th><th>Befund</th><th></th></tr></thead>
+        <thead><tr><th>Datum</th><th>Produkt</th><th>Dokument</th><th></th></tr></thead>
         <tbody>
-          <?php foreach ($labs as $l): $url = $portalLink('analyse_datei') . '&id=' . (int)$l['id']; $bf = laboranalyse_befund_label($l['befund'] ?? null); ?>
-          <tr>
-            <td><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
-            <td><?= h($l['produkt'] ?: '–') ?><?php if ($l['auftrag_nr']): ?> <span class="muted" style="font-size:12px">· <?= h($l['auftrag_nr']) ?></span><?php endif; ?></td>
-            <td><?= $l['charge_nr'] ? h($l['charge_nr']) : '<span class="muted">–</span>' ?></td>
-            <td><?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '<span class="muted">–</span>' ?></td>
-            <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h($url) ?>" target="_blank" rel="noopener">Ansehen / Download</a></td>
-          </tr>
-          <?php endforeach; ?>
+        <?php foreach ($dkProdLabs as $l): ?>
+          <tr><td><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '' ?></td><td><?= h((string)$l['produkt']) ?></td>
+              <td><?= h((string)($l['titel'] ?: 'Laboranalyse')) ?></td>
+              <td style="text-align:right"><?= $dkBtn($portalLink('analyse_datei') . '&id=' . (int)$l['id'], 'Ansehen') ?></td></tr>
+        <?php endforeach; ?>
         </tbody>
       </table></div>
     <?php endif; ?>
@@ -5173,8 +5222,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   $firmaTel = trim((string) meta_get('firma_telefon', ''));
   // Karten nur zu freigeschalteten Bereichen zeigen (sonst führt der Link auf die Übersicht zurück).
   $infoCards = [];
-  if (isset($L['etiketten']))  $infoCards[] = ['label'=>'Etiketten & Dokumente', 'desc'=>'Ihre Etiketten, Spezifikationen und Analysen (CoA) zu jeder Bestellung.', 'href'=>$portalLink('etiketten'), 'cta'=>'Öffnen'];
-  if (isset($L['labortest']))  $infoCards[] = ['label'=>'Laboranalysen',          'desc'=>'Freigegebene Laborergebnisse zu Ihren Produkten und Chargen.',        'href'=>$portalLink('labortest'), 'cta'=>'Öffnen'];
+  if (isset($L['dokumente']))  $infoCards[] = ['label'=>'Dokumente',              'desc'=>'Alle Unterlagen je Bestellung: Auftragsbestätigung, Rechnung, Lieferschein, PIB, Produktionsbericht, Informationsdokument/Laboranalyse.', 'href'=>$portalLink('dokumente'), 'cta'=>'Öffnen'];
+  if (isset($L['etiketten']))  $infoCards[] = ['label'=>'Etiketten',              'desc'=>'Ihre Etiketten-Designs je Bestellung hochladen und freigeben.', 'href'=>$portalLink('etiketten'), 'cta'=>'Öffnen'];
   $infoCards[] = ['label'=>'Angebote',    'desc'=>'Angebote prüfen, Menge wählen und verbindlich annehmen.',      'href'=>$portalLink('meine_anfragen') . '&oatab=zubestaetigen', 'cta'=>'Öffnen'];
   $infoCards[] = ['label'=>'Bestellungen','desc'=>'Produktion und Versand Ihrer Aufträge verfolgen.',             'href'=>$portalLink('bestellungen'), 'cta'=>'Öffnen'];
   $infoCards[] = ['label'=>'Mein Konto',  'desc'=>'Stammdaten, Adressen und Zugang pflegen.',                      'href'=>$portalLink('konto'), 'cta'=>'Öffnen'];

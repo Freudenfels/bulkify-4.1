@@ -391,3 +391,10 @@ Die berechnete Übersicht heißt im Portal „Informationsdokument zum Produkt�
 **Kleinigkeiten (Report 10, 03.11.2026):** Etikettenzähler an der Bestellung: bei versendeter Bestellung „Die Etiketten dieser
 Bestellung sind verbraucht“ statt „0 von 1.000 bestellten“. Produktseite: unter der Zusammensetzung „Füllung … mg + Kapselhülle … mg
 = … mg je gefüllter Kapsel“ (`produkt_kapselhuelle_mg()`, gleiche Quelle wie das PIB). „Kapseln pro Tag“ am PIB-Button der Bestellung.
+
+**Dokumente statt Labortest (Report 2, 03.11.2026):** Menüpunkt „Dokumente“ (`v=dokumente`; alter `v=labortest` leitet dorthin).
+Je Bestellung eine Karte mit allen vorhandenen Unterlagen (nur Links auf die bestehenden, geprüften Handler): Auftragsbestätigung,
+Rechnung (wenn freigegeben), Angebot, Lieferschein(e), PIB, Verpackungs-Konformität, Etikett-/Beutel-Design, Etikett-Druckvorlage,
+Produktionsbericht (wenn freigegeben), Informationsdokument/Laboranalyse. Darunter „Zu Ihren Produkten“ (Analysen ohne Bestellbezug).
+Filter Produkt, Charge, Bestelldatum von/bis; leerer Zustand mit Erklärung. Info & Tools: Karte „Dokumente“ (statt „Etiketten &
+Dokumente“ -> Etiketten) und „Etiketten“ getrennt.
