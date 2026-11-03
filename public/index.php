@@ -39,6 +39,20 @@ if (($_GET['p'] ?? '') === 'api_einlager') {
     exit;
 }
 
+// Loopback-API „QM-Freigabe Fertigware": die Lager-App gibt eine Charge frei (quarantaene -> frei) und meldet das hier,
+// damit Produktionsbericht + zusammenfassendes CoA für den Kunden entstehen (fertigware_qm_freigabe_nach). Token wie api_einlager.
+if (($_GET['p'] ?? '') === 'api_qm_freigabe') {
+    header('Content-Type: application/json; charset=utf-8');
+    $soll  = trim((string) meta_get('einlager_api_token', ''));
+    $token = (string)($_POST['token'] ?? '');
+    if ($soll === '' || !hash_equals($soll, $token)) { http_response_code(401); echo json_encode(['ok'=>false, 'meldung'=>'Token ungültig.']); exit; }
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    if ($cid <= 0) { http_response_code(400); echo json_encode(['ok'=>false, 'meldung'=>'charge_id fehlt.']); exit; }
+    $r = fertigware_qm_freigabe_nach($cid, mb_substr(trim((string)($_POST['wer'] ?? '')), 0, 150));
+    echo json_encode(['ok'=>$r['fehler'] === '', 'bericht'=>$r['bericht'], 'coa'=>$r['coa'], 'meldung'=>$r['fehler']]);
+    exit;
+}
+
 // Router: Whitelist Seite -> Modul-Datei. Kein direkter Dateizugriff moeglich.
 $routes = [
     'login'       => 'auth/login.php',

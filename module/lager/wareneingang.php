@@ -25,8 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($aktion === 'freigeben') {
         if (!darf_qm_freigeben()) { header('Location: ?p=wareneingang&quarantaene=1&nurqm=1'); exit; }   // QM-Gate (St-11)
-        q("UPDATE charge SET status='frei' WHERE id=? AND status='quarantaene'", [(int)($_POST['charge_id'] ?? 0)]);
+        $qcid = (int)($_POST['charge_id'] ?? 0);
+        $warQ = (string) scalar("SELECT status FROM charge WHERE id=?", [$qcid]) === 'quarantaene';
+        q("UPDATE charge SET status='frei' WHERE id=? AND status='quarantaene'", [$qcid]);
         bedarf_bump();   // freigegebene Ware zählt sofort als verfügbar (Bedarf/Einkauf/Produktion)
+        if ($warQ) fertigware_qm_freigabe_nach($qcid);   // Fertigware: Produktionsbericht + zusammenfassendes CoA für den Kunden (Nico 03.11.)
         nach_antwort(fn() => material_komplett_pruefen(true));   // Team: „Material komplett" für wartende Aufträge
         header('Location: ?p=wareneingang&frei=1' . (!empty($_POST['quarantaene']) ? '&quarantaene=1' . ((int)($_POST['q_item'] ?? 0) > 0 ? '&item=' . (int)$_POST['q_item'] : '') : '')); exit;
     }

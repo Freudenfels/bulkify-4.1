@@ -134,7 +134,7 @@ function laboranalysen_fuer_kunde(int $kunde_id): array {
     return all("
         SELECT d.id, d.datei_orig, d.titel, d.befund, COALESCE(d.dok_datum, DATE(d.angelegt)) AS datum,
                COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, p.id AS produkt_id,
-               NULL AS auftrag_nr, d.charge_nr AS charge_nr
+               NULL AS auftrag_nr, d.charge_nr AS charge_nr, COALESCE(d.hochgeladen_von,'') AS quelle
           FROM dokument d JOIN produkt p ON p.id=d.objekt_id
          WHERE d.objekt_typ='produkt' AND d.typ='analyse' AND d.kunde_sichtbar=1
            AND (p.kunde_id=? OR p.id IN (SELECT DISTINCT produkt_id FROM auftrag WHERE kunde_id=? AND produkt_id IS NOT NULL))
@@ -144,9 +144,14 @@ function laboranalysen_fuer_kunde(int $kunde_id): array {
                a.nummer AS auftrag_nr,
                COALESCE(NULLIF(d.charge_nr,''),
                         (SELECT c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
-                          WHERE pa.auftrag_id=a.id AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1)) AS charge_nr
+                          WHERE pa.auftrag_id=a.id AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1)) AS charge_nr,
+               COALESCE(d.hochgeladen_von,'') AS quelle
           FROM dokument d JOIN auftrag a ON a.id=d.objekt_id LEFT JOIN produkt p ON p.id=a.produkt_id
          WHERE d.objekt_typ='auftrag' AND d.typ='analyse' AND d.kunde_sichtbar=1 AND a.kunde_id=?
+           -- Vorrang: ein gemessenes CoA (Laboranalyse) derselben Charge/Bestellung verdrängt die berechnete Übersicht
+           AND NOT (COALESCE(d.hochgeladen_von,'')='coa_ueb' AND EXISTS (SELECT 1 FROM dokument d2 WHERE d2.objekt_typ='auftrag'
+                    AND d2.objekt_id=d.objekt_id AND d2.typ='analyse' AND d2.kunde_sichtbar=1 AND COALESCE(d2.hochgeladen_von,'')<>'coa_ueb'
+                    AND (d2.charge_nr IS NULL OR d2.charge_nr='' OR d2.charge_nr=d.charge_nr)))
         ORDER BY datum DESC, produkt ASC, id DESC", [$kunde_id, $kunde_id, $kunde_id]);
 }
 

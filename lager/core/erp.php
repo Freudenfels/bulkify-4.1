@@ -1073,6 +1073,26 @@ function erp_einlager_token(): string {
 }
 // Einlagern auslösen: ruft die kanonische Dashboard-Funktion per Loopback auf (gleicher Server).
 // Rueckgabe ['ok'=>bool,'meldung'=>string,'ziel'=>?].
+// QM-Freigabe an das Dashboard melden (?p=api_qm_freigabe): dort entstehen bei Fertigware Produktionsbericht-Freigabe und
+// zusammenfassendes CoA (fertigware_qm_freigabe_nach). Best effort – die Freigabe selbst ist schon gebucht. Spiegel von erp_einlager_buchen().
+function erp_qm_freigabe_melden(int $charge_id): array {
+    if ($charge_id <= 0 || !function_exists('curl_init')) return ['ok' => false];
+    $token = erp_einlager_token();
+    if ($token === '') return ['ok' => false];
+    $u = function_exists('lg_benutzer') ? lg_benutzer() : null;
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $ch = curl_init($scheme . '://' . $host . '/?p=api_qm_freigabe');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 45, CURLOPT_CONNECTTIMEOUT => 15,
+        CURLOPT_POSTFIELDS => http_build_query(['charge_id' => $charge_id, 'token' => $token, 'wer' => (string)($u['name'] ?? '')]),
+        CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 2, CURLOPT_POSTREDIR => 7,
+    ]);
+    if (defined('CURLSSLOPT_NATIVE_CA')) curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+    $res = curl_exec($ch); curl_close($ch);
+    $j = json_decode((string)$res, true);
+    return is_array($j) ? $j : ['ok' => false];
+}
 function erp_einlager_buchen(int $pa_id): array {
     if ($pa_id <= 0) return ['ok' => false, 'meldung' => 'Kein Produktionsauftrag angegeben.'];
     if (!function_exists('curl_init')) return ['ok' => false, 'meldung' => 'PHP-curl fehlt auf dem Server.'];
@@ -1470,6 +1490,8 @@ function erp_charge_status_setzen(int $charge_id, string $status): array {
     if ((string)$c['status'] === 'leer' || (float)$c['menge_verfuegbar'] <= 0) return ['ok' => false, 'meldung' => 'Leere Charge – Status bleibt.'];
     q("UPDATE charge SET status=? WHERE id=?", [$status, $charge_id]);
     erp_bedarf_bump();   // freigegebene/gesperrte Ware ändert den verfügbaren Bestand -> Bedarf/Einkauf neu rechnen
+    // QM-Freigabe einer Charge aus der Quarantäne -> Dashboard benachrichtigen (Fertigware: Bericht + CoA für den Kunden).
+    if ($status === 'frei' && (string)$c['status'] === 'quarantaene') erp_qm_freigabe_melden($charge_id);
     $txt = ['frei' => 'Freigegeben', 'quarantaene' => 'In Quarantäne', 'gesperrt' => 'Gesperrt'];
     return ['ok' => true, 'meldung' => 'Status: ' . $txt[$status]];
 }

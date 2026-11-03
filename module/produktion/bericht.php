@@ -17,13 +17,14 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($akt === 'bericht_freigeben') {
         $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : '';
-        q("UPDATE produktionsauftrag SET bericht_freigegeben_am=NOW(), bericht_freigegeben_von=? WHERE id=?", [$wer ?: null, $id]);
+        q("UPDATE produktionsauftrag SET bericht_freigegeben_am=UTC_TIMESTAMP(), bericht_freigegeben_von=?, bericht_zurueckgehalten=0 WHERE id=?", [$wer ?: null, $id]);
         $pa = one("SELECT nummer, kunde_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$id]);
         if ($pa && $pa['kunde_id']) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktionsbericht ' . $pa['nummer'] . ' für den Kunden freigegeben.', 'auftrag', 'auftrag', (int)$pa['auftrag_id']);
         header('Location: ?p=produktion_bericht&id=' . $id . '&freigegeben=1'); exit;
     }
     if ($akt === 'bericht_freigabe_zurueck') {
-        q("UPDATE produktionsauftrag SET bericht_freigegeben_am=NULL, bericht_freigegeben_von=NULL WHERE id=?", [$id]);
+        // Ausnahme „zurückhalten": bleibt zurückgehalten, auch wenn QM später weitere Fertigware freigibt (keine Auto-Freigabe).
+        q("UPDATE produktionsauftrag SET bericht_freigegeben_am=NULL, bericht_freigegeben_von=NULL, bericht_zurueckgehalten=1 WHERE id=?", [$id]);
         header('Location: ?p=produktion_bericht&id=' . $id . '&zurueck=1'); exit;
     }
     if ($akt === 'foto_upload') {   // Abschlussfotos (Spec 13.1) hochladen
@@ -87,15 +88,15 @@ if (!$D['fertig']) echo '<div class="bx-panel no-print" style="border-color:#e6c
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
     <div>
       <h2 style="margin:0 0 4px;font-size:15px">Freigabe für den Kunden</h2>
-      <div class="muted" style="font-size:13px"><?= $freigegeben ? 'Freigegeben am ' . h(date('d.m.Y', strtotime((string)$pa['bericht_freigegeben_am']))) . ($pa['bericht_freigegeben_von'] ? ' von ' . h((string)$pa['bericht_freigegeben_von']) : '') . ' – der Kunde sieht die Kundenansicht im Portal.' : 'Prüfe die Kundenansicht, ergänze ggf. eine Bemerkung und gib den Bericht dann frei.' ?></div>
+      <div class="muted" style="font-size:13px"><?= $freigegeben ? 'Freigegeben am ' . h(date('d.m.Y', strtotime((string)$pa['bericht_freigegeben_am']))) . ($pa['bericht_freigegeben_von'] ? ' von ' . h((string)$pa['bericht_freigegeben_von']) : '') . ' – der Kunde sieht die Kundenansicht im Portal.' : (!empty($pa['bericht_zurueckgehalten']) ? 'Bewusst zurückgehalten – der Kunde sieht den Bericht nicht, auch nicht nach der QM-Freigabe.' : 'Wird bei der QM-Freigabe der Fertigware automatisch für den Kunden freigegeben. Vorher hier prüfen oder schon jetzt freigeben.') ?></div>
     </div>
     <div class="bx-row" style="gap:8px">
       <?php if (!$freigegeben): ?>
         <form method="post" style="margin:0" onsubmit="return confirm('Bericht für den Kunden freigeben? Er erscheint dann im Kundenportal.');">
           <input type="hidden" name="aktion" value="bericht_freigeben"><button class="btn btn-primary" type="submit"<?= $D['fertig'] ? '' : ' disabled title="Erst abschließen"' ?>>Für Kunden freigeben</button></form>
       <?php else: ?>
-        <form method="post" style="margin:0" onsubmit="return confirm('Freigabe zurücknehmen? Der Kunde sieht den Bericht dann nicht mehr.');">
-          <input type="hidden" name="aktion" value="bericht_freigabe_zurueck"><button class="btn btn-ghost" type="submit">Freigabe zurücknehmen</button></form>
+        <form method="post" style="margin:0" onsubmit="return confirm('Bericht zurückhalten? Der Kunde sieht ihn dann nicht mehr – auch nicht nach weiteren QM-Freigaben.');">
+          <input type="hidden" name="aktion" value="bericht_freigabe_zurueck"><button class="btn btn-ghost" type="submit">Zurückhalten</button></form>
       <?php endif; ?>
     </div>
   </div>

@@ -33,3 +33,7 @@ Button „Drucken / PDF" (`window.print()`); `@media print` blendet Seitenleiste
 
 ## Pulver/Granulat und Flüssig (Füllmengen-Formen, St-13)
 `produktion_bericht_daten()` liefert zusätzlich `fuell_einheit` (`g`/`ml`/leer) und `einheiten_gesamt`. Bei Pulver zeigt der Abschnitt Menge „Füllmenge je Packung 300 g · Füllmenge gesamt 600 kg · Portionen gesamt 120.000" statt „Stk je Packung 300 · Stk gesamt 600.000"; die Zutaten-Gesamtmengen rechnen mit den Portionen (Füllgewicht / mg je Portion) – vorher 5-fach zu hoch (g als Portionen). Bei ml ist das Portionsvolumen unbekannt, dann entfällt die Gesamtspalte. Die Darreichungsform kommt jetzt auch aus der Rezeptur des Produkts (vorher „–").
+
+**Auto-Freigabe (03.11.2026):** Der Bericht wird bei der QM-Freigabe der Fertigware automatisch für den Kunden freigegeben.
+„Zurückhalten“ (früher „Freigabe zurücknehmen“) setzt `bericht_zurueckgehalten=1` – dann bleibt er auch nach weiteren QM-Freigaben
+unsichtbar; „Für Kunden freigeben“ setzt das wieder zurück.

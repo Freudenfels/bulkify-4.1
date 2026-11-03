@@ -73,3 +73,6 @@ Der Admin-Upload kennt jetzt zusätzlich:
 - **keine Zuordnung**: `objekt_typ='offen'`, `objekt_id=0`, `kunde_sichtbar=0` (nie im Kundenportal). Beim Speichern
   muss man das per Popup bestätigen; in der Liste erscheint das Badge „ohne Zuordnung" (Spalte Bezug) zum späteren Zuordnen.
 `laboranalysen_alle()` löst Rohstoff/Artikel (item) + Lieferant mit auf.
+
+`laboranalysen_fuer_kunde()` liefert zusätzlich `quelle` (= hochgeladen_von). Die berechnete CoA-Übersicht (`coa_ueb`) entfällt,
+sobald ein gemessenes CoA (Laboranalyse) derselben Bestellung/Charge sichtbar ist.

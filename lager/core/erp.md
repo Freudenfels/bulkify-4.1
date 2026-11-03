@@ -86,3 +86,6 @@ Neue letzte Station **„Wareneingang bei bulkify"** (`eingegangen`, de/en/zh). 
 
 ## Inventarnummer unter Sperre (Aufräumen 13)
 `erp_etikett_rollen_verteilen()` vergibt die Auto-Inventarnummern (MAX+1) und legt die Rollen unter `GET_LOCK(bx_inventar_nr)` an. So ziehen zwei gleichzeitige Wareneingänge nicht dieselbe Nummer. Ein UNIQUE-Index geht nicht, weil eine Nummer nur je **aktiver** Rolle eindeutig ist (leere Rollen dürfen sie behalten).
+
+`erp_qm_freigabe_melden($charge_id)`: nach einer Freigabe quarantaene -> frei in `erp_charge_status_setzen()` meldet die Lager-App
+das per Loopback `?p=api_qm_freigabe` ans Dashboard (Token wie api_einlager) -> dort Produktionsbericht + CoA für den Kunden.

@@ -352,3 +352,9 @@ Beutel (`bedarf_aggregiert()['druck']`) ist erst bestellbar, wenn alle Aufträge
 `produkt_verpackung_items()`: bei bedrucktem Behälter (vollbedruckter Beutel) keine Etikett-Position – auch nicht automatisch aus dem Behälter abgeleitet (03.11.2026).
 
 `produkt_verpackung_items()`: steht im Etikett-Slot ein **Kundenetikett** (Lagerartikel je Produkt + Kunde, ohne eigenen Preis – evtl. eines anderen Kunden), wird für Preis, Angebotspositionen und PPWR das neutrale **Maß-Etikett** genommen (`etikett_vorlage_id`, sonst `etikett_id_fuer_behaelter()`). Vorher wurde das Etikett dann mit 0 € gerechnet (03.11.2026).
+
+**QM-Freigabe Fertigware -> Dokumente für den Kunden (Nico 03.11.2026):** `fertigware_qm_freigabe_nach($charge_id, $wer)`
+läuft, wenn QM eine verkaufsfertige Charge (mit pa_id) aus der Quarantäne freigibt: setzt `charge.qm_freigabe_am/_von`, gibt den
+Produktionsbericht frei (`produktionsauftrag.bericht_freigegeben_*`, außer `bericht_zurueckgehalten=1`) und erzeugt – wenn
+`app_meta coa_uebersicht_auto=1` – das zusammenfassende CoA (`core/coa_uebersicht.php`, einmal je Charge, nicht bei gemessenem CoA).
+Aufrufer: module/lager/wareneingang.php (Dashboard-Quarantäne) und `?p=api_qm_freigabe` (Lager-App). Wirft nie.

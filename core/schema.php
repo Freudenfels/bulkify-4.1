@@ -845,6 +845,7 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'bericht_notiz', "TEXT NULL");                    // Bemerkung, die der Kunde im Bericht sieht
     ensure_column('produktionsauftrag', 'bericht_freigegeben_am', "DATETIME NULL");       // fuer Kunden freigegeben am
     ensure_column('produktionsauftrag', 'bericht_freigegeben_von', "VARCHAR(190) NULL");  // durch wen freigegeben
+    ensure_column('produktionsauftrag', 'bericht_zurueckgehalten', "TINYINT(1) NOT NULL DEFAULT 0");  // Ausnahme: Team hält den Bericht bewusst zurück -> keine Auto-Freigabe bei QM
 
     // produktion_verbrauch: welche Charge in welcher Menge für einen Produktionsauftrag entnommen wurde (Rückverfolgung).
     $pdo->exec("CREATE TABLE IF NOT EXISTS produktion_verbrauch (
@@ -1235,6 +1236,8 @@ function init_schema(): void {
     ensure_column('charge', 'auftrag_id', "INT NULL");
     ensure_column('charge', 'bestellung_position_id', "INT NULL");
     ensure_column('charge', 'tracking', "TEXT NULL");   // Tracking-Code(s) der eingegangenen Pakete/Palette (Wareneingang, je Zeile einer)
+    ensure_column('charge', 'qm_freigabe_am', "DATETIME NULL");       // QM-Freigabe (quarantaene -> frei), UTC – Fertigware: Auslöser für Bericht + CoA
+    ensure_column('charge', 'qm_freigabe_von', "VARCHAR(190) NULL");
     ensure_column('charge', 'pa_id', "INT NULL");   // Produktionsauftrag der Fertigware-Charge (Rückverfolgung Zusammensetzung)
     ensure_column('charge', 'coa_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");   // bulkify-CoA dieser Charge fuer den Kunden freigegeben?
     ensure_column('charge', 'coa_freigabe_am', "DATETIME NULL");
@@ -10408,6 +10411,45 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
 // Die FERTIGWARE-Chargen eines Auftrags (Artikel der Kategorie verkaufsfertig, Lager 1): per auftrag_id ODER – bei älteren Chargen ohne
 // auftrag_id – über die pa_id der Produktionsaufträge des Auftrags. Das ist die einzige Quelle für Versand und Lieferschein (S-09/St-06);
 // Lieferanten-/Rohstoff-Chargen (auch wenn sie am Auftrag hängen) gehören NICHT dazu. $nurFrei = nur freie, FEFO-sortiert.
+// QM hat eine FERTIGWARE-Charge freigegeben (quarantaene -> frei) – Nico 03.11.2026: dann werden für den Kunden
+// automatisch sichtbar: Produktionsbericht (produktionsauftrag.bericht_freigegeben_*) und ein ZUSAMMENFASSENDES CoA
+// (core/coa_uebersicht.php, als dokument typ='analyse' am Auftrag, hochgeladen_von='coa_ueb', kunde_sichtbar=1).
+// Ausnahmen (Team hält zurück): bericht_zurueckgehalten=1 bzw. CoA-Dokument auf nicht sichtbar – beides bleibt so (das CoA
+// wird je Charge nur EINMAL erzeugt). Liegt ein echtes, am Fertigprodukt gemessenes CoA vor, entsteht keine Übersicht.
+// Aufruf: Dashboard-Quarantäne (module/lager/wareneingang.php) und Lager-App über ?p=api_qm_freigabe. Wirft nie.
+function fertigware_qm_freigabe_nach(int $charge_id, string $wer = ''): array {
+    $out = ['bericht' => false, 'coa' => 0, 'fehler' => ''];
+    try {
+        $c = one("SELECT c.id, c.charge_nr, c.pa_id, c.auftrag_id, c.status, i.kategorie FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
+        if (!$c || (string)$c['kategorie'] !== 'verkaufsfertig' || empty($c['pa_id']) || (string)$c['status'] !== 'frei') return $out;
+        if ($wer === '' && function_exists('current_user')) { $u = current_user(); $wer = trim((string)($u['name'] ?? '')); }
+        q("UPDATE charge SET qm_freigabe_am=COALESCE(qm_freigabe_am, UTC_TIMESTAMP()), qm_freigabe_von=COALESCE(qm_freigabe_von, ?) WHERE id=?", [$wer !== '' ? $wer : null, $charge_id]);
+        $pa = one("SELECT id, nummer, auftrag_id, kunde_id, bericht_freigegeben_am, COALESCE(bericht_zurueckgehalten,0) AS zh FROM produktionsauftrag WHERE id=?", [(int)$c['pa_id']]);
+        if ($pa && empty($pa['bericht_freigegeben_am']) && (int)$pa['zh'] === 0) {
+            q("UPDATE produktionsauftrag SET bericht_freigegeben_am=UTC_TIMESTAMP(), bericht_freigegeben_von=? WHERE id=?", [mb_substr(($wer !== '' ? $wer : 'QM') . ' (automatisch bei QM-Freigabe)', 0, 190), (int)$pa['id']]);
+            $out['bericht'] = true;
+            if ((int)$pa['kunde_id'] > 0) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'system', 'Produktionsbericht ' . $pa['nummer'] . ' bei der QM-Freigabe automatisch für Sie freigegeben.', '', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
+        }
+        $aid = (int)($c['auftrag_id'] ?: ($pa['auftrag_id'] ?? 0));
+        require_once __DIR__ . '/coa_uebersicht.php';
+        $schonDa = $aid > 0 && (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' AND hochgeladen_von='coa_ueb' AND charge_nr=?", [$aid, (string)$c['charge_nr']]) > 0;
+        // Schalter app_meta coa_uebersicht_auto (Standard 0): erst nach dem Gegenlesen des Muster-CoA durch QM (Tabea) einschalten.
+        if ((string) meta_get('coa_uebersicht_auto', '0') === '1' && $aid > 0 && !$schonDa && !coa_fertig_gemessen_vorhanden($charge_id)) {
+            $pdf = build_coa_uebersicht_pdf($charge_id);
+            if ($pdf) {
+                if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+                $fn = 'coa_uebersicht_' . $charge_id . '_' . bin2hex(random_bytes(5)) . '.pdf';
+                if (@file_put_contents(BX_UPLOADS . '/' . $fn, $pdf) !== false) {
+                    q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von,charge_nr,dok_datum)
+                       VALUES ('auftrag',?,'analyse',?,?,?,1,'coa_ueb',?,CURDATE())",
+                      [$aid, 'CoA (Übersicht aus Rohstoff-Analysen) · Charge ' . $c['charge_nr'], $fn, 'CoA_Uebersicht_' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)$c['charge_nr']) . '.pdf', (string)$c['charge_nr']]);
+                    $out['coa'] = (int) insert_id();
+                }
+            }
+        }
+    } catch (\Throwable $e) { $out['fehler'] = $e->getMessage(); }
+    return $out;
+}
 function auftrag_fertigware_chargen(int $auftrag_id, bool $nurFrei = false): array {
     if ($auftrag_id <= 0) return [];
     return all("SELECT c.* FROM charge c JOIN item i ON i.id=c.item_id

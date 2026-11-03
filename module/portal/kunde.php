@@ -4288,21 +4288,56 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
-  <?php // Produktionsbericht – nur wenn das Team ihn fuer den Kunden freigegeben hat.
+  <?php // „Charge & Qualität" (Nico 03.11.2026): Charge(n), MHD, Produktionsdatum IMMER, sobald produziert. Produktionsbericht
+        // und CoA, sobald freigegeben (automatisch bei der QM-Freigabe der Fertigware; das Team kann bewusst zurückhalten).
+        // Ein am Fertigprodukt gemessenes CoA (Laboranalyse) hat Vorrang vor der berechneten Übersicht.
+        $cqCh = all("SELECT c.id, c.charge_nr, c.mhd, c.angelegt, c.status FROM charge c JOIN item i ON i.id=c.item_id
+                     WHERE i.kategorie='verkaufsfertig' AND (c.auftrag_id=? OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'))
+                     ORDER BY c.id", [(int)$a['id'], (int)$a['id']]);
         $pbFrei = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND bericht_freigegeben_am IS NOT NULL ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
-        if ($pbFrei): ?>
+        $cqDoks = all("SELECT id, titel, charge_nr, befund, COALESCE(hochgeladen_von,'') AS quelle FROM dokument
+                       WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' AND kunde_sichtbar=1 ORDER BY id", [(int)$a['id']]);
+        if ($cqCh || $pbFrei):
+            require_once BX_ROOT . '/core/laboranalyse.php'; ?>
   <div class="bx-panel">
-    <h2 style="margin:0 0 8px;font-size:16px">Produktionsbericht</h2>
-    <p class="muted" style="margin:0 0 10px">Der Bericht zu Ihrer Produktion – Zusammensetzung, Herstellung &amp; Prüfung, Charge und Mindesthaltbarkeit.</p>
-    <a class="btn btn-primary btn-sm" href="<?= $portalLink('produktionsbericht') ?>&aid=<?= (int)$a['id'] ?>">Produktionsbericht ansehen</a>
+    <h2 style="margin:0 0 8px;font-size:16px">Charge &amp; Qualität</h2>
+    <?php if ($cqCh): ?>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Charge</th><th>Mindesthaltbar bis</th><th>Produktionsdatum</th><th>Status</th><th>Analysenzertifikat (CoA)</th></tr></thead>
+      <tbody>
+      <?php foreach ($cqCh as $ch):
+          $gem = array_values(array_filter($cqDoks, fn($d) => $d['quelle'] !== 'coa_ueb' && ((string)$d['charge_nr'] === '' || (string)$d['charge_nr'] === (string)$ch['charge_nr'])));
+          $ueb = array_values(array_filter($cqDoks, fn($d) => $d['quelle'] === 'coa_ueb' && (string)$d['charge_nr'] === (string)$ch['charge_nr']));
+          $coa = $gem ?: $ueb; ?>
+        <tr>
+          <td style="white-space:nowrap"><strong><?= h((string)$ch['charge_nr']) ?></strong></td>
+          <td style="white-space:nowrap"><?= $ch['mhd'] ? h(date('d.m.Y', strtotime((string)$ch['mhd']))) : '<span class="muted">–</span>' ?></td>
+          <td style="white-space:nowrap"><?= $ch['angelegt'] ? h(fmt_zeit((string)$ch['angelegt'], 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
+          <td><?= (string)$ch['status'] === 'quarantaene' ? bx_badge('in Qualitätsprüfung', 'warn') : ((string)$ch['status'] === 'gesperrt' ? bx_badge('gesperrt', 'err') : bx_badge('freigegeben', 'ok')) ?></td>
+          <td><?php if ($coa): foreach ($coa as $d): $bf = laboranalyse_befund_label($d['befund'] ?? null); ?>
+              <a class="btn btn-ghost btn-sm" href="<?= $portalLink('analyse_datei') ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= $d['quelle'] === 'coa_ueb' ? 'CoA (Übersicht aus Rohstoff-Analysen)' : 'CoA (Laboranalyse)' ?></a>
+              <?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '' ?>
+            <?php endforeach; else: ?><span class="muted"><?= (string)$ch['status'] === 'quarantaene' ? 'nach der Qualitätsprüfung' : '–' ?></span><?php endif; ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <?php if (array_filter($cqDoks, fn($d) => $d['quelle'] === 'coa_ueb')): ?>
+    <p class="muted" style="margin:8px 0 0;font-size:12px">Die CoA-Übersicht fasst die Analysen der eingesetzten Rohstoffe (stichprobenhaft geprüft) und die Produktdaten zusammen; sie ist nicht am Fertigprodukt gemessen. Eine Laboranalyse des Fertigprodukts können Sie separat dazubuchen.</p>
+    <?php endif; endif; ?>
+    <?php if ($pbFrei): ?>
+    <div style="margin-top:12px"><a class="btn btn-primary btn-sm" href="<?= $portalLink('produktionsbericht') ?>&aid=<?= (int)$a['id'] ?>">Produktionsbericht ansehen</a>
+      <span class="muted" style="font-size:13px;margin-left:8px">Zusammensetzung, Herstellung &amp; Prüfung, Charge und Mindesthaltbarkeit.</span></div>
+    <?php endif; ?>
   </div>
   <?php endif; ?>
 
   <?php // Laborprüfung zu DIESER Bestellung – Laboranalysen (CoA) nach Auftrag/Produkt gefiltert.
         require_once BX_ROOT . '/core/laboranalyse.php';
         $ordLabs = array_values(array_filter(laboranalysen_fuer_kunde((int)$k['id']), fn($l) =>
-            ((string)($l['auftrag_nr'] ?? '') === (string)$a['nummer'])
-            || (!empty($a['produkt_id']) && (int)($l['produkt_id'] ?? 0) === (int)($a['produkt_id'] ?? 0))));
+            ($l['quelle'] ?? '') !== 'coa_ueb'   // die berechnete CoA-Übersicht steht schon unter „Charge & Qualität"
+            && (((string)($l['auftrag_nr'] ?? '') === (string)$a['nummer'])
+                || (!empty($a['produkt_id']) && (int)($l['produkt_id'] ?? 0) === (int)($a['produkt_id'] ?? 0)))));
         // Panel zeigen, wenn Analysen vorliegen ODER der Kunde immer eine Laborprüfung hat (Annapurna etc.).
         $zeigeLabor = $ordLabs || !empty($k['labortest_extern']) || !empty($k['zeige_energetisierung']);
         if ($zeigeLabor): ?>

@@ -372,3 +372,8 @@ Nach „Rezeptur verbindlich annehmen" bekommt das Team `mail_team_rezeptur_ange
 ## Kleinigkeiten (Aufräumen 11)
 - Laboranalyse-Upsell: Der Satz wird nur aus vorhandenen Teilen gebaut, also kein „für : ." mehr bei fehlendem Preis.
 - „Erste Schritte": „Angebot prüfen & annehmen" ist erst erledigt, wenn ein Angebot **angenommen** ist (vorher reichte ein vorhandenes Angebot).
+
+**Charge & Qualität (Bestellseite, 03.11.2026):** Block mit allen Fertigware-Chargen der Bestellung (Charge, MHD,
+Produktionsdatum, Status „in Qualitätsprüfung/freigegeben“) – immer, sobald produziert. Je Charge das CoA: ein gemessenes
+(Laboranalyse) hat Vorrang vor der berechneten Übersicht (`hochgeladen_von='coa_ueb'`); Hinweis zur Übersicht darunter.
+Produktionsbericht-Link im selben Block (ersetzt das frühere eigene Panel). Das Laborprüfung-Panel zeigt die Übersicht nicht doppelt.
