@@ -420,3 +420,8 @@ verfügbar, Ware versendet, Rechnung erstellt; max. 8, neueste zuerst). Leere Zu
 Übersicht und Info & Tools zeigen „Ihr Ansprechpartner bei bulkify“ (Name, Position, Telefon, E-Mail) aus `portal_ansprechpartner()`.
 
 **Rohstoff-Katalog (03.11.2026):** Spalte „Novel Food“ mit dem gespeicherten automatischen Abgleich (`item.novelfood_status`, Label/Farbe aus `novelfood_status_meta()`, „Stand“ = `novelfood_geprueft_am`); ohne Abgleich „noch nicht geprüft“. Hinweis-Symbol: Einschätzung, keine Rechtsberatung.
+
+## Pulver/Granulat: Rezeptur = Tagesdosis, Kunde gibt g an (03.11.2026, Nico)
+- **Anfrage:** Der Kunde gibt die „Füllmenge pro Verpackung (g)“ an. Je Staffel-Zeile erscheint live „≈ N Tagesdosen à x g“ (JS `bxTdHint`, PHP `$tdHintJs()`; Dosis = Rezeptur-mg). Das gilt für die Produktseite, „Produkt anfragen“ (Option `data-dosis`) und „Menge ändern“. Reine Info, nichts wird damit gerechnet.
+- **Produktseite:** „Füllmenge je Packung 300 g (≈ 60 Tagesdosen à 5 g)“, „Menge/Nährwerte je Tagesdosis“, Größen mit Tagesdosen-Info. `$einheitWortP()`: Pulver = Tagesdosis, Stick = Portion, sonst Einheit (auch Rezeptur-Detail/Weiterentwickeln/Bestellung).
+- **PIB an der Bestellung:** Bei Pulver gibt es keine Wahl „pro Tag“ mehr (td=1, Rezeptur = Tagesdosis).

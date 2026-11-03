@@ -10,16 +10,19 @@
 $offen = $a['status'] === 'gesendet';
 $canAccept = $offen && !empty($accept);
 $einh = (int)$a['einheiten_pro_packung'];
-$formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Portionen','granulat'=>'Portionen','fluessig'=>'ml'];
-$mengeLbl = $einh . ' ' . ($formPl[$inf['form']] ?? 'Stk');
-$gPack = ($inf['istPulver'] && $inf['portionG'] > 0) ? $mg($einh * $inf['portionG']) . ' g pro Packung' : '';
-// Packungs-Label je Staffel aus deren Stückzahl (v3 menge_pro_vpe): Kapseln/Tabletten als Anzahl,
-// Pulver/Granulat als Gramm-Packung (Portionen × Tagesdosis) – für den Kunden greifbarer (z. B. „250 g").
-$paketLbl = function (int $stk) use ($inf, $mg, $formPl, $mengeLbl) {
-    if ($stk <= 0) return $mengeLbl;
-    if (in_array($inf['form'], ['pulver','granulat'], true) && $inf['portionG'] > 0)
-        return $mg($stk * $inf['portionG']) . ' g';
+$formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','fluessig'=>'ml'];
+// Pulver/Granulat (Nico 03.11.2026): die Packungsgröße SIND g (stueck = g), die Rezeptur ist eine Tagesdosis.
+// „≈ N Tagesdosen à x g" ist nur Info (vorher fälschlich g × Portionsgewicht = z. B. 300 × 5 g = 1.500 g).
+$kartTD = form_ist_tagesdosis((string)$inf['form']);
+$einhWort = $kartTD ? 'Tagesdosis' : 'Einheit';
+$paketTxt = function (int $stk) use ($inf, $kartTD, $formPl) {
+    if ($kartTD) { $td = tagesdosen_txt((float)$stk, (float)$inf['portionG'] * 1000); return number_format($stk, 0, ',', '.') . ' g' . ($td !== '' ? ' (' . $td . ')' : ''); }
     return $stk . ' ' . ($formPl[$inf['form']] ?? 'Stk');
+};
+$mengeLbl = $paketTxt($einh);
+// Packungs-Label je Staffel aus deren Stückzahl: Kapseln/Tabletten als Anzahl, Pulver/Granulat als g je Packung.
+$paketLbl = function (int $stk) use ($paketTxt, $mengeLbl) {
+    return $stk <= 0 ? $mengeLbl : $paketTxt($stk);
 };
 // Upsell-Argument fuer bxBestaetigen: Labortest nur anbieten, wenn der Kunde Dienstleistungen anfragen darf
 // UND es sich um ein PRODUKT-Angebot handelt. Auf einem Dienstleistungs-Angebot (selbst ggf. ein Labortest/
@@ -61,12 +64,12 @@ if ($a['status'] === 'bestaetigt') {
   <details style="margin-top:10px">
     <summary style="cursor:pointer;color:var(--gruen)">Rezeptur ansehen</summary>
     <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table">
-      <thead><tr><th>Zutat</th><th class="bx-num">Menge je Einheit</th></tr></thead>
+      <thead><tr><th>Zutat</th><th class="bx-num">Menge je <?= $einhWort ?></th></tr></thead>
       <tbody><?php foreach ($inf['zutaten'] as $z): ?><tr><td><?= h($z['bezeichnung']) ?></td><td class="bx-num"><?= $mg($z['menge_mg']) ?> mg</td></tr><?php endforeach; ?></tbody>
     </table></div>
     <?php if ($inf['nutr']): ?>
     <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table">
-      <thead><tr><th>Nährstoff</th><th class="bx-num">je Einheit</th><th class="bx-num">% NRV</th></tr></thead>
+      <thead><tr><th>Nährstoff</th><th class="bx-num">je <?= $einhWort ?></th><th class="bx-num">% NRV</th></tr></thead>
       <tbody><?php foreach ($inf['nutr'] as $n): $lbl = ($n['anzeige']??'')!=='' ? $n['anzeige'] : $n['einheit']; $betr = $n['einheit']==='µg' ? $mg($n['mg']*1000).' '.$lbl : $mg($n['mg']).' '.$lbl; if(($n['ie_mg']??null)!==null && (float)$n['ie_mg']>0) $betr .= ' ('.$mg($n['mg']/(float)$n['ie_mg']).' I.E.)'; $pct='–'; if($n['nrv']!==null&&$n['nrv']!==''){ $nrvMg=$n['einheit']==='µg'?(float)$n['nrv']/1000:(float)$n['nrv']; if($nrvMg>0) $pct=number_format($n['mg']/$nrvMg*100,0,',','.').' %'; } ?><tr><td><?= h($n['name']) ?></td><td class="bx-num"><?= $betr ?></td><td class="bx-num"><?= $pct ?></td></tr><?php endforeach; ?></tbody>
     </table></div>
     <?php endif; ?>
@@ -87,7 +90,8 @@ if ($a['status'] === 'bestaetigt') {
     <?php foreach ($std_menge_ang as $bm): foreach (std_groessen_fuer($inf['form']) as $stk):
         $cell = $inf['matrix'][$stk][$bm] ?? null;
         $lbl = form_groessen_label($inf['form'], (float)$stk);
-        $gp = ($inf['form'] === 'stick' && $inf['portionG'] > 0) ? $mg($stk * $inf['portionG']) . ' g pro Packung' : ''; ?>
+        $gp = ($inf['form'] === 'stick' && $inf['portionG'] > 0) ? $mg($stk * $inf['portionG']) . ' g pro Packung'
+            : ($kartTD ? tagesdosen_txt((float)$stk, (float)$inf['portionG'] * 1000) : ''); ?>
       <tr>
         <td><?= h($lbl) ?><?= $gp ? '<div class="muted" style="font-size:12px">' . h($gp) . '</div>' : '' ?></td>
         <td class="bx-num"><?= number_format($bm, 0, ',', '.') ?></td>

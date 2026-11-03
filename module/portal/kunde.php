@@ -1804,6 +1804,22 @@ $apHtml = function () use ($apKunde): string {
         . ($tel !== '' ? '<a class="btn btn-ghost btn-sm" href="tel:' . h(preg_replace('/[^0-9+]/', '', $tel)) . '">' . h($tel) . '</a>' : '')
         . ($mail !== '' ? '<a class="btn btn-ghost btn-sm" href="mailto:' . h($mail) . '">' . h($mail) . '</a>' : '') . '</div></div>';
 };
+// Pulver/Granulat (Nico 03.11.2026): Rezeptur = 1 Tagesdosis, der Kunde gibt die g je Packung an. Je Staffel-Zeile
+// erscheint live „≈ N Tagesdosen à x g" – reine Info, gerechnet wird nach Gewicht. bxTdHint(tbody, fn() => mg je Tagesdosis).
+$tdHintJs = function (): string {
+    static $da = false;
+    if ($da) return '';
+    $da = true;
+    return "<script>window.bxTdHint=window.bxTdHint||function(tb,dosis){if(!tb)return function(){};"
+         . "function upd(){var d=+dosis()||0;tb.querySelectorAll('input[name=\"st_anzahl[]\"]').forEach(function(i){"
+         . "var h=i.parentNode.querySelector('.td-hint'),g=parseFloat((i.value||'').replace(',','.'))||0,n=(d&&g)?Math.floor(g*1000/d+1e-9):0;"
+         . "if(!n){if(h)h.remove();return;}"
+         . "if(!h){h=document.createElement('div');h.className='td-hint muted';h.style.cssText='font-size:12px;margin-top:4px';i.parentNode.appendChild(h);}"
+         . "h.textContent='\u2248 '+n.toLocaleString('de-DE')+' '+(n===1?'Tagesdosis':'Tagesdosen')+' \u00e0 '+(d/1000).toLocaleString('de-DE',{maximumFractionDigits:2})+' g';});}"
+         . "tb.addEventListener('input',upd);upd();return upd;};</script>";
+};
+// Beschriftung einer Einheit der Rezeptur: Pulver/Granulat = Tagesdosis, Stick = Portion, sonst Einheit.
+$einheitWortP = fn(string $form) => form_ist_tagesdosis($form) ? 'Tagesdosis' : (in_array($form, ['stick'], true) ? 'Portion' : 'Einheit');
 // Beschriftung der Tagesdosis am PIB-Button der Bestellung: „Kapseln pro Tag", „Portionen pro Tag" … (PIB bewusst erst ab Bestellung, Nico 03.11.2026)
 $pibTagLabel = fn(?string $form) => (in_array((string)$form, ['pulver', 'granulat', 'fluessig', 'gel', ''], true) ? 'Portionen' : form_plural((string)$form)) . ' pro Tag';
 // Aus den verknüpften Rohstoffen: Wirkstoffe je Zutat (Anzeige in der Zusammensetzung) + Allergen/Vegan/GVO.
@@ -2602,7 +2618,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   // Spaltenkopf der Zutaten an die gewählte Darreichungsform anpassen (Menge je Kapsel / pro Stick / pro Portion …).
   (function(){
     var sel=document.getElementById('pf_form'), hdr=document.getElementById('pf_mengehdr'); if(!sel||!hdr) return;
-    var MAP={kapsel:'Menge je Kapsel',softgel:'Menge je Softgel',tablette:'Menge je Tablette',stick:'Menge pro Stick',pulver:'Menge pro Portion',gummi:'Menge pro Stk',fluessig:'Menge pro Portion',gel:'Menge pro Portion',oel:'Menge pro Portion'};
+    var MAP={kapsel:'Menge je Kapsel',softgel:'Menge je Softgel',tablette:'Menge je Tablette',stick:'Menge pro Stick',pulver:'Menge je Tagesdosis',granulat:'Menge je Tagesdosis',gummi:'Menge pro Stk',fluessig:'Menge pro Portion',gel:'Menge pro Portion',oel:'Menge pro Portion'};
     function upd(){ hdr.textContent = MAP[sel.value] || 'Menge je Einheit'; }
     sel.addEventListener('change', upd); upd();
   })();
@@ -2971,7 +2987,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (!$rezDetail): ?>
     <h1 style="margin-bottom:4px">Rezeptur</h1>
     <div class="bx-panel"><div class="muted">Rezeptur nicht gefunden.</div><div style="margin-top:12px"><a class="btn btn-ghost" href="<?= $portalLink('rezepturen') ?>">Zurück zur Liste</a></div></div>
-  <?php else: $dfP = in_array($rezDetail['darreichungsform'], ['pulver','stick','granulat'], true) ? 'Portion' : 'Einheit'; ?>
+  <?php else: $dfP = $einheitWortP((string)$rezDetail['darreichungsform']); ?>
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <h1 style="margin:0"><?= h($rezDetail['name']) ?></h1>
       <div class="bx-row" style="gap:8px">
@@ -3138,7 +3154,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       </div>
     </div>
     <p class="bx-sub"><?= h($prodDetail['nummer']) ?><?= $prodDetail['darreichungsform'] ? ' · '.h($DFORM_P[$prodDetail['darreichungsform']] ?? $prodDetail['darreichungsform']) : '' ?></p>
-    <?php $dfE = in_array($prodDetail['darreichungsform'] ?? '', ['pulver','stick','granulat'], true) ? 'Portion' : 'Einheit'; ?>
+    <?php $dfE = $einheitWortP((string)($prodDetail['darreichungsform'] ?? '')); $pdTD = form_ist_tagesdosis((string)($prodDetail['darreichungsform'] ?? '')); ?>
 
     <?php // Hinterlegte Verpackung des Produkts (Behälter/Verschluss) + Einheiten je Packung – damit der Kunde
           //  sieht, in welcher Verpackung sein Produkt konfiguriert ist (nicht nur „zzgl. Verpackung").
@@ -3153,7 +3169,8 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="bx-tablewrap"><table class="bx-table"><tbody>
         <?php if ($pdVpName !== ''): ?><tr><td style="width:220px">Behälter</td><td><?= h($pdVpName) ?></td></tr><?php endif; ?>
         <?php if ($pdVsName !== ''): ?><tr><td style="width:220px">Verschluss</td><td><?= h($pdVsName) ?></td></tr><?php endif; ?>
-        <?php if ($pdEinh > 0): ?><tr><td style="width:220px"><?= h($dfE) ?>en je Packung</td><td><?= (int)$pdEinh ?></td></tr><?php endif; ?>
+        <?php if ($pdEinh > 0): if ($pdTD): $pdTdTxt = tagesdosen_txt((float)$pdEinh, $prodPortionG * 1000); ?><tr><td style="width:220px">Füllmenge je Packung</td><td><?= number_format($pdEinh, 0, ',', '.') ?> g<?= $pdTdTxt !== '' ? ' <span class="muted">(' . h($pdTdTxt) . ')</span>' : '' ?></td></tr>
+        <?php else: ?><tr><td style="width:220px"><?= h($dfE) ?>en je Packung</td><td><?= (int)$pdEinh ?></td></tr><?php endif; endif; ?>
       </tbody></table></div>
     </div>
     <?php endif; ?>
@@ -3194,7 +3211,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php endforeach; ?>
         </tbody>
       </table></div>
-      <div class="muted" style="margin-top:6px;font-size:12px">* NRV = Nährstoffbezugswert je <?= $dfE ?>. Die Verzehrempfehlung (Einheiten/Tag) legen Sie fest.</div>
+      <div class="muted" style="margin-top:6px;font-size:12px">* NRV = Nährstoffbezugswert je <?= $dfE ?>.<?= $pdTD ? ' Die Rezeptur ist genau eine Tagesdosis.' : ' Die Verzehrempfehlung (Einheiten/Tag) legen Sie fest.' ?></div>
     </div>
     <?php endif; ?>
 
@@ -3217,7 +3234,8 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php foreach ($prodPreise as $pp): ?>
           <tr><td><?= $prodForm === 'stick' && $prodPortionG > 0
                       ? rtrim(rtrim(number_format($pp['stueck'] * $prodPortionG, 1, ',', '.'), '0'), ',') . ' g je Packung'
-                      : h(form_groessen_label($prodForm, (float)$pp['stueck'])) . ' je Packung' ?></td>
+                      : h(form_groessen_label($prodForm, (float)$pp['stueck'])) . ' je Packung'
+                        . (($pdTD && ($ppTd = tagesdosen_txt((float)$pp['stueck'], $prodPortionG * 1000)) !== '') ? '<div class="muted" style="font-size:12px">' . h($ppTd) . '</div>' : '') ?></td>
               <td class="bx-num">ab <?= $eur($pp['ab']) ?> *</td></tr>
         <?php endforeach; ?>
         </tbody>
@@ -3259,6 +3277,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
         <button class="btn btn-primary" type="submit">Anfrage senden</button>
       </form>
+      <?= $tdHintJs() ?>
       <script>(function(){
         var tb=document.querySelector('#pd_staffel tbody'); if(!tb) return;
         var add=document.getElementById('pd_addrow');
@@ -3270,6 +3289,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           tb.appendChild(tr);
         });
         tb.addEventListener('click',function(e){ var b=e.target.closest('.pd_del'); if(!b) return; if(tb.querySelectorAll('.pd_srow').length>1) b.closest('tr').remove(); });
+        if(window.bxTdHint) bxTdHint(tb, function(){ return <?= $pdTD ? (float)$prodPortionG * 1000 : 0 ?>; });
       })();</script>
     </div>
   <?php endif; ?>
@@ -3283,7 +3303,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div style="margin-top:10px"><a class="btn btn-ghost" href="<?= $portalLink('rezepturen') ?>">Zurück</a></div></div>
   <?php else:
     $basisZut = all("SELECT bezeichnung, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$basisId]);
-    $dfP = in_array($basis['darreichungsform'], ['pulver','stick','granulat'], true) ? 'Portion' : 'Einheit'; ?>
+    $dfP = $einheitWortP((string)$basis['darreichungsform']); ?>
   <h1 style="margin-bottom:4px">Rezeptur weiterentwickeln</h1>
   <p class="bx-sub">Basis: <?= h($basis['nummer'] . ' ' . $basis['name']) ?> · <?= h($DFORM_P[$basis['darreichungsform']] ?? $basis['darreichungsform']) ?></p>
   <div class="bx-panel">
@@ -3337,11 +3357,13 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h1 style="margin-bottom:4px">Menge ändern</h1>
     <div class="bx-panel"><div class="muted">Diese Anfrage kann nicht (mehr) geändert werden – sie ist bereits bestellt oder nicht vorhanden.</div>
       <div style="margin-top:10px"><a class="btn btn-ghost" href="<?= $portalLink('meine_anfragen') ?>">Zurück zu Meine Anfragen</a></div></div>
-  <?php else:
+  <?php else: echo $tdHintJs();
     $paForm  = (string) scalar("SELECT COALESCE(r.darreichungsform, r2.darreichungsform) FROM portal_anfrage pa
                    LEFT JOIN produkt pr ON pr.id=pa.produkt_id LEFT JOIN rezeptur r ON r.id=pr.rezeptur_id
                    LEFT JOIN rezeptur r2 ON r2.id=pa.rezeptur_id WHERE pa.id=?", [$paf]);
     $paFuell = form_ist_fuellmenge($paForm);
+    $paDosisMg = form_ist_tagesdosis($paForm) ? rezeptur_gewicht_mg((int) scalar("SELECT COALESCE(pr.rezeptur_id, pa.rezeptur_id, 0) FROM portal_anfrage pa
+                   LEFT JOIN produkt pr ON pr.id=pa.produkt_id WHERE pa.id=?", [$paf])) : 0.0;
     $anzLbl  = $paFuell ? (form_groessen_einheit($paForm) === 'ml' ? 'Füllmenge pro Verpackung (ml)' : 'Füllmenge pro Verpackung (g)')
                         : ($paForm === 'stick' ? 'Sticks je Verpackung' : 'Anzahl pro Verpackung');
     $paName  = $pa['produkt_id'] ? produkt_kundenname((int)$pa['produkt_id'], $kid)
@@ -3386,6 +3408,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         tb.appendChild(tr);
       });
       tb.addEventListener('click',function(e){ var b=e.target.closest('.ma_del'); if(!b) return; if(tb.querySelectorAll('.ma_srow').length>1) b.closest('tr').remove(); });
+      if(window.bxTdHint) bxTdHint(tb, function(){ return <?= (float)$paDosisMg ?>; });
     })();</script>
   </div>
   <?php endif; ?>
@@ -3421,19 +3444,19 @@ portal_head('Kundenportal · ' . $k['firma']);
             <?php endif; ?>
             <?php if ($paEigene): ?>
             <optgroup label="Meine Rezepturen (noch kein fertiges Produkt)">
-              <?php foreach ($paEigene as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
+              <?php foreach ($paEigene as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" data-dosis="<?= form_ist_tagesdosis((string)$rz['darreichungsform']) ? rezeptur_gewicht_mg((int)$rz['id']) : 0 ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
             </optgroup>
             <?php endif; ?>
             <?php if ($paKatalog): ?>
             <optgroup label="Katalog-Rezepturen">
-              <?php foreach ($paKatalog as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
+              <?php foreach ($paKatalog as $rz): ?><option value="r<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>" data-dosis="<?= form_ist_tagesdosis((string)$rz['darreichungsform']) ? rezeptur_gewicht_mg((int)$rz['id']) : 0 ?>" <?= $rid === (int)$rz['id'] ? 'selected' : '' ?>><?= h($rz['name']) ?> · <?= h($DFORM_P[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
             </optgroup>
             <?php endif; ?>
             <?php // Katalog-Produkte OHNE die eigenen (die stehen schon oben unter „Meine Produkte").
                   $paKatalogProd = array_values(array_filter($katalog, fn($pk) => empty($meineProduktIds[(int)$pk['id']])));
                   if ($paKatalogProd): ?>
             <optgroup label="Produkte aus dem Katalog">
-              <?php foreach ($paKatalogProd as $pk): ?><option value="p<?= (int)$pk['id'] ?>" data-form="<?= h($pk['darreichungsform']) ?>"><?= h($pk['name']) ?><?= $pk['darreichungsform'] ? ' · '.h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '' ?></option><?php endforeach; ?>
+              <?php foreach ($paKatalogProd as $pk): ?><option value="p<?= (int)$pk['id'] ?>" data-form="<?= h($pk['darreichungsform']) ?>" data-dosis="<?= form_ist_tagesdosis((string)$pk['darreichungsform']) && !empty($pk['rezeptur_id']) ? rezeptur_gewicht_mg((int)$pk['rezeptur_id']) : 0 ?>"><?= h($pk['name']) ?><?= $pk['darreichungsform'] ? ' · '.h($DFORM_P[$pk['darreichungsform']] ?? $pk['darreichungsform']) : '' ?></option><?php endforeach; ?>
             </optgroup>
             <?php endif; ?>
           </select>
@@ -3468,6 +3491,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="bx-field" style="margin-top:14px"><label>Notiz (optional)</label><textarea name="notiz" placeholder="Wünsche, Zieltermin …"></textarea></div>
       <button class="btn btn-primary" type="submit">Anfrage senden</button>
     </form>
+    <?= $tdHintJs() ?>
     <script>(function(){
       var sel=document.getElementById('pa_produkt'); if(!sel) return;
       // Verpackungstyp je Darreichungsform (aus core/schema.php verpackung_typen_fuer_form()).
@@ -3542,8 +3566,9 @@ portal_head('Kundenportal · ' . $k['firma']);
         vp.innerHTML=html;
         if(keep && allow.indexOf(keep)>=0) vp.value=keep;   // vorherige Wahl behalten, wenn noch gültig
       }
-      sel.addEventListener('change',function(){ lbl(); updVerp(); paCheck(); paKarton(); }); lbl(); updVerp(); paCheck(); paKarton();
       var tb=document.querySelector('#pa_staffel tbody');
+      var tdUpd = window.bxTdHint ? bxTdHint(tb, function(){ var o=sel.options[sel.selectedIndex]; return o ? (+o.getAttribute('data-dosis')||0) : 0; }) : function(){};
+      sel.addEventListener('change',function(){ lbl(); updVerp(); paCheck(); paKarton(); tdUpd(); }); lbl(); updVerp(); paCheck(); paKarton();
       tb.addEventListener('input', function(){ paCheck(); paKarton(); });
       document.getElementById('pa_addrow').addEventListener('click',function(){
         var tr=document.createElement('tr'); tr.className='pa_srow';
@@ -4388,7 +4413,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         $rezSum = 0.0; foreach ($rezZut as $z) $rezSum += (float)$z['menge_mg'];
         $mgF = fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', '.'), '0'), ',');
         $istPulverRez = function_exists('form_groessen_einheit') && form_groessen_einheit((string)($rezRow['darreichungsform'] ?? '')) === 'g';
-        $einWort = $istPulverRez ? 'je Portion' : 'je Einheit';
+        $einWort = $istPulverRez ? 'je Tagesdosis' : 'je Einheit';
   ?>
   <div class="bx-panel">
     <h2 style="margin:0 0 4px;font-size:16px">Rezeptur</h2>
@@ -4672,8 +4697,9 @@ portal_head('Kundenportal · ' . $k['firma']);
       <form method="get" target="_blank" class="btn btn-ghost" style="flex:1 1 220px;display:flex;gap:8px;align-items:center;justify-content:center;padding:10px 14px;font-size:15px;cursor:default" title="Wie viele pro Tag? Daraus rechnet das PIB die Werte je Tagesdosis.">
         <input type="hidden" name="p" value="portal"><input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="v" value="pib"><input type="hidden" name="aid" value="<?= (int)$a['id'] ?>">
-        <label style="font-size:13px;white-space:nowrap"><?= h($pibTagLabel(auftrag_darreichungsform($a))) ?></label>
-        <input type="number" name="td" min="0" max="50" value="1" style="width:52px;text-align:center;padding:4px" title="Kapseln/Portionen pro Tag (0 = ohne Tagesdosis)">
+        <?php if (form_ist_tagesdosis(auftrag_darreichungsform($a))): ?><input type="hidden" name="td" value="1">
+        <?php else: ?><label style="font-size:13px;white-space:nowrap"><?= h($pibTagLabel(auftrag_darreichungsform($a))) ?></label>
+        <input type="number" name="td" min="0" max="50" value="1" style="width:52px;text-align:center;padding:4px" title="Kapseln/Portionen pro Tag (0 = ohne Tagesdosis)"><?php endif; ?>
         <button class="btn btn-primary btn-sm" type="submit" data-busy="PIB…" style="white-space:nowrap">Produktinfo (PIB)</button>
       </form>
       <?php if (umkarton_druckvorlage_datei((int)($a['produkt_id'] ?? 0))): ?>
