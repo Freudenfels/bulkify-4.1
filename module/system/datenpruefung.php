@@ -280,7 +280,7 @@ $CHECKS = [
                            k.menge_pro_vpe AS menge_jetzt, ROUND(x.mg/1000, 2) AS portion_g, ROUND(k.menge_pro_vpe*x.mg/1000) AS als_portionen_g,
                            p.einheiten_pro_packung AS fuellmenge_g, k.preis, k.notiz,
                            (SELECT k2.id FROM produkt_kundenpreis k2 WHERE k2.produkt_id=k.produkt_id AND k2.kunde_id=k.kunde_id
-                              AND k2.menge_pro_vpe=p.einheiten_pro_packung AND k2.id<>k.id LIMIT 1) AS _konflikt
+                              AND k2.menge_pro_vpe=p.einheiten_pro_packung AND COALESCE(k2.anzahl_vpe,0)=COALESCE(k.anzahl_vpe,0) AND k2.id<>k.id LIMIT 1) AS _konflikt
                     FROM produkt_kundenpreis k
                     JOIN produkt p ON p.id = k.produkt_id
                     JOIN rezeptur r ON r.id = p.rezeptur_id

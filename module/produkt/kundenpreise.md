@@ -49,3 +49,11 @@ Wird bei Pulver/Granulat die Menge je Packung von einer Portionszahl auf g umges
 - Vorher blieb der Auftrag auf 31 und stand als eigene Zeile „31 g · aus Auftrag“ da.
 - Bei Pulver-Zeilen „aus Auftrag“ ist die Menge ebenfalls editierbar (nur für diese Korrektur). Danach rutscht der Auftrag in die Kundenpreis-Zeile.
 - Andere Formen: Die Menge eines Auftrags ändert man am Auftrag.
+
+## Staffelpreise je Bestellmenge (03.11.2026)
+Eine Zeile = Kunde × Produkt × Menge je Packung × **Bestellmenge** (Schlüssel `pid:kid:stk:bm`). Jede Bestellmenge hat ihren eigenen Herstellungspreis (`produkt_kundenpreis.anzahl_vpe` = Bestellmenge). Verpackung/Etikett, VK und Gesamt werden bei genau dieser Menge gerechnet.
+- Vorher gab es einen Preis für mehrere Mengen („9.000, 7.000 Stk“).
+- Aufträge hängen an der Zeile mit ihrer Bestellmenge.
+- Ein Kundenpreis ohne Bestellmenge gilt für „alle Mengen“; Aufträge ohne eigene Staffel hängen dann daran.
+- Bepreiste Aufträge stehen als Info „AB-…: x € je Pkg“ in der Zeile.
+- `kundenpreis_setzen()` setzt Upserts jetzt je Bestellmenge. Eine Annahme mit anderer Menge legt eine neue Staffel an, statt die alte zu überschreiben.

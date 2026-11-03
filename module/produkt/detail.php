@@ -70,8 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kp_ad
     if ($kpk > 0 && $kpp > 0) {
         // Gibt es für diesen Kunden schon eine Zeile dieser Größe (Produkt + Kunde + Menge je Packung), wird sie aktualisiert
         // statt eine zweite anzulegen (gleicher Schlüssel wie kundenpreis_setzen()).
-        $kpEx = $kpm ? (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? LIMIT 1", [(int)$id, $kpk, $kpm]) : 0;
-        if ($kpEx) q("UPDATE produkt_kundenpreis SET anzahl_vpe=?, preis=?, notiz=? WHERE id=?", [$kpa, $kpp, $kpn ?: null, $kpEx]);
+        $kpEx = $kpm ? (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND COALESCE(anzahl_vpe,0)=? LIMIT 1", [(int)$id, $kpk, $kpm, (int)($kpa ?? 0)]) : 0;
+        if ($kpEx) q("UPDATE produkt_kundenpreis SET preis=?, notiz=? WHERE id=?", [$kpp, $kpn ?: null, $kpEx]);
         else q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,preis,notiz) VALUES (?,?,?,?,?,?)",
           [(int)$id, $kpk, $kpm, $kpa, $kpp, $kpn ?: null]);
         log_aktivitaet('produkt', (int)$id, 'team', 'Kundenpreis gesetzt: ' . number_format($kpp, 2, ',', '.') . ' € je Packung' . ($kpm ? ' (' . $kpm . ' je VPE)' : '') . '.', 'notiz');

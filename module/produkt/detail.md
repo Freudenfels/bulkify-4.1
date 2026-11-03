@@ -98,3 +98,5 @@ Abgelöst durch den Abschnitt unten (Rezeptur = Tagesdosis).
   - Füllgewicht-Prüfung mit den g je Packung selbst (vorher fälschlich Rezeptur-Gewicht × g).
   - Nährwerte je 1 Tagesdosis.
 - Sticks/Kapseln/Tabletten unverändert.
+
+„Kundenpreis hinzufügen“ (03.11.2026): gleiche Größe UND gleiche Anzahl Verpackungen → vorhandene Zeile aktualisieren; andere Anzahl = eigene Staffel.

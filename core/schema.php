@@ -4988,14 +4988,16 @@ function durchlaufzeiten_rows(?int $kunde_id = null, ?string $von = null, ?strin
     return $out;
 }
 // Einen Kundenpreis (VK je Packung OHNE Verpackung) idempotent setzen -> Grundlage für „ab xy" im Portal.
-// Upsert je (Produkt, Kunde, Stück je Packung): bestehende Zeile dieser Größe wird aktualisiert, sonst neu.
+// Upsert je (Produkt, Kunde, Stück je Packung, Bestellmenge = Staffel, 03.11.2026): bestehende Zeile dieser Größe UND
+// Bestellmenge wird aktualisiert, sonst neu. $anzahl null/0 = Preis ohne Staffel (gilt für alle Bestellmengen).
 // Wird bei Angebots-Bestätigung automatisch aus der Herstellungs-Position/-Zelle gepflegt. $quelle = Herkunftsnotiz.
 function kundenpreis_setzen(int $produkt_id, int $kunde_id, int $stueck, ?int $anzahl, float $preis, string $quelle = ''): void {
     if ($produkt_id <= 0 || $kunde_id <= 0 || $stueck <= 0 || $preis <= 0) return;
     if (!table_exists('produkt_kundenpreis')) return;
     $notiz = $quelle !== '' ? ('automatisch aus ' . $quelle) : null;
-    $ex = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? LIMIT 1", [$produkt_id, $kunde_id, $stueck]);
-    if ($ex) q("UPDATE produkt_kundenpreis SET anzahl_vpe=?, preis=?, notiz=? WHERE id=?", [$anzahl, round($preis, 4), $notiz, $ex]);
+    $ex = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND COALESCE(anzahl_vpe,0)=? LIMIT 1",
+                       [$produkt_id, $kunde_id, $stueck, (int)($anzahl ?? 0)]);
+    if ($ex) q("UPDATE produkt_kundenpreis SET preis=?, notiz=? WHERE id=?", [round($preis, 4), $notiz, $ex]);
     else     q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,preis,notiz) VALUES (?,?,?,?,?,?)", [$produkt_id, $kunde_id, $stueck, $anzahl, round($preis, 4), $notiz]);
 }
 

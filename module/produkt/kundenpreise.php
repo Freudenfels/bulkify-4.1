@@ -12,13 +12,16 @@ require_once BX_ROOT . '/core/schema.php';
 $fuellen = (string) meta_get('kundenpreise_auftrag_fuellen', '0') === '1';
 
 // --- Zeilen aufbauen -------------------------------------------------------------------------------------------
+// Eine Zeile je Kunde x Produkt x Menge je Packung x BESTELLMENGE (Staffel, 03.11.2026): jede Bestellmenge hat ihren eigenen
+// Herstellungspreis, Verpackung/VK/Gesamt werden bei genau dieser Menge gerechnet. Ein Kundenpreis ohne Bestellmenge
+// (anzahl_vpe leer) gilt für alle Mengen – Aufträge ohne eigene Staffel hängen dann daran.
 function kp_zeilen(): array {
     $z = [];
-    $key = fn(int $p, int $k, int $s) => $p . ':' . $k . ':' . $s;
+    $key = fn(int $p, int $k, int $s, int $m = 0) => $p . ':' . $k . ':' . $s . ':' . $m;
     foreach (all("SELECT id, produkt_id, kunde_id, menge_pro_vpe, anzahl_vpe, preis, notiz FROM produkt_kundenpreis
                   WHERE COALESCE(menge_pro_vpe,0) > 0 ORDER BY id") as $r) {
-        $k = $key((int)$r['produkt_id'], (int)$r['kunde_id'], (int)$r['menge_pro_vpe']);
-        $z[$k] = ['pid' => (int)$r['produkt_id'], 'kid' => (int)$r['kunde_id'], 'stk' => (int)$r['menge_pro_vpe'],
+        $k = $key((int)$r['produkt_id'], (int)$r['kunde_id'], (int)$r['menge_pro_vpe'], (int)($r['anzahl_vpe'] ?? 0));
+        $z[$k] = ['pid' => (int)$r['produkt_id'], 'kid' => (int)$r['kunde_id'], 'stk' => (int)$r['menge_pro_vpe'], 'bm' => (int)($r['anzahl_vpe'] ?? 0),
                   'kp_id' => (int)$r['id'], 'preis' => $r['preis'] !== null ? (float)$r['preis'] : null, 'anzahl' => (int)($r['anzahl_vpe'] ?? 0),
                   'notiz' => (string)($r['notiz'] ?? ''), 'auftraege' => []];
     }
@@ -27,8 +30,10 @@ function kp_zeilen(): array {
                   FROM auftrag a JOIN produkt p ON p.id = a.produkt_id
                   WHERE a.status <> 'storniert' AND a.kunde_id IS NOT NULL ORDER BY a.id DESC") as $a) {
         if ((int)$a['stk'] <= 0) continue;
-        $k = $key((int)$a['produkt_id'], (int)$a['kunde_id'], (int)$a['stk']);
-        if (!isset($z[$k])) $z[$k] = ['pid' => (int)$a['produkt_id'], 'kid' => (int)$a['kunde_id'], 'stk' => (int)$a['stk'],
+        $k = $key((int)$a['produkt_id'], (int)$a['kunde_id'], (int)$a['stk'], (int)$a['menge']);
+        $kAlle = $key((int)$a['produkt_id'], (int)$a['kunde_id'], (int)$a['stk']);
+        if (!isset($z[$k]) && isset($z[$kAlle])) $k = $kAlle;   // Kundenpreis ohne Staffel gilt für alle Bestellmengen
+        if (!isset($z[$k])) $z[$k] = ['pid' => (int)$a['produkt_id'], 'kid' => (int)$a['kunde_id'], 'stk' => (int)$a['stk'], 'bm' => (int)$a['menge'],
                                       'kp_id' => 0, 'preis' => null, 'anzahl' => 0, 'notiz' => '', 'auftraege' => []];
         $z[$k]['auftraege'][] = $a;
     }
@@ -45,8 +50,8 @@ function kp_zeilen(): array {
         $ohne = array_values(array_filter($r['auftraege'], fn($a) => (float)($a['gesamt_netto'] ?? 0) <= 0));
         $r['ohne_preis_auftraege'] = $ohne;
         $neuester = $r['auftraege'][0] ?? null;
-        // Bestellmenge für Staffel/Gesamt: offener unbepreister Auftrag, sonst hinterlegte Anzahl VPE, sonst letzter Auftrag.
-        $r['menge'] = (int)($ohne[0]['menge'] ?? 0) ?: ($r['anzahl'] ?: (int)($neuester['menge'] ?? 0)) ?: 1;
+        // Bestellmenge für Verpackung/Gesamt: die Staffel der Zeile; ohne Staffel offener unbepreister Auftrag, sonst letzter Auftrag.
+        $r['menge'] = $r['bm'] ?: ((int)($ohne[0]['menge'] ?? 0) ?: (int)($neuester['menge'] ?? 0)) ?: 1;
         $r['verp_override'] = (int)($ohne[0]['verpackung_id'] ?? 0) ?: ((int)($neuester['verpackung_id'] ?? 0) ?: null);
         $r['verp_cent'] = verpackung_cent_je_pack($r['pid'], $r['menge'], $r['kid'], $r['verp_override']);
         $vp = $r['verp_override'] ?: (int)($p['verpackung_id'] ?? 0);
@@ -59,7 +64,7 @@ function kp_zeilen(): array {
         $r['mengen'] = array_values(array_unique(array_map(fn($a) => (int)$a['menge'], $r['auftraege'])));
     }
     unset($r);
-    uasort($z, fn($a, $b) => [mb_strtolower($a['firma']), mb_strtolower($a['produkt']), $a['stk']] <=> [mb_strtolower($b['firma']), mb_strtolower($b['produkt']), $b['stk']]);
+    uasort($z, fn($a, $b) => [mb_strtolower($a['firma']), mb_strtolower($a['produkt']), $a['stk'], $a['bm']] <=> [mb_strtolower($b['firma']), mb_strtolower($b['produkt']), $b['stk'], $b['bm']]);
     return $z;
 }
 
@@ -100,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
             $portion = form_ist_tagesdosis($r['form']) && pulver_ist_portionszahl($r['rid'], $r['stk'], $neuStk);
             if (!$r['kp_id'] && !$portion) { $fehler[] = $wer . 'die Menge je Packung eines Auftrags wird am Auftrag geändert'; continue; }
             if ($r['kp_id']) {
-                $dup = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND id<>? LIMIT 1", [$r['pid'], $r['kid'], $neuStk, $r['kp_id']]);
+                $dup = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND COALESCE(anzahl_vpe,0)=? AND id<>? LIMIT 1", [$r['pid'], $r['kid'], $neuStk, $r['bm'], $r['kp_id']]);
                 if ($dup) { $fehler[] = $wer . form_groessen_label($r['form'], $neuStk) . ' gibt es schon als eigene Zeile – Menge nicht geändert'; continue; }
                 $vorM = one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: [];
                 q("UPDATE produkt_kundenpreis SET menge_pro_vpe=? WHERE id=? AND menge_pro_vpe=?", [$neuStk, $r['kp_id'], $r['stk']]);
@@ -116,8 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
         if ($preis <= 0) { $fehler[] = $r['firma'] . ' / ' . $r['produkt'] . ': Preis muss größer 0 sein'; continue; }
         if ($r['preis'] !== null && abs($r['preis'] - round($preis, 4)) < 1e-6) continue;   // unverändert
         $vor = $r['kp_id'] ? (one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: []) : [];
-        kundenpreis_setzen($r['pid'], $r['kid'], $r['stk'], $r['menge'], $preis, 'manuell: Preisliste');
-        $id = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? LIMIT 1", [$r['pid'], $r['kid'], $r['stk']]);
+        kundenpreis_setzen($r['pid'], $r['kid'], $r['stk'], $r['bm'] ?: null, $preis, 'manuell: Preisliste');
+        $id = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND COALESCE(anzahl_vpe,0)=? LIMIT 1", [$r['pid'], $r['kid'], $r['stk'], $r['bm']]);
         q("UPDATE produkt_kundenpreis SET notiz=? WHERE id=?", ['manuell: Preisliste', $id]);
         $nach = one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$id]) ?: [];
         // Neue Zeile: nur die fachlichen Felder protokollieren (nicht id/angelegt).
@@ -182,7 +187,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   <style>.kp-tab td{font-size:14px}.kp-tab .kp-txt{white-space:normal;max-width:210px}.kp-tab .bx-num{white-space:nowrap}</style>
   <div class="bx-tablewrap"><table class="bx-table kp-tab">
     <thead><tr>
-      <th>Kunde</th><th>Produkt</th><th class="bx-num">Menge je Pkg</th><th>Verpackung</th><th>Bestellmenge(n)</th>
+      <th>Kunde</th><th>Produkt</th><th class="bx-num">Menge je Pkg</th><th>Verpackung</th><th>Bestellmenge (Staffel)</th>
       <th class="bx-num">Herstellung je Pkg (€)</th><th class="bx-num">Verp. + Etikett je Pkg</th><th class="bx-num">VK je Pkg</th><th class="bx-num">Gesamt netto</th><th></th>
     </tr></thead>
     <tbody>
@@ -200,7 +205,11 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
             <div class="muted" style="font-size:12px">aus Auftrag</div>
           <?php else: ?><?= h(form_groessen_label($r['form'], (float)$r['stk'])) ?><div class="muted" style="font-size:12px">aus Auftrag</div><?php endif; ?></td>
         <td class="kp-txt"><?= $r['verpackung'] !== '' ? h($r['verpackung']) : '<span class="muted">–</span>' ?><?= $r['vollbedruckt'] ? '<div class="muted" style="font-size:12px">vollbedruckt</div>' : '' ?></td>
-        <td class="kp-txt" style="font-size:13px"><?= $r['mengen'] ? h(implode(', ', array_map(fn($m) => number_format($m, 0, ',', '.'), $r['mengen']))) . ' Stk' : ($r['anzahl'] ? h(number_format($r['anzahl'], 0, ',', '.')) . ' Stk' : '<span class="muted">–</span>') ?>
+        <td class="kp-txt" style="font-size:13px"><?= $r['bm'] ? h(number_format($r['bm'], 0, ',', '.')) . ' Stk' : 'alle Mengen' . ($r['mengen'] ? '<div class="muted" style="font-size:12px">Aufträge: ' . h(implode(', ', array_map(fn($m) => number_format($m, 0, ',', '.'), $r['mengen']))) . ' Stk</div>' : '') ?>
+            <?php // Bepreiste Aufträge dieser Staffel als Info (VK je Pkg inkl. Verpackung) – hilft beim Eintragen des Herstellungspreises.
+                  foreach ($r['auftraege'] as $a): if ((float)($a['gesamt_netto'] ?? 0) <= 0 || (int)$a['menge'] <= 0) continue; ?>
+              <div class="muted" style="font-size:12px"><a href="?p=auftrag&id=<?= (int)$a['id'] ?>"><?= h($a['nummer']) ?></a>: <?= $eur((float)$a['gesamt_netto'] / (int)$a['menge']) ?> € je Pkg</div>
+            <?php endforeach; ?>
             <?php if ($r['ohne_preis_auftraege']): ?><div style="font-size:12px;color:#8f231b"><?= count($r['ohne_preis_auftraege']) ?> Auftrag/Aufträge ohne Preis: <?php foreach ($r['ohne_preis_auftraege'] as $i => $a): ?><?= $i ? ', ' : '' ?><a href="?p=auftrag&id=<?= (int)$a['id'] ?>"><?= h($a['nummer']) ?></a><?php endforeach; ?></div><?php endif; ?></td>
         <td class="bx-num"><input type="text" inputmode="decimal" name="preis[<?= h($k) ?>]" value="<?= h($preisTxt($r['preis'])) ?>" placeholder="0,00" class="kp-preis" style="width:96px;text-align:right"></td>
         <td class="bx-num"><?= $eur($verp) ?> €<div class="muted" style="font-size:12px">bei <?= number_format($r['menge'], 0, ',', '.') ?> Stk</div>
