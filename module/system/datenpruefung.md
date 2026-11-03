@@ -21,6 +21,9 @@ Die Seite führt die Prüf-Abfragen aus der Liste „Nicos manuelle Live-DB-Aufg
 | Doppelte Nummern | nein (Einzelentscheidung, freigegebene Rechnungen nie umnummerieren) |
 | Kundenetiketten ohne Artikelnummer | ja (Freigabe Nico 03.11.): Artikelnummer wie bei neuen Kundenetiketten, `naechste_nummer(item_prefix('verpackung'))` = VP-… unter der Nummern-Sperre, in ID-Reihenfolge; schon in `item` vergebene Nummern werden übersprungen (`dp_neue_vp_nummer()`); nummerierte Etiketten fallen aus der Liste |
 | Protokoll der Kundenetikett-Migration | Anzeige von `app_meta migr_kundenetikett_protokoll` |
+| Blocker 1 A: Katalogprodukt mit bedrucktem Kundenbeutel im Behälter-Slot | vorbereitet, **Knopf erst nach Freigabe** (`$bl1Frei`): `produkt.verpackung_id` = neutraler Basis-Behälter (Spalten „neutral“, „Herleitung“: `basis_item_id` / Notiz des Beutels / Angebot der Aufträge, „Aenderung“ von -> auf). Nicht eindeutig = nicht anwählbar. Nur der Slot, der Beutel bleibt am Auftrag. |
+| Blocker 1 B: bedruckter Beutel ohne Besitzer | vorbereitet, **Knopf erst nach Freigabe** (`$bl1Frei`): `item.kunde_id` = Kunde der Aufträge mit diesem Beutel (`auftrag.verpackung_id`); mehrere Kunden oder kein Auftrag = nicht anwählbar. |
+| Blocker 1 C: Katalogprodukt mit Kundenetikett im Etikett-Slot | nein, Kontrolle (Vorschlag `etikett_id = NULL`, Knopf erst nach Freigabe) |
 
 ## Links
 „Öffnen" zeigt immer auf das Objekt der Zeile: Charge → `?p=chargen&id=` (Chargen-Detail), Produkt → Produkt, Bestellposition → Bestellung, Lieferanten-Preis → Rezeptur, Produktionsauftrag → PA, Benutzer → Benutzer, Kundenetikett → Verpackung. Zusätzlich sind verknüpfte Werte in der Tabelle anklickbar (Auftrags-Nr., PA, Charge-Nr.).
@@ -31,3 +34,6 @@ Die Seite führt die Prüf-Abfragen aus der Liste „Nicos manuelle Live-DB-Aufg
 - Technisch: `fix.ziel` = Spalte mit der ID des geänderten Datensatzes (Standard: die Zeile selbst), `fix.params` = Werte je Zeile (z. B. Kunde des Auftrags).
 - Alles läuft in einer Transaktion. Jede geänderte Spalte wird mit alt/neu, Person und Route `datenpruefung` ins Feld-Änderungsprotokoll (`aenderung_log`) geschrieben. Ansicht: Protokoll → Feld-Änderungen.
 - Fehlt auf einer Datenbank eine Spalte, zeigt die jeweilige Prüfung den Fehler an, statt die Seite abzubrechen.
+
+## zeilen (Nachbereitung)
+Optional `zeilen => fn(array $rows): array` ergänzt Spalten, die sich nicht in SQL rechnen lassen – z. B. der neutrale Basis-Behälter (`dp_neutral_herleitung()` über `verpackung_neutrale_basis()`). Beheben prüft gegen dieselbe nachbereitete Liste.

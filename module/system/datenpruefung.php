@@ -15,6 +15,8 @@ if (!has_role('admin')) {
 }
 
 $gelMenge = column_exists('bestellung_position', 'geliefert_menge');
+// Blocker 1 A/B: Beheben-Knopf erst nach Nicos Freigabe der Trefferlisten (bis dahin nur Anzeige). Auf true = Knopf an.
+$bl1Frei = false;
 
 // --- Prüfungen ---------------------------------------------------------------------------------------------
 // sql:     reine Lese-Abfrage; _id = Zeilen-ID für die Auswahl (wird nicht angezeigt), _link = Öffnen-Link auf das Objekt der
@@ -205,6 +207,72 @@ $CHECKS = [
                     'update' => "UPDATE item SET artikelnummer = ? WHERE id = ? AND verpackung_rolle = 'etikett' AND produkt_id IS NOT NULL AND (artikelnummer IS NULL OR artikelnummer = '')",
                     'params' => fn(array $r) => [dp_neue_vp_nummer(), (int)$r['_id']]],
     ],
+    'bl1_katalog_beutel' => [
+        'titel' => 'Blocker 1 A: Katalogprodukt mit bedrucktem Kundenbeutel im Behälter-Slot',
+        'info'  => 'Vor dem Blocker-1-Fix schrieb die Annahme den bedruckten Beutel eines Kunden in den Behälter-Slot des kundenneutralen Katalogprodukts – alle Kunden sahen ihn im Katalog (z. B. P-2701 mit VP-2747). Das Katalogprodukt soll den neutralen Basis-Behälter tragen; der bedruckte Beutel bleibt am Auftrag des Kunden.',
+        'sql'   => "SELECT p.id AS _id, CONCAT('?p=produkt&id=', p.id) AS _link, p.nummer, p.name, p.verpackung_id AS _beutel_id,
+                           CONCAT('?p=verpackung&id=', i.id) AS _link_beutel, i.artikelnummer AS beutel, i.name AS beutel_name, i.kunde_id AS beutel_kunde_id
+                    FROM produkt p JOIN item i ON i.id = p.verpackung_id
+                    WHERE p.exklusiv = 0 AND p.kunde_id IS NULL AND COALESCE(i.kundenspezifisch, 0) = 1
+                    ORDER BY p.id",
+        'zeilen' => function (array $rows): array {
+            foreach ($rows as &$r) {
+                [$nid, $quelle] = dp_neutral_herleitung((int)$r['_beutel_id']);
+                $n = $nid ? one("SELECT artikelnummer, name FROM item WHERE id=?", [$nid]) : null;
+                $r['_neutral_id'] = $nid;
+                $r['_link_neutral'] = $nid ? '?p=verpackung&id=' . $nid : null;
+                $r['neutral'] = $n ? trim(($n['artikelnummer'] ?? '') . ' ' . $n['name']) : null;
+                $r['herleitung'] = $nid ? $quelle : 'nicht automatisch behebbar: neutraler Basis-Behälter nicht eindeutig';
+                $r['aenderung'] = $nid ? 'verpackung_id ' . $r['_beutel_id'] . ' (' . ($r['beutel'] ?: '#' . $r['_beutel_id']) . ') -> ' . $nid . ' (' . (($n['artikelnummer'] ?? '') ?: '#' . $nid) . ')' : null;
+            }
+            return $rows;
+        },
+        'korrektur' => "-- je angehaktem Produkt: Behälter-Slot zurück auf den neutralen Basis-Behälter (Spalte „neutral“)\nUPDATE produkt SET verpackung_id = <neutral>\n WHERE id = <Produkt> AND exklusiv = 0 AND kunde_id IS NULL AND verpackung_id = <bedruckter Beutel>;",
+        'ohne_fix'  => ($bl1Frei ? '' : 'Nur Anzeige – Beheben-Knopf erst nach Freigabe der Trefferliste. ') . 'Nur der Behälter-Slot ändert sich. Der bedruckte Beutel bleibt bestehen und am Auftrag/PA des Kunden. Zeilen ohne eindeutigen neutralen Behälter sind nicht anwählbar (nicht raten).',
+        'fix'   => !$bl1Frei ? null : ['tabelle' => 'produkt', 'typ' => 'produkt',
+                    'waehlbar' => fn(array $r) => !empty($r['_neutral_id']),
+                    'update' => "UPDATE produkt SET verpackung_id = ? WHERE id = ? AND exklusiv = 0 AND kunde_id IS NULL AND verpackung_id = ?",
+                    'params' => fn(array $r) => [(int)$r['_neutral_id'], (int)$r['_id'], (int)$r['_beutel_id']]],
+    ],
+    'bl1_beutel_besitzer' => [
+        'titel' => 'Blocker 1 B: bedruckter Beutel ohne Besitzer (Kunde)',
+        'info'  => 'Der bedruckte Beutel gehört dem Kunden (je Produkt + Kunde, wie das Kundenetikett). Ältere Beutel haben nur die Produkt-Bindung. Besitzer = Kunde der Aufträge, die den Beutel nutzen.',
+        'sql'   => "SELECT x.*,
+                           CASE WHEN x._nk = 1 THEN x.kunde_aus_auftrag
+                                WHEN x._nk = 0 THEN 'nicht automatisch behebbar: kein Auftrag nutzt den Beutel'
+                                ELSE 'nicht automatisch behebbar: Aufträge mehrerer Kunden' END AS neuer_besitzer
+                    FROM (
+                      SELECT i.id AS _id, CONCAT('?p=verpackung&id=', i.id) AS _link, i.artikelnummer, i.name, i.produkt_id,
+                             CONCAT('?p=produkt&id=', i.produkt_id) AS _link_produkt_id, i.kunde_id,
+                             GROUP_CONCAT(DISTINCT a.nummer ORDER BY a.nummer SEPARATOR ', ') AS auftraege,
+                             GROUP_CONCAT(DISTINCT CONCAT(k.firma, ' (', a.kunde_id, ')') ORDER BY a.kunde_id SEPARATOR ', ') AS kunde_aus_auftrag,
+                             COUNT(DISTINCT a.kunde_id) AS _nk, MIN(a.kunde_id) AS _kunde_neu
+                      FROM item i
+                      LEFT JOIN auftrag a ON a.verpackung_id = i.id
+                      LEFT JOIN kunden k ON k.id = a.kunde_id
+                      WHERE COALESCE(i.kundenspezifisch, 0) = 1 AND i.kategorie = 'verpackung' AND i.kunde_id IS NULL
+                      GROUP BY i.id, i.artikelnummer, i.name, i.produkt_id, i.kunde_id
+                    ) x ORDER BY x._id",
+        'korrektur' => "-- je angehaktem Beutel: Besitzer = Kunde der Aufträge mit diesem Beutel (nur wenn genau EIN Kunde)\nUPDATE item SET kunde_id = <Kunde>\n WHERE id = <Beutel> AND kundenspezifisch = 1 AND kunde_id IS NULL;",
+        'ohne_fix'  => ($bl1Frei ? '' : 'Nur Anzeige – Beheben-Knopf erst nach Freigabe der Trefferliste. ') . 'Mehrdeutige Beutel (mehrere Kunden) oder Beutel ohne Auftrag sind nicht anwählbar – bitte einzeln klären.',
+        'fix'   => !$bl1Frei ? null : ['tabelle' => 'item', 'typ' => 'item',
+                    'waehlbar' => fn(array $r) => (int)$r['_nk'] === 1 && (int)$r['_kunde_neu'] > 0,
+                    'update' => "UPDATE item SET kunde_id = ? WHERE id = ? AND COALESCE(kundenspezifisch, 0) = 1 AND kunde_id IS NULL",
+                    'params' => fn(array $r) => [(int)$r['_kunde_neu'], (int)$r['_id']]],
+    ],
+    'bl1_katalog_etikett' => [
+        'titel' => 'Blocker 1 C: Katalogprodukt mit Kundenetikett im Etikett-Slot (Kontrolle)',
+        'info'  => 'Nebenbefund: Vor dem Paket Etiketten wurde das Kundenetikett teils in den Slot des Katalogprodukts geschrieben. Kunden-Sichten lösen das Etikett je Kunde auf (nie das eines anderen Kunden), der Slot gehört trotzdem nicht ans Katalogprodukt.',
+        'sql'   => "SELECT p.id AS _id, CONCAT('?p=produkt&id=', p.id) AS _link, p.nummer, p.name, p.etikett_id,
+                           CONCAT('?p=verpackung&id=', e.id) AS _link_etikett, e.name AS etikett, e.kunde_id AS etikett_kunde_id, e.produkt_id AS etikett_produkt_id
+                    FROM produkt p JOIN item e ON e.id = p.etikett_id
+                    WHERE p.exklusiv = 0 AND p.kunde_id IS NULL
+                      AND (e.kunde_id IS NOT NULL OR (e.verpackung_rolle = 'etikett' AND e.produkt_id IS NOT NULL))
+                    ORDER BY p.id",
+        'korrektur' => "-- Vorschlag (noch nicht freigegeben): Etikett-Slot des Katalogprodukts leeren, das Kundenetikett bleibt beim Kunden\nUPDATE produkt SET etikett_id = NULL WHERE id = <Produkt> AND exklusiv = 0 AND kunde_id IS NULL AND etikett_id = <Kundenetikett>;",
+        'ohne_fix'  => 'Nur Anzeige – Beheben-Knopf erst nach Freigabe.',
+        'fix'   => null,
+    ],
 ];
 
 // Artikelnummer für ein Kundenetikett: dieselbe Logik wie kundenetikett_version_anlegen() (Aufräumen 17) –
@@ -219,9 +287,23 @@ function dp_neue_vp_nummer(): string {
 }
 
 // Prüfung ausführen (Fehler, z. B. fehlende Spalte, wird angezeigt statt die Seite zu sprengen).
+// zeilen (optional): fn(array $rows): array – ergänzt Spalten, die sich nicht in SQL rechnen lassen (z. B. Herleitung).
 function dp_laden(array $c): array {
-    try { return ['rows' => all($c['sql']), 'fehler' => '']; }
+    try { $rows = all($c['sql']); return ['rows' => isset($c['zeilen']) ? ($c['zeilen'])($rows) : $rows, 'fehler' => '']; }
     catch (\Throwable $e) { return ['rows' => [], 'fehler' => $e->getMessage()]; }
+}
+
+// Blocker 1: neutraler Basis-Behälter zu einem bedruckten Beutel + woher er kommt (nicht raten: 0 = nicht eindeutig).
+function dp_neutral_herleitung(int $beutel_id): array {
+    $nid = verpackung_neutrale_basis($beutel_id);
+    if ($nid <= 0) return [0, ''];
+    $b = one("SELECT basis_item_id, notiz FROM item WHERE id=?", [$beutel_id]) ?: [];
+    $n = one("SELECT artikelnummer FROM item WHERE id=?", [$nid]) ?: [];
+    if ((int)($b['basis_item_id'] ?? 0) === $nid) return [$nid, 'basis_item_id'];
+    $notiz = (string)($b['notiz'] ?? '');
+    if ((($n['artikelnummer'] ?? '') !== '' && str_contains($notiz, 'vom neutralen Behälter ' . $n['artikelnummer'] . ' '))
+        || str_contains($notiz, 'vom neutralen Behälter #' . $nid . ' ')) return [$nid, 'Notiz des Beutels'];
+    return [$nid, 'Angebot der Aufträge mit diesem Beutel'];
 }
 
 // --- Beheben (nur auf ausdrücklichen Klick, nur angehakte Zeilen) -------------------------------------------
