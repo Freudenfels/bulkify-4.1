@@ -92,8 +92,17 @@ $jetztUtc = gmdate('Y-m-d H:i:s');
 // sortieren kann. bx_sort_rows sortiert nach dem Spalten-Key in der Zeile; die Render-Closures lesen diese
 // Keys NICHT (Art über $auftragArt, Dauer über $fertigMap), daher kein Konflikt.
 $artSort = ['neu_rez' => '1', 'neu_prod' => '2', 'nach' => '3', 'none' => '9'];
+// Etikett-Status je Auftrag (03.11.2026): 0 = rot (kein Design), 1 = gelb (Design da, nicht freigegeben), 2 = grün (freigegeben),
+// 9 = braucht kein Etikett. Auch als Sortierwert der Spalte „Etikett".
+$etikettStand = function (array $r): int {
+    $aid = (int)$r['id'];
+    if (in_array((string)($r['status'] ?? ''), ['storniert'], true) || !auftrag_braucht_etikett($aid)) return 9;
+    if (etikett_freigegeben($aid)) return 2;
+    return (etikett_vorhanden($aid) || etikett_quelle($aid)) ? 1 : 0;
+};
 foreach ($rows as &$rr) {
     $rr['art']   = $artSort[$auftragArt($rr)] ?? '9';
+    $rr['etikett'] = $etikettStand($rr);
     $start       = $rr['angelegt'] ?? null;
     $rr['dauer'] = $start ? (strtotime(($fertigMap[(int)$rr['id']] ?? $jetztUtc)) - strtotime((string)$start)) : 0;
 }
@@ -131,12 +140,6 @@ $cols = [
     'produkt_name' => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r)=>
         ($r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>')
         . (!empty($r['kundenname']) && $r['kundenname'] !== $r['produkt_name'] ? ' <span class="muted">· ' . h($r['kundenname']) . '</span>' : '')],
-    'art'          => ['label' => 'Art', 'sort' => true, 'render' => function($r) use ($auftragArt) {
-                        $k = $auftragArt($r);
-                        if ($k === 'none') return '<span class="muted">–</span>';
-                        [$label, $stil, $hint] = auftrag_art_meta($k);   // $stil hier bewusst ignoriert: schlichter Text statt farbiger Kachel
-                        return '<span class="muted" title="' . h($hint) . '">' . h($label) . '</span>';
-                     }],
     'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true, 'render' => function($r) {
                         $out = number_format((int)$r['menge'], 0, ',', '.');
                         // Produktionsfortschritt direkt in der Übersicht: wieviel ist schon produziert (gebucht)?
@@ -155,6 +158,13 @@ $cols = [
     'gesamt_netto' => ['label' => 'Netto', 'sort' => true, 'num' => true, 'render' => fn($r)=> $eur($r['gesamt_netto'])],
     'rechnung_nr'  => ['label' => 'Rechnung', 'sort' => true, 'render' => fn($r)=> $r['rechnung_nr'] ? h($r['rechnung_nr']) : '<span class="muted">–</span>'],
     'status'       => ['label' => 'Fortschritt', 'sort' => true, 'render' => $standBadge],
+    'etikett'      => ['label' => 'Etikett', 'sort' => true, 'render' => function($r) {
+                        $st = (int)($r['etikett'] ?? 9);
+                        if ($st === 9) return '<span class="muted">–</span>';
+                        $lbl = auftrag_design_label((int)$r['id']);
+                        [$farbe, $txt] = [0 => ['var(--err)', 'kein Design hochgeladen'], 1 => ['var(--warn)', 'hochgeladen, noch nicht freigegeben'], 2 => ['var(--ok)', 'hochgeladen und freigegeben']][$st];
+                        return '<span title="' . h($lbl . ': ' . $txt) . '" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' . $farbe . '"></span>';
+                     }],
     'angelegt'     => ['label' => 'Bestellt am', 'sort' => true, 'render' => fn($r)=> !empty($r['angelegt']) ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
     'dauer'        => ['label' => 'Dauer / Stand', 'sort' => true, 'render' => function($r) use ($fertigMap, $jetztUtc, $dauerFmt) {
                         $start = $r['angelegt'] ?? null;
@@ -169,6 +179,12 @@ $cols = [
                         if (($r['status'] ?? '') === 'storniert') return '<span class="muted">–</span>';
                         $t = $dauerFmt($start, $jetztUtc);
                         return $t !== '' ? '<span class="muted">läuft seit ' . h($t) . '</span>' : '<span class="muted">–</span>';
+                     }],
+    'art'          => ['label' => 'Art', 'sort' => true, 'render' => function($r) use ($auftragArt) {
+                        $k = $auftragArt($r);
+                        if ($k === 'none') return '<span class="muted">–</span>';
+                        [$label, $stil, $hint] = auftrag_art_meta($k);   // $stil hier bewusst ignoriert: schlichter Text statt farbiger Kachel
+                        return '<span class="muted" title="' . h($hint) . '">' . h($label) . '</span>';
                      }],
 ];
 
