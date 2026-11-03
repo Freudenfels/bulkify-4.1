@@ -1727,6 +1727,37 @@ $prodDetail = $pid ? one("SELECT p.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kun
     )", [$pid, (int)!empty($k['portal_produkte']), $kid, $kid, $kid, $kid]) : null;
 $prodZutaten = ($prodDetail && $prodDetail['rezeptur_id']) ? all("SELECT z.item_id, z.bezeichnung, z.menge_mg, i.allergene, i.vegan, i.gvo_frei
     FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [(int)$prodDetail['rezeptur_id']]) : [];
+// PIB VOR der Bestellung (Report 3, 03.11.2026): von der Produkt- bzw. Rezepturseite, mit der am Button gewählten Tagesdosis.
+// Sichtbarkeit exakt wie die Detailseite ($prodDetail / $rezDetail) – sonst 404.
+if (($_GET['v'] ?? '') === 'pib_katalog') {
+    $td = max(0, min(50, (int)($_GET['td'] ?? 0)));
+    require_once BX_ROOT . '/core/pdf_pib.php';
+    $pdf = null; $name = 'Produktinfo';
+    if ($prodDetail) {
+        if ($td <= 0 && pib_ausliefern((int)$prodDetail['id'], 'Produktinfo-' . $prodDetail['nummer'])) exit;   // hochgeladenes PIB ohne Tagesdosis
+        $pdf = pib_pdf_bauen((int)$prodDetail['id'], null, $td ?: null, (int)$kid); $name = 'Produktinfo-' . $prodDetail['nummer'];
+    } elseif ($rezDetail) {
+        $pdf = pib_pdf_bauen_rezeptur((int)$rezDetail['id'], $td ?: null); $name = 'Produktinfo-' . $rezDetail['nummer'];
+    }
+    if ($pdf === null) { http_response_code(404); echo 'Produktinformationsblatt nicht verfügbar.'; exit; }
+    log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'PIB heruntergeladen (' . ($prodDetail ? 'Produkt ' . $prodDetail['nummer'] : 'Rezeptur ' . $rezDetail['nummer']) . ')'
+        . ($td > 0 ? ' · Tagesdosis: ' . $td . ' pro Tag' : ' · ohne Tagesdosis'), 'pib');
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]+/', '_', $name) . '.pdf"');
+    header('Content-Length: ' . strlen($pdf));
+    echo $pdf; exit;
+}
+// Beschriftung der Tagesdosis am PIB-Button: „Kapseln pro Tag", „Portionen pro Tag" …
+$pibTagLabel = fn(?string $form) => (in_array((string)$form, ['pulver', 'granulat', 'fluessig', 'gel', ''], true) ? 'Portionen' : form_plural((string)$form)) . ' pro Tag';
+// PIB-Formular (GET, neues Fenster) – Tagesdosis direkt am Button.
+$pibForm = function (string $ziel, int $id, ?string $form, int $vorschlag) use ($token, $pibTagLabel): string {
+    return '<form method="get" target="_blank" style="margin:0;display:inline-flex;gap:6px;align-items:center" title="Wie viele pro Tag? Daraus rechnet das PIB die Werte je Tagesdosis.">'
+        . '<input type="hidden" name="p" value="portal"><input type="hidden" name="token" value="' . h($token) . '">'
+        . '<input type="hidden" name="v" value="pib_katalog"><input type="hidden" name="' . $ziel . '" value="' . $id . '">'
+        . '<label style="font-size:13px;white-space:nowrap">' . h($pibTagLabel($form)) . '</label>'
+        . '<input type="number" name="td" min="0" max="50" value="' . max(1, $vorschlag) . '" style="width:56px;text-align:center;padding:4px">'
+        . '<button class="btn btn-primary btn-sm" type="submit" style="white-space:nowrap">Produktinfo für Ihr Etikett (PIB)</button></form>';
+};
 // Aus den verknüpften Rohstoffen: Wirkstoffe je Zutat (Anzeige in der Zusammensetzung) + Allergen/Vegan/GVO.
 $prodWirk = []; $prodAllergene = []; $veganFlags = []; $gvoFlags = [];
 foreach ($prodZutaten as $z) {
@@ -2856,6 +2887,7 @@ portal_head('Kundenportal · ' . $k['firma']);
               if ($kannProduktAnfrage && in_array($rezDetail['status'], ['eingefroren','freigegeben'], true)): ?>
           <a class="btn btn-primary btn-sm" href="<?= $portalLink('prodanfrage') ?>&rid=<?= (int)$rezDetail['id'] ?>">Als Produkt anfragen</a>
         <?php endif; ?>
+        <?php if ($rezZutaten) echo $pibForm('rid', (int)$rezDetail['id'], (string)$rezDetail['darreichungsform'], 1); ?>
         <?php if (!empty($k['portal_rezeptur_ableiten']) && $rezZutaten): ?>
           <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezeptur_ableiten') ?>&basis=<?= (int)$rezDetail['id'] ?>">Als Basis weiterentwickeln</a>
         <?php endif; ?>
@@ -3008,6 +3040,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-row" style="justify-content:space-between;align-items:center">
       <h1 style="margin:0"><?= h($prodDetail['anzeige_name'] ?? $prodDetail['name']) ?></h1>
       <div class="bx-row" style="gap:8px">
+        <?php if (!empty($prodDetail['rezeptur_id'])) echo $pibForm('pid', (int)$prodDetail['id'], (string)($prodDetail['darreichungsform'] ?? ''), (int)($prodDetail['einnahme_pro_tag'] ?? 1)); ?>
         <?php if (!empty($k['portal_rezeptur_ableiten']) && !empty($prodDetail['rezeptur_id'])): ?>
           <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezeptur_ableiten') ?>&basis=<?= (int)$prodDetail['rezeptur_id'] ?>">Als Basis weiterentwickeln</a>
         <?php endif; ?>
@@ -4518,7 +4551,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <form method="get" target="_blank" class="btn btn-ghost" style="flex:1 1 220px;display:flex;gap:8px;align-items:center;justify-content:center;padding:10px 14px;font-size:15px;cursor:default" title="Wie viele pro Tag? Daraus rechnet das PIB die Werte je Tagesdosis.">
         <input type="hidden" name="p" value="portal"><input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="v" value="pib"><input type="hidden" name="aid" value="<?= (int)$a['id'] ?>">
-        <label style="font-size:13px;white-space:nowrap">pro&nbsp;Tag</label>
+        <label style="font-size:13px;white-space:nowrap"><?= h($pibTagLabel(auftrag_darreichungsform($a))) ?></label>
         <input type="number" name="td" min="0" max="50" value="1" style="width:52px;text-align:center;padding:4px" title="Kapseln/Portionen pro Tag (0 = ohne Tagesdosis)">
         <button class="btn btn-primary btn-sm" type="submit" data-busy="PIB…" style="white-space:nowrap">Produktinfo (PIB)</button>
       </form>
