@@ -9427,9 +9427,13 @@ function kundenetikett_datei_sig(string $datei): string {
     if (is_file($p)) { $h = @sha1_file($p); if ($h) return $h; }
     return 'n:' . basename($datei);
 }
-// Maß-/Format-Vorlage aus dem generischen Glas-Etikett des Produkts.
+// Maß-/Format-Vorlage aus dem generischen Glas-Etikett des Produkts. Maßgeblich ist der TATSÄCHLICHE
+// Behälter (produkt_behaelter_id(): jüngster Auftrags-Behälter mit Vorrang, sonst Produkt-Behälter) –
+// NICHT der rohe produkt.verpackung_id. Sonst übernimmt v1 das Maß eines anderen Glases (z. B. das
+// 200-ml-Endformat „67 x 188", obwohl der Auftrag ein 150-ml-Glas „60 x 172" nutzt). Gleiche Quelle wie
+// produkt_etikettmass()/erp_produkt_etikettmass(), damit Lager und Etikett-Artikel dasselbe Maß sehen.
 function kundenetikett_vorlage(int $produkt_id): array {
-    $vp = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$produkt_id]);
+    $vp = (int) (produkt_behaelter_id($produkt_id) ?? 0);
     if ($vp <= 0) return [];
     $tid = (int) (etikett_id_fuer_behaelter($vp) ?? 0);
     if ($tid <= 0) return ['_vorlage' => null];

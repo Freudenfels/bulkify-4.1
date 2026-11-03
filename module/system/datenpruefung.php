@@ -438,6 +438,61 @@ UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftra
         'fix'   => ['tabelle' => 'auftrag', 'typ' => 'auftrag',
                     'aktion' => fn(array $r) => pulver_auftrag_fuellmenge_korrigieren((int)$r['_id'], (int)$r['stueck_jetzt'], (int)$r['fuellmenge_g'], 'datenpruefung')],
     ],
+    'etikett_mass_abweichung' => [
+        'titel' => 'Etikett: Maß weicht vom Behälter-Endformat ab',
+        'info'  => 'Aktive Kundenetikett-Artikel, deren gespeichertes Maß (breite_mm/hoehe_mm bzw. etikett_final) um mehr als 2 mm vom Endformat des TATSÄCHLICHEN Produkt-Behälters abweicht (Behälter = jüngster Auftrags-Behälter mit Vorrang, sonst Produkt-Behälter; Endformat = item.etikett_final am Behälter). Ursache: v1 hat früher das Maß vom falschen generischen Maß-Etikett übernommen (z. B. 200-ml-Glas „67 x 188" statt 150-ml-Glas „60 x 172"). Beheben zieht Maß und Maß-Vorlage (etikett_vorlage_id) auf das passende Maß-Etikett des Behälters. Das aufgedruckte Design (etikett_druck) bleibt unberührt.',
+        'sql'   => "SELECT i.id AS _id, i.produkt_id AS _pid, CONCAT('?p=verpackung&id=', i.id) AS _link, i.artikelnummer, i.name AS etikett,
+                           i.breite_mm AS _breite_mm, i.hoehe_mm AS _hoehe_mm, i.etikett_final AS _etikett_final, i.etikett_vorlage_id AS _vorlage_alt,
+                           p.nummer AS produkt_nr, p.name AS produkt, CONCAT('?p=produkt&id=', p.id) AS _link_produkt, k.firma AS kunde
+                    FROM item i
+                    JOIN produkt p ON p.id = i.produkt_id
+                    LEFT JOIN kunden k ON k.id = i.kunde_id
+                    WHERE i.verpackung_rolle = 'etikett' AND i.produkt_id IS NOT NULL AND COALESCE(i.gesperrt,0) = 0
+                    ORDER BY i.id DESC",
+        'zeilen' => function (array $rows): array {
+            // Je Zeile: Endformat des tatsächlichen Behälters gegen das eigene Maß des Etikett-Artikels halten.
+            // Maße zum Vergleich auf [groß, klein] normieren (Orientierung B x H / H x B egal), Toleranz 2 mm.
+            $out = [];
+            foreach ($rows as $r) {
+                $pid = (int)$r['_pid'];
+                $beh = produkt_etikettmass($pid);                 // [groß, klein] Endformat aus dem Behälter, sonst null
+                if (!$beh) continue;                              // ohne Behälter-Endformat gibt es nichts zu vergleichen
+                $eigen = (!empty($r['_breite_mm']) && !empty($r['_hoehe_mm']))
+                       ? [(float)$r['_breite_mm'], (float)$r['_hoehe_mm']]
+                       : etikett_masse((string)($r['_etikett_final'] ?? ''));
+                $eigenN = $eigen ? [max($eigen[0], $eigen[1]), min($eigen[0], $eigen[1])] : null;
+                $abw = $eigenN ? max(abs($eigenN[0] - $beh[0]), abs($eigenN[1] - $beh[1])) : null;
+                if ($eigenN !== null && $abw <= 2.0) continue;    // passt bis 2 mm -> kein Treffer
+                $vl = kundenetikett_vorlage($pid);                // Ziel-Maß/Vorlage aus dem tatsächlichen Behälter
+                $zielMass = (!empty($vl['breite_mm']) && !empty($vl['hoehe_mm']))
+                          ? ((float)$vl['breite_mm'] . ' x ' . (float)$vl['hoehe_mm'] . ' mm')
+                          : (!empty($vl['etikett_final']) ? (string)$vl['etikett_final'] : null);
+                $r['etikett_mass']        = $eigenN ? ((float)$eigenN[0] . ' x ' . (float)$eigenN[1] . ' mm') : 'kein Maß';
+                $r['behaelter_endformat'] = (float)$beh[0] . ' x ' . (float)$beh[1] . ' mm';
+                $r['abweichung_mm']       = $eigenN ? round((float)$abw, 1) : null;
+                $r['_fixbar']             = !empty($vl['_vorlage']) && $zielMass !== null;
+                $r['aenderung']           = $r['_fixbar'] ? ('Maß/Vorlage -> ' . $zielMass) : 'nicht automatisch: kein passendes Maß-Etikett zum Behälter';
+                $out[] = $r;
+            }
+            return $out;
+        },
+        'korrektur' => "-- je angehaktem Etikett: Maß + Maß-Vorlage auf das passende Maß-Etikett des Behälters ziehen (etikett_druck bleibt)\nUPDATE item SET breite_mm=<B>, hoehe_mm=<H>, etikett_format=<Format>, etikett_final=<Endformat>, etikett_vorlage_id=<Maß-Etikett>\n WHERE id=<Etikett> AND verpackung_rolle='etikett' AND produkt_id IS NOT NULL;   (Maße aus kundenetikett_vorlage(Produkt) = Behälter)",
+        'ohne_fix'  => 'Ändert nur die Maß-Felder des Etikett-Artikels, nicht das aufgedruckte Design und keine Aufträge. Zeilen ohne passendes Maß-Etikett zum Behälter sind nicht anwählbar – dort fehlt die Maß-Vorlage. Ist stattdessen der Behälter am Produkt/Auftrag falsch, dort korrigieren statt hier zu beheben.',
+        'fix'   => ['tabelle' => 'item', 'typ' => 'item',
+                    'waehlbar' => fn(array $r) => !empty($r['_fixbar']),
+                    'aktion' => function (array $r): int {
+                        $iid = (int)$r['_id']; $pid = (int)$r['_pid'];
+                        $vl = kundenetikett_vorlage($pid);
+                        if (empty($vl['_vorlage'])) return 0;
+                        $vor = one("SELECT * FROM item WHERE id=?", [$iid]);
+                        if (!$vor) return 0;
+                        q("UPDATE item SET breite_mm=?, hoehe_mm=?, etikett_format=?, etikett_final=?, etikett_vorlage_id=?
+                           WHERE id=? AND verpackung_rolle='etikett' AND produkt_id IS NOT NULL AND COALESCE(gesperrt,0)=0",
+                          [$vl['breite_mm'] ?? null, $vl['hoehe_mm'] ?? null, $vl['etikett_format'] ?? null, $vl['etikett_final'] ?? null, (int)$vl['_vorlage'], $iid]);
+                        $nach = one("SELECT * FROM item WHERE id=?", [$iid]);
+                        return aenderung_protokollieren('item', $iid, $vor, $nach, 'datenpruefung') > 0 ? 1 : 0;
+                    }],
+    ],
 ];
 
 // Artikelnummer für ein Kundenetikett: dieselbe Logik wie kundenetikett_version_anlegen() (Aufräumen 17) –
