@@ -332,10 +332,39 @@ $CHECKS = [
             return array_values($out);
         },
         'korrektur' => "-- je angehaktem Produkt: Behälter-Teil im Namen auf den hinterlegten Behälter ziehen (alter Name -> Synonyme)\nproduktname: ' · <Behälter im Namen>' -> ' · <Behälter am Produkt>'   (produkt_name_behaelter_nachziehen)",
-        'ohne_fix'  => 'Nur der Name ändert sich (Auftrags-Namen sind als Snapshot gespeichert und bleiben). Ist der Behälter am Produkt falsch, bitte dort korrigieren statt hier zu beheben.',
+        'ohne_fix'  => 'Der Name ändert sich, dazu die Auftrags-Namen dieses Produkts, die im neuen Behälter laufen. Ist der Behälter am Produkt falsch, bitte dort korrigieren statt hier zu beheben.',
         'fix'   => ['tabelle' => 'produkt', 'typ' => 'produkt',
                     'waehlbar' => fn(array $r) => !empty($r['neuer_name']),
                     'aktion' => fn(array $r) => produkt_name_behaelter_nachziehen((int)$r['_id'], (int)$r['_alt_vp'], (int)$r['_neu_vp'], 'datenpruefung') !== '' ? 1 : 0],
+    ],
+    'auftrag_name_behaelter' => [
+        'titel' => 'Auftrag: Name nennt einen anderen Behälter als der Auftrag',
+        'info'  => 'Der Auftrag speichert den Produktnamen zur Auftragszeit (Kopf, AB-PDF). Wurde der Behälter danach geändert, steht oben z. B. „100 ml Glas“, der Auftrag läuft aber im 150 ml Glas. Maßgeblich ist der Behälter am Auftrag, sonst der am Produkt. Beheben tauscht nur den Behälter-Teil im Auftrags-Namen. Bedruckte Kundenbehälter sind ausgenommen.',
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, a.status, kd.firma AS kunde, a.produkt_bezeichnung AS name_im_auftrag,
+                           vi.name AS behaelter_im_namen, vc.name AS behaelter_des_auftrags
+                    FROM auftrag a
+                    LEFT JOIN produkt p ON p.id = a.produkt_id
+                    LEFT JOIN kunden kd ON kd.id = a.kunde_id
+                    JOIN item vc ON vc.id = COALESCE(NULLIF(a.verpackung_id,0), p.verpackung_id)
+                    JOIN item vi ON vi.kategorie = 'verpackung' AND COALESCE(vi.verpackung_rolle,'primaer') = 'primaer' AND vi.id <> vc.id
+                                AND CHAR_LENGTH(vi.name) >= 3 AND INSTR(a.produkt_bezeichnung, CONCAT(' · ', vi.name)) > 0
+                    WHERE a.status <> 'storniert' AND INSTR(a.produkt_bezeichnung, CONCAT(' · ', vc.name)) = 0 AND COALESCE(vc.kundenspezifisch,0) = 0
+                    ORDER BY a.id DESC, CHAR_LENGTH(vi.name) DESC",
+        'zeilen' => function (array $rows): array {
+            $out = [];
+            foreach ($rows as $r) if (!isset($out[(int)$r['_id']])) $out[(int)$r['_id']] = $r;
+            foreach ($out as &$r) {
+                $neu = preg_replace('/ · ' . preg_quote((string)$r['behaelter_im_namen'], '/') . '(?=$|\s+v\d+$)/u', ' · ' . $r['behaelter_des_auftrags'], (string)$r['name_im_auftrag'], 1);
+                $r['neuer_name'] = $neu !== (string)$r['name_im_auftrag'] ? $neu : null;
+                $r['aenderung'] = $r['neuer_name'] ? 'Name -> ' . $r['neuer_name'] : 'nicht automatisch: Behälter steht nicht am Namensende';
+            }
+            return array_values($out);
+        },
+        'korrektur' => "-- je angehaktem Auftrag: Behälter-Teil im Auftrags-Namen auf den Behälter des Auftrags ziehen\nUPDATE auftrag SET produkt_bezeichnung = <neuer_name> WHERE id = <Auftrag>;   (auftrag_name_behaelter_nachziehen)",
+        'ohne_fix'  => 'Nur der gespeicherte Auftrags-Name ändert sich (Kopf, Listen, AB-PDF beim nächsten Öffnen). Ist der Behälter am Auftrag falsch, im Auftrag unter Verpackung korrigieren statt hier zu beheben.',
+        'fix'   => ['tabelle' => 'auftrag', 'typ' => 'auftrag',
+                    'waehlbar' => fn(array $r) => !empty($r['neuer_name']),
+                    'aktion' => fn(array $r) => auftrag_name_behaelter_nachziehen((int)$r['_id'], 'datenpruefung') !== '' ? 1 : 0],
     ],
     'pulver_kundenpreis' => [
         'titel' => 'Pulver: Kundenpreis mit Portionen statt g je Packung',

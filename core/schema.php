@@ -4863,6 +4863,29 @@ function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int
     return $neu;
 }
 
+// Auftrags-Namen (produkt_bezeichnung, Snapshot zur Auftragszeit) auf den Behälter DES AUFTRAGS ziehen: Der Kopf
+// zeigte „· 100 ml Glas“, obwohl der Auftrag (bzw. sein Produkt) im 150 ml Glas läuft (AB 590, 03.11.2026).
+// Nur der Behälter-Teil („ · <Name>“, ggf. vor „ vN“) wird getauscht, der Rest des Snapshots bleibt. Bedruckte
+// Kundenbehälter gehören nicht in den Namen (Blocker 1) -> dann nichts. Rückgabe: neuer Name ('' = nichts geändert).
+function auftrag_name_behaelter_nachziehen(int $auftrag_id, string $route = ''): string {
+    $a = one("SELECT a.id, a.produkt_bezeichnung, COALESCE(NULLIF(a.verpackung_id,0), p.verpackung_id) AS vp
+              FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    $name = trim((string)($a['produkt_bezeichnung'] ?? ''));
+    if (!$a || $name === '' || (int)$a['vp'] <= 0) return '';
+    $ist = one("SELECT name, COALESCE(kundenspezifisch,0) AS ks FROM item WHERE id=?", [(int)$a['vp']]);
+    if (!$ist || (int)$ist['ks'] === 1 || trim((string)$ist['name']) === '') return '';
+    if (mb_strpos($name, ' · ' . $ist['name']) !== false) return '';
+    // Längster passender Behältername (z. B. „100 ml Glas braun“ vor „100 ml Glas“).
+    $alt = (string) scalar("SELECT name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND id<>?
+                             AND CHAR_LENGTH(name) >= 3 AND INSTR(?, CONCAT(' · ', name)) > 0 ORDER BY CHAR_LENGTH(name) DESC LIMIT 1", [(int)$a['vp'], $name]);
+    if ($alt === '') return '';
+    $neu = mb_substr(preg_replace('/ · ' . preg_quote($alt, '/') . '(?=$|\s+v\d+$)/u', ' · ' . $ist['name'], $name, 1), 0, 190);
+    if ($neu === $name) return '';
+    q("UPDATE auftrag SET produkt_bezeichnung=? WHERE id=?", [$neu, $auftrag_id]);
+    if (function_exists('aenderung_protokollieren')) aenderung_protokollieren('auftrag', $auftrag_id, ['produkt_bezeichnung' => $name], ['produkt_bezeichnung' => $neu], $route ?: 'behaelter_name');
+    return $neu;
+}
+
 // Der Produktname trägt den Behälter („Rezeptur · 120 Kapseln · 100 ml Glas", produkt_variante_id). Wird der Behälter-
 // Slot geändert, zieht der Behälter-Teil im Namen mit – sonst steht oben „100 ml Glas", unten 150 ml (03.11.2026).
 // Nur wenn der alte Behältername als Namensteil („ · <Name>", ggf. vor „ vN") vorkommt; der bisherige Name wandert in
@@ -4886,6 +4909,10 @@ function produkt_name_behaelter_nachziehen(int $produkt_id, int $alt_vp, int $ne
     q("UPDATE produkt SET name=?, synonyme=? WHERE id=?", [$neuName, $syn ?: null, $produkt_id]);
     $nach = one("SELECT * FROM produkt WHERE id=?", [$produkt_id]) ?: [];
     if (function_exists('aenderung_protokollieren')) aenderung_protokollieren('produkt', $produkt_id, $p, $nach, $route ?: 'behaelter_name');
+    // Aufträge dieses Produkts im neuen Behälter tragen den alten Namen als Snapshot -> Kopf zeigte weiter „100 ml“.
+    foreach (all("SELECT a.id FROM auftrag a WHERE a.produkt_id=? AND COALESCE(NULLIF(a.verpackung_id,0), ?)=?
+                    AND INSTR(a.produkt_bezeichnung, CONCAT(' · ', ?)) > 0", [$produkt_id, $neu_vp, $neu_vp, $alt]) as $o)
+        auftrag_name_behaelter_nachziehen((int)$o['id'], $route ?: 'behaelter_name');
     return $neuName;
 }
 // Das Produkt zu (Rezeptur des Vorlage-Produkts x Packungsgröße + Behälter) finden – oder anlegen.

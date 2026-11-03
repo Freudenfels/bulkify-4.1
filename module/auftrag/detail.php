@@ -154,6 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $vp = (int)($_POST['verpackung_id'] ?? 0);
     if ($vp > 0 && !scalar("SELECT id FROM item WHERE id=? AND kategorie='verpackung'", [$vp])) $vp = 0;
     q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vp ?: null, $id]);
+    auftrag_name_behaelter_nachziehen($id, 'auftrag');            // „· 100 ml Glas“ im Auftrags-Namen mitziehen
     if (function_exists('bedarf_bump')) bedarf_bump();            // Material-/Bedarf-Cache neu rechnen
     header('Location: ?p=auftrag&id=' . $id . '&vpok=1'); exit;
 }

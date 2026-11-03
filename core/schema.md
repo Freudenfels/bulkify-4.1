@@ -396,3 +396,6 @@ Aufgerufen in `auftrag_aus_import()` und `kontingent_abruf()` (dort fehlte der H
 - Die Version wird neu bestimmt; der alte Name wird Synonym; Feld-Protokoll.
 - Nicht bei bedrucktem Kundenbehälter (Blocker 1).
 - Aufgerufen in der Produktseite (Behälter geändert, Name nicht von Hand geändert), in der Vorbereitung „als Standard“ und in der Datenprüfung `produkt_name_behaelter`.
+- Zieht danach die Auftrags-Namen dieses Produkts mit, die im neuen Behälter laufen (Auftrag ohne eigenen Behälter oder mit dem neuen).
+
+`auftrag_name_behaelter_nachziehen($aid, $route)` (03.11.2026, AB 590): Der Auftrag speichert den Produktnamen als Snapshot (`produkt_bezeichnung`). Nennt er einen anderen Primärbehälter als der Behälter des Auftrags (`auftrag.verpackung_id`, sonst Produkt), wird nur der Behälter-Teil getauscht (längster Treffer, ggf. vor „ vN“) und im aenderung_log protokolliert. Bedruckte Kundenbehälter: nichts. Aufgerufen in der Auftragsseite (Verpackung speichern), Vorbereitung (Glas nur für diesen Auftrag), `produkt_name_behaelter_nachziehen` und der Datenprüfung `auftrag_name_behaelter`.

@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'glas_setzen' && $paId) {
         [$aid, $pid] = vp_ids($paId);
         $vid = ($_POST['verpackung_id'] ?? '') !== '' ? (int)$_POST['verpackung_id'] : null;
-        if ($aid) q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vid, $aid]);
+        if ($aid) { q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vid, $aid]); auftrag_name_behaelter_nachziehen((int)$aid, 'vorbereitung'); }
         if (($_POST['verp_scope'] ?? '') === 'standard' && $vid && $pid) {
             $altVp = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$pid]);
             q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vid, $pid]);

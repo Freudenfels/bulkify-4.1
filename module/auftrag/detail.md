@@ -227,3 +227,6 @@ Die Kacheln oben am Auftrag sind ein responsives Raster (`auto-fill, minmax(160p
 `liefertermin_setzen`, protokolliert). Der Kunde sieht ihn im Portal über dem Fortschritt; leer = geplanter Produktionstermin.
 
 **Nachrichten mit dem Kunden (Report 5):** Kasten oben im Reiter Details (`kunde_nachricht_panel`), Antwort = Aktion `kunde_nachricht` -> gespeichert, Mail an den Kunden (`mail_kunde_einfach`, Link auf die Bestellung), im Portal sichtbar; Kunden-Nachrichten werden beim Öffnen als gelesen markiert.
+
+## Behälter im Auftrags-Namen (03.11.2026)
+Der Kopf zeigt den Namens-Snapshot (`produkt_bezeichnung`). Beim Speichern der Verpackung zieht `auftrag_name_behaelter_nachziehen` den Behälter-Teil („· 100 ml Glas“) auf den gewählten Behälter; vorher blieb oben 100 ml stehen, obwohl der Auftrag im 150 ml Glas lief (AB 590).
