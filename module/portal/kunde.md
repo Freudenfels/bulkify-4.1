@@ -379,3 +379,7 @@ Produktionsdatum, Status „in Qualitätsprüfung/freigegeben“) – immer, sob
 Produktionsbericht-Link im selben Block (ersetzt das frühere eigene Panel). Das Laborprüfung-Panel zeigt die Übersicht nicht doppelt.
 
 **PIB vor der Bestellung (03.11.2026):** Produkt- und Rezepturseite haben den Button „Produktinfo für Ihr Etikett (PIB)“ mit Tagesdosis-Feld („Kapseln pro Tag“, „Portionen pro Tag“ …). Aufruf `v=pib_katalog&pid=…|rid=…&td=…` – gleiche Sichtbarkeit wie die Detailseite (`$prodDetail`/`$rezDetail`), sonst 404; Produkt mit kundenspezifischem Namen, ohne Tagesdosis gilt ein hochgeladenes PIB. Bestellseite: Feld heißt jetzt „Kapseln pro Tag“ statt „pro Tag“.
+
+**Versand an der Bestellung (Report 4, 03.11.2026):** Im Dokumente-Kasten „Versand“: Lieferscheine als PDF
+(`v=lieferschein_pdf&lid=`, nur eigene Bestellungen) und Sendungen (`auftrag_sendungen()`, „Sendung verfolgen“). Über dem
+Fortschritt der voraussichtliche Termin (`auftrag_liefertermin_text()`).

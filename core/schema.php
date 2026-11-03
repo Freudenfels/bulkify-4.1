@@ -1236,6 +1236,10 @@ function init_schema(): void {
     ensure_column('charge', 'auftrag_id', "INT NULL");
     ensure_column('charge', 'bestellung_position_id', "INT NULL");
     ensure_column('charge', 'tracking', "TEXT NULL");   // Tracking-Code(s) der eingegangenen Pakete/Palette (Wareneingang, je Zeile einer)
+    ensure_column('beleg', 'versand_tracking', "VARCHAR(200) NULL");   // Lieferschein: Sendungs-/Speditionsnummer(n) an den Kunden (Kunde sieht sie im Portal)
+    ensure_column('beleg', 'versand_dienst', "VARCHAR(40) NULL");      // dhl|dpd|ups|gls|cargoboard|spedition|sonstig
+    ensure_column('auftrag', 'liefertermin_von', "DATE NULL");         // voraussichtlicher Liefer-/Fertigtermin (Zeitraum) – Kunde sieht ihn im Fortschritt
+    ensure_column('auftrag', 'liefertermin_bis', "DATE NULL");
     ensure_column('charge', 'qm_freigabe_am', "DATETIME NULL");       // QM-Freigabe (quarantaene -> frei), UTC – Fertigware: Auslöser für Bericht + CoA
     ensure_column('charge', 'qm_freigabe_von', "VARCHAR(190) NULL");
     ensure_column('charge', 'pa_id', "INT NULL");   // Produktionsauftrag der Fertigware-Charge (Rückverfolgung Zusammensetzung)
@@ -10450,6 +10454,48 @@ function fertigware_qm_freigabe_nach(int $charge_id, string $wer = ''): array {
     } catch (\Throwable $e) { $out['fehler'] = $e->getMessage(); }
     return $out;
 }
+// Versanddienste für die Sendungsnummer am Lieferschein + Link zur Sendungsverfolgung (null = kein öffentlicher Link).
+function versand_dienste(): array {
+    return ['dhl' => 'DHL', 'dpd' => 'DPD', 'ups' => 'UPS', 'gls' => 'GLS', 'cargoboard' => 'Cargoboard (Spedition)', 'spedition' => 'Spedition', 'sonstig' => 'Sonstiger'];
+}
+function versand_tracking_url(string $dienst, string $nr): ?string {
+    $nr = trim($nr); if ($nr === '') return null; $u = rawurlencode($nr);
+    return match (strtolower($dienst)) {
+        'dhl' => 'https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=' . $u,
+        'dpd' => 'https://tracking.dpd.de/status/de_DE/parcel/' . $u,
+        'ups' => 'https://www.ups.com/track?loc=de_DE&tracknum=' . $u,
+        'gls' => 'https://gls-group.com/DE/de/paketverfolgung?match=' . $u,
+        default => null,
+    };
+}
+// Sendungen zu einem Auftrag: Sendungsnummern an den Lieferscheinen + Sendungen der Lager-App (lg_versand), deren Positionen
+// Fertigware-Chargen DIESES Auftrags enthalten. Rückgabe je Sendung: ['nr','dienst','url','datum','quelle'].
+function auftrag_sendungen(int $auftrag_id): array {
+    $out = []; $dienste = versand_dienste();
+    foreach (all("SELECT nummer, datum, versand_tracking, versand_dienst FROM beleg WHERE auftrag_id=? AND typ='lieferschein' AND COALESCE(versand_tracking,'')<>'' ORDER BY id", [$auftrag_id]) as $b)
+        foreach (preg_split('/[\s,;]+/', (string)$b['versand_tracking']) as $nr) if ($nr !== '')
+            $out[$nr] = ['nr' => $nr, 'dienst' => $dienste[(string)$b['versand_dienst']] ?? '', 'url' => versand_tracking_url((string)$b['versand_dienst'], $nr), 'datum' => (string)$b['datum'], 'quelle' => (string)$b['nummer']];
+    if (table_exists('lg_versand') && table_exists('lg_versand_pos')) {
+        foreach (all("SELECT DISTINCT v.tracking, v.carrier, DATE(COALESCE(v.versendet_am, v.angelegt)) AS datum, v.nummer
+                      FROM lg_versand v JOIN lg_versand_pos vp ON vp.versand_id=v.id JOIN charge c ON c.id=vp.charge_id
+                      WHERE v.status<>'storniert' AND COALESCE(v.tracking,'')<>''
+                        AND (c.auftrag_id=? OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=?))", [$auftrag_id, $auftrag_id]) as $v)
+            foreach (preg_split('/[\s,;]+/', (string)$v['tracking']) as $nr) if ($nr !== '' && !isset($out[$nr]))
+                $out[$nr] = ['nr' => $nr, 'dienst' => $dienste[(string)$v['carrier']] ?? '', 'url' => versand_tracking_url((string)$v['carrier'], $nr), 'datum' => (string)$v['datum'], 'quelle' => (string)$v['nummer']];
+    }
+    return array_values($out);
+}
+// Voraussichtlicher Termin für den Kunden (Portal-Fortschritt): vom Team gepflegter Zeitraum (auftrag.liefertermin_von/_bis),
+// sonst der geplante Produktionstermin. '' = nichts bekannt bzw. schon versendet/storniert.
+function auftrag_liefertermin_text(array $a): string {
+    if (in_array((string)($a['status'] ?? ''), ['versendet', 'storniert'], true)) return '';
+    $f = fn($d) => date('d.m.Y', strtotime((string)$d));
+    $von = (string)($a['liefertermin_von'] ?? ''); $bis = (string)($a['liefertermin_bis'] ?? '');
+    if ($von !== '' && $bis !== '' && $bis !== $von) return 'Voraussichtliche Lieferung: ' . date('d.m.', strtotime($von)) . ' – ' . $f($bis);
+    if ($von !== '' || $bis !== '') return 'Voraussichtliche Lieferung: ' . $f($von ?: $bis);
+    $g = (string) scalar("SELECT geplant_am FROM produktionsauftrag WHERE auftrag_id=? AND status NOT IN ('erledigt','storniert') AND geplant_am IS NOT NULL ORDER BY geplant_am LIMIT 1", [(int)($a['id'] ?? 0)]);
+    return $g !== '' ? 'Produktion geplant ab ' . $f($g) : '';
+}
 function auftrag_fertigware_chargen(int $auftrag_id, bool $nurFrei = false): array {
     if ($auftrag_id <= 0) return [];
     return all("SELECT c.* FROM charge c JOIN item i ON i.id=c.item_id
@@ -10544,7 +10590,7 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     // Kunde: Versand-/Lieferschein-Mail (Teil-/Restlieferung), inkl. Hinweis auf die freigegebene Rechnung (Paket Mails).
     if (function_exists('mail_kunde_versand') && mail_bereit()) nach_antwort(fn() => mail_kunde_versand($auftrag_id, $lsId, (int)$ship, (bool)$voll));
     bedarf_bump();   // Fertigware ausgebucht
-    return ['ok'=>true, 'voll'=>$voll, 'versendet'=>$ship, 'gesamt'=>$gesamt, 'kumuliert'=>$neuVersendet,
+    return ['ok'=>true, 'voll'=>$voll, 'versendet'=>$ship, 'gesamt'=>$gesamt, 'kumuliert'=>$neuVersendet, 'ls_id'=>(int)($lsId ?? 0),
             'msg'=>$voll ? 'Versendet.' : ('Teillieferung ' . number_format($ship,0,',','.') . ' versendet – offen bleiben ' . number_format($gesamt - $neuVersendet,0,',','.') . '.')];
 }
 // Nach Produktionsabschluss: war schon (per Teilversand während der Produktion) alles geliefert, geht der Auftrag direkt auf 'versendet'

@@ -358,3 +358,9 @@ läuft, wenn QM eine verkaufsfertige Charge (mit pa_id) aus der Quarantäne frei
 Produktionsbericht frei (`produktionsauftrag.bericht_freigegeben_*`, außer `bericht_zurueckgehalten=1`) und erzeugt – wenn
 `app_meta coa_uebersicht_auto=1` – das zusammenfassende CoA (`core/coa_uebersicht.php`, einmal je Charge, nicht bei gemessenem CoA).
 Aufrufer: module/lager/wareneingang.php (Dashboard-Quarantäne) und `?p=api_qm_freigabe` (Lager-App). Wirft nie.
+
+**Versand für den Kunden (Report 4, 03.11.2026):** `beleg.versand_tracking`/`versand_dienst` (Lieferschein), `versand_dienste()`,
+`versand_tracking_url()` (DHL/DPD/UPS/GLS; Spedition ohne Link), `auftrag_sendungen($aid)` = Nummern am Lieferschein + Sendungen
+der Lager-App (`lg_versand` über Positionen mit Fertigware-Chargen des Auftrags). `auftrag.liefertermin_von/_bis` +
+`auftrag_liefertermin_text()` (Zeitraum, sonst „Produktion geplant ab …“ aus `produktionsauftrag.geplant_am`).
+`auftrag_versenden_menge()` gibt zusätzlich `ls_id` zurück.

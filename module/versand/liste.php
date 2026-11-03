@@ -10,7 +10,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'verse
     $mRaw = preg_replace('/\D+/', '', (string)($_POST['menge'] ?? ''));
     $m    = $mRaw !== '' ? (int)$mRaw : null;
     $res  = auftrag_versenden_menge((int)($_POST['auftrag_id'] ?? 0), $m);
+    // Sendungs-/Speditionsnummer gleich am neuen Lieferschein festhalten (Kunde sieht sie im Portal mit Link).
+    $trk = trim(mb_substr((string)($_POST['tracking'] ?? ''), 0, 200)); $dst = (string)($_POST['dienst'] ?? '');
+    if (!empty($res['ok']) && !empty($res['ls_id']) && $trk !== '')
+        q("UPDATE beleg SET versand_tracking=?, versand_dienst=? WHERE id=? AND typ='lieferschein'", [$trk, isset(versand_dienste()[$dst]) ? $dst : null, (int)$res['ls_id']]);
     header('Location: ?p=versand&' . ($res['ok'] ? ((!empty($res['voll']) ? 'ok=1' : 'teil=' . urlencode($res['msg']))) : 'fehler=' . urlencode($res['msg']))); exit;
+}
+// Sendungsnummer an einem Lieferschein nachtragen/ändern (z. B. wenn die Spedition die Nummer erst später liefert).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'tracking_setzen') {
+    $dst = (string)($_POST['dienst'] ?? '');
+    q("UPDATE beleg SET versand_tracking=?, versand_dienst=? WHERE id=? AND typ='lieferschein'",
+      [trim(mb_substr((string)($_POST['tracking'] ?? ''), 0, 200)) ?: null, isset(versand_dienste()[$dst]) ? $dst : null, (int)($_POST['beleg_id'] ?? 0)]);
+    header('Location: ?p=versand&trk=1'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'an_lager2') {
     $res = auftrag_ins_fremdlager((int)($_POST['auftrag_id'] ?? 0));
@@ -27,7 +38,7 @@ $rows = all("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name,
                         AND (c.auftrag_id=a.id OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=a.id AND status<>'storniert')))
                ELSE (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM item i JOIN charge c ON c.item_id=i.id
                       WHERE i.produkt_id=a.produkt_id AND i.kategorie='verkaufsfertig' AND c.status='frei' AND c.fremd_kunde_id IS NULL) END AS fertig_frei,   -- ohne Kundenware (S-16)
-             (SELECT GROUP_CONCAT(CONCAT(b.id,':',b.nummer) ORDER BY b.id SEPARATOR '|')
+             (SELECT GROUP_CONCAT(CONCAT(b.id,':',b.nummer,':',COALESCE(b.versand_dienst,''),':',COALESCE(b.versand_tracking,'')) ORDER BY b.id SEPARATOR '|')
               FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='lieferschein') AS lieferscheine,
              COALESCE(k.nutzt_fulfillment,0) AS fulfillment
              FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
@@ -83,8 +94,12 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
         if (!$ls) { echo '<span class="muted">–</span>'; }
         else {
             $links = [];
-            foreach ($ls as $eintrag) { [$lid, $lnr] = array_pad(explode(':', $eintrag, 2), 2, '');
-                $links[] = '<a href="?p=lieferschein_pdf&id=' . (int)$lid . '" target="_blank" rel="noopener" title="Lieferschein als PDF öffnen/drucken">' . h($lnr) . '</a>'; }
+            foreach ($ls as $eintrag) { [$lid, $lnr, $ldst, $ltrk] = array_pad(explode(':', $eintrag, 4), 4, '');
+                $links[] = '<a href="?p=lieferschein_pdf&id=' . (int)$lid . '" target="_blank" rel="noopener" title="Lieferschein als PDF öffnen/drucken">' . h($lnr) . '</a>'
+                    . '<form method="post" style="margin:2px 0 4px;display:flex;gap:4px;align-items:center"><input type="hidden" name="aktion" value="tracking_setzen"><input type="hidden" name="beleg_id" value="' . (int)$lid . '">'
+                    . '<select name="dienst" style="font-size:12px;padding:2px 4px"><option value="">Dienst</option>'
+                    . implode('', array_map(fn($k, $l) => '<option value="' . h($k) . '"' . ($k === $ldst ? ' selected' : '') . '>' . h($l) . '</option>', array_keys(versand_dienste()), versand_dienste()))
+                    . '</select><input type="text" name="tracking" value="' . h($ltrk) . '" placeholder="Sendungsnr." style="width:130px;font-size:12px;padding:2px 6px"><button class="btn btn-ghost btn-sm" type="submit">Speichern</button></form>'; }
             echo implode('<br>', $links);
         }
       ?></td>
@@ -96,6 +111,8 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
               <form method="post" style="margin:0;display:flex;gap:6px;align-items:center">
                 <input type="hidden" name="aktion" value="versenden"><input type="hidden" name="auftrag_id" value="<?= (int)$r['id'] ?>">
                 <input type="number" name="menge" value="<?= $maxShip ?>" min="1" max="<?= $maxShip ?>" style="width:90px;text-align:right;padding:5px 8px" title="Wieviele Packungen jetzt versenden? Weniger als offen = Teilversand.">
+                <select name="dienst" style="padding:5px 6px" title="Versanddienst (für den Link zur Sendungsverfolgung im Kundenportal)"><option value="">Dienst</option><?php foreach (versand_dienste() as $dk => $dl): ?><option value="<?= h($dk) ?>"><?= h($dl) ?></option><?php endforeach; ?></select>
+                <input type="text" name="tracking" placeholder="Sendungsnr. (optional)" style="width:150px;padding:5px 8px" title="Sendungs-/Speditionsnummer – der Kunde sieht sie im Portal an der Bestellung. Später nachtragbar.">
                 <button class="btn btn-primary btn-sm" type="submit" title="Diese Menge an den Kunden ausliefern (Lieferschein, Fertigware ausbuchen)"><?= $maxShip >= $offen ? ($teil ? 'Rest senden' : 'An Kunden senden') : 'Senden' ?></button>
               </form>
               <?php if ($ff && $r['status'] === 'erledigt'): ?>

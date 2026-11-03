@@ -312,6 +312,14 @@ if ($k && ($_GET['v'] ?? '') === 'analyse_datei') {
     header('Content-Length: ' . filesize($pf));
     readfile($pf); exit;
 }
+// Lieferschein als PDF (Report 4, 03.11.2026): nur Lieferscheine zu EIGENEN Bestellungen. Charge auf dem Lieferschein = Fertigware (St-06).
+if ($k && ($_GET['v'] ?? '') === 'lieferschein_pdf') {
+    $lid = (int)($_GET['lid'] ?? 0);
+    $ls = $lid ? one("SELECT b.id, b.nummer FROM beleg b JOIN auftrag a ON a.id=b.auftrag_id WHERE b.id=? AND b.typ='lieferschein' AND a.kunde_id=?", [$lid, (int)$k['id']]) : null;
+    require_once BX_ROOT . '/core/pdf_lieferschein.php';
+    if (!$ls || !lieferschein_pdf_ausliefern((int)$ls['id'], (string)$ls['nummer'])) { http_response_code(404); echo 'Lieferschein nicht gefunden.'; }
+    exit;
+}
 // Hochgeladene Original-Rechnung (Alt-Import) ausliefern: nur eigene, freigegebene Rechnung.
 if ($k && ($_GET['v'] ?? '') === 'rechnung_datei') {
     $bid = (int)($_GET['id'] ?? 0);
@@ -4253,6 +4261,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if ($track): ?>
   <div class="bx-panel">
     <h2 style="margin:0 0 18px;font-size:16px">Fortschritt</h2>
+    <?php $ltTxt = auftrag_liefertermin_text($a); if ($ltTxt !== ''): ?><p style="margin:-8px 0 14px;font-size:14px"><?= h($ltTxt) ?></p><?php endif; ?>
     <div style="overflow-x:auto">
       <ul class="bx-htrack">
         <?php foreach ($track as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>
@@ -4510,6 +4519,27 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <div class="bx-panel" style="margin:0">
     <h2 style="margin:0 0 14px;font-size:16px">Dokumente</h2>
+    <?php // Versand (Report 4): Lieferscheine als PDF + Sendungs-/Speditionsnummern mit Link zur Sendungsverfolgung.
+          $vsLs = all("SELECT id, nummer, datum, menge FROM beleg WHERE auftrag_id=? AND typ='lieferschein' ORDER BY id", [(int)$a['id']]);
+          $vsSend = auftrag_sendungen((int)$a['id']);
+          if ($vsLs || $vsSend): ?>
+    <div class="muted" style="font-size:13px;margin:-6px 0 10px">Versand</div>
+    <div style="margin-bottom:16px;border:1px solid var(--line);border-radius:10px">
+      <?php foreach ($vsLs as $i => $l): ?>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:10px 12px<?= $i ? ';border-top:1px solid var(--line)' : '' ?>">
+        <div>Lieferschein <?= h((string)$l['nummer']) ?> <span class="muted" style="font-size:13px"><?= $l['datum'] ? h(date('d.m.Y', strtotime((string)$l['datum']))) : '' ?><?= (float)$l['menge'] > 0 ? ' · ' . number_format((float)$l['menge'], 0, ',', '.') . ' Packungen' : '' ?></span></div>
+        <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('lieferschein_pdf') ?>&lid=<?= (int)$l['id'] ?>">Lieferschein (PDF)</a>
+      </div>
+      <?php endforeach; ?>
+      <?php foreach ($vsSend as $i => $sd): ?>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:10px 12px<?= ($i || $vsLs) ? ';border-top:1px solid var(--line)' : '' ?>">
+        <div>Sendung<?= $sd['dienst'] !== '' ? ' · ' . h($sd['dienst']) : '' ?> <span class="muted" style="font-size:13px"><?= $sd['datum'] ? h(date('d.m.Y', strtotime($sd['datum']))) : '' ?></span>
+          <div style="font-family:var(--mono);font-size:13px;word-break:break-all"><?= h($sd['nr']) ?></div></div>
+        <?php if ($sd['url']): ?><a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="<?= h($sd['url']) ?>">Sendung verfolgen</a><?php endif; ?>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
     <div class="muted" style="font-size:13px;margin:-6px 0 10px">Rechnung</div>
     <?php if (!$re): ?>
       <?php if ($altRe || $manBezahlt): ?>

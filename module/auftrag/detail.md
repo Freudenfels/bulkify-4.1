@@ -222,3 +222,6 @@ Bei Zukauf-Art „fertig" hat der Produktionsauftrag nur noch **Fertigware berei
 
 ## Kennzahl-Kacheln (Aufräumen 12)
 Die Kacheln oben am Auftrag sind ein responsives Raster (`auto-fill, minmax(160px,1fr)`). Sie brechen in neue Zeilen um, statt Beschriftungen mit „…" abzuschneiden. Menge mit Tausenderpunkt.
+
+**Voraussichtliche Lieferung (03.11.2026):** Reiter Details, Zeitraum von/bis (`auftrag.liefertermin_von/_bis`, Aktion
+`liefertermin_setzen`, protokolliert). Der Kunde sieht ihn im Portal über dem Fortschritt; leer = geplanter Produktionstermin.

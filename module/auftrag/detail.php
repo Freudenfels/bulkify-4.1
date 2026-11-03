@@ -121,6 +121,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&rezverk=1'); exit;
 }
 
+// Voraussichtlicher Liefertermin (Zeitraum) – der Kunde sieht ihn im Portal-Fortschritt (Report 4, 03.11.2026).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'liefertermin_setzen') {
+    if (!(has_role('admin') || has_role('sales') || has_role('production'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    $dt = fn($k) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST[$k] ?? '')) ? (string)$_POST[$k] : null;
+    $von = $dt('liefertermin_von'); $bis = $dt('liefertermin_bis');
+    if ($von && $bis && $bis < $von) [$von, $bis] = [$bis, $von];
+    $vor = one("SELECT liefertermin_von, liefertermin_bis FROM auftrag WHERE id=?", [$id]) ?: [];
+    q("UPDATE auftrag SET liefertermin_von=?, liefertermin_bis=? WHERE id=?", [$von, $bis, $id]);
+    aenderung_protokollieren('auftrag', $id, $vor, ['liefertermin_von' => $von, 'liefertermin_bis' => $bis], 'auftrag');
+    header('Location: ?p=auftrag&id=' . $id . '&ltok=1'); exit;
+}
+
 // Verpackung (Behälter) am AUFTRAG setzen – auftrag.verpackung_id hat Vorrang vor dem Produkt (auftrag_braucht_etikett,
 // PIB, Etikettmaß). Wichtig für alte v3-Aufträge ohne Produkt-Verpackung: hier lässt sich der Behälter auswählen.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'verpackung_setzen') {
@@ -888,6 +900,17 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
 
 <div class="bx-panel" data-panel="details">
   <?php $kachelnRender(); // Kennzahl-Kacheln (aus dem Seitenkopf in den Details-Reiter verschoben) ?>
+  <?php if (!in_array((string)$a['status'], ['versendet', 'storniert'], true)): $ltTxt = auftrag_liefertermin_text($a); ?>
+  <form method="post" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px">
+    <input type="hidden" name="aktion" value="liefertermin_setzen">
+    <span class="muted" style="white-space:nowrap">Voraussichtliche Lieferung <?= bx_hint('Zeitraum, den der Kunde im Portal im Fortschritt sieht. Leer = es gilt der geplante Produktionstermin (falls gesetzt).') ?></span>
+    <input type="date" name="liefertermin_von" value="<?= h((string)($a['liefertermin_von'] ?? '')) ?>"> <span class="muted">bis</span>
+    <input type="date" name="liefertermin_bis" value="<?= h((string)($a['liefertermin_bis'] ?? '')) ?>">
+    <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+    <?php if (isset($_GET['ltok'])): ?><span class="muted" style="font-size:12px">gespeichert</span><?php endif; ?>
+    <?php if ($ltTxt !== ''): ?><span class="muted" style="font-size:12px">Kunde sieht: <?= h($ltTxt) ?></span><?php endif; ?>
+  </form>
+  <?php endif; ?>
   <h2>Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>

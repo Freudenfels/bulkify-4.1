@@ -22,3 +22,7 @@ Handelsware-Aufträge ohne Produktionsauftrag erscheinen schon im Status offen/i
 
 ## Fertig im Lager (S-16)
 Die Spalte zählt nur unseren Bestand (`fremd_kunde_id IS NULL`) – Kundenware im Lager 2 ist nicht versandfähig für eigene Aufträge.
+
+**Sendungsnummer (03.11.2026):** Beim Versenden optional Versanddienst + Sendungs-/Speditionsnummer – landet am neuen
+Lieferschein (`beleg.versand_tracking/_dienst`). Je Lieferschein in der Liste nachtragbar (Aktion `tracking_setzen`). Der Kunde
+sieht sie im Portal an der Bestellung (mit Link zur Sendungsverfolgung).
