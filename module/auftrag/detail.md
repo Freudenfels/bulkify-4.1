@@ -233,3 +233,6 @@ Der Kopf zeigt den Namens-Snapshot (`produkt_bezeichnung`). Beim Speichern der V
 
 ## Material-Übersicht: Spalte „Bestellt bei“ (03.11.2026)
 Je Position die Bestellungen aus `item_bestellungen()`: Nummer (Link), Lieferant, Menge, Status-Badge, Termin, „für diesen Auftrag“. Ohne Bestellung steht „nicht bestellt“. In der Zeile „Fertigware“ erscheinen auch Bulk-Zukäufe, die als Freitext an den Auftrag gebunden sind. Position und „Bestellt bei“ brechen um, damit die Tabelle nicht seitlich scrollt.
+
+## Freigabe oben (03.11.2026)
+Ist der Produktionsauftrag in Vorbereitung (nur Admin, Auftrag nicht storniert), steht der Block **„Produktionsauftrag … wartet auf Freigabe“** über den Reitern: Herstellung, Produktionsmenge und Knopf „Zur Produktion freigeben“, gleicher Handler `pa_freigeben`. Im Reiter Produktion steht nur noch ein Hinweis. Die Erfolgsmeldung „Zur Produktion freigegeben.“ erscheint ebenfalls oben.

@@ -775,6 +775,30 @@ if (($a['status'] ?? '') !== 'storniert'):
   </div>
 </div>
 <?php endif; ?>
+<?php // Freigabe GANZ OBEN (Nico 03.11.2026: „klarer Button oben in der Übersicht, nicht versteckt in einem Reiter“).
+// Gleicher Handler wie bisher (aktion=pa_freigeben -> produktionsauftrag_freigeben). Nur Admin, nicht bei Storno.
+if ($paVorbereitung && has_role('admin') && (string)$a['status'] !== 'storniert'): ?>
+<div class="bx-panel" style="border:2px solid var(--gruen,#1D9E75);padding:14px 16px;margin:0 0 16px">
+  <div style="font-size:15px;margin-bottom:4px"><strong>Produktionsauftrag <?= h((string)$pa['nummer']) ?> wartet auf Freigabe</strong></div>
+  <div class="muted" style="font-size:12px;margin-bottom:10px">Erst mit der Freigabe erscheint der Auftrag in der Produktion und der Einkauf darf dafür bestellen. Offene Punkte (Etikett/Material) sind nur ein Hinweis.</div>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="pa_freigeben">
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
+      <select name="produktionsart" style="max-width:190px">
+        <option value="fremd" <?= $istFremd ? 'selected' : '' ?>>Einkaufen (Zukauf)</option>
+        <option value="eigen" <?= $istFremd ? '' : 'selected' ?>>Herstellen</option>
+      </select>
+    </label>
+    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (<?= $bulkEinh ?>)<?= $bulkLes($freigabeBedarf) ?>
+      <input type="text" inputmode="<?= $bulkInM ?>" name="menge_produktion" value="<?= $bulkInput($freigabeBedarf) ?>" <?= $bulkTaus ?> style="min-width:150px">
+    </label>
+    <button class="btn btn-primary" type="submit">Zur Produktion freigeben</button>
+  </form>
+  <div class="muted" style="font-size:12px;margin-top:6px">Mehrmenge über den Bedarf wird als Bulk gebucht. Flaschen, Verpackung und Kapselgröße: <a href="?p=produktion_vorbereitung&id=<?= (int)$pa['id'] ?>">Vor-Produktion</a>.</div>
+</div>
+<?php elseif (isset($_GET['freigabeok'])): ?>
+<div class="bx-panel badge-ok" style="padding:10px 14px;margin:0 0 16px">Zur Produktion freigegeben.</div>
+<?php endif; ?>
 <div class="settabs" id="auftabs" style="margin-bottom:16px">
   <a href="#" class="on" data-tab="details">Details</a>
   <a href="#" data-tab="rezeptur">Rezeptur</a>
@@ -1046,7 +1070,7 @@ if (auftrag_braucht_etikett($id)):
   }
   $nsTon = 'info'; $nsLager = false;
   if (!$pa)                                    { $nsText = 'Beschaffung wählen: Herstellen (aus Rohstoffen) oder Einkaufen (fertige Bulkware) – unten.'; }
-  elseif ($paVorbereitung)                     { $nsText = 'Produktionsauftrag ist in Vorbereitung – unten „Zur Produktion freigeben".'; $nsTon = 'warn'; }
+  elseif ($paVorbereitung)                     { $nsText = 'Produktionsauftrag ist in Vorbereitung – oben „Zur Produktion freigeben".'; $nsTon = 'warn'; }
   elseif ($berSt === 'wartet' && $fehlDetail && !array_filter($fehlDetail, fn($fd) => $fd['quar'] + 1e-6 < $fd['fehlt']))
                                                { $nsText = 'Produktion wartet auf die QM-Freigabe – das Material liegt in Quarantäne:'; $nsTon = 'warn'; }
   elseif ($berSt === 'wartet')                 { $nsText = 'Produktion noch nicht möglich – es fehlt Material:'; $nsTon = 'err'; }
@@ -1314,21 +1338,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
     </div></div>
     <?php if ($paVorbereitung): ?>
     <div style="grid-column:1/-1"><div class="k muted">Zur Produktion freigeben</div>
-      <?php if (isset($_GET['freigabeok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:4px 0 8px;display:inline-block">Zur Produktion freigegeben.</div><?php endif; ?>
-      <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
-        <input type="hidden" name="aktion" value="pa_freigeben">
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
-          <select name="produktionsart" style="max-width:190px">
-            <option value="fremd" <?= $istFremd ? 'selected' : '' ?>>Einkaufen (Zukauf)</option>
-            <option value="eigen" <?= $istFremd ? '' : 'selected' ?>>Herstellen</option>
-          </select>
-        </label>
-        <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (<?= $bulkEinh ?>)<?= $bulkLes($freigabeBedarf) ?>
-          <input type="text" inputmode="<?= $bulkInM ?>" name="menge_produktion" value="<?= $bulkInput($freigabeBedarf) ?>" <?= $bulkTaus ?> style="min-width:150px">
-        </label>
-        <button class="btn btn-primary btn-sm" type="submit">Zur Produktion freigeben</button>
-      </form>
-      <div class="muted" style="font-size:12px;margin-top:4px">Du kannst immer freigeben – offene Punkte (Etikett/Material) sind nur ein Hinweis; die Produktion wartet ggf. auf Material. Mehrmenge über den Bedarf wird als Bulk gebucht.</div>
+      <div>Noch nicht freigegeben – der Knopf <strong>„Zur Produktion freigeben“</strong> steht oben über den Reitern.</div>
     </div>
     <?php endif; ?>
     <?php // „Einlagern" (In Lager 1 buchen) steht jetzt im Reiter „Lager". ?>
