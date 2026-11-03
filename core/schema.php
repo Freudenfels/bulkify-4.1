@@ -8462,6 +8462,39 @@ function item_unterwegs(int $item_id): float {
                            WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL", [$item_id]);
 }
 
+// Bestellungen zu einem Artikel für die Material-Übersicht am Auftrag (Nico 03.11.2026: „sehen, ob ich das schon
+// bestellt habe und bei wem“): alle laufenden Bestellungen (Entwurf, gesendet, bestellt – noch nicht eingegangen)
+// und dazu die schon eingegangenen, die an DIESEN Auftrag gebunden sind. $freitext: auch Positionen ohne Artikel,
+// die an diesen Auftrag gebunden sind (Bulk-Zukauf „Bulk: … (AB-…)“ – Zeile „Fertigware“). Je Zeile Nummer,
+// Lieferant (bzw. Online-Händler), offene Menge, Stufe (bestellung_stufe), Termin, ob sie diesem Auftrag gehört.
+function item_bestellungen(int $item_id, int $auftrag_id = 0, bool $freitext = false): array {
+    if ($item_id <= 0 && !($freitext && $auftrag_id > 0)) return [];
+    $rows = all("SELECT b.*, l.firma AS lieferant, bp.menge AS pos_menge, COALESCE(bp.geliefert_menge,0) AS pos_geliefert,
+                        COALESCE(NULLIF(bp.einheit,''), '') AS pos_einheit, COALESCE(bp.auftrag_id,0) AS pos_auftrag
+                 FROM bestellung_position bp
+                 JOIN bestellung b ON b.id = bp.bestellung_id
+                 LEFT JOIN lieferanten l ON l.id = b.lieferant_id
+                 WHERE b.status <> 'storniert'
+                   AND ((? > 0 AND bp.item_id = ? AND ((b.status <> 'geliefert' AND b.angekommen_am IS NULL) OR (? > 0 AND bp.auftrag_id = ?)))
+                        OR (? = 1 AND ? > 0 AND bp.item_id IS NULL AND bp.auftrag_id = ?))
+                 ORDER BY (b.status = 'geliefert' OR b.angekommen_am IS NOT NULL), (COALESCE(bp.auftrag_id,0) = ?) DESC, b.id DESC",
+                [$item_id, $item_id, $auftrag_id, $auftrag_id, $freitext ? 1 : 0, $auftrag_id, $auftrag_id, $auftrag_id]);
+    $out = [];
+    foreach ($rows as $r) {
+        $bei = trim((string)($r['lieferant'] ?? ''));
+        if ((string)($r['bestellart'] ?? '') === 'online') $bei = trim((string)($r['online_haendler'] ?? '')) ?: ($bei ?: 'online');
+        $eingang = (string)$r['status'] === 'geliefert' || !empty($r['angekommen_am']);
+        $out[] = [
+            'id' => (int)$r['id'], 'nummer' => (string)($r['nummer'] ?: ('#' . $r['id'])), 'bei' => $bei !== '' ? $bei : 'Lieferant offen',
+            'menge' => $eingang ? (float)$r['pos_menge'] : max(0.0, (float)$r['pos_menge'] - (float)$r['pos_geliefert']),
+            'einheit' => (string)$r['pos_einheit'], 'stufe' => bestellung_stufe($r), 'eingang' => $eingang,
+            'datum' => $eingang ? (string)($r['angekommen_am'] ?? '') : (string)($r['eta_geplant'] ?? ''),
+            'fuer_auftrag' => $auftrag_id > 0 && (int)$r['pos_auftrag'] === $auftrag_id,
+        ];
+    }
+    return $out;
+}
+
 // Einheitliche Warenart-/Kategorie-Bezeichnungen (Teil 3 Block K): EINE Quelle fürs ganze Dashboard, damit
 // „Fertigware" nicht mehr mehrdeutig ist. Die DB-WERTE bleiben unverändert: 'fertig' = Bulkware (lose
 // Kapseln/Pulver/Tabletten, mit Rezeptur), 'verkaufsfertig' = Fertigprodukt (abgefüllt + etikettiert, mit Produkt).

@@ -230,3 +230,6 @@ Die Kacheln oben am Auftrag sind ein responsives Raster (`auto-fill, minmax(160p
 
 ## Behälter im Auftrags-Namen (03.11.2026)
 Der Kopf zeigt den Namens-Snapshot (`produkt_bezeichnung`). Beim Speichern der Verpackung zieht `auftrag_name_behaelter_nachziehen` den Behälter-Teil („· 100 ml Glas“) auf den gewählten Behälter; vorher blieb oben 100 ml stehen, obwohl der Auftrag im 150 ml Glas lief (AB 590).
+
+## Material-Übersicht: Spalte „Bestellt bei“ (03.11.2026)
+Je Position die Bestellungen aus `item_bestellungen()`: Nummer (Link), Lieferant, Menge, Status-Badge, Termin, „für diesen Auftrag“. Ohne Bestellung steht „nicht bestellt“. In der Zeile „Fertigware“ erscheinen auch Bulk-Zukäufe, die als Freitext an den Auftrag gebunden sind. Position und „Bestellt bei“ brechen um, damit die Tabelle nicht seitlich scrollt.

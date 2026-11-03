@@ -1202,9 +1202,9 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
     }; ?>
 <div class="bx-panel" data-panel="material">
   <h2 style="margin:0 0 4px;font-size:16px">Material-Übersicht</h2>
-  <div class="muted" style="font-size:12px;margin-bottom:10px">Was dieser Auftrag braucht, was frei im Lager liegt und was bestellt, aber noch unterwegs ist.</div>
+  <div class="muted" style="font-size:12px;margin-bottom:10px">Was dieser Auftrag braucht, was frei im Lager liegt, was bestellt ist und bei wem.</div>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num"><?= $ueProd > 0 ? 'noch benötigt' : 'benötigt' ?></th><th class="bx-num">frei</th><th class="bx-num">in Quarantäne</th><th class="bx-num">unterwegs</th><th>Deckung</th></tr></thead>
+    <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num"><?= $ueProd > 0 ? 'noch benötigt' : 'benötigt' ?></th><th class="bx-num">frei</th><th class="bx-num">in Quarantäne</th><th class="bx-num">unterwegs</th><th>Deckung</th><th>Bestellt bei</th></tr></thead>
     <tbody>
     <?php foreach ($bedarfRows as $r):
         $iid = (int)($r['item_id'] ?? 0);
@@ -1215,20 +1215,32 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         $deckt = $frei + 1e-6 >= $ben;
         $quar = (float)($r['quarantaene'] ?? 0);
         $decktMitQuar = !$deckt && $quar > 1e-6 && ($frei + $quar + 1e-6 >= $ben);
-        $decktMitUnterwegs = !$deckt && !$decktMitQuar && ($frei + $quar + $unterwegs + 1e-6 >= $ben); ?>
+        $decktMitUnterwegs = !$deckt && !$decktMitQuar && ($frei + $quar + $unterwegs + 1e-6 >= $ben);
+        $bestellungen = item_bestellungen($iid, (int)$a['id'], (string)($r['rolle'] ?? '') === 'Fertigware'); ?>
       <tr>
-        <td><?= h((string)($r['name'] ?? '–')) ?></td>
+        <td style="white-space:normal;min-width:200px;max-width:320px"><?= h((string)($r['name'] ?? '–')) ?></td>
         <td class="muted"><?= h((string)($r['rolle'] ?? '–')) ?></td>
         <td class="bx-num"><?= $mng($ben, $einh) ?></td>
         <td class="bx-num"><?= $mng($frei, $einh) ?></td>
         <td class="bx-num"><?= $quar > 1e-9 ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '">' . $mng($quar, $einh) . '</a>' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
         <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>' : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn'))) ?></td>
+        <td style="white-space:normal;min-width:240px;font-size:12px">
+          <?php if (!$bestellungen): ?><span class="muted">nicht bestellt</span>
+          <?php else: foreach (array_slice($bestellungen, 0, 4) as $bs): ?>
+            <div style="margin:0 0 4px"><a href="?p=bestellung&id=<?= $bs['id'] ?>"><?= h($bs['nummer']) ?></a> · <?= h($bs['bei']) ?>
+              <span class="muted">· <?= $mng($bs['menge'], $bs['einheit'] !== '' ? $bs['einheit'] : $einh) ?></span>
+              <?= bx_badge($bs['stufe']['label'], $bs['stufe']['kind']) ?>
+              <?php if ($bs['datum'] !== ''): ?><span class="muted">· <?= $bs['eingang'] ? 'am' : 'Termin' ?> <?= h(date('d.m.Y', strtotime($bs['datum']))) ?></span><?php endif; ?>
+              <?php if ($bs['fuer_auftrag']): ?><span class="muted">· für diesen Auftrag</span><?php endif; ?>
+            </div>
+          <?php endforeach; if (count($bestellungen) > 4): ?><div class="muted">+<?= count($bestellungen) - 4 ?> weitere</div><?php endif; endif; ?>
+        </td>
       </tr>
     <?php endforeach; ?>
     </tbody>
   </table></div>
-  <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„frei" = im Lager verfügbar · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus.</p>
+  <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„frei" = im Lager verfügbar · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
 </div>
 <?php endif; endif; ?>
 <div class="bx-panel" data-panel="produktion">
