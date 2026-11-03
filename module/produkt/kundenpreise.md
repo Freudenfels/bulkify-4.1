@@ -43,3 +43,9 @@ Hinweis „ohne Etikett-Preis“: Der Behälter braucht ein Etikett, es ist aber
 
 ## Menge je Packung ändern (03.11.2026)
 Bei Zeilen mit eigenem Kundenpreis ist „Menge je Pkg“ ein Eingabefeld (bei Pulver/Granulat in g = Füllmenge, nicht Portionen; Tausenderpunkt). Beim Speichern wird **dieselbe** Zeile `produkt_kundenpreis` umgestellt (`UPDATE … WHERE id=? AND menge_pro_vpe=<alt>`, Feld-Protokoll), es entsteht keine neue Zeile. Gibt es die Zielgröße für Produkt + Kunde schon als eigene Zeile, bleibt die Menge unverändert, und ein Hinweis erscheint (nichts wird zusammengelegt oder gelöscht). Zeilen „aus Auftrag“ (noch ohne Kundenpreis) zeigen die Menge des Auftrags nur an. Ist sie bei Pulver eine Portionszahl, über die Datenprüfung „Pulver: Auftrag mit Portionen …“ bzw. das PA-Panel korrigieren.
+
+## Pulver: Portionen → g zieht die Aufträge mit (03.11.2026)
+Wird bei Pulver/Granulat die Menge je Packung von einer Portionszahl auf g umgestellt (`pulver_ist_portionszahl()`: alt × Tagesdosis ≈ neu ± 25 %), stellt `pulver_auftrag_fuellmenge_korrigieren()` die Aufträge dieser Zeile und ihre PA mit um, nur wo noch die alte Zahl steht, mit Protokoll und Bedarf neu.
+- Vorher blieb der Auftrag auf 31 und stand als eigene Zeile „31 g · aus Auftrag“ da.
+- Bei Pulver-Zeilen „aus Auftrag“ ist die Menge ebenfalls editierbar (nur für diese Korrektur). Danach rutscht der Auftrag in die Kundenpreis-Zeile.
+- Andere Formen: Die Menge eines Auftrags ändert man am Auftrag.

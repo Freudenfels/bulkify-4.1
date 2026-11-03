@@ -302,7 +302,7 @@ $CHECKS = [
                     'params' => fn(array $r) => [(int)$r['fuellmenge_g'], (int)$r['_id'], (int)$r['menge_jetzt']]],
     ],
     'pulver_auftrag' => [
-        'titel' => 'Pulver: Auftrag mit Portionen statt g je Packung (Kontrolle)',
+        'titel' => 'Pulver: Auftrag mit Portionen statt g je Packung',
         'info'  => 'Gleiche Regel für auftrag.stueck: v3-Pulveraufträge tragen teils die Portionszahl. Dann rechnet der Bedarf zu niedrig und die Kundenpreis-Liste zeigt z. B. „31 g". Korrigieren über den Produktionsauftrag, Panel „Füllmenge je Packung (Pulver)“. Es setzt Produkt, Auftrag und PA zusammen.',
         'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, a.status, p.nummer AS produkt_nr, p.name AS produkt, kd.firma AS kunde,
                            a.stueck AS stueck_jetzt, ROUND(x.mg/1000, 2) AS portion_g, ROUND(a.stueck*x.mg/1000) AS als_portionen_g, p.einheiten_pro_packung AS fuellmenge_g,
@@ -317,9 +317,12 @@ $CHECKS = [
                       AND p.einheiten_pro_packung > a.stueck
                       AND ABS(a.stueck*x.mg/1000 - p.einheiten_pro_packung) <= 0.25*p.einheiten_pro_packung
                     ORDER BY a.id DESC",
-        'korrektur' => "-- je Auftrag über den PA: Panel „Füllmenge je Packung (Pulver)“ (aktion=pulver_fuellmenge) setzt produkt.einheiten_pro_packung, auftrag.stueck und pa.stueck",
-        'ohne_fix'  => 'Nur Anzeige – Korrektur am Produktionsauftrag (dort sieht man die Portionen zur Kontrolle).',
-        'fix'   => null,
+        'korrektur' => "-- je angehaktem Auftrag: Füllmenge = Füllmenge des Produkts (g), nur wo noch die alte Zahl steht
+UPDATE auftrag SET stueck = <fuellmenge_g> WHERE id = <Auftrag> AND stueck = <stueck_jetzt>;
+UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftrag> AND stueck = <stueck_jetzt>;",
+        'ohne_fix'  => 'Auftrag und seine Produktionsaufträge werden zusammen umgestellt (pulver_auftrag_fuellmenge_korrigieren), jede Feld-Änderung landet im Protokoll; danach wird der Bedarf neu gerechnet.',
+        'fix'   => ['tabelle' => 'auftrag', 'typ' => 'auftrag',
+                    'aktion' => fn(array $r) => pulver_auftrag_fuellmenge_korrigieren((int)$r['_id'], (int)$r['stueck_jetzt'], (int)$r['fuellmenge_g'], 'datenpruefung')],
     ],
 ];
 
@@ -368,6 +371,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
     $sel = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), fn($i) => isset($erlaubt[$i]))));
     if (!$sel) { header('Location: ?p=datenpruefung&err=' . rawurlencode('Keine (gültige) Zeile angehakt – nichts geändert.') . '#' . $key); exit; }
     if (!empty($fix['sortiert'])) sort($sel);   // z. B. Nummern in ID-Reihenfolge vergeben
+    // Eigene Korrektur je Zeile über mehrere Tabellen (protokolliert selbst), z. B. Pulver-Auftrag + PA.
+    if (isset($fix['aktion'])) {
+        $pdo = db();
+        $pdo->beginTransaction();
+        try { $n = 0; foreach ($sel as $i) $n += (int)($fix['aktion'])($erlaubt[$i]); $pdo->commit(); }
+        catch (\Throwable $e) { $pdo->rollBack(); header('Location: ?p=datenpruefung&err=' . rawurlencode('Fehler, nichts geändert: ' . $e->getMessage()) . '#' . $key); exit; }
+        if (function_exists('bedarf_bump')) bedarf_bump();
+        header('Location: ?p=datenpruefung&ok=' . rawurlencode($c['titel'] . ': ' . $n . ' Datensatz/Datensätze geändert, im Protokoll.') . '#' . $key); exit;
+    }
     $zielSp = $fix['ziel'] ?? '_id';
     $ids = array_values(array_unique(array_map(fn($i) => (int)$erlaubt[$i][$zielSp], $sel)));
     $tab = $fix['tabelle'];

@@ -39,6 +39,7 @@ function kp_zeilen(): array {
         $r['produkt_nr'] = (string)($p['nummer'] ?? '');
         $rz = !empty($p['rezeptur_id']) ? one("SELECT nummer, name, darreichungsform FROM rezeptur WHERE id=?", [(int)$p['rezeptur_id']]) : null;
         $r['rezeptur'] = (string)($rz['name'] ?? '');
+        $r['rid'] = (int)($p['rezeptur_id'] ?? 0);
         $r['form'] = (string)($rz['darreichungsform'] ?? 'kapsel');
         $r['firma'] = (string) scalar("SELECT firma FROM kunden WHERE id=?", [$r['kid']]);
         $ohne = array_values(array_filter($r['auftraege'], fn($a) => (float)($a['gesamt_netto'] ?? 0) <= 0));
@@ -81,7 +82,7 @@ function kp_auftraege_fuellen(array $r, float $preis): int {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speichern') {
     $alle = kp_zeilen();
     $nur  = (string)($_POST['nur'] ?? '');
-    $gesp = 0; $gefuellt = 0; $mengeGes = 0; $fehler = [];
+    $gesp = 0; $gefuellt = 0; $mengeGes = 0; $aufKorr = 0; $fehler = [];
     $mengen = (array)($_POST['stk'] ?? []);
     foreach (array_unique(array_merge(array_keys((array)($_POST['preis'] ?? [])), array_keys($mengen))) as $k) {
         $k = (string)$k;
@@ -90,16 +91,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
         $r = $alle[$k];
         // Menge je Packung ändern (bei Pulver g je Packung): DIESELBE Kundenpreis-Zeile umstellen, keine neue anlegen.
         // Gibt es die Zielgröße für Produkt + Kunde schon als eigene Zeile, wird nichts zusammengelegt (Hinweis statt Doppelzeile).
+        // Pulver-Altdaten (v3): war die alte Menge eine PORTIONSZAHL (31 statt 275 g), ziehen die Aufträge dieser Zeile und ihre
+        // PA mit – sonst stünde der Auftrag mit 31 g als eigene Zeile da und Bedarf/Einkauf rechneten mit 31 g.
         $neuStk = trim((string)($mengen[$k] ?? '')) !== '' ? (int) preg_replace('/\D+/', '', (string)$mengen[$k]) : $r['stk'];
-        if ($r['kp_id'] && $neuStk !== $r['stk']) {
+        if ($neuStk !== $r['stk']) {
             $wer = $r['firma'] . ' / ' . $r['produkt'] . ': ';
             if ($neuStk <= 0) { $fehler[] = $wer . 'Menge je Packung muss größer 0 sein'; continue; }
-            $dup = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND id<>? LIMIT 1", [$r['pid'], $r['kid'], $neuStk, $r['kp_id']]);
-            if ($dup) { $fehler[] = $wer . form_groessen_label($r['form'], $neuStk) . ' gibt es schon als eigene Zeile – Menge nicht geändert'; continue; }
-            $vorM = one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: [];
-            q("UPDATE produkt_kundenpreis SET menge_pro_vpe=? WHERE id=? AND menge_pro_vpe=?", [$neuStk, $r['kp_id'], $r['stk']]);
-            $nachM = one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: [];
-            if ($vorM && aenderung_protokollieren('produkt_kundenpreis', $r['kp_id'], $vorM, $nachM, 'kundenpreise') > 0) $mengeGes++;
+            $portion = form_ist_tagesdosis($r['form']) && pulver_ist_portionszahl($r['rid'], $r['stk'], $neuStk);
+            if (!$r['kp_id'] && !$portion) { $fehler[] = $wer . 'die Menge je Packung eines Auftrags wird am Auftrag geändert'; continue; }
+            if ($r['kp_id']) {
+                $dup = (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND id<>? LIMIT 1", [$r['pid'], $r['kid'], $neuStk, $r['kp_id']]);
+                if ($dup) { $fehler[] = $wer . form_groessen_label($r['form'], $neuStk) . ' gibt es schon als eigene Zeile – Menge nicht geändert'; continue; }
+                $vorM = one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: [];
+                q("UPDATE produkt_kundenpreis SET menge_pro_vpe=? WHERE id=? AND menge_pro_vpe=?", [$neuStk, $r['kp_id'], $r['stk']]);
+                $nachM = one("SELECT * FROM produkt_kundenpreis WHERE id=?", [$r['kp_id']]) ?: [];
+                if ($vorM && aenderung_protokollieren('produkt_kundenpreis', $r['kp_id'], $vorM, $nachM, 'kundenpreise') > 0) $mengeGes++;
+            }
+            if ($portion) foreach ($r['auftraege'] as $a) $aufKorr += pulver_auftrag_fuellmenge_korrigieren((int)$a['id'], $r['stk'], $neuStk, 'kundenpreise');
             $r['stk'] = $neuStk;
         }
         $roh = (string)($_POST['preis'][$k] ?? '');
@@ -118,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
         $gesp++;
         if ($fuellen) $gefuellt += kp_auftraege_fuellen($r, $preis);
     }
-    $msg = $gesp . ' Kundenpreis(e) gespeichert' . ($mengeGes ? ', ' . $mengeGes . ' Menge(n) je Packung geändert' : '') . ($fuellen ? ', ' . $gefuellt . ' Auftrag/Aufträge mit Preis gefüllt' : '') . '.';
+    $msg = $gesp . ' Kundenpreis(e) gespeichert' . ($mengeGes ? ', ' . $mengeGes . ' Menge(n) je Packung geändert' : '') . ($aufKorr ? ', ' . $aufKorr . ' Auftrag/PA von Portionen auf g umgestellt' : '') . ($fuellen ? ', ' . $gefuellt . ' Auftrag/Aufträge mit Preis gefüllt' : '') . '.';
     $qs = http_build_query(array_filter(['ohne' => $_POST['f_ohne'] ?? '', 'kunde' => $_POST['f_kunde'] ?? '', 'produkt' => $_POST['f_produkt'] ?? '', 'q' => $_POST['f_q'] ?? '']));
     header('Location: ?p=kundenpreise' . ($qs !== '' ? '&' . $qs : '') . '&ok=' . rawurlencode($msg) . ($fehler ? '&err=' . rawurlencode(implode('; ', $fehler)) : '')); exit;
 }
@@ -187,6 +195,9 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
             <div class="muted" style="font-size:12px"><?= h($r['produkt_nr']) ?><?= $r['preis'] === null ? ' · ' . bx_badge('ohne Preis', 'warn') : '' ?></div></td>
         <td class="bx-num" style="white-space:nowrap"><?php if ($r['kp_id']): $einhS = form_groessen_einheit($r['form']) ?: form_plural($r['form']); ?>
             <input type="text" inputmode="numeric" data-tausender name="stk[<?= h($k) ?>]" value="<?= number_format($r['stk'], 0, ',', '.') ?>" class="kp-stk" style="width:72px;text-align:right" title="Menge je Packung<?= form_groessen_einheit($r['form']) === 'g' ? ' in g (Füllmenge, nicht Portionen)' : '' ?>"> <?= h($einhS) ?>
+          <?php elseif (form_ist_tagesdosis($r['form'])): // Pulver-Auftrag: Portionszahl (v3) hier auf g korrigierbar ?>
+            <input type="text" inputmode="numeric" data-tausender name="stk[<?= h($k) ?>]" value="<?= number_format($r['stk'], 0, ',', '.') ?>" class="kp-stk" style="width:72px;text-align:right" title="Steht hier eine Portionszahl statt g (Altdaten), die Füllmenge in g eintragen – Auftrag und PA werden mit umgestellt."> g
+            <div class="muted" style="font-size:12px">aus Auftrag</div>
           <?php else: ?><?= h(form_groessen_label($r['form'], (float)$r['stk'])) ?><div class="muted" style="font-size:12px">aus Auftrag</div><?php endif; ?></td>
         <td class="kp-txt"><?= $r['verpackung'] !== '' ? h($r['verpackung']) : '<span class="muted">–</span>' ?><?= $r['vollbedruckt'] ? '<div class="muted" style="font-size:12px">vollbedruckt</div>' : '' ?></td>
         <td class="kp-txt" style="font-size:13px"><?= $r['mengen'] ? h(implode(', ', array_map(fn($m) => number_format($m, 0, ',', '.'), $r['mengen']))) . ' Stk' : ($r['anzahl'] ? h(number_format($r['anzahl'], 0, ',', '.')) . ' Stk' : '<span class="muted">–</span>') ?>

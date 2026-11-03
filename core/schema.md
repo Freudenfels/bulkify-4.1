@@ -378,3 +378,5 @@ kunde_id, auftrag_id ODER angebot_id, akteur kunde|team, text, benutzer, erstell
 
 ## Pulver: Tagesdosen nur als Info (03.11.2026)
 `form_ist_tagesdosis($form)` (Pulver/Granulat), `tagesdosen_je_packung($g, $dosis_mg)` (abgerundet) und `tagesdosen_txt($g, $dosis_mg, $ca='≈')` („≈ 60 Tagesdosen à 5 g“). Regel (Nico): Die Rezeptur ist eine Tagesdosis, der Kunde gibt die g je Packung an. Die Tagesdosen werden nur angezeigt; gerechnet wird nach Gewicht (Füllmenge × Massenanteil).
+
+`pulver_ist_portionszahl($rid, $alt, $neu)` und `pulver_auftrag_fuellmenge_korrigieren($auftrag_id, $alt, $neu, $route)`: Pulver-Altdaten (v3, Portionen statt g) erkennen bzw. Auftrag + PA umstellen (guarded, Protokoll, `bedarf_bump`). Genutzt von Kundenpreis-Liste und Datenprüfung.

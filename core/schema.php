@@ -4574,6 +4574,29 @@ function tagesdosen_txt(float $g, float $dosis_mg, string $ca = '≈'): string {
     $dg = rtrim(rtrim(number_format($dosis_mg / 1000, 2, ',', '.'), '0'), ',');
     return $ca . ' ' . number_format($n, 0, ',', '.') . ' ' . ($n === 1 ? 'Tagesdosis' : 'Tagesdosen') . ' à ' . $dg . ' g';
 }
+// Pulver-Altdaten (v3): steht als Packungsgröße eine PORTIONSZAHL statt g? Plausibel, wenn alt < neu und
+// alt × Tagesdosis höchstens 25 % neben den neuen g liegt (z. B. 31 × 9 g = 279 g ≈ 275 g).
+function pulver_ist_portionszahl(int $rezeptur_id, float $alt, float $neu): bool {
+    $mg = $rezeptur_id > 0 ? rezeptur_gewicht_mg($rezeptur_id) : 0.0;
+    return $mg > 0 && $alt > 0 && $neu > $alt && abs($alt * $mg / 1000 - $neu) <= 0.25 * $neu;
+}
+// Auftrag + seine Produktionsaufträge von der Portionszahl $alt auf $neu g umstellen – nur, wo noch $alt steht.
+// Jede Feld-Änderung landet im Protokoll; danach Bedarf neu rechnen. Rückgabe: Zahl geänderter Datensätze.
+function pulver_auftrag_fuellmenge_korrigieren(int $auftrag_id, int $alt, int $neu, string $route = ''): int {
+    if ($auftrag_id <= 0 || $alt <= 0 || $neu <= 0 || $alt === $neu) return 0;
+    $n = 0;
+    $vor = one("SELECT * FROM auftrag WHERE id=? AND stueck=?", [$auftrag_id, $alt]);
+    if ($vor) {
+        q("UPDATE auftrag SET stueck=? WHERE id=? AND stueck=?", [$neu, $auftrag_id, $alt]);
+        if (aenderung_protokollieren('auftrag', $auftrag_id, $vor, one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]) ?: [], $route) > 0) $n++;
+    }
+    foreach (all("SELECT * FROM produktionsauftrag WHERE auftrag_id=? AND stueck=?", [$auftrag_id, $alt]) as $pv) {
+        q("UPDATE produktionsauftrag SET stueck=? WHERE id=? AND stueck=?", [$neu, (int)$pv['id'], $alt]);
+        if (aenderung_protokollieren('produktionsauftrag', (int)$pv['id'], $pv, one("SELECT * FROM produktionsauftrag WHERE id=?", [(int)$pv['id']]) ?: [], $route) > 0) $n++;
+    }
+    if ($n && function_exists('bedarf_bump')) bedarf_bump();
+    return $n;
+}
 // „Inhalt je Packung" formgerecht: Pulver „300 g je Packung", Flüssig „250 ml je Packung", Kapseln „60 Kapseln je Packung",
 // sonst „60 Stk je Packung" – nie „300 Stück je Packung" bei Pulver (St-13). Leer, wenn kein Wert.
 function inhalt_je_packung_txt(string $form, float $wert): string {
