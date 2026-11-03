@@ -1403,6 +1403,42 @@ function erp_charge_rollen(int $charge_id): array {
                 FROM charge_gebinde g" . ($auf ? " LEFT JOIN auftrag a ON a.id=g.auftrag_id" : "") . "
                 WHERE g.charge_id=? AND g.inventar_nr IS NOT NULL ORDER BY g.nummer, g.id", [$charge_id]);
 }
+// Inventarnummern der Rollen einer Charge nachträglich korrigieren (z. B. Aufkleber 11111111 aufsteigend, im System
+// aber gekürzt bzw. automatisch vergeben). $neu = gebinde_id => Nummer (leer = unverändert). Regeln: nur Rollen dieser
+// Charge, genau 8 Ziffern, keine Nummer doppelt (weder in der Eingabe noch bei einer anderen aktiven Rolle – Tausch
+// innerhalb der Eingabe ist erlaubt). Jede Änderung landet im Feld-Protokoll des Dashboards (aenderung_log) und in der
+// Lager-Bewegung. Rückgabe: ['geaendert'=>int, 'fehler'=>[...]].
+function erp_rollen_inventar_korrigieren(int $charge_id, array $neu): array {
+    $rollen = [];
+    foreach (erp_charge_rollen($charge_id) as $g) $rollen[(int)$g['id']] = $g;
+    $plan = []; $fehler = []; $seen = [];
+    foreach ($neu as $gid => $roh) {
+        $gid = (int)$gid; $roh = trim((string)$roh);
+        if (!isset($rollen[$gid]) || $roh === '') continue;
+        $d = preg_replace('/\D+/', '', $roh);
+        $rl = 'Rolle ' . (int)$rollen[$gid]['nummer'];
+        if (strlen($d) !== 8)  { $fehler[] = $rl . ': „' . $roh . '" hat nicht 8 Ziffern.'; continue; }
+        if ($d === (string)$rollen[$gid]['inventar_nr']) continue;
+        if (isset($seen[$d]))  { $fehler[] = $rl . ': ' . $d . ' steht doppelt in der Eingabe.'; continue; }
+        $seen[$d] = $gid; $plan[$gid] = $d;
+    }
+    foreach ($plan as $gid => $d) {   // gegen andere aktive Rollen (die nicht selbst gerade umnummeriert werden)
+        $andere = (int) scalar("SELECT id FROM charge_gebinde WHERE inventar_nr=? AND status<>'leer' AND id<>? LIMIT 1", [$d, $gid]);
+        if ($andere && !isset($plan[$andere])) { $fehler[] = 'Rolle ' . (int)$rollen[$gid]['nummer'] . ': ' . $d . ' trägt schon eine andere Rolle.'; unset($plan[$gid]); }
+    }
+    if (!$plan) return ['geaendert' => 0, 'fehler' => $fehler];
+    $u = function_exists('lg_uid') && lg_uid() ? erp_benutzer(lg_uid()) : null;
+    $log = tabelle_da('aenderung_log');
+    $c = erp_charge($charge_id);
+    foreach ($plan as $gid => $d) {
+        $alt = (string)$rollen[$gid]['inventar_nr'];
+        q("UPDATE charge_gebinde SET inventar_nr=? WHERE id=? AND charge_id=?", [$d, $gid, $charge_id]);
+        if ($log) q("INSERT INTO aenderung_log (objekt_typ,objekt_id,feld,alt,neu,benutzer_id,benutzer,route,erstellt) VALUES (?,?,?,?,?,?,?,?,?)",
+                    ['charge_gebinde', $gid, 'inventar_nr', $alt, $d, $u ? (int)$u['id'] : null, $u ? (string)$u['name'] : null, 'lager_rollen', gmdate('Y-m-d H:i:s')]);
+        if (function_exists('lg_bewegung_log')) lg_bewegung_log($charge_id, 'korrektur', 0, null, (string)($c['item_name'] ?? ''), 'Inventarnummer Rolle ' . (int)$rollen[$gid]['nummer'] . ': ' . $alt . ' -> ' . $d);
+    }
+    return ['geaendert' => count($plan), 'fehler' => $fehler];
+}
 // Eine Rolle per Inventarnummer auflösen – mit Produkt, Charge, Lieferant, Kunde und zugeordnetem Auftrag.
 function erp_rolle_per_inventar(string $nr): ?array {
     $nr = erp_inventar_norm($nr);

@@ -46,3 +46,10 @@ zugeordneten Auftrag; „Details" führt auf `?p=gebinde&inv=<nr>`.
 
 ## QM-Gate (St-11)
 Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) oder Admin – Dashboard `darf_qm_freigeben()`, Lager-App `lg_darf_qm_freigeben()`. Andere Rollen sehen „Freigabe durch QM" statt des Knopfs; ein direkter POST wird abgewiesen. Sperren oder zurück in Quarantäne darf weiterhin jeder.
+
+## Inventarnummern der Rollen korrigieren (03.11.2026)
+In der Tabelle „Etikettenrollen“ ist die Nummer je Rolle ein Eingabefeld. „Ab Nummer aufsteigend“ (z. B. 11111111) füllt die Rollen in ihrer Reihenfolge mit Start, Start+1, … „Nummern speichern“ (POST `aktion=rollen_nummern`) ruft `erp_rollen_inventar_korrigieren()` auf:
+- genau 8 Ziffern, keine Doppelnummer (auch nicht bei einer anderen aktiven Rolle; Tausch innerhalb der Eingabe erlaubt),
+- jede Änderung im Feld-Protokoll (`aenderung_log`, Route `lager_rollen`) und in der Lager-Bewegung.
+
+Leere Rollen sind gesperrt. Rollen, die nicht 8-stellig sind, tragen den Hinweis „nicht 8-stellig“. Enter springt zur nächsten Rolle (Handscanner).

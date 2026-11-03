@@ -100,3 +100,5 @@ Die Aufkleber in den Etikettenrollen sind 8-stellig.
 - `erp_inventar_naechste()` vergibt 8-stellig ab 90000000 (geprüft gegen alle aktiven Rollen). Das System legt die Nummer an, wenn nichts gescannt wird, und druckt sie als Aufkleber mit Barcode für die Rolle.
 - `erp_rolle_per_inventar()` findet bei einem 8er-Scan auch Altdaten, die das frühere 7er-Eingabefeld (maxlength 7) auf die ersten 7 Ziffern gekürzt hat.
 - DB: `charge_gebinde.inventar_nr` wird von VARCHAR(7) auf VARCHAR(8) verbreitert (core/schema.php, einmal nach dem Deploy).
+
+`erp_rollen_inventar_korrigieren($charge_id, [gebinde_id => Nummer])` (03.11.2026): Nachbessern falscher Rollennummern (Aufkleber 11111111 aufsteigend, im System gekürzt/auto). Prüft 8 Ziffern und Doppelnummern, schreibt `aenderung_log` (Dashboard-Tabelle, nur hier in der Naht) und `lg_bewegung`.

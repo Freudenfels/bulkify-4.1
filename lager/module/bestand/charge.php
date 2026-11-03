@@ -24,6 +24,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         weiter('?p=charge&id=' . $id);
     }
+    // Inventarnummern der Etikettenrollen nachträglich korrigieren (8 Ziffern, keine Doppelnummer, protokolliert).
+    if ($aktion === 'rollen_nummern') {
+        $r = erp_rollen_inventar_korrigieren($id, (array)($_POST['inv'] ?? []));
+        if ($r['geaendert']) flash($r['geaendert'] . ' Inventarnummer(n) geändert.');
+        if ($r['fehler']) flash(implode(' · ', $r['fehler']), 'warn');
+        if (!$r['geaendert'] && !$r['fehler']) flash('Keine Nummer geändert.', 'warn');
+        weiter('?p=charge&id=' . $id);
+    }
     if ($aktion === 'loesen') {
         $lid = (int)($_POST['leiste_id'] ?? 0);
         leiste_finden($lid, 'rot', 3, false); leiste_loesen($lid);
@@ -438,14 +446,21 @@ $rollen = function_exists('erp_charge_rollen') ? erp_charge_rollen($id) : [];
 if ($rollen): ?>
 <div class="bx-panel" style="margin-bottom:var(--sp-5)">
   <h2 style="margin-top:0">Etikettenrollen <span class="muted">(Inventaraufkleber)</span></h2>
-  <p class="muted" style="margin-top:0">Je Rolle ein Maniso-Inventaraufkleber. In der Produktion wird die verwendete Rolle einem Auftrag zugeordnet (Rückverfolgung).</p>
+  <p class="muted" style="margin-top:0">Je Rolle ein Inventaraufkleber (8 Ziffern). In der Produktion wird die verwendete Rolle einem Auftrag zugeordnet (Rückverfolgung). Stimmt eine Nummer nicht mit dem Aufkleber in der Rolle überein, hier korrigieren – einzeln oder „ab Nummer aufsteigend“.</p>
+  <form method="post" id="rollenNrForm">
+  <input type="hidden" name="aktion" value="rollen_nummern">
+  <div class="bx-row" style="gap:var(--sp-2);align-items:flex-end;flex-wrap:wrap;margin-bottom:var(--sp-3)">
+    <div class="bx-field" style="margin:0;flex:0 1 200px"><label>Ab Nummer aufsteigend</label><input type="text" id="rollenAb" class="lg-code" inputmode="numeric" maxlength="8" placeholder="z. B. 11111111"></div>
+    <button type="button" class="btn btn-ghost" id="rollenAbBtn">In die Felder übernehmen</button>
+    <button type="submit" class="btn btn-primary">Nummern speichern</button>
+  </div>
   <div class="bx-tablewrap">
     <table class="bx-table lg-karten">
       <thead><tr><th>Inventaraufkleber</th><th>Rolle</th><th>Menge</th><th>Status</th><th>Auftrag</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($rollen as $g): $zu = (int)($g['auftrag_id'] ?? 0) > 0; ?>
         <tr>
-          <td data-label="Inventaraufkleber" class="lg-code"><?= h((string)$g['inventar_nr']) ?></td>
+          <td data-label="Inventaraufkleber"><input type="text" class="lg-code rollen-nr" name="inv[<?= (int)$g['id'] ?>]" value="<?= h((string)$g['inventar_nr']) ?>" data-alt="<?= h((string)$g['inventar_nr']) ?>" inputmode="numeric" maxlength="8" autocomplete="off" style="width:120px"<?= (string)$g['status'] === 'leer' ? ' disabled title="leere Rolle"' : '' ?>><?= strlen((string)$g['inventar_nr']) !== 8 ? '<div class="muted" style="font-size:12px;color:var(--warn)">nicht 8-stellig</div>' : '' ?></td>
           <td data-label="Rolle"><?= (int)$g['nummer'] ?> / <?= (int)$g['anzahl_gesamt'] ?></td>
           <td data-label="Menge"><?= h(menge_txt($g['menge_verfuegbar'])) ?> <?= h((string)($g['einheit'] ?? '')) ?></td>
           <td data-label="Status"><?= h(['voll'=>'voll','angebrochen'=>'angebrochen','leer'=>'leer'][(string)$g['status']] ?? (string)$g['status']) ?><?= (string)$g['standort'] === 'produktion' ? ' · in Produktion' : '' ?></td>
@@ -456,6 +471,23 @@ if ($rollen): ?>
       </tbody>
     </table>
   </div>
+  </form>
+  <script>
+  (function(){
+    // „Ab Nummer aufsteigend": Rollen in ihrer Reihenfolge (Rolle 1, 2, …) bekommen Start, Start+1, … – erst Speichern schreibt.
+    var b=document.getElementById('rollenAbBtn'), ab=document.getElementById('rollenAb');
+    if(!b||!ab) return;
+    b.addEventListener('click',function(){
+      var d=(ab.value||'').replace(/\D/g,'');
+      if(d.length!==8){ alert('Bitte eine 8-stellige Startnummer eingeben.'); ab.focus(); return; }
+      var n=parseInt(d,10);
+      document.querySelectorAll('#rollenNrForm .rollen-nr').forEach(function(i){ if(i.disabled) return; i.value=String(n++); });
+    });
+    // Enter im Nummernfeld springt zur nächsten Rolle statt zu speichern (Handscanner sendet Enter).
+    var f=document.querySelectorAll('#rollenNrForm .rollen-nr');
+    f.forEach(function(i,k){ i.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); var nx=f[k+1]; if(nx) nx.focus(); } }); });
+  })();
+  </script>
 </div>
 <?php endif; ?>
 
