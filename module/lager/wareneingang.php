@@ -59,7 +59,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$items = all("SELECT id, name, kategorie, einheit, verpackung_rolle, breite_mm, hoehe_mm, etikett_format FROM item WHERE kategorie IN ('rohstoff','verpackung','fertig','verkaufsfertig') AND gesperrt=0 ORDER BY name");
+// Etiketten bringen für den Abgleich ihr freigegebenes Design (Kundenetikett), Version, Kunde und Material mit;
+// fehlen Maße/Material am Kundenetikett, gelten die der Maß-Vorlage (etikett_vorlage_id).
+$items = all("SELECT i.id, i.name, i.kategorie, i.einheit, i.verpackung_rolle,
+                     COALESCE(i.breite_mm, v.breite_mm) AS breite_mm, COALESCE(i.hoehe_mm, v.hoehe_mm) AS hoehe_mm,
+                     COALESCE(NULLIF(i.etikett_format,''), v.etikett_format) AS etikett_format,
+                     COALESCE(NULLIF(i.material,''), v.material) AS material, i.produkt_id, COALESCE(i.etikett_version,1) AS etikett_version,
+                     IF(d.id IS NOT NULL AND COALESCE(d.datei,'')<>'', d.id, 0) AS et_dok, COALESCE(NULLIF(d.datei_orig,''), d.datei, '') AS et_datei, k.firma AS et_kunde
+              FROM item i
+              LEFT JOIN item v ON v.id=i.etikett_vorlage_id
+              LEFT JOIN dokument d ON d.id=i.etikett_dokument_id
+              LEFT JOIN kunden k ON k.id=i.kunde_id
+              WHERE i.kategorie IN ('rohstoff','verpackung','fertig','verkaufsfertig') AND i.gesperrt=0 ORDER BY i.name");
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 // Erwartete Lieferungen (bestellt, noch nicht angekommen) – optionaler Bestellbezug beim Einbuchen.
 $offeneBestellungen = all("SELECT b.id, b.nummer, COALESCE(l.firma,'') AS lieferant FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
@@ -199,10 +210,18 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
     </div>
     <!-- Etikett-Abgleich: bestelltes Format + Design-Bild, damit die Lieferung gegen die Bestellung geprüft werden kann -->
     <div class="bx-panel" id="weEtikettBox" style="display:none;margin:0 0 12px;border-color:#C0F24E">
-      <div style="font-weight:600;margin-bottom:6px">Etikett prüfen – stimmt das Gelieferte mit der Bestellung?</div>
-      <div id="weEtikettMass" class="muted" style="font-size:13px;margin-bottom:8px"></div>
-      <div id="weEtikettDesign"></div>
+      <div style="font-weight:600;margin-bottom:10px">Etikett prüfen – stimmt das Gelieferte mit der Bestellung?</div>
+      <div class="bx-row" style="gap:var(--sp-5);flex-wrap:wrap;align-items:flex-start">
+        <div id="weEtikettDesign" style="flex:1 1 300px;min-width:0;max-width:560px"></div>
+        <div style="flex:1 1 220px;min-width:0">
+          <div class="muted" style="font-size:13px">Größe</div>
+          <div id="weEtikettMass" style="font-size:28px;font-weight:600;line-height:1.15;margin:2px 0 10px">–</div>
+          <div id="weEtikettDaten" style="font-size:14px;line-height:1.7;overflow-wrap:anywhere"></div>
+          <div class="muted" style="font-size:12px;margin-top:8px">Design und Größe mit dem gelieferten Etikett vergleichen. Passt etwas nicht: nicht buchen, Rücksprache halten.</div>
+        </div>
+      </div>
     </div>
+    <script src="/assets/etikett_vorschau.js"></script>
     <div class="bx-field"><label>Tracking-Code(s) Paket / Palette <?= bx_hint('Barcode/Sendungsnummer vom Paket- oder Palettenetikett scannen. Mehrere Pakete: einfach nacheinander scannen – jeder Scan landet automatisch in einer eigenen Zeile.') ?></label>
       <textarea name="tracking" id="weTracking" rows="2" placeholder="Etikett scannen … (je Paket eine Zeile)" style="font-variant-numeric:tabular-nums"></textarea>
       <div class="muted" id="weTrackCount" style="font-size:12px;margin-top:4px"></div>
@@ -214,31 +233,36 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
 </form>
 <script>
 (function(){
-  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'r'=>(string)($it['verpackung_rolle'] ?? ''),'w'=>$it['breite_mm']!==null?(float)$it['breite_mm']:null,'h'=>$it['hoehe_mm']!==null?(float)$it['hoehe_mm']:null,'f'=>(string)($it['etikett_format'] ?? '')], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'r'=>(string)($it['verpackung_rolle'] ?? ''),'w'=>$it['breite_mm']!==null?(float)$it['breite_mm']:null,'h'=>$it['hoehe_mm']!==null?(float)$it['hoehe_mm']:null,'f'=>(string)($it['etikett_format'] ?? ''),
+        'mat'=>(string)($it['material'] ?? ''),'ke'=>(int)($it['produkt_id'] ?? 0) > 0,'v'=>(int)$it['etikett_version'],'kd'=>(string)($it['et_kunde'] ?? ''),'dok'=>(int)$it['et_dok'],
+        'pdf'=>(string)$it['et_datei'] === '' || strtolower(pathinfo((string)$it['et_datei'], PATHINFO_EXTENSION)) === 'pdf'], $items), JSON_UNESCAPED_UNICODE) ?>;
   var aufEtikett = <?= json_encode($aufEtikett, JSON_FORCE_OBJECT) ?>;   // auftrag_id => dokument_id (Etikett-Design)
   var box=document.getElementById('weArtSuche'), hid=document.getElementById('weArtId'), list=document.getElementById('weArtList');
   if(!box||!hid||!list) return;
   function itemById(id){ id=+id; for(var i=0;i<items.length;i++) if(items[i].id===id) return items[i]; return null; }
   function nz(x){ return (Math.round(Number(x)*100)/100).toString(); }   // 172.00 -> 172, 60 bleibt 60
   function etMass(it){ return (it.w&&it.h) ? (nz(it.w)+' × '+nz(it.h)+' mm') : (it.f||''); }
-  // Etikett-Abgleich: bestelltes Format + (falls Auftrag gewählt) das freigegebene Design als Bild.
+  // Etikett-Abgleich: Maße + Material/Version/Kunde und das freigegebene Design (Kundenetikett; sonst das
+  // Design des gewählten Auftrags) als Vorschau – vor dem Buchen.
+  var etZuletzt='';
   function showEtikett(){
     var boxEl=document.getElementById('weEtikettBox'); if(!boxEl) return;
     var it=itemById(hid.value);
-    if(!it || it.r!=='etikett'){ boxEl.style.display='none'; return; }
+    if(!it || it.r!=='etikett'){ boxEl.style.display='none'; etZuletzt=''; return; }
     var mass=etMass(it);
-    document.getElementById('weEtikettMass').innerHTML = mass
-      ? ('Bestelltes Etikettenformat: <strong>'+esc(mass)+'</strong> &nbsp;·&nbsp; bitte das gelieferte Etikett ausmessen und vergleichen.')
-      : 'Für diesen Etikett-Artikel ist kein Format hinterlegt.';
+    document.getElementById('weEtikettMass').textContent = mass || 'Maße nicht hinterlegt';
+    document.getElementById('weEtikettDaten').innerHTML =
+        '<span class="muted">Material</span> '+esc(it.mat||'–')+'<br>'
+      + '<span class="muted">Version</span> '+(it.ke?('v'+it.v):'Standard-Etikett')+'<br>'
+      + '<span class="muted">Kunde</span> '+esc(it.kd||'–');
     var aid = (typeof normalAuf!=='undefined' && normalAuf) ? normalAuf.value : '';
-    var dok = (aid && aufEtikett[aid]) ? aufEtikett[aid] : 0;
-    var dz=document.getElementById('weEtikettDesign');
-    if(dok){
-      dz.innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:6px">Design laut Auftrag:</div>'
-        + '<iframe src="?p=dokument&id='+dok+'" style="width:100%;max-width:440px;height:320px;border:1px solid var(--line);border-radius:8px;background:#fff" title="Etikett-Design"></iframe>'
-        + '<div style="margin-top:6px"><a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id='+dok+'">Design in neuem Tab öffnen</a></div>';
-    } else {
-      dz.innerHTML = '<div class="muted" style="font-size:12px">Design-Bild: oben bei „Für Auftrag" den passenden Auftrag wählen – dann erscheint hier das freigegebene Etikett-Design zum Vergleich.</div>';
+    var dok = it.dok || ((aid && aufEtikett[aid]) ? aufEtikett[aid] : 0), pdf = it.dok ? it.pdf : true;
+    var dz=document.getElementById('weEtikettDesign'), key=it.id+':'+dok;
+    if(key!==etZuletzt){
+      etZuletzt=key;
+      if(dok){ bxEtikettVorschau(dz, '?p=dokument&id='+dok, pdf); }
+      else if(it.ke){ dz.innerHTML='<div style="padding:10px 12px;border:1px solid var(--warn);border-radius:8px;font-size:13px">Kein freigegebenes Etikett-Design hinterlegt.</div>'; }
+      else { dz.innerHTML='<div class="muted" style="font-size:12px">Standard-Etikett ohne Kundendesign. Für ein Design oben bei „Für Auftrag" den passenden Auftrag wählen.</div>'; }
     }
     boxEl.style.display='';
   }

@@ -42,3 +42,10 @@ Die Übersicht (`?p=wareneingang&quarantaene=1`, Knopf „Nur Quarantäne (Anzah
 `bestellung_position.geliefert_menge` (neu, additiv) zählt, was je Position schon eingebucht ist. Der Wareneingang mit Bestellbezug ruft `bestellung_lieferung_erfassen($bestellung_id, $charge_ids)` (Lager-App: `erp_bestellung_lieferung_erfassen`): die Chargen werden auf die Positionen verteilt (gleicher Artikel, sonst Freitext-Position; g/kg und ml/l werden umgerechnet). **Geschlossen** (angekommen_am, Status geliefert) wird die Bestellung erst, wenn alle Positionen zu mind. 98 % geliefert sind. Vorher bleibt sie offen, und „unterwegs" zählt nur den Rest (`bp_rest_sql()`, auch in `bulk_position_basis_sql()`), es entsteht also kein doppelter Bedarf. Der Knopf „liefern" (`bestellung_wareneingang`) setzt alle Positionen voll.
 
 Freigeben (QM) einer Fertigware-Charge ruft danach `fertigware_qm_freigabe_nach()` auf (Bericht + CoA für den Kunden).
+
+## Etikett prüfen vor dem Buchen (03.11.2026)
+Wählt man ein Etikett (Typ „Verpackung / Etikett“; Kundenetiketten heißen „Etikett · Produkt · Kunde · vN“, Suche per Produktname), erscheint die Prüfbox. Darin:
+- links das freigegebene Design des Kundenetiketts (`item.etikett_dokument_id`) als Vorschau (`/assets/etikett_vorschau.js`, PDF Seite 1 als Bild). Ohne eigenes Design greift wie bisher das Design des gewählten Auftrags.
+- rechts groß die Maße sowie Material, Version und Kunde. Fehlende Werte kommen von der Maß-Vorlage.
+
+Hat ein Kundenetikett kein freigegebenes Design, steht dort „Kein freigegebenes Etikett-Design hinterlegt“. Das Buchen selbst ist unverändert.
