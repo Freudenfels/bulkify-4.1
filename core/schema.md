@@ -348,3 +348,5 @@ vollbedruckt = kein Kundenetikett/kein Etikett im Bedarf (`auftrag_vollbedruckt(
 „Etikett“ bzw. „Beutel-Design“ für die Texte. `kundenetikett_nach_freigabe()` hängt das freigegebene Design bei vollbedruckt
 an den Beutel (`item.etikett_dokument_id`/`etikett_datei_sig`) statt eine Etikett-Version anzulegen. Einkauf: der bedruckte
 Beutel (`bedarf_aggregiert()['druck']`) ist erst bestellbar, wenn alle Aufträge mit ihm freigegeben sind.
+
+`produkt_verpackung_items()`: bei bedrucktem Behälter (vollbedruckter Beutel) keine Etikett-Position – auch nicht automatisch aus dem Behälter abgeleitet (03.11.2026).
