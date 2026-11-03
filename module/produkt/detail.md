@@ -78,3 +78,12 @@ Im Reiter Verpackung steht unter dem Etikett-Slot die Tabelle **Kundenetiketten 
 
 ## Kundenpreis hinzufügen = gleiche Größe aktualisieren (03.11.2026)
 `kp_add` legt keine zweite Zeile derselben Größe mehr an: Gibt es für Produkt + Kunde schon eine Zeile mit dieser Menge je Packung, werden Anzahl, Preis und Notiz dort aktualisiert (gleicher Schlüssel wie `kundenpreis_setzen()`). Bei Pulver/Granulat heißen Spalte und Feld „Füllmenge je Verpackung (g)“, die Werte stehen mit Einheit (z. B. 275 g).
+
+## Pulver-Beschriftung in der Kalkulation (03.11.2026, nur Anzeige)
+Bei Pulver/Granulat (eine Rezeptur-Einheit = eine Portion):
+- „Verzehr je Tag“ heißt „Portionen pro Tag (à 9 g)“.
+- Die Kachel „Gewicht / Einheit“ heißt „Portionsgröße“ und zeigt g statt mg (9 g statt 9.000 mg).
+- Die Tagesdosis steht als „(bei 1 Portion/Tag à 9 g)“.
+- „Füllmenge je Packung (g)“ bleibt.
+
+Die Rechnung ist unverändert. Offen bei Nico: Kosten/Packung, Reichweite und Füllgewicht-Prüfung nehmen bei Pulver die Füllmenge (g) noch als Portionszahl.
