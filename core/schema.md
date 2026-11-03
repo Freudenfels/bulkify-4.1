@@ -332,3 +332,11 @@ Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route,
 
 ## Kundenetikett mit Artikelnummer (Aufräumen 17)
 `kundenetikett_version_anlegen()` vergibt eine Artikelnummer (VP-…) wie jeder Verpackungsartikel. Vorher blieb das Kundenetikett ohne Nummer. Bestehende Kundenetiketten ohne Nummer stehen in der SELECT-Liste für Nico.
+
+**Beutel-Typen (Nico 03.11.2026):** Standbodenbeutel **vollbedruckt = Standard** (eigener bedruckter Beutel je Produkt + Kunde,
+**kein** Etikett), **Blanko + Etikett = Ausnahme** (`angebot_position.blanko_etikett=1`; neutraler Beutel + Kundenetikett).
+`annahme_vollbedruckt()` entscheidet im Annahme-Hook: Beutel -> vollbedruckt außer blanko gewählt; ohne Verpackungs-Position
+(Matrix, Nachbestellung) wie der letzte Auftrag des Kunden für das Produkt, sonst Standard; andere Behälter nur bei
+`kundenspezifisch=1`. Bedruckter Behälter = der Druck ersetzt das Etikett: `verpackung_ist_bedruckt()` / `auftrag_vollbedruckt()`
+-> kein Kundenetikett, `auftrag_braucht_etikett()` = nein (keine Freigabe-Sperre, kein Etikett im Portal), kein Etikett im
+Bedarf/Einkauf, `produktion_etikett_entnehmen()` bucht nichts. Der Schritt „Etikettieren“ bleibt (Charge/MHD-Kennzeichnung).

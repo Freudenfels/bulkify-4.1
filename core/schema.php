@@ -560,6 +560,7 @@ function init_schema(): void {
     ensure_column('angebot_position', 'stueck', "INT NULL");
     ensure_column('angebot_position', 'verpackung_id', "INT NULL");
     ensure_column('angebot_position', 'kundenspezifisch', "TINYINT(1) NOT NULL DEFAULT 0"); // Verpackungs-Position: bedruckt/kundenspezifisch -> bei Annahme eigener Behälter-Artikel am Produkt
+    ensure_column('angebot_position', 'blanko_etikett', "TINYINT(1) NOT NULL DEFAULT 0");   // Standbodenbeutel: 1 = Ausnahme „Blanko + Etikett" (Standard = vollbedruckt, ohne Etikett)
     // VK je Einheit in e4 (Euro x 10.000) fuer Sub-Cent-Preise (z. B. Bulk 0,0250 EUR/Stk). preis_cent allein
     // (ganze Cent) rundet 0,025 auf 0,03 -> falsche Summe. preis_e4 NULL = Altwert, dann gilt preis_cent*100.
     ensure_column('angebot_position', 'preis_e4', "INT NULL");
@@ -5935,7 +5936,7 @@ function angebot_positionen_calc(int $angebot_id): array {
         'preis_e4'=>((isset($r['preis_e4']) && $r['preis_e4'] !== null && $r['preis_e4'] !== '') ? (int)$r['preis_e4'] : (int)$r['preis_cent'] * 100),
         'ek_cent'=>(int)$r['ek_cent'], 'mwst_satz'=>(float)$r['mwst_satz'], 'quelle'=>$r['quelle'], 'gruppe'=>$r['gruppe'] ?? null,
         'rezeptur_id'=>$r['rezeptur_id'] ?? null, 'stueck'=>$r['stueck'] ?? null, 'verpackung_id'=>$r['verpackung_id'] ?? null,
-        'kundenspezifisch'=>(int)($r['kundenspezifisch'] ?? 0),
+        'kundenspezifisch'=>(int)($r['kundenspezifisch'] ?? 0), 'blanko_etikett'=>(int)($r['blanko_etikett'] ?? 0),
     ], $echt);
     $a = one("SELECT * FROM angebot WHERE id=?", [$angebot_id]);
     if (!$a) return [];
@@ -8401,6 +8402,7 @@ function auftrag_bedarf(int $pa_id): array {
                 $au = etikett_id_fuer_behaelter($verpEff); if ($au) $etikettEff = $au;
             }
         }
+        if ($verpEff && verpackung_ist_bedruckt($verpEff)) $etikettEff = 0;   // vollbedruckter Behälter: der Druck ersetzt das Etikett
         $effSlots = ['verpackung_id'=>$verpEff, 'verschluss_id'=>(int)($slots['verschluss_id'] ?? 0),
                      'etikett_id'=>$etikettEff, 'karton_id'=>(int)($slots['karton_id'] ?? 0), 'beipack_id'=>(int)($slots['beipack_id'] ?? 0)];
         foreach (['verpackung_id'=>'Verpackung','verschluss_id'=>'Deckel','etikett_id'=>'Etikett','karton_id'=>'Karton','beipack_id'=>'Beipackzettel'] as $f => $rolle) {
@@ -9028,11 +9030,23 @@ function etikett_del(int $auftrag_id): void {
 }
 
 // --- Etikettenfreigabe (Kunde) -------------------------------------------------
+// Bedruckter Behälter (z. B. vollbedruckter Standbodenbeutel): der Druck ERSETZT das Etikett (Nico 03.11.2026 –
+// Standbodenbeutel vollbedruckt = Standard, „Blanko + Etikett" = Ausnahme). Dann gibt es kein Kundenetikett, kein
+// Etikett im Bedarf/Einkauf, keine Etikett-Entnahme und keine Etikett-Freigabe-Sperre.
+function verpackung_ist_bedruckt(int $item_id): bool {
+    return $item_id > 0 && (int) scalar("SELECT COALESCE(kundenspezifisch,0) FROM item WHERE id=?", [$item_id]) === 1;
+}
+// Effektiver Behälter eines Auftrags (Auftrag vor Produkt) ist bedruckt?
+function auftrag_vollbedruckt(int $auftrag_id): bool {
+    $vp = (int) scalar("SELECT COALESCE(NULLIF(a.verpackung_id,0), p.verpackung_id, 0) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    return verpackung_ist_bedruckt($vp);
+}
 // Braucht dieser Auftrag überhaupt ein Etikett? (nur Produkte mit Etikett-Slot). Ohne Produkt/Slot = nein.
 function auftrag_braucht_etikett(int $auftrag_id): bool {
     $r = one("SELECT a.verpackung_id AS a_vp, p.etikett_id, p.verpackung_id AS p_vp
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
     if (!$r) return false;
+    if (verpackung_ist_bedruckt((int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0))) return false;   // vollbedruckt: kein Etikett
     if ((int)($r['etikett_id'] ?? 0) > 0) return true;           // expliziter Etikett-Slot am Produkt
     // Etikett ist Standard: jedes VERPACKTE Produkt (Glas/Dose) bekommt ein Etikett. Behälter des Auftrags
     // hat Vorrang (Admin kann je Auftrag ein anderes Glas setzen), sonst der des Produkts. Das Etikett (inkl.
@@ -10322,6 +10336,7 @@ function produktion_etikett_entnehmen(int $pa_id, ?float $bis = null, bool $troc
     $pa = one("SELECT menge, produkt_id, auftrag_id, verpackung_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa || empty($pa['produkt_id'])) return ['ok'=>true, 'fehlt'=>[]];
     $auf = (int)($pa['auftrag_id'] ?? 0);
+    if (verpackung_ist_bedruckt((int)($pa['verpackung_id'] ?? 0)) || ($auf > 0 && auftrag_vollbedruckt($auf))) return ['ok'=>true, 'fehlt'=>[]];   // vollbedruckt: kein Etikett
     $eid = $auf > 0 ? etikett_item_fuer_auftrag_kunde($auf, (int)$pa['produkt_id']) : 0;
     $vid = (int)($pa['verpackung_id'] ?? 0) ?: (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
     $gen = $vid > 0 ? (int)(etikett_id_fuer_behaelter($vid) ?? 0) : 0;
@@ -10502,25 +10517,39 @@ function auftrag_name_snapshot(int $auftrag_id): void {
 
 // Annahme-Hook für ALLE Annahmewege (auftrag_aus_angebot / _positionen / _zelle): legt bei der ANNAHME das
 // Kundenetikett (v1, je Produkt + KUNDE) an und bindet es an den Auftrag – so kann das Lager die gelieferten,
-// kundenspezifischen Etiketten gezielt einbuchen (kein generischer Glas-Topf). Ist die Verpackungs-Position des
-// Angebots als „bedruckt, kundenspezifisch" markiert, entsteht erst JETZT ein eigener Behälter-Lagerartikel am
-// Produkt (wie Glas + Etikett) – getrennt vom Standard-Beutel, einkaufbar, bei Nachbestellung wiederverwendet.
+// kundenspezifischen Etiketten gezielt einbuchen (kein generischer Glas-Topf). Bekommt der Auftrag einen bedruckten
+// Behälter (annahme_vollbedruckt(): Standbodenbeutel standardmäßig vollbedruckt), entsteht JETZT der Beutel je Produkt +
+// Kunde – und KEIN Kundenetikett (der Druck ersetzt es). Nur „Blanko + Etikett" bzw. unbedruckte Behälter bekommen das Etikett.
 // Idempotent. Rückgabe: die (ggf. neue) verpackung_id des Auftrags.
 // $gruppe: gewählte Angebots-Option (Positions-Weg) – nur deren Verpackungs-Position + gruppenlose zählen.
 function auftrag_annahme_etikett_verpackung(int $auftrag_id, int $angebot_id, int $produkt_id, int $kunde_id, int $verp_id, ?string $gruppe = null): int {
     if ($auftrag_id <= 0 || $produkt_id <= 0) return $verp_id;
     // Handelsware: die zugekaufte Ware ist schon etikettiert/verpackt -> kein Kundenetikett, kein bedruckter Behälter (Kette-Nachtrag).
     if ((int) scalar("SELECT COALESCE(handelsware,0) FROM produkt WHERE id=?", [$produkt_id]) === 1) return $verp_id;
+    $grp = ($gruppe !== null && $gruppe !== '') ? " AND (TRIM(COALESCE(gruppe,''))=? OR TRIM(COALESCE(gruppe,''))='')" : '';
+    $vpPos = one("SELECT COUNT(*) AS n, COALESCE(MAX(kundenspezifisch),0) AS ks, COALESCE(MAX(blanko_etikett),0) AS bl
+                  FROM angebot_position WHERE angebot_id=? AND quelle='verpackung'" . $grp, $grp !== '' ? [$angebot_id, $gruppe] : [$angebot_id]) ?: [];
+    if (annahme_vollbedruckt($auftrag_id, $produkt_id, $kunde_id, $verp_id, $vpPos)) {
+        $vpk = auftrag_verpackung_kundenspezifisch_binden($auftrag_id);   // Auftrag + Produktionsauftrag + Name/Nr./Lieferant/EK
+        if ($vpk > 0) return $vpk;                                          // der Druck ersetzt das Etikett -> kein Kundenetikett
+    }
     $etId = kundenetikett_sicherstellen($produkt_id, $kunde_id ?: null, $verp_id);
     if ($etId > 0) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$etId, $auftrag_id]);
-    $grp = ($gruppe !== null && $gruppe !== '') ? " AND (TRIM(COALESCE(gruppe,''))=? OR TRIM(COALESCE(gruppe,''))='')" : '';
-    $kspez = (int) scalar("SELECT COALESCE(MAX(kundenspezifisch),0) FROM angebot_position WHERE angebot_id=? AND quelle='verpackung'" . $grp,
-                          $grp !== '' ? [$angebot_id, $gruppe] : [$angebot_id]);
-    if ($kspez === 1) {
-        $vpk = auftrag_verpackung_kundenspezifisch_binden($auftrag_id);   // Auftrag + Produktionsauftrag + Name/Nr./Lieferant/EK
-        if ($vpk > 0) $verp_id = $vpk;
-    }
     return $verp_id;
+}
+// Bekommt dieser Auftrag einen bedruckten Behälter (statt Behälter + Etikett)?
+// Standbodenbeutel: VOLLBEDRUCKT ist Standard (Nico 03.11.2026), „Blanko + Etikett" nur, wenn an der Verpackungs-Position
+// gewählt (blanko_etikett=1). Ohne Verpackungs-Position (Matrix, Nachbestellung): wie der letzte Auftrag dieses Kunden für
+// dieses Produkt, sonst Standard. Andere Behälter (Glas, Dose …): bedruckt nur, wenn ausdrücklich markiert (kundenspezifisch).
+function annahme_vollbedruckt(int $auftrag_id, int $produkt_id, int $kunde_id, int $verp_id, array $vpPos): bool {
+    $eff = $verp_id ?: (int) scalar("SELECT COALESCE(NULLIF(a.verpackung_id,0), p.verpackung_id, 0) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    $basis = $eff > 0 ? verpackung_neutrale_basis($eff) : 0;
+    $istBeutel = $basis > 0 && (string) scalar("SELECT verpackungsart FROM item WHERE id=?", [$basis]) === 'beutel';
+    if (!$istBeutel) return (int)($vpPos['ks'] ?? 0) === 1;
+    if ((int)($vpPos['n'] ?? 0) > 0) return (int)($vpPos['bl'] ?? 0) !== 1;
+    $vor = $kunde_id > 0 ? (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE kunde_id=? AND produkt_id=? AND id<>? AND verpackung_id IS NOT NULL ORDER BY id DESC LIMIT 1",
+                                        [$kunde_id, $produkt_id, $auftrag_id]) : 0;
+    return $vor > 0 ? verpackung_ist_bedruckt($vor) : true;
 }
 
 function auftrag_aus_angebot(int $angebot_id): ?int {

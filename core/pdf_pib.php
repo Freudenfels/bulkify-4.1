@@ -166,7 +166,8 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
     $y = spec_grid($p, $y, $ident);
 
     // Verpackung & Etikett (+ Leergewichte für die Brutto-Rechnung, + Etikettmaße für die Gestaltung)
-    $verp   = !empty($prod['verpackung_id']) ? one("SELECT name, volumen_ml, gewicht_g, etikett_final FROM item WHERE id=?", [(int)$prod['verpackung_id']]) : null;
+    $verp   = !empty($prod['verpackung_id']) ? one("SELECT name, volumen_ml, gewicht_g, etikett_final, COALESCE(kundenspezifisch,0) AS bedruckt FROM item WHERE id=?", [(int)$prod['verpackung_id']]) : null;
+    $vollbedruckt = $verp && (int)$verp['bedruckt'] === 1;   // vollbedruckter Behälter: der Druck ersetzt das Etikett
     $versch = !empty($prod['verschluss_id']) ? one("SELECT name, gewicht_g FROM item WHERE id=?", [(int)$prod['verschluss_id']]) : null;
     $etik   = !empty($prod['etikett_id'])    ? one("SELECT name, gewicht_g, breite_mm, hoehe_mm, etikett_format FROM item WHERE id=?", [(int)$prod['etikett_id']]) : null;
     // Etikettmaße: bevorzugt Endformat am Behälter, sonst Maße/Format des Etikett-Artikels.
@@ -178,12 +179,22 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
     $vp = [];
     if ($verp)   $vp[] = ['Behälter', (string)$verp['name'] . ((float)($verp['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($verp['volumen_ml']) . ' ml' : '')];
     if ($versch) $vp[] = ['Verschluss', (string)$versch['name']];
-    if ($etik)   $vp[] = ['Etikett', (string)$etik['name']];
-    if ($emass)  $vp[] = ['Etikettmaße (B × H)', $mg($emass[0]) . ' × ' . $mg($emass[1]) . ' mm'];
+    // Fehlen Maße (z. B. Blanko-Standbodenbeutel + Etikett: Format individuell), gilt die Rücksprache (Nico 03.11.2026).
+    $ruecksprache = 'individuell – nach Rücksprache mit Ihrem bulkify-Ansprechpartner';
+    if ($vollbedruckt) {
+        $vp[] = ['Etikett', 'entfällt – Behälter vollbedruckt'];
+        $vp[] = ['Druckformat', $ruecksprache];
+    } elseif ($verp || $etik) {   // reine Bulkware ohne Behälter: kein Etikett-Block
+        if ($etik) $vp[] = ['Etikett', (string)$etik['name']];
+        $vp[] = ['Etikettmaße (B × H)', $emass ? $mg($emass[0]) . ' × ' . $mg($emass[1]) . ' mm' : $ruecksprache];
+    }
     if ($vp) {
         $y = spec_h($p, $y, 'Verpackung & Etikett'); $y = spec_grid($p, $y, $vp);
         $y += 12;
-        $p->text($L, $y, $emass ? 'Endformat der Etikettendatei (Wickeletikett); Druckvorlage separat im Portal. Bitte 2–3 mm Beschnitt einplanen.' : 'Etikettmaße noch nicht hinterlegt – Druckvorlage separat im Portal.', 8, false, [110, 110, 108]); $y += 16;
+        $hinweis = $vollbedruckt ? 'Druckdaten für den vollbedruckten Behälter stimmen wir mit Ihnen ab; Druckvorlage separat im Portal.'
+                 : ($emass ? 'Endformat der Etikettendatei (Wickeletikett); Druckvorlage separat im Portal. Bitte 2–3 mm Beschnitt einplanen.'
+                           : 'Das Etikettformat legen wir gemeinsam mit Ihnen fest – bitte sprechen Sie Ihren bulkify-Ansprechpartner an. Druckvorlage separat im Portal.');
+        $p->text($L, $y, $hinweis, 8, false, [110, 110, 108]); $y += 16;
     }
 
     // Gewichte: je Kapsel/Einheit, netto (Inhalt) und brutto (Gesamtgewicht der Packung).

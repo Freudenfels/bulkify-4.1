@@ -88,3 +88,6 @@ Bei Zukauf-Art „fertig" hat der Produktionsauftrag nur noch **Fertigware berei
 
 ## QM-Gate Schritte (St-11a)
 Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schließt nur QM (Rolle `labor`) oder Admin ab: Dashboard `produktion_schritt_erledigen()` (`produktion_qm_stationen()`, `darf_qm_freigeben()`), Prod-App/Werk-App `erp_schritt_abschliessen($id, $akteur, $uid)` (`erp_darf_qm()`). Die Produktion bekommt „… schließt QM ab (Vier-Augen-Prinzip)", in der Werk-App ist der Knopf gesperrt. Auch die QS-Freigabe in der Prod-App (`?p=qs`) und ihr Zurückziehen sind nur für QM/Admin. Admin-Overrides/God-Mode bleiben. Noch nicht gebaut: echtes Personen-Vier-Augen (b).
+
+**Vollbedruckt (03.11.2026):** `erp_vollbedruckt($pa_id)` (Behälter PA -> Auftrag -> Produkt bedruckt) – dann liefert
+`erp_etikett_item_id()` 0 (keine Etikett-Entnahme/-Anzeige) und `erp_etikett_sperre()` sperrt nicht. Spiegel von `auftrag_vollbedruckt()`.

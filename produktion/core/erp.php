@@ -539,9 +539,19 @@ function erp_etikett_schon_verwendet(string $hash, int $pa_id): int {
 // desselben Katalogprodukts: 1) die an den Auftrag gebundene Version (auftrag.etikett_item_id), 2) das aktuelle
 // Kundenetikett dieses Kunden (item.kunde_id), 3) der Produkt-Slot NUR wenn er ein generisches Etikett ist (kein
 // Kundenetikett eines Fremden). Spiegel von etikett_item_fuer_auftrag_kunde() im Dashboard.
+// Behälter des PA (PA → Auftrag → Produkt) ist bedruckt (vollbedruckter Beutel)? Dann ersetzt der Druck das Etikett.
+// Spiegel von auftrag_vollbedruckt()/verpackung_ist_bedruckt() im Dashboard.
+function erp_vollbedruckt(int $pa_id): bool {
+    if (!erp_spalte_da('item', 'kundenspezifisch')) return false;
+    return (int) scalar("SELECT COALESCE(i.kundenspezifisch,0) FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+                         LEFT JOIN produkt p ON p.id=pa.produkt_id
+                         LEFT JOIN item i ON i.id=COALESCE(NULLIF(pa.verpackung_id,0), NULLIF(a.verpackung_id,0), p.verpackung_id)
+                         WHERE pa.id=?", [$pa_id]) === 1;
+}
 function erp_etikett_item_id(int $pa_id): int {
     $pa = one("SELECT produkt_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa || empty($pa['produkt_id'])) return 0;
+    if (erp_vollbedruckt($pa_id)) return 0;   // vollbedruckt: kein Etikett
     $pid = (int)$pa['produkt_id']; $auf = (int)($pa['auftrag_id'] ?? 0);
     if ($auf && erp_spalte_da('auftrag', 'etikett_item_id')) {
         $b = (int) scalar("SELECT COALESCE(etikett_item_id,0) FROM auftrag WHERE id=?", [$auf]);
@@ -686,7 +696,7 @@ function erp_etikett_sperre(int $pa_id): string {
     $r = one("SELECT a.verpackung_id AS a_vp, a.etikett_freigegeben, p.etikett_id, p.verpackung_id AS p_vp
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$aid]);
     if (!$r) return '';
-    $braucht = (int)($r['etikett_id'] ?? 0) > 0 || ((int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0)) > 0;
+    $braucht = !erp_vollbedruckt($pa_id) && ((int)($r['etikett_id'] ?? 0) > 0 || ((int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0)) > 0);
     if (!$braucht || (int)($r['etikett_freigegeben'] ?? 0) === 1) return '';
     return erp_etikett_datei($pa_id) !== null ? 'Das Etikett ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
                                              : 'Es fehlt noch das Etikett-Design bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';

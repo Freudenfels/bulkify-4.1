@@ -83,20 +83,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ek = $_POST['p_ek'] ?? []; $besch = $_POST['p_besch'] ?? []; $quelle = $_POST['p_quelle'] ?? []; $grp = $_POST['p_gruppe'] ?? [];
         $prez = $_POST['p_rez'] ?? []; $pstk = $_POST['p_stk'] ?? []; $pvid = $_POST['p_vid'] ?? [];
         $pkspez = $_POST['p_kspez'] ?? [];   // Punkt 6: Verpackung bedruckt/kundenspezifisch (0/1 je Zeile)
+        $pblanko = $_POST['p_blanko'] ?? []; // Standbodenbeutel: 1 = Ausnahme „Blanko + Etikett" (Standard vollbedruckt)
         $sort = 0;
         foreach ($bez as $i => $b) {
             $b = trim($b); if ($b === '') continue;
             $gv = strtoupper(trim($grp[$i] ?? '')); $gv = ($gv !== '' && ctype_alpha($gv)) ? substr($gv, 0, 2) : null;
             $pEur = (float)str_replace(',', '.', $preis[$i] ?? '0');
             $qv = in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell';
-            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,preis_e4,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id,kundenspezifisch) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,preis_e4,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id,kundenspezifisch,blanko_etikett) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               [(int)$id, $sort++, trim($art[$i] ?? ''), $b, trim($besch[$i] ?? ''),
                (float)str_replace(',', '.', $mng[$i] ?? '0'), trim($einh[$i] ?? ''),
                (int) round($pEur * 100), (int) round($pEur * 10000),
                (int) round((float)str_replace(',', '.', $ek[$i] ?? '0') * 100),
                mwst_normalisieren((float)str_replace(',', '.', $mwst[$i] ?? '0')), $qv, $gv,
                (int)($prez[$i] ?? 0) ?: null, (int)($pstk[$i] ?? 0) ?: null, (int)($pvid[$i] ?? 0) ?: null,
-               ($qv === 'verpackung' && !empty($pkspez[$i])) ? 1 : 0]);
+               ($qv === 'verpackung' && !empty($pkspez[$i])) ? 1 : 0,
+               ($qv === 'verpackung' && !empty($pblanko[$i])) ? 1 : 0]);
         }
         } catch (Throwable $e) { db()->rollBack(); throw $e; }
         db()->commit();
@@ -931,10 +933,23 @@ if (!$neu):
             <input type="hidden" name="p_rez[]" value="<?= (int)($pp['rezeptur_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_vid[]" value="<?= (int)($pp['verpackung_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_kspez[]" class="p_kspez" value="<?= (int)($pp['kundenspezifisch'] ?? 0) ?>">
-            <?php if (($pp['quelle'] ?? '') === 'verpackung'): ?>
-            <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-top:4px" class="muted" title="Bedruckter, kundenspezifischer Behälter (kein Standard-Basic). Bei Annahme entsteht daraus ein eigener Behälter-Artikel am Produkt (wie Glas + Etikett) – getrennt vom Standard, im Einkauf bestellbar.">
-              <input type="checkbox" <?= (int)($pp['kundenspezifisch'] ?? 0) ? 'checked' : '' ?> onchange="this.closest('.posrow').querySelector('.p_kspez').value=this.checked?1:0"> bedruckt / kundenspezifisch</label>
-            <?php endif; ?>
+            <input type="hidden" name="p_blanko[]" class="p_blanko" value="<?= (int)($pp['blanko_etikett'] ?? 0) ?>">
+            <?php if (($pp['quelle'] ?? '') === 'verpackung'):
+                // Standbodenbeutel? (Behälter der Zeile, sonst der Herstellungszeile derselben Option)
+                $vpZeile = (int)($pp['verpackung_id'] ?? 0);
+                if ($vpZeile <= 0) foreach ($pos as $hp) if (($hp['quelle'] ?? '') === 'herstellung' && (string)($hp['gruppe'] ?? '') === (string)($pp['gruppe'] ?? '') && (int)($hp['verpackung_id'] ?? 0) > 0) { $vpZeile = (int)$hp['verpackung_id']; break; }
+                $istBeutelZeile = $vpZeile > 0 && (string) scalar("SELECT verpackungsart FROM item WHERE id=?", [verpackung_neutrale_basis($vpZeile) ?: $vpZeile]) === 'beutel';
+                if ($istBeutelZeile): $bl = (int)($pp['blanko_etikett'] ?? 0); ?>
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;margin-top:4px" class="muted" title="Standbodenbeutel: vollbedruckt ist Standard (eigener bedruckter Beutel je Produkt + Kunde, KEIN Etikett). Ausnahme: Blanko-Beutel + Etikett (Etikettformat individuell, nach Rücksprache).">
+              Beutel
+              <select style="font-size:11px;padding:2px 4px" onchange="var r=this.closest('.posrow');r.querySelector('.p_blanko').value=this.value;r.querySelector('.p_kspez').value=this.value==='1'?0:1">
+                <option value="0" <?= $bl ? '' : 'selected' ?>>vollbedruckt (Standard, ohne Etikett)</option>
+                <option value="1" <?= $bl ? 'selected' : '' ?>>blanko + Etikett (Ausnahme)</option>
+              </select></label>
+            <?php else: ?>
+            <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-top:4px" class="muted" title="Bedruckter, kundenspezifischer Behälter (kein Standard-Basic). Bei Annahme entsteht daraus ein eigener Behälter-Artikel je Produkt + Kunde – der Druck ersetzt das Etikett.">
+              <input type="checkbox" <?= (int)($pp['kundenspezifisch'] ?? 0) ? 'checked' : '' ?> onchange="this.closest('.posrow').querySelector('.p_kspez').value=this.checked?1:0"> bedruckt / kundenspezifisch (ohne Etikett)</label>
+            <?php endif; endif; ?>
             <input type="hidden" name="p_ek[]" class="p_ek" value="<?= h(number_format($pp['ek_cent']/100,4,'.','')) ?>">
             <?php if (($pp['quelle'] ?? '') === 'herstellung' && (int)($pp['rezeptur_id'] ?? 0) > 0 && (int)($pp['stueck'] ?? 0) > 0):
                 $ekQ = rezeptur_ek_quelle((int)$pp['rezeptur_id'], (int)$pp['stueck'], (int) round((float)$pp['menge']));   // Nacht 3 (13a)
@@ -1084,7 +1099,7 @@ function posRecalc(){
     var tr=document.createElement('tr'); tr.className='posrow';
     tr.innerHTML='<td><input type="text" name="p_bez[]">'
       +'<textarea name="p_besch[]" class="p_besch" rows="2" placeholder="Beschreibung / Rezeptur (optional)"></textarea>'
-      +'<input type="hidden" name="p_art[]" value=""><input type="hidden" name="p_quelle[]" value="manuell"><?= $istDL ? '<label style=\"display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-top:4px\" class=\"muted\">Variante <input type=\"text\" name=\"p_gruppe[]\" maxlength=\"1\" placeholder=\"–\" title=\"Varianten-Buchstabe A/B/C … (leer = Basis)\" style=\"width:44px;text-align:center;text-transform:uppercase\"></label>' : '<input type=\"hidden\" name=\"p_gruppe[]\" value=\"\">' ?><input type="hidden" name="p_kspez[]" class="p_kspez" value="0"><input type="hidden" name="p_ek[]" class="p_ek" value="0">'
+      +'<input type="hidden" name="p_art[]" value=""><input type="hidden" name="p_quelle[]" value="manuell"><?= $istDL ? '<label style=\"display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-top:4px\" class=\"muted\">Variante <input type=\"text\" name=\"p_gruppe[]\" maxlength=\"1\" placeholder=\"–\" title=\"Varianten-Buchstabe A/B/C … (leer = Basis)\" style=\"width:44px;text-align:center;text-transform:uppercase\"></label>' : '<input type=\"hidden\" name=\"p_gruppe[]\" value=\"\">' ?><input type="hidden" name="p_kspez[]" class="p_kspez" value="0"><input type="hidden" name="p_blanko[]" class="p_blanko" value="0"><input type="hidden" name="p_ek[]" class="p_ek" value="0">'
       +'<input type="hidden" name="p_rez[]" value=""><input type="hidden" name="p_vid[]" value=""></td>'
       +'<td><input type="number" step="1" min="0" name="p_stk[]" class="p_stk" data-unit="" placeholder="&ndash;" style="width:100%;text-align:right"></td>'
       +'<td><input type="number" step="0.001" name="p_menge[]" class="p_menge"></td>'

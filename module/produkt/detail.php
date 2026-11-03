@@ -589,8 +589,8 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
   <p class="muted" style="margin-top:0">Aktuell: <strong><?= $pibDok ? 'hochgeladenes PIB (' . h($pibDok['datei_orig'] ?: 'Datei') . ')' : 'automatisch aus den Produktdaten erzeugt' ?></strong></p>
   <?php if (!$pibDok && is_numeric($id) && produkt_etikettmass((int)$id) === null): ?>
     <div class="badge-warn" style="padding:8px 12px;margin-bottom:10px">
-      <strong>Etikettmaß fehlt</strong> – das automatische PIB kann keine Etikettengröße anzeigen (eines der wichtigsten Felder fürs Etikett).
-      Bitte am <strong>Behälter</strong> (Verpackung) das Endformat (B × H) hinterlegen, oder dem Produkt bzw. Auftrag eine Verpackung mit Etikettmaß zuordnen.
+      <strong>Etikettmaß fehlt</strong> – das automatische PIB nennt dann „individuell – nach Rücksprache mit Ihrem bulkify-Ansprechpartner“ (z. B. Blanko-Beutel + Etikett).
+      Steht das Format fest, am <strong>Behälter</strong> (Verpackung) das Endformat (B × H) hinterlegen, oder dem Produkt bzw. Auftrag eine Verpackung mit Etikettmaß zuordnen.
     </div>
   <?php endif; ?>
   <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap">

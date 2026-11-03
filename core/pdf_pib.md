@@ -35,3 +35,7 @@ Bei diesen Formen (`form_groessen_einheit()` = `g` bzw. `ml`) ist „Einheiten j
 - Gewichte: „Gewicht je Portion 5.000 mg (5 g)", Nettofüllmenge = die Füllmenge selbst (vorher fälschlich 300 × 5.000 mg = 1.500 g).
 - Tabellen „je Portion", Verzehrempfehlung „1 Portion (5 g) pro Tag", Pflichtangabe „Nettofüllmenge: 300 g (60 Portionen à 5 g)".
 - Kapseln/Tabletten unverändert; nur „je Tagesdosis = 1 Kapsel" steht jetzt im Singular.
+
+**Etikettmaß-Fallback (03.11.2026):** Fehlen Maße (z. B. Blanko-Beutel + Etikett, Format individuell), steht bei „Etikettmaße“
+„individuell – nach Rücksprache mit Ihrem bulkify-Ansprechpartner“. Vollbedruckter Behälter (`item.kundenspezifisch=1`):
+„Etikett: entfällt – Behälter vollbedruckt“, Druckformat nach Rücksprache. Reine Bulkware ohne Behälter: kein Etikett-Block.
