@@ -22,6 +22,9 @@ Die Seite führt die Prüf-Abfragen aus der Liste „Nicos manuelle Live-DB-Aufg
 | Kundenetiketten ohne Artikelnummer | nein |
 | Protokoll der Kundenetikett-Migration | Anzeige von `app_meta migr_kundenetikett_protokoll` |
 
+## Links
+„Öffnen" zeigt immer auf das Objekt der Zeile: Charge → `?p=chargen&id=` (Chargen-Detail), Produkt → Produkt, Bestellposition → Bestellung, Lieferanten-Preis → Rezeptur, Produktionsauftrag → PA, Benutzer → Benutzer, Kundenetikett → Verpackung. Zusätzlich sind verknüpfte Werte in der Tabelle anklickbar (Auftrags-Nr., PA, Charge-Nr.).
+
 ## Beheben
 - Je Prüfung mit dokumentierter Korrektur gibt es einen Haken je Zeile (plus „alle") und den Knopf „Angehakte beheben" mit Bestätigung.
 - Ausgeführt wird genau die angezeigte Korrektur, nur für die angehakten Zeilen. Die Bedingungen der Prüfung stehen immer mit in der WHERE, und die IDs werden vor dem Ausführen gegen die aktuelle Trefferliste geprüft. Eine veraltete Auswahl ändert also nichts Falsches.

@@ -17,7 +17,8 @@ if (!has_role('admin')) {
 $gelMenge = column_exists('bestellung_position', 'geliefert_menge');
 
 // --- Prüfungen ---------------------------------------------------------------------------------------------
-// sql:     reine Lese-Abfrage; _id = Zeilen-ID für die Auswahl (wird nicht angezeigt), _link = Öffnen-Link.
+// sql:     reine Lese-Abfrage; _id = Zeilen-ID für die Auswahl (wird nicht angezeigt), _link = Öffnen-Link auf das Objekt der
+//          Zeile (Charge -> ?p=chargen, Produkt -> ?p=produkt …), _link_<spalte> = macht den Wert dieser Spalte zum Link.
 // fix:     null = nur Anzeige. Sonst: tabelle/typ fürs Protokoll, update mit {IDS} (die Bedingungen der Prüfung stehen
 //          IMMER mit in der WHERE, damit eine veraltete Auswahl nichts Falsches ändert), waehlbar = Zeile behebbar?
 // leer_ok: false = keine Treffer ist das Problem (z. B. niemand hat die QM-Rolle).
@@ -52,7 +53,7 @@ $CHECKS = [
     's10_verbrauch' => [
         'titel' => 'S-10: Pulver-Verbrauch als „Stk" gebucht',
         'info'  => 'Produktions-Verbrauch mit Einheit „Stk", obwohl die Charge in g oder ml geführt wird.',
-        'sql'   => "SELECT v.id AS _id, CONCAT('?p=produktionsauftrag&id=', v.pa_id) AS _link, v.pa_id, v.menge, v.einheit, c.charge_nr, c.einheit AS charge_einheit, i.name
+        'sql'   => "SELECT v.id AS _id, CONCAT('?p=produktionsauftrag&id=', v.pa_id) AS _link, CONCAT('?p=chargen&id=', v.charge_id) AS _link_charge_nr, v.pa_id, v.menge, v.einheit, c.charge_nr, c.einheit AS charge_einheit, i.name
                     FROM produktion_verbrauch v JOIN charge c ON c.id = v.charge_id JOIN item i ON i.id = v.item_id
                     WHERE v.einheit = 'Stk' AND c.einheit IN ('g','ml')
                     ORDER BY v.id DESC",
@@ -76,7 +77,8 @@ $CHECKS = [
     'fertig_auftrag' => [
         'titel' => 'Fertigware-Altchargen ohne Auftrag',
         'info'  => 'Optional. Die Chargen funktionieren weiter über den Produktionsauftrag, die Zuordnung zum Auftrag dient nur Übersicht und Auswertung. Behebbar sind nur Zeilen mit Auftrags-Vorschlag.',
-        'sql'   => "SELECT c.id AS _id, IF(pa.auftrag_id IS NULL, NULL, CONCAT('?p=auftrag&id=', pa.auftrag_id)) AS _link, c.charge_nr, i.name, c.menge, c.menge_verfuegbar, c.status,
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=chargen&id=', c.id) AS _link, IF(pa.auftrag_id IS NULL, NULL, CONCAT('?p=auftrag&id=', pa.auftrag_id)) AS _link_auftrag_nr,
+                           IF(c.pa_id IS NULL, NULL, CONCAT('?p=produktionsauftrag&id=', c.pa_id)) AS _link_pa_id, c.charge_nr, i.name, c.menge, c.menge_verfuegbar, c.status,
                            c.pa_id, pa.auftrag_id AS auftrag_vorschlag_id, a.nummer AS auftrag_nr, a.kunde_id
                     FROM charge c JOIN item i ON i.id = c.item_id
                     LEFT JOIN produktionsauftrag pa ON pa.id = c.pa_id LEFT JOIN auftrag a ON a.id = pa.auftrag_id
@@ -92,7 +94,7 @@ $CHECKS = [
     's16_bestand' => [
         'titel' => 'S-16: Fremdlager-Altbestand – freie Fertigware ohne Besitzer',
         'info'  => 'Fertigware auf Artikeln von Fulfillment-Kunden (Produkt gehört dem Kunden), noch ohne Besitzer. Bis zur Migration gilt sie im FEFO als Rückfall.',
-        'sql'   => "SELECT c.id AS _id, CONCAT('?p=kunde&id=', p.kunde_id) AS _link, c.charge_nr, i.name, c.menge_verfuegbar, c.status, c.standort, p.kunde_id, k.firma
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=chargen&id=', c.id) AS _link, c.charge_nr, i.name, c.menge_verfuegbar, c.status, c.standort, p.kunde_id, k.firma
                     FROM charge c JOIN item i ON i.id = c.item_id AND i.kategorie = 'verkaufsfertig'
                     JOIN produkt p ON p.id = i.produkt_id JOIN kunden k ON k.id = p.kunde_id AND k.nutzt_fulfillment = 1
                     WHERE c.fremd_kunde_id IS NULL AND c.status IN ('frei','quarantaene') AND c.menge_verfuegbar > 0
@@ -124,7 +126,7 @@ $CHECKS = [
     'zukauf_fertig' => [
         'titel' => 'Zukauf „fertig" mit alten Schritten',
         'info'  => 'Offene Produktionsaufträge mit Zukauf-Art „fertig", bei denen Verpacken oder Etikettieren noch offen ist. Neue PAs bekommen automatisch den kurzen Weg.',
-        'sql'   => "SELECT pa.id AS _id, IF(a.id IS NULL, CONCAT('?p=produktionsauftrag&id=', pa.id), CONCAT('?p=auftrag&id=', a.id)) AS _link, pa.nummer, a.nummer AS auftrag,
+        'sql'   => "SELECT pa.id AS _id, CONCAT('?p=produktionsauftrag&id=', pa.id) AS _link, IF(a.id IS NULL, NULL, CONCAT('?p=auftrag&id=', a.id)) AS _link_auftrag, pa.nummer, a.nummer AS auftrag,
                            GROUP_CONCAT(s.station ORDER BY s.sort SEPARATOR ' > ') AS offene_schritte
                     FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id = pa.auftrag_id
                     JOIN produktion_schritt s ON s.pa_id = pa.id AND s.erledigt = 0
@@ -287,7 +289,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
       <?php foreach ($rows as $r): ?>
         <tr>
           <?php if ($fix): ?><td><?php if (!isset($fix['waehlbar']) || ($fix['waehlbar'])($r)): ?><input type="checkbox" name="ids[]" value="<?= (int)$r['_id'] ?>"><?php endif; ?></td><?php endif; ?>
-          <?php foreach ($spalten as $s): ?><td><?= dp_wert($s, $r[$s]) ?></td><?php endforeach; ?>
+          <?php foreach ($spalten as $s): $lz = $r['_link_' . $s] ?? null; ?><td><?= $lz && $r[$s] !== null && $r[$s] !== '' ? '<a href="' . h((string)$lz) . '">' . dp_wert($s, $r[$s]) . '</a>' : dp_wert($s, $r[$s]) ?></td><?php endforeach; ?>
           <?php if ($hatLink): ?><td><?= !empty($r['_link']) ? '<a href="' . h((string)$r['_link']) . '">Öffnen</a>' : '' ?></td><?php endif; ?>
         </tr>
       <?php endforeach; ?>
