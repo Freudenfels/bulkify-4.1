@@ -39,3 +39,11 @@ Bei diesen Formen (`form_groessen_einheit()` = `g` bzw. `ml`) ist „Einheiten j
 **Etikettmaß-Fallback (03.11.2026):** Fehlen Maße (z. B. Blanko-Beutel + Etikett, Format individuell), steht bei „Etikettmaße“
 „individuell – nach Rücksprache mit Ihrem bulkify-Ansprechpartner“. Vollbedruckter Behälter (`item.kundenspezifisch=1`):
 „Etikett: entfällt – Behälter vollbedruckt“, Druckformat nach Rücksprache. Reine Bulkware ohne Behälter: kein Etikett-Block.
+
+## Pulver/Granulat: Rezeptur = Tagesdosis (03.11.2026)
+Bei Pulver/Granulat ist die Rezeptur EINE Tagesdosis, die Packung hat g. Das PIB zeigt:
+- „Füllmenge/Nettofüllmenge 300 g (ca. 60 Tagesdosen à 5 g)“ (`tagesdosen_txt()`, reine Info, abgerundet),
+- Zutaten und Nährwerte „je Tagesdosis“ (eine Spalte),
+- Verzehrempfehlung „5 g pro Tag (1 Tagesdosis)“ bzw. „5 g täglich mit ausreichend Flüssigkeit“.
+
+Eine Kundenwahl „pro Tag“ (`$proTagOverride`) wird bei Pulver ignoriert (immer 1). Kapseln/Tabletten/Sticks/Flüssig unverändert.

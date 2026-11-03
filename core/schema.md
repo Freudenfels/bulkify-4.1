@@ -375,3 +375,6 @@ der Lager-App (`lg_versand` über Positionen mit Fertigware-Chargen des Auftrags
 kunde_id, auftrag_id ODER angebot_id, akteur kunde|team, text, benutzer, erstellt UTC, gelesen_team/_kunde). `kunde_nachricht_senden()`,
 `kunde_nachrichten()`, `kunde_nachricht_gelesen()`. Ansprechpartner: `kunden.betreuer_benutzer_id` (je Kunde) sonst
 `app_meta portal_ansprechpartner_id` (Standard) -> `portal_ansprechpartner($k)` liefert name/position/telefon/email aus `benutzer`.
+
+## Pulver: Tagesdosen nur als Info (03.11.2026)
+`form_ist_tagesdosis($form)` (Pulver/Granulat), `tagesdosen_je_packung($g, $dosis_mg)` (abgerundet) und `tagesdosen_txt($g, $dosis_mg, $ca='≈')` („≈ 60 Tagesdosen à 5 g“). Regel (Nico): Die Rezeptur ist eine Tagesdosis, der Kunde gibt die g je Packung an. Die Tagesdosen werden nur angezeigt; gerechnet wird nach Gewicht (Füllmenge × Massenanteil).

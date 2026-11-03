@@ -4560,6 +4560,20 @@ function form_groessen_label(string $form, float $wert): string {
     if ($e !== '') return rtrim(rtrim(number_format($wert, 1, ',', '.'), '0'), ',') . ' ' . $e;
     return (int) $wert . ' ' . form_plural($form);
 }
+// Pulver/Granulat (Nico 03.11.2026): die Rezeptur ist EINE Tagesdosis, die Packungsgröße sind g (gibt der Kunde an).
+// Wie viele Tagesdosen eine Packung ergibt, ist reine Info für den Kunden (abgerundet auf ganze Tagesdosen) –
+// gerechnet wird ausschließlich nach Gewicht (Füllmenge × Massenanteil), nie über die Zahl der Tagesdosen.
+function form_ist_tagesdosis(string $form): bool { return form_groessen_einheit($form) === 'g'; }
+function tagesdosen_je_packung(float $g, float $dosis_mg): int {
+    return ($g > 0 && $dosis_mg > 0) ? (int) floor($g * 1000 / $dosis_mg + 1e-9) : 0;
+}
+// „≈ 30 Tagesdosen à 9 g" (leer, wenn nicht bestimmbar). $ca: Zeichen davor (PDF: „ca.", MiniPDF kennt kein ≈).
+function tagesdosen_txt(float $g, float $dosis_mg, string $ca = '≈'): string {
+    $n = tagesdosen_je_packung($g, $dosis_mg);
+    if ($n <= 0) return '';
+    $dg = rtrim(rtrim(number_format($dosis_mg / 1000, 2, ',', '.'), '0'), ',');
+    return $ca . ' ' . number_format($n, 0, ',', '.') . ' ' . ($n === 1 ? 'Tagesdosis' : 'Tagesdosen') . ' à ' . $dg . ' g';
+}
 // „Inhalt je Packung" formgerecht: Pulver „300 g je Packung", Flüssig „250 ml je Packung", Kapseln „60 Kapseln je Packung",
 // sonst „60 Stk je Packung" – nie „300 Stück je Packung" bei Pulver (St-13). Leer, wenn kein Wert.
 function inhalt_je_packung_txt(string $form, float $wert): string {
