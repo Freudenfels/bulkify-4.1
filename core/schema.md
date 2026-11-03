@@ -382,3 +382,11 @@ kunde_id, auftrag_id ODER angebot_id, akteur kunde|team, text, benutzer, erstell
 `pulver_ist_portionszahl($rid, $alt, $neu)` und `pulver_auftrag_fuellmenge_korrigieren($auftrag_id, $alt, $neu, $route)`: Pulver-Altdaten (v3, Portionen statt g) erkennen bzw. Auftrag + PA umstellen (guarded, Protokoll, `bedarf_bump`). Genutzt von Kundenpreis-Liste und Datenprüfung.
 
 `kundenpreis_setzen()` (03.11.2026): Schlüssel = Produkt + Kunde + Menge je Packung + Bestellmenge (`COALESCE(anzahl_vpe,0)`), also Staffelpreise. 0/leer = Preis für alle Mengen.
+
+## Kundenetikett je Auftrag sicherstellen (03.11.2026)
+`auftrag_kundenetikett_sicherstellen($auftrag_id)` legt für Alt-/v3-/Import-/Kontingent-Aufträge ohne Annahme-Hook das Kundenetikett (je Produkt + Kunde) an:
+- v1 mit Maßen aus dem Glas; ein freigegebenes Design des Auftrags geht mit (`kundenetikett_nach_freigabe`).
+- Offene Aufträge werden gebunden (`etikett_item_id`, protokolliert). Gelieferte nur, wenn sie noch gar kein Kundenetikett tragen.
+- Nicht bei Handelsware, Bulk ohne Behälter oder vollbedrucktem Behälter.
+
+Aufgerufen in `auftrag_aus_import()` und `kontingent_abruf()` (dort fehlte der Hook) sowie über die Datenprüfung `kundenetikett_fehlt`. Die Kopie `auftrag_aus_import()` in `buchhaltung/core/erp.php` darf core/schema.php nicht laden; diese Aufträge fängt die Datenprüfung.

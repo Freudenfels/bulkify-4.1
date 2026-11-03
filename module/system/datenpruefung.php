@@ -273,6 +273,42 @@ $CHECKS = [
         'ohne_fix'  => 'Nur Anzeige – Beheben-Knopf erst nach Freigabe.',
         'fix'   => null,
     ],
+    'kundenetikett_fehlt' => [
+        'titel' => 'Etikett: Auftrag ohne Kundenetikett-Artikel',
+        'info'  => 'Alt-/v3-/Import-Aufträge mit Etikett, für deren Produkt + Kunde es noch keinen Kundenetikett-Artikel gibt (er entsteht sonst bei der Annahme). Ohne ihn lassen sich gelieferte Etiketten nicht kundenrein einbuchen (Lager „Etiketten einbuchen" findet das Produkt nicht), Bedarf und Bestand laufen über das allgemeine Maß-Etikett aus dem Glas.',
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, a.status, p.nummer AS produkt_nr, p.name AS produkt,
+                           CONCAT('?p=produkt&id=', p.id) AS _link_produkt, k.firma AS kunde, a.etikett_freigegeben AS design_freigegeben,
+                           (SELECT COUNT(*) FROM auftrag a2 WHERE a2.produkt_id=a.produkt_id AND a2.kunde_id=a.kunde_id AND a2.status<>'storniert') AS auftraege_gesamt
+                    FROM auftrag a
+                    JOIN produkt p ON p.id = a.produkt_id
+                    LEFT JOIN kunden k ON k.id = a.kunde_id
+                    WHERE a.status <> 'storniert' AND a.kunde_id IS NOT NULL AND COALESCE(p.handelsware,0) = 0
+                      AND COALESCE(NULLIF(a.verpackung_id,0), p.verpackung_id, p.etikett_id) IS NOT NULL
+                      AND NOT EXISTS (SELECT 1 FROM item i WHERE i.verpackung_rolle='etikett' AND i.produkt_id=a.produkt_id AND i.kunde_id=a.kunde_id AND COALESCE(i.gesperrt,0)=0)
+                      AND a.id = (SELECT MAX(a3.id) FROM auftrag a3 WHERE a3.produkt_id=a.produkt_id AND a3.kunde_id=a.kunde_id AND a3.status<>'storniert')
+                    ORDER BY a.id DESC",
+        'zeilen' => function (array $rows): array {
+            // Vollbedruckter Beutel braucht kein Etikett (der Druck ersetzt es) -> nicht anbieten.
+            $rows = array_values(array_filter($rows, fn($r) => auftrag_braucht_etikett((int)$r['_id']) && !auftrag_vollbedruckt((int)$r['_id'])));
+            foreach ($rows as &$r) {
+                $vl = kundenetikett_vorlage((int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [(int)$r['_id']]));
+                $r['masse_aus_glas'] = !empty($vl['etikett_format']) ? (string)$vl['etikett_format'] : ((!empty($vl['breite_mm']) && !empty($vl['hoehe_mm'])) ? (float)$vl['breite_mm'] . ' x ' . (float)$vl['hoehe_mm'] . ' mm' : null);
+                $r['aenderung'] = 'Kundenetikett v1 anlegen' . ((int)$r['design_freigegeben'] === 1 ? ' mit freigegebenem Design' : ' (Design folgt mit der Freigabe)') . ', offene Aufträge binden';
+            }
+            return $rows;
+        },
+        'korrektur' => "-- je angehaktem Produkt + Kunde (Zeile = jüngster Auftrag): wie bei der Annahme\nauftrag_kundenetikett_sicherstellen(<Auftrag>)   -- je Auftrag dieses Produkts + Kunden\n  -> kundenetikett_sicherstellen(Produkt, Kunde, Behälter)   -- v1, Maße aus dem Glas\n  -> freigegebenes Design: kundenetikett_nach_freigabe(Auftrag)\n  -> offene Aufträge: UPDATE auftrag SET etikett_item_id = <v1>",
+        'ohne_fix'  => 'Legt nur an und bindet, löscht nichts. Bereits gebuchter Bestand auf dem allgemeinen Maß-Etikett bleibt dort.',
+        'fix'   => ['tabelle' => 'auftrag', 'typ' => 'auftrag',
+                    'aktion' => function (array $r): int {
+                        $n = 0;
+                        $a = one("SELECT produkt_id, kunde_id FROM auftrag WHERE id=?", [(int)$r['_id']]);
+                        if (!$a) return 0;
+                        foreach (all("SELECT id FROM auftrag WHERE produkt_id=? AND kunde_id=? AND status<>'storniert' ORDER BY id DESC", [(int)$a['produkt_id'], (int)$a['kunde_id']]) as $x)
+                            if (auftrag_kundenetikett_sicherstellen((int)$x['id']) > 0) $n++;
+                        return $n;
+                    }],
+    ],
     'pulver_kundenpreis' => [
         'titel' => 'Pulver: Kundenpreis mit Portionen statt g je Packung',
         'info'  => 'Bei Pulver/Granulat ist die Menge je Packung die Füllmenge in g. Alte Zeilen (v3) tragen die Portionszahl (z. B. 31 statt 275 g). Treffer: Menge kleiner als die Füllmenge des Produkts UND Menge × Portionsgröße liegt höchstens 25 % neben der Füllmenge (dann sind es Portionen). Korrektur: Menge = Füllmenge des Produkts.',

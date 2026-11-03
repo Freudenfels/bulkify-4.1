@@ -9526,6 +9526,35 @@ function kundenetikett_nach_freigabe(int $auftrag_id): void {
     // Bereitschaft nach dem Wechsel auf v2 weiter „Etikett vorrätig" mit den alten v1-Etiketten).
     if (function_exists('bedarf_bump')) bedarf_bump();
 }
+// Jeder Auftrag mit Etikett braucht SEIN Kundenetikett (Artikel je Produkt + Kunde), sonst lassen sich gelieferte Etiketten
+// nicht kundenrein einbuchen (Lager „Etiketten einbuchen") und Bedarf/Bestand fallen aufs generische Maß-Etikett zurück.
+// Für Alt-/v3-/Import-/Kontingent-Aufträge (ohne Annahme-Hook): Kundenetikett sicherstellen (v1 mit Maßen aus dem Glas),
+// ein schon freigegebenes Design des Auftrags geht mit (kundenetikett_nach_freigabe). Offene Aufträge werden daran gebunden,
+// gelieferte/erledigte nur, wenn sie noch gar kein Kundenetikett tragen (Historie bleibt sonst unberührt).
+// Nicht bei Handelsware, Bulk ohne Behälter, vollbedrucktem Behälter. Rückgabe: Etikett-Artikel (0 = keins nötig/möglich).
+function auftrag_kundenetikett_sicherstellen(int $auftrag_id): int {
+    $a = one("SELECT a.id, a.status, a.produkt_id, a.kunde_id, COALESCE(a.verpackung_id,0) AS vp, COALESCE(a.etikett_item_id,0) AS eid,
+                     COALESCE(p.handelsware,0) AS hw
+              FROM auftrag a JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    if (!$a || (int)$a['kunde_id'] <= 0 || (int)$a['hw'] === 1 || (string)$a['status'] === 'storniert') return 0;
+    if (!auftrag_braucht_etikett($auftrag_id) || auftrag_vollbedruckt($auftrag_id)) return 0;
+    $pid = (int)$a['produkt_id']; $kid = (int)$a['kunde_id'];
+    $eigen = fn(int $eid) => $eid > 0 && (int) scalar("SELECT 1 FROM item WHERE id=? AND verpackung_rolle='etikett' AND produkt_id=? AND kunde_id=?", [$eid, $pid, $kid]);
+    if ($eigen((int)$a['eid'])) return (int)$a['eid'];
+    if (kundenetikett_aktuell($pid, $kid) <= 0 && etikett_freigegeben($auftrag_id) && etikett_datei($auftrag_id))
+        kundenetikett_nach_freigabe($auftrag_id);   // legt v1 mit dem freigegebenen Design an und bindet diesen Auftrag
+    $et = kundenetikett_sicherstellen($pid, $kid, (int)$a['vp']);
+    if ($et <= 0) return 0;
+    $offen = in_array((string)$a['status'], ['offen', 'in_produktion'], true);
+    $jetzt = (int) scalar("SELECT COALESCE(etikett_item_id,0) FROM auftrag WHERE id=?", [$auftrag_id]);
+    if (!$eigen($jetzt) && ($offen || $jetzt <= 0)) {
+        $vor = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]) ?: [];
+        q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$et, $auftrag_id]);
+        if ($vor) aenderung_protokollieren('auftrag', $auftrag_id, $vor, one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]) ?: [], 'kundenetikett');
+    }
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return $et;
+}
 // Altdaten: bestehende Kundenetikett-Artikel (item mit produkt_id, ohne kunde_id) JE KUNDE zuordnen. Einmalig (Meta-Flag
 // migr_kundenetikett_je_kunde), idempotent, löscht NICHTS. Schritte:
 //  A) Besitzer = Kunde des FRÜHESTEN Auftrags, der an diesen Artikel gebunden ist (der Kunde, dessen Annahme v1/vN erzeugt
@@ -11612,6 +11641,7 @@ function auftrag_aus_import(int $kunde_id, array $d, string $status): array {
       [naechste_nummer('AB'), $kunde_id, $pid ?: null, $menge, $stueck ?: null, $verpId ?: null, $vk, $netto, $status, $datum,
        mb_substr((string)($d['produkt_name'] ?? ''), 0, 190) ?: null, (string)($d['darreichungsform'] ?? 'kapsel'), ($ref !== '' ? mb_substr($ref, 0, 60) : null)]);
     $aid = (int) insert_id();
+    if ($pid) auftrag_kundenetikett_sicherstellen($aid);   // Kundenetikett je Produkt + Kunde wie bei der Annahme
     log_aktivitaet('kunde', $kunde_id, 'team', 'Auftrag aus Angebot/AB importiert' . ($ref !== '' ? ' (' . $ref . ')' : '') . '.', 'auftrag', 'auftrag', $aid);
     return ['ok' => true, 'auftrag_id' => $aid, 'produkt_id' => (int)$pid, 'rezeptur_id' => $rez['id'], 'rezeptur_neu' => $rez['neu'], 'schon_da' => false];
 }
@@ -11847,6 +11877,7 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
       [naechste_nummer('AB'), $kid, $pid, $menge, $kStueck ?: null, $kVerp ?: null, $vk, $netto, 'offen', $kontingent_id]);
     $aid = insert_id();
     auftrag_name_snapshot((int)$aid);
+    if ($pid) auftrag_kundenetikett_sicherstellen((int)$aid);   // Kundenetikett je Produkt + Kunde wie bei der Annahme
     $land = scalar("SELECT land FROM kunden WHERE id=?", [$kid]) ?: 'DE';
     $ustP = (meta_get('kleinunternehmer', '0') === '1' || $land !== 'DE') ? 0.0 : (float) meta_get('ust_inland', 19);
     $ust = round($netto * $ustP / 100, 2); $brutto = $netto + $ust;
