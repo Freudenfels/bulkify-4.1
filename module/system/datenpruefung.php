@@ -199,11 +199,24 @@ $CHECKS = [
         'sql'   => "SELECT id AS _id, CONCAT('?p=verpackung&id=', id) AS _link, id, name, produkt_id, kunde_id FROM item
                     WHERE verpackung_rolle = 'etikett' AND produkt_id IS NOT NULL AND (artikelnummer IS NULL OR artikelnummer = '')
                     ORDER BY id",
-        'korrektur' => '',
-        'ohne_fix'  => 'Keine Korrektur dokumentiert, nur Anzeige.',
-        'fix'   => null,
+        'korrektur' => "-- je angehaktem Etikett, in ID-Reihenfolge, über die atomare Nummernvergabe wie bei neuen Kundenetiketten:\nUPDATE item SET artikelnummer = naechste_nummer(item_prefix('verpackung'))   -- VP-…, schon vergebene Nummern werden übersprungen\n WHERE id = <Etikett> AND verpackung_rolle='etikett' AND produkt_id IS NOT NULL AND (artikelnummer IS NULL OR artikelnummer='');",
+        'ohne_fix'  => 'Freigegeben von Nico am 03.11.2026. Schon nummerierte Etiketten fallen aus der Liste und werden nie neu nummeriert.',
+        'fix'   => ['tabelle' => 'item', 'typ' => 'item', 'sortiert' => true,
+                    'update' => "UPDATE item SET artikelnummer = ? WHERE id = ? AND verpackung_rolle = 'etikett' AND produkt_id IS NOT NULL AND (artikelnummer IS NULL OR artikelnummer = '')",
+                    'params' => fn(array $r) => [dp_neue_vp_nummer(), (int)$r['_id']]],
     ],
 ];
+
+// Artikelnummer für ein Kundenetikett: dieselbe Logik wie kundenetikett_version_anlegen() (Aufräumen 17) –
+// naechste_nummer(item_prefix('verpackung')) unter der Nummern-Sperre. Liegt der Nummernkreis hinter Altbestand, wird
+// eine schon vergebene Nummer übersprungen, damit keine Doppelnummer entsteht.
+function dp_neue_vp_nummer(): string {
+    for ($i = 0; $i < 100; $i++) {
+        $nr = naechste_nummer(item_prefix('verpackung'));
+        if (!scalar("SELECT 1 FROM item WHERE artikelnummer = ? LIMIT 1", [$nr])) return $nr;
+    }
+    throw new \RuntimeException('Keine freie VP-Nummer gefunden (Nummernkreis prüfen).');
+}
 
 // Prüfung ausführen (Fehler, z. B. fehlende Spalte, wird angezeigt statt die Seite zu sprengen).
 function dp_laden(array $c): array {
@@ -224,6 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
         if (!isset($fix['waehlbar']) || ($fix['waehlbar'])($r)) $erlaubt[(int)$r['_id']] = $r;
     $sel = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), fn($i) => isset($erlaubt[$i]))));
     if (!$sel) { header('Location: ?p=datenpruefung&err=' . rawurlencode('Keine (gültige) Zeile angehakt – nichts geändert.') . '#' . $key); exit; }
+    if (!empty($fix['sortiert'])) sort($sel);   // z. B. Nummern in ID-Reihenfolge vergeben
     $zielSp = $fix['ziel'] ?? '_id';
     $ids = array_values(array_unique(array_map(fn($i) => (int)$erlaubt[$i][$zielSp], $sel)));
     $tab = $fix['tabelle'];

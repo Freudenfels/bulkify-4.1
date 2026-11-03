@@ -19,7 +19,7 @@ Die Seite führt die Prüf-Abfragen aus der Liste „Nicos manuelle Live-DB-Aufg
 | Zukauf „fertig" mit alten Schritten | nein (am Auftrag Zukauf-Art neu speichern) |
 | Wer hat die Rolle QM (labor)? | nein (Warnung, wenn niemand) |
 | Doppelte Nummern | nein (Einzelentscheidung, freigegebene Rechnungen nie umnummerieren) |
-| Kundenetiketten ohne Artikelnummer | nein |
+| Kundenetiketten ohne Artikelnummer | ja (Freigabe Nico 03.11.): Artikelnummer wie bei neuen Kundenetiketten, `naechste_nummer(item_prefix('verpackung'))` = VP-… unter der Nummern-Sperre, in ID-Reihenfolge; schon in `item` vergebene Nummern werden übersprungen (`dp_neue_vp_nummer()`); nummerierte Etiketten fallen aus der Liste |
 | Protokoll der Kundenetikett-Migration | Anzeige von `app_meta migr_kundenetikett_protokoll` |
 
 ## Links
