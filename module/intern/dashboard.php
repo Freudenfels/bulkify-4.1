@@ -11,7 +11,7 @@ if (function_exists('benachrichtigungen_auto_pruefen')) benachrichtigungen_auto_
 
 $anfragen_neu   = (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE status='neu'");
 $angebote_offen = (int) scalar("SELECT COUNT(*) FROM angebot WHERE status IN ('offen','gesendet')");
-$prod_offen     = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE status IN ('offen','laufend')");
+$prod_offen     = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag pa WHERE pa.status IN ('offen','laufend') AND " . pa_aktiv_sql());
 $versandbereit  = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status='erledigt'");
 $offene_posten  = (float) scalar("SELECT COALESCE(SUM(brutto),0) FROM beleg WHERE typ='rechnung' AND status='offen'");
 $rohstoff_leer  = (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0

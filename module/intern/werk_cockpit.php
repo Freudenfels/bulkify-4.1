@@ -15,13 +15,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'aufga
 $meineAufgaben = $uid ? aufgaben_fuer_benutzer($uid) : [];
 
 // Kennzahlen
-$paOffen   = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE status IN ('offen','laufend')");
-$paLaufend = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE status='laufend'");
+$paOffen   = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag pa WHERE pa.status IN ('offen','laufend') AND " . pa_aktiv_sql());
+$paLaufend = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag pa WHERE pa.status='laufend' AND " . pa_aktiv_sql());
 $quar      = (int) scalar("SELECT COUNT(*) FROM charge WHERE status='quarantaene'");
 $rezOffen  = (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE status NOT IN ('beantwortet','abgelehnt')");
 // Produktionsbereit: Material komplett da
 $paBereitAnz = 0;
-foreach (all("SELECT id FROM produktionsauftrag WHERE status IN ('offen','laufend')") as $x)
+foreach (all("SELECT pa.id FROM produktionsauftrag pa WHERE pa.status IN ('offen','laufend') AND " . pa_aktiv_sql()) as $x)
     if (produktion_bereitschaft((int)$x['id'])['status'] === 'bereit') $paBereitAnz++;
 
 // Als Nächstes zu produzieren (offene/laufende PA, nächste Station)
@@ -31,7 +31,7 @@ $paListe = all("SELECT pa.*, k.firma AS kunde_firma, p.name AS produkt_name,
                 (SELECT station FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 ORDER BY s.sort LIMIT 1) AS naechste_station
                 FROM produktionsauftrag pa
                 LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
-                WHERE pa.status IN ('offen','laufend')
+                WHERE pa.status IN ('offen','laufend') AND " . pa_aktiv_sql() . "
                 ORDER BY pa.prio ASC, (pa.status='laufend') DESC, pa.angelegt ASC LIMIT 12");
 
 // Letzte Wareneingänge
@@ -42,7 +42,7 @@ $wareneingaenge = all("SELECT c.*, i.name AS item_name FROM charge c
 // Baustein 2: heute eingeplante Produktionen
 $heutePlan = all("SELECT pa.*, p.name AS produkt_name, k.firma AS kunde
                   FROM produktionsauftrag pa LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN kunden k ON k.id=pa.kunde_id
-                  WHERE pa.geplant_am = ? AND pa.status <> 'erledigt' ORDER BY pa.prio, pa.angelegt", [date('Y-m-d')]);
+                  WHERE pa.geplant_am = ? AND pa.status <> 'erledigt' AND " . pa_aktiv_sql() . " ORDER BY pa.prio, pa.angelegt", [date('Y-m-d')]);
 
 // Baustein 4: Wareneingänge, die gezielt für einen Auftrag gekommen sind
 $wareFuerAuftrag = all("SELECT c.*, i.name AS item_name, i.kategorie AS kategorie, i.form AS form,

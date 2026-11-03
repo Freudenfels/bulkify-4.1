@@ -11,3 +11,5 @@
 **Zugänge:** Menü „Geführte Produktion" (Werk-Menü oben, auch Admin-Menü); Button „Geführt produzieren" auf der Admin-Detailseite.
 
 Schritt-Fehler (z. B. Etikett nicht freigegeben) werden als Meldung „Schritt nicht abgeschlossen: …" angezeigt (`schrittfehler`).
+
+Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief.

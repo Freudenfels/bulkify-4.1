@@ -7,3 +7,5 @@
 **Listen:** Neue Rezepturanfragen (→ Bearbeitung), Versandbereite Aufträge (→ Versand), Offene Rechnungen (→ Rechnung). Jede Zeile klickbar.
 
 **Technik:** rechnet die Zahlen live per `scalar()`/`all()` über die Modul-Tabellen; keine eigenen Daten.
+
+Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief. (Zähler „Produktion offen“)

@@ -12,3 +12,5 @@ Menü „Produktion → Planung". Rolle: `production` (Admin immer).
 
 **Vertrag mit `/produktion/`:** Die Produktion **liest** `geplant_am` nur (Spalte „Wann dran",
 Kalender, Sortierung). Gesetzt wird ausschließlich hier im Dashboard – keine weiteren Felder/Tabellen.
+
+Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief.

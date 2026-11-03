@@ -14,3 +14,5 @@ Aufträge lassen sich per **Drag & Drop** auf einen Tag ziehen (= `geplant_am` s
 **Kapazität/Tag:** einstellbar (app_meta `prod_kap_tag`, Default 3). Tage mit mehr Aufträgen als Kapazität werden rot markiert; Anzeige „belegt/Kapazität". Mehrere Aufträge am selben Tag = parallel.
 
 **Mitarbeiter:** Spalte `produktionsauftrag.mitarbeiter_id` (FK benutzer). Je Auftrag (im Kalender-Chip und in der ungeplant-Liste) ein Mitarbeiter-Dropdown (aktive `benutzer`), Aktion `mitarbeiter`. Schreibt nur `geplant_am` + `mitarbeiter_id`; die Produktion liest.
+
+Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief.

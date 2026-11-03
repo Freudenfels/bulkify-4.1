@@ -337,6 +337,27 @@ $CHECKS = [
                     'waehlbar' => fn(array $r) => !empty($r['neuer_name']),
                     'aktion' => fn(array $r) => produkt_name_behaelter_nachziehen((int)$r['_id'], (int)$r['_alt_vp'], (int)$r['_neu_vp'], 'datenpruefung') !== '' ? 1 : 0],
     ],
+    'pa_auftrag_storniert' => [
+        'titel' => 'Produktion: aktiver Produktionsauftrag zu storniertem Auftrag',
+        'info'  => 'Der Auftrag ist storniert (z. B. in ein Kontingent umgewandelt), sein Produktionsauftrag läuft aber weiter. Produktion und Einkauf blenden ihn seit 03.11.2026 aus; Beheben storniert ihn auch in den Daten und gibt Reservierungen frei. Bestellungen beim Lieferanten bleiben bestehen – Spalte „Bestellungen“ prüfen und ggf. im Einkauf stornieren.',
+        'sql'   => "SELECT pa.id AS _id, CONCAT('?p=produktionsauftrag&id=', pa.id) AS _link, pa.nummer, pa.status AS pa_status, pa.menge,
+                           a.nummer AS auftrag, CONCAT('?p=auftrag&id=', a.id) AS _link_auftrag, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt, k.firma AS kunde,
+                           IF(a.kontingent_id IS NOT NULL, 'ja', '') AS kontingent,
+                           (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=1) AS schritte_erledigt,
+                           (SELECT GROUP_CONCAT(DISTINCT b.nummer SEPARATOR ', ') FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                             WHERE bp.auftrag_id=a.id AND b.status NOT IN ('storniert','geliefert') AND b.angekommen_am IS NULL) AS bestellungen
+                    FROM produktionsauftrag pa
+                    JOIN auftrag a ON a.id = pa.auftrag_id
+                    LEFT JOIN produkt p ON p.id = a.produkt_id
+                    LEFT JOIN kunden k ON k.id = a.kunde_id
+                    WHERE a.status = 'storniert' AND pa.status IN ('vorbereitung','offen','laufend')
+                    ORDER BY pa.id DESC",
+        'korrektur' => "-- je angehaktem Produktionsauftrag (nur ohne erledigten Schritt):\nUPDATE reservierung SET status='storniert' WHERE pa_id = <PA> AND status='aktiv';\nUPDATE produktionsauftrag SET status='storniert' WHERE id = <PA>;   (pa_storno_nachziehen)",
+        'ohne_fix'  => 'Produktionsaufträge mit erledigtem Schritt werden nicht automatisch storniert (bitte ansehen). Bestellungen beim Lieferanten ändert Beheben nicht.',
+        'fix'   => ['tabelle' => 'produktionsauftrag', 'typ' => 'produktionsauftrag',
+                    'waehlbar' => fn(array $r) => (int)$r['schritte_erledigt'] === 0,
+                    'aktion' => fn(array $r) => pa_storno_nachziehen((int)$r['_id'], 'datenpruefung')],
+    ],
     'auftrag_name_behaelter' => [
         'titel' => 'Auftrag: Name nennt einen anderen Behälter als der Auftrag',
         'info'  => 'Der Auftrag speichert den Produktnamen zur Auftragszeit (Kopf, AB-PDF). Wurde der Behälter danach geändert, steht oben z. B. „100 ml Glas“, der Auftrag läuft aber im 150 ml Glas. Maßgeblich ist der Behälter am Auftrag, sonst der am Produkt. Beheben tauscht nur den Behälter-Teil im Auftrags-Namen. Bedruckte Kundenbehälter sind ausgenommen.',

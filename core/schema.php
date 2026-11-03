@@ -7815,6 +7815,25 @@ function produktionsauftrag_bulk_erstellen(int $rezeptur_id, int $stueck, int $p
 
 // Produktionsbereitschaft: ist das Material komplett da, um den Auftrag zu produzieren?
 // Rückgabe: ['status'=>bereit|wartet|laeuft|fertig|unbekannt, 'fehlend'=>[['name','benoetigt','verfuegbar','einheit'], ...]]
+// Zählt ein Produktionsauftrag in Produktion/Einkauf? Nicht, wenn er storniert ist ODER sein Auftrag storniert ist
+// (Nico 03.11.2026: Leberkomplex 10.000 – der in ein Kontingent umgewandelte Auftrag ist storniert, sein PA lief aber
+// weiter und stand unter „Wartet auf Material“, der Einkauf wollte dafür Material). SQL-Bedingung für Alias pa.
+function pa_aktiv_sql(): string {
+    return "pa.status <> 'storniert' AND NOT EXISTS (SELECT 1 FROM auftrag ax WHERE ax.id = pa.auftrag_id AND ax.status = 'storniert')";
+}
+// Wartet ein PA nur noch auf BESTELLTES Material? true, wenn jede fehlende Position mindestens eine laufende
+// (noch nicht eingegangene) Bestellung hat – Bulk-Zukauf auch als Freitext-Position am Auftrag. Dann steht er
+// unter „Material bestellt“ statt „Wartet auf Material“ (Nico 03.11.2026). Rückgabe ['ja'=>bool, 'eta'=>'Y-m-d'|''].
+function produktion_material_bestellt(array $fehlend, int $auftrag_id): array {
+    if (!$fehlend) return ['ja' => false, 'eta' => ''];
+    $eta = '';
+    foreach ($fehlend as $f) {
+        $offen = array_values(array_filter(item_bestellungen((int)($f['item_id'] ?? 0), $auftrag_id, (string)($f['rolle'] ?? '') === 'Fertigware'), fn($b) => !$b['eingang']));
+        if (!$offen) return ['ja' => false, 'eta' => ''];
+        foreach ($offen as $b) if ($b['datum'] !== '' && ($eta === '' || $b['datum'] > $eta)) $eta = $b['datum'];   // spätester Termin = wann alles da ist
+    }
+    return ['ja' => true, 'eta' => $eta];
+}
 function produktion_bereitschaft(int $pa_id): array {
     $pa = pa_row_cached($pa_id);
     if (!$pa) return ['status'=>'unbekannt', 'fehlend'=>[]];
@@ -7842,7 +7861,7 @@ function material_komplett_pruefen(bool $sofort = false): int {
     meta_set('material_pruefung_zuletzt', (string) time());
     $warte = array_map('intval', json_decode((string) meta_get('material_wartet', '[]'), true) ?: []);
     $neu = []; $n = 0;
-    foreach (all("SELECT id FROM produktionsauftrag WHERE status IN ('offen','vorbereitung')") as $r) {
+    foreach (all("SELECT pa.id FROM produktionsauftrag pa WHERE pa.status IN ('offen','vorbereitung') AND " . pa_aktiv_sql()) as $r) {
         $pid = (int)$r['id'];
         $st = produktion_bereitschaft($pid)['status'] ?? '';
         if ($st === 'wartet') { $neu[] = $pid; continue; }
@@ -7859,6 +7878,7 @@ function bereitschaft_badge(string $s): string {
     return match ($s) {
         'bereit' => bx_badge('produktionsbereit','ok'),
         'wartet' => bx_badge('wartet auf Material','warn'),
+        'bestellt' => bx_badge('Material bestellt','info'),
         'laeuft' => bx_badge('in Produktion','info'),
         'fertig' => bx_badge('fertig','ok'),
         default  => bx_badge('–'),
@@ -8061,7 +8081,7 @@ function vorbereitung_liste(): array {
                 LEFT JOIN produkt p   ON p.id=pa.produkt_id
                 LEFT JOIN rezeptur rz ON rz.id=COALESCE(pa.rezeptur_id, p.rezeptur_id)
                 LEFT JOIN kunden k    ON k.id=pa.kunde_id
-                WHERE pa.status='vorbereitung'
+                WHERE pa.status='vorbereitung' AND " . pa_aktiv_sql() . "
                 ORDER BY COALESCE(pa.prio,2), pa.id DESC");
 }
 
@@ -8264,6 +8284,20 @@ function auftrag_reservieren(int $pa_id): int {
 }
 function auftrag_reservierung_freigeben(int $pa_id): void {
     q("UPDATE reservierung SET status='storniert' WHERE pa_id=? AND status='aktiv'", [$pa_id]);
+}
+// PA eines STORNIERTEN Auftrags nachträglich stornieren (Altfälle, z. B. vor dem Kontingent-Fix vom 07.10.2026
+// umgewandelte Jahresmengen): nur solange kein Schritt erledigt ist. Reservierungen frei, Protokoll, Bedarf neu.
+// Bestellungen beim Lieferanten bleiben unberührt (die zeigt die Datenprüfung zum Nachsehen). Rückgabe 1/0.
+function pa_storno_nachziehen(int $pa_id, string $route = ''): int {
+    $pa = one("SELECT pa.id, pa.status FROM produktionsauftrag pa JOIN auftrag a ON a.id=pa.auftrag_id
+               WHERE pa.id=? AND a.status='storniert' AND pa.status IN ('vorbereitung','offen','laufend')
+                 AND NOT EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=1)", [$pa_id]);
+    if (!$pa) return 0;
+    auftrag_reservierung_freigeben($pa_id);
+    q("UPDATE produktionsauftrag SET status='storniert' WHERE id=?", [$pa_id]);
+    if (function_exists('aenderung_protokollieren')) aenderung_protokollieren('produktionsauftrag', $pa_id, ['status' => $pa['status']], ['status' => 'storniert'], $route ?: 'pa_storno');
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return 1;
 }
 // Bei physischer Entnahme: aktive Reservierung des Auftrags für dieses Item schließen (sonst doppelte Sperre).
 function reservierung_verbrauchen(int $auftrag_id, int $item_id): void {
@@ -9791,7 +9825,7 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
     $agg = [];
     // Alle offenen Aufträge – auch Fremdproduktion braucht Verpackung/Etiketten. Der Bulk-Zukauf (item_id 0) fällt unten raus.
     // Nur FESTGELEGTE Aufträge (Eigen/Fremd entschieden) – sonst steht die Stückliste noch nicht fest (Rohstoffe vs. Bulk).
-    $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.art_festgelegt_am IS NOT NULL"
+    $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.art_festgelegt_am IS NOT NULL AND " . pa_aktiv_sql()
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
     foreach (all("SELECT pa.id, pa.auftrag_id, a.nummer AS auftrag_nr, k.firma AS kunde,
                          COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt
@@ -9893,7 +9927,7 @@ function bulk_position_basis_sql(string $a = 'bp'): string {
     return "CASE WHEN LOWER($a.einheit) IN ('kg','l') THEN $r*1000 ELSE $r END";
 }
 function bedarf_bulk(bool $nur_gemeldet = false): array {
-    $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.produktionsart='fremd' AND pa.art_festgelegt_am IS NOT NULL"
+    $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.produktionsart='fremd' AND pa.art_festgelegt_am IS NOT NULL AND " . pa_aktiv_sql()
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
     // Gleiches Produkt (= gleiche Kapsel/Bulk) über mehrere Aufträge zusammenfassen.
     // WICHTIG – Einheit je Darreichungsform: Bei Stück-Formen (Kapsel/Tablette/…) ist einheiten_pro_packung die

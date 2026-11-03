@@ -9,7 +9,7 @@ $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'prio';
 $dir  = $_GET['dir']  ?? 'asc';
 $tab  = $_GET['tab']  ?? 'laufend';
-if (!in_array($tab, ['laufend', 'bereit', 'wartet', 'erledigt'], true)) $tab = 'laufend';
+if (!in_array($tab, ['laufend', 'bereit', 'wartet', 'bestellt', 'erledigt'], true)) $tab = 'laufend';
 
 // Sammel-Umstellung Eigen-/Fremdproduktion für markierte Aufträge.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_bulk') {
@@ -55,7 +55,8 @@ $alle = all("SELECT pa.*, k.firma AS kunde_firma, a.etikett_freigegeben AS etike
              FROM produktionsauftrag pa
              LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
              LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
-             LEFT JOIN auftrag a ON a.id=pa.auftrag_id");
+             LEFT JOIN auftrag a ON a.id=pa.auftrag_id
+             WHERE " . pa_aktiv_sql());   // stornierte PAs und PAs stornierter Aufträge gehören nicht in die Produktion
 // PreProduktionsauftrag: Vor-PAs (Status 'vorbereitung') gehören NICHT in die Produktionsliste – sie werden
 // zuerst im Dashboard unter „Vor-Produktion" geprüft und freigegeben. Hier nur ein Hinweis-Banner mit Link.
 $vorbereitungN = count(array_filter($alle, fn($r) => ($r['status'] ?? '') === 'vorbereitung'));
@@ -103,7 +104,15 @@ foreach ($alle as &$r) {
     if ($r['status'] === 'erledigt')        $r['_bereit'] = 'erledigt';
     elseif (empty($r['art_festgelegt_am'])) $r['_bereit'] = 'art_offen';   // Eigen/Fremd noch nicht festgelegt -> NICHT in Produktion
     elseif ((int)$r['n_done'] > 0)          $r['_bereit'] = 'laeuft';      // begonnen -> Material war da
-    else                                    $r['_bereit'] = produktion_bereitschaft((int)$r['id'])['status'];
+    else {
+        $ber = produktion_bereitschaft((int)$r['id']);
+        $r['_bereit'] = $ber['status'];
+        // Fehlt nur noch Material, das schon bestellt ist -> eigener Reiter „Material bestellt“ mit Termin.
+        if ($r['_bereit'] === 'wartet') {
+            $mb = produktion_material_bestellt($ber['fehlend'] ?? [], (int)($r['auftrag_id'] ?? 0));
+            if ($mb['ja']) { $r['_bereit'] = 'bestellt'; $r['_eta'] = $mb['eta']; }
+        }
+    }
 }
 unset($r);
 // Cache bleibt für die (schreibfreie) Anzeige aktiv (Spalte „Kapsel/Tablette"); am Dateiende wieder aus.
@@ -113,15 +122,18 @@ unset($r);
 $istErledigt = fn($r) => $r['status'] === 'erledigt';
 $istLaufend  = fn($r) => !$istErledigt($r) && ($r['_bereit'] ?? '') === 'laeuft';
 $istWartet   = fn($r) => !$istErledigt($r) && in_array(($r['_bereit'] ?? ''), ['wartet', 'art_offen'], true);   // wartet auf Material ODER Eigen/Fremd-Festlegung
-$istBereit   = fn($r) => !$istErledigt($r) && !$istLaufend($r) && !$istWartet($r);   // startklar: Material da, noch nicht begonnen
+$istBestellt = fn($r) => !$istErledigt($r) && ($r['_bereit'] ?? '') === 'bestellt';   // fehlendes Material ist komplett bestellt
+$istBereit   = fn($r) => !$istErledigt($r) && !$istLaufend($r) && !$istWartet($r) && !$istBestellt($r);   // startklar: Material da, noch nicht begonnen
 
 $anzLaufend  = count(array_filter($alle, $istLaufend));
 $anzBereit   = count(array_filter($alle, $istBereit));
 $anzWartet   = count(array_filter($alle, $istWartet));
+$anzBestellt = count(array_filter($alle, $istBestellt));
 $anzErledigt = count(array_filter($alle, $istErledigt));
 
 if ($tab === 'erledigt')      $rows = array_filter($alle, $istErledigt);
 elseif ($tab === 'wartet')    $rows = array_filter($alle, $istWartet);
+elseif ($tab === 'bestellt')  $rows = array_filter($alle, $istBestellt);
 elseif ($tab === 'bereit')    $rows = array_filter($alle, $istBereit);
 else                          $rows = array_filter($alle, $istLaufend);
 
@@ -174,7 +186,8 @@ $cols = [
                         $txt   = $p === 1 ? 'Hoch' : ($p === 3 ? 'Niedrig' : 'Normal');
                         return '<span title="Priorität: ' . $txt . '" aria-label="Priorität: ' . $txt . '" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' . $farbe . '"></span>';
                      }],
-    'bereit'       => ['label' => 'Bereit', 'render' => fn($r)=> ($r['_bereit'] ?? '') === 'art_offen' ? bx_badge('Eigen/Fremd offen','warn') : bereitschaft_badge($r['_bereit'] ?? '')],
+    'bereit'       => ['label' => 'Bereit', 'render' => fn($r)=> ($r['_bereit'] ?? '') === 'art_offen' ? bx_badge('Eigen/Fremd offen','warn')
+                          : bereitschaft_badge($r['_bereit'] ?? '') . (!empty($r['_eta']) ? ' <span class="muted" style="font-size:12px">bis ' . h(date('d.m.Y', strtotime((string)$r['_eta']))) . '</span>' : '')],
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, firma_kurz($r['kunde_firma']))],
     'produkt_name' => ['label' => 'Produkt', 'render' => fn($r)=> $r['produkt_name']?h($r['produkt_name']):'<span class="muted">–</span>'],
@@ -215,10 +228,11 @@ $TABS = [
     'laufend'  => 'In Produktion',
     'bereit'   => 'Produktionsbereit',
     'wartet'   => 'Wartet auf Material',
+    'bestellt' => 'Material bestellt',
     'erledigt' => 'Abgeschlossen',
 ];
-$TABCOUNT = ['laufend' => $anzLaufend, 'bereit' => $anzBereit, 'wartet' => $anzWartet, 'erledigt' => $anzErledigt];
-$sub = ['laufend' => 'laufende Produktionen (schon begonnen)', 'bereit' => 'startklare Aufträge (Material da, noch nicht begonnen)', 'wartet' => 'Aufträge, die auf Material warten', 'erledigt' => 'abgeschlossene Produktionsaufträge'];
+$TABCOUNT = ['laufend' => $anzLaufend, 'bereit' => $anzBereit, 'wartet' => $anzWartet, 'bestellt' => $anzBestellt, 'erledigt' => $anzErledigt];
+$sub = ['laufend' => 'laufende Produktionen (schon begonnen)', 'bereit' => 'startklare Aufträge (Material da, noch nicht begonnen)', 'wartet' => 'Aufträge, denen Material fehlt (noch nicht bestellt)', 'bestellt' => 'Aufträge, deren fehlendes Material bestellt ist und unterwegs',  'erledigt' => 'abgeschlossene Produktionsaufträge'];
 
 $flash = $_SESSION['prod_flash'] ?? null; unset($_SESSION['prod_flash']);
 $zeigeNeu = isset($_GET['neu']);
@@ -236,6 +250,7 @@ if (has_role('admin')) $kpi('Wartet auf Freigabe', (int)$vorbereitungN, '?p=auft
 $kpi('In Produktion', $anzLaufend, '?p=produktion&tab=laufend', '', $tab === 'laufend');
 $kpi('Produktionsbereit', $anzBereit, '?p=produktion&tab=bereit', 'var(--gruen)', $tab === 'bereit');
 $kpi('Wartet auf Material', $anzWartet, '?p=produktion&tab=wartet', '#f59e0b', $tab === 'wartet');
+$kpi('Material bestellt', $anzBestellt, '?p=produktion&tab=bestellt', '', $tab === 'bestellt');
 $kpi('Abgeschlossen', $anzErledigt, '?p=produktion&tab=erledigt', '', $tab === 'erledigt');
 echo '</div>';
 if (!empty($vorbereitungN) && has_role('admin'))

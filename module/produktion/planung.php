@@ -28,7 +28,7 @@ $rows = all("SELECT pa.id, pa.nummer, pa.menge, pa.prio, pa.geplant_am, pa.art_f
             LEFT JOIN produkt p   ON p.id=pa.produkt_id
             LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
             LEFT JOIN auftrag a   ON a.id=pa.auftrag_id
-            WHERE pa.status IN ('offen','laufend')
+            WHERE pa.status IN ('offen','laufend') AND " . pa_aktiv_sql() . "
             ORDER BY (pa.geplant_am IS NULL) DESC, pa.geplant_am ASC, COALESCE(pa.prio,2), pa.id");
 
 $prioDot = function($p) {

@@ -21,7 +21,7 @@ $alle = all("SELECT a.*, k.firma AS kunde_firma, COALESCE(k.nutzt_fulfillment,0)
 // (Quelle/Eigen-Fremd noch nicht festgelegt, art_festgelegt_am IS NULL). Ersetzt die frühere eigene
 // Vor-Produktions-Seite: ein Klick führt auf die Auftragsseite, wo Quelle festlegen + Freigeben warten.
 $wartetIds = [];
-foreach (all("SELECT DISTINCT auftrag_id FROM produktionsauftrag WHERE status='vorbereitung' AND auftrag_id IS NOT NULL") as $w)
+foreach (all("SELECT DISTINCT pa.auftrag_id FROM produktionsauftrag pa WHERE pa.status='vorbereitung' AND pa.auftrag_id IS NOT NULL AND " . pa_aktiv_sql()) as $w)
     $wartetIds[(int)$w['auftrag_id']] = true;
 
 // Erstauftrag vs. Nachbestellung – berechnet über ALLE Aufträge (nicht nur den aktuellen Reiter).

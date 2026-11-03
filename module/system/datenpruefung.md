@@ -49,3 +49,5 @@ Optional `zeilen => fn(array $rows): array` ergänzt Spalten, die sich nicht in 
 **produkt_name_behaelter** (03.11.2026): Produkte, deren Name einen anderen Primärbehälter nennt als im Slot steht (längster Treffer je Produkt; bedruckte Kundenbehälter ausgenommen). Beheben (`aktion`) zieht den Namen auf den hinterlegten Behälter. Ist der Behälter falsch, am Produkt korrigieren.
 
 **auftrag_name_behaelter** (03.11.2026): Aufträge (nicht storniert), deren gespeicherter Name einen anderen Primärbehälter nennt als der Behälter des Auftrags (eigener, sonst vom Produkt). Beheben (`aktion` → `auftrag_name_behaelter_nachziehen`) tauscht nur den Behälter-Teil. Ist der Behälter am Auftrag falsch: im Auftrag unter Verpackung korrigieren, der Name zieht dann selbst mit.
+
+**pa_auftrag_storniert** (03.11.2026): aktive Produktionsaufträge (Vorbereitung, offen, laufend) zu einem stornierten Auftrag, z. B. ein vor dem 07.10. umgewandeltes Kontingent. Die Spalten zeigen Kontingent, erledigte Schritte und offene Bestellungen am Auftrag. Beheben über `aktion` → `pa_storno_nachziehen`, nur ohne erledigten Schritt. Bestellungen beim Lieferanten bitte selbst im Einkauf prüfen.

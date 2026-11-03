@@ -91,3 +91,5 @@ Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schl
 
 **Vollbedruckt (03.11.2026):** `erp_vollbedruckt($pa_id)` (Behälter PA -> Auftrag -> Produkt bedruckt) – dann liefert
 `erp_etikett_item_id()` 0 (keine Etikett-Entnahme/-Anzeige) und `erp_etikett_sperre()` sperrt nicht. Spiegel von `auftrag_vollbedruckt()`.
+
+`erp_produktionsauftraege()` (03.11.2026): Ohne `'alle'` werden Produktionsaufträge stornierter Aufträge ausgeblendet (NOT EXISTS auf `auftrag.status='storniert'`, eigene Kopie der Regel `pa_aktiv_sql()`, weil die Sub-App core/schema.php nicht lädt).

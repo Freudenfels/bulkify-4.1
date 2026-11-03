@@ -54,7 +54,7 @@ $sel = "SELECT pa.*, COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.name,''
         LEFT JOIN auftrag a   ON a.id=pa.auftrag_id
         LEFT JOIN kunden k    ON k.id=pa.kunde_id
         LEFT JOIN benutzer b  ON b.id=pa.mitarbeiter_id";
-$geplant = all($sel . " WHERE pa.geplant_am BETWEEN ? AND ? ORDER BY pa.geplant_am, pa.prio", [$first, date('Y-m-t', $ts)]);
+$geplant = all($sel . " WHERE pa.geplant_am BETWEEN ? AND ? AND " . pa_aktiv_sql() . " ORDER BY pa.geplant_am, pa.prio", [$first, date('Y-m-t', $ts)]);
 $byDay = [];
 foreach ($geplant as $g) { $byDay[(int)date('j', strtotime($g['geplant_am']))][] = $g; }
 

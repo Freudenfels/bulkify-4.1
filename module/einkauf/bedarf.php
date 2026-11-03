@@ -45,7 +45,7 @@ $alle = all("SELECT pa.*, a.nummer AS auftrag_nr, COALESCE(NULLIF(p.kundenname,'
              LEFT JOIN auftrag a ON a.id=pa.auftrag_id
              LEFT JOIN produkt p ON p.id=pa.produkt_id
              LEFT JOIN kunden k ON k.id=pa.kunde_id
-             WHERE pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL
+             WHERE pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND " . pa_aktiv_sql() . "
              ORDER BY pa.prio, pa.angelegt");
 // Diese Seite ist schreibfrei (POST-Handler oben leiten weiter) -> Bestands-/Zeilen-Cache aktivieren und
 // Auftrag/Produkt/Fertigware/Schritte aller Auftraege gebuendelt vorladen, damit die Material-Rechnung

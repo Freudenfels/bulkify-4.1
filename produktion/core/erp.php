@@ -178,9 +178,12 @@ function erp_produktionsauftraege(string $status = '', bool $gateAware = true): 
     // PreProduktionsauftrag: Vor-PAs (Status 'vorbereitung') sind hier SICHTBAR, aber gesperrt (nicht startbar).
     // Erst die Admin-Freigabe im Dashboard macht daraus einen startbaren Auftrag ('offen'). $gateAware bleibt
     // als Fallback, falls der Status in einer alten DB noch nicht existiert.
+    // Stornierte Aufträge gehören nicht ins Werk (Nico 03.11.2026): auch ein noch aktiver PA eines stornierten
+    // Auftrags (z. B. in ein Kontingent umgewandelte Jahresmenge) bleibt draußen – außer bei 'alle'.
+    $ohneStorno = "NOT EXISTS (SELECT 1 FROM auftrag ax WHERE ax.id=pa.auftrag_id AND ax.status='storniert')";
     if ($status === 'alle')  { /* alle Status */ }
-    elseif ($status !== '')  { $sql .= " WHERE pa.status=?"; $params[] = $status; }
-    else                     { $sql .= " WHERE pa.status IN ('vorbereitung','offen','laufend')"; }   // aktive + Vorbereitung
+    elseif ($status !== '')  { $sql .= " WHERE pa.status=? AND $ohneStorno"; $params[] = $status; }
+    else                     { $sql .= " WHERE pa.status IN ('vorbereitung','offen','laufend') AND $ohneStorno"; }   // aktive + Vorbereitung
     if ($status === 'erledigt') $sql .= " ORDER BY pa.aktualisiert DESC, pa.id DESC";  // zuletzt fertig zuerst
     else                        $sql .= " ORDER BY COALESCE(pa.prio,2), (pa.geplant_am IS NULL), pa.geplant_am, pa.id DESC";
     try { return all($sql, $params); }

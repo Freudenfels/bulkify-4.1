@@ -32,7 +32,7 @@ if (!$id) {
                    LEFT JOIN produkt p ON p.id=pa.produkt_id
                    LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
                    LEFT JOIN kunden k ON k.id=pa.kunde_id
-                   WHERE pa.status IN ('offen','laufend')
+                   WHERE pa.status IN ('offen','laufend') AND " . pa_aktiv_sql() . "
                    ORDER BY pa.prio, pa.angelegt");   // Prio (1=Hoch zuerst), dann älteste zuerst = FIFO
     render_header('produktion', 'Geführte Produktion');
     bx_head('Geführte Produktion', 'Nach Priorität und Eingang (FIFO). Grau = noch nicht machbar.',

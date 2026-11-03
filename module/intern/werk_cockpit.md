@@ -13,3 +13,5 @@
 
 ## Warenart-Labels (Teil 3 Block K)
 Die Warenart-Labels („Neu eingetroffen") kommen aus `kategorie_labels()` (`core/schema.php`): `fertig`→Bulkware, `verkaufsfertig`→Fertigprodukt.
+
+Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief.
