@@ -1753,7 +1753,7 @@ if ($rezZutaten) { require_once BX_ROOT . '/core/pdf_spec.php'; require_once BX_
 // Rohstoff-Katalog (Preis auf Anfrage) – ohne Leerkapseln. Filter nach Art (Stoffklasse) und Form.
 $rohArt  = trim((string)($_GET['art'] ?? ''));
 $rohForm = trim((string)($_GET['form'] ?? ''));
-$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, art, form, beschaffenheit, dev, cas, name_lat, synonym, bot_quelle, herkunftsland FROM item
+$rohkatalog = $k['portal_rohstoffe'] ? all("SELECT id, name, art, form, beschaffenheit, dev, cas, name_lat, synonym, bot_quelle, herkunftsland, novelfood_status, novelfood_geprueft_am FROM item
     WHERE kategorie='rohstoff' AND gesperrt=0 AND (form<>'kapselhuelle' OR form IS NULL)
       AND (? = '' OR name LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR cas LIKE ?)
       AND (? = '' OR art = ?)
@@ -3602,10 +3602,11 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php if (!$rohkatalog): ?><div class="muted"><?= ($q !== '' || $rohArt !== '' || $rohForm !== '') ? 'Kein Rohstoff zu diesem Filter gefunden.' : 'Aktuell keine Rohstoffe verfügbar.' ?></div>
     <?php else: ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Name</th><th>Art</th><th>Form</th><th>CAS</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Art</th><th>Form</th><th>CAS</th><th>Novel Food <?= bx_hint('Automatischer Abgleich mit dem EU-Novel-Food-Katalog (Datum des Abgleichs) – Einschätzung, keine Rechtsberatung; maßgeblich ist der jeweils aktuelle EU-Katalog.') ?></th><th></th></tr></thead>
       <tbody>
       <?php foreach ($rohkatalog as $ro): ?>
         <tr><td><?= h(rohstoff_anzeige_name($ro)) ?></td><td><?= ($lbl = rohstoff_art_label($ro['art'] ?? '')) !== '' ? h($lbl) : '<span class="muted">–</span>' ?></td><td><?= h($FORMLBL_P[$ro['form']] ?? $ro['form']) ?></td><td><?= h($ro['cas'] ?: '–') ?></td>
+          <td style="white-space:nowrap"><?php if (!empty($ro['novelfood_status']) && $ro['novelfood_status'] !== 'unklar'): $nfm = novelfood_status_meta($ro['novelfood_status']); ?><span style="color:<?= $nfm['farbe'] ?>"><?= h($nfm['label']) ?></span><?= $ro['novelfood_geprueft_am'] ? '<div class="muted" style="font-size:12px">Stand ' . h(fmt_zeit((string)$ro['novelfood_geprueft_am'], 'd.m.Y')) . '</div>' : '' ?><?php else: ?><span class="muted">noch nicht geprüft</span><?php endif; ?></td>
           <td style="text-align:right"><div class="bx-row" style="gap:6px;justify-content:flex-end">
             <a class="btn btn-primary btn-sm" href="<?= $portalLink('rohanfrage') ?>&iid=<?= (int)$ro['id'] ?>">Anfragen</a>
             <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$ro['id'] ?>">ansehen</a>

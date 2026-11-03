@@ -418,3 +418,5 @@ verfügbar, Ware versendet, Rechnung erstellt; max. 8, neueste zuerst). Leere Zu
 („Rückfrage zum Angebot“) Verlauf + Formular (aktion=rueckfrage, nur eigene Bestellung/Angebot, nur mit Bestellrecht). Speichern ->
 `mail_team()` (Dashboard-Benachrichtigung mit Link zum Auftrag/Angebot + Admin-Mail). Team-Antworten erscheinen hier und kommen per Mail.
 Übersicht und Info & Tools zeigen „Ihr Ansprechpartner bei bulkify“ (Name, Position, Telefon, E-Mail) aus `portal_ansprechpartner()`.
+
+**Rohstoff-Katalog (03.11.2026):** Spalte „Novel Food“ mit dem gespeicherten automatischen Abgleich (`item.novelfood_status`, Label/Farbe aus `novelfood_status_meta()`, „Stand“ = `novelfood_geprueft_am`); ohne Abgleich „noch nicht geprüft“. Hinweis-Symbol: Einschätzung, keine Rechtsberatung.
