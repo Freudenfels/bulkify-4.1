@@ -1486,7 +1486,7 @@ $L['info'] = 'Info & Tools';
 $NAVGROUPS = [
     ''          => ['start'],
     'Katalog'   => ['rezepturen', 'produkte', 'rohstoffe'],
-    'Anfragen'  => ['meine_anfragen', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
+    'Anfragen'  => ['meine_anfragen', 'neue_anfrage', 'anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'],
     'Vorgänge'  => ['nachbestellen', 'kontingente', 'angebote', 'bestellungen', 'rechnungen', 'etiketten', 'dokumente', 'fremdprodukte'],
     'Konto'     => ['konto'],
     'Hilfe'     => ['info'],
@@ -1508,7 +1508,15 @@ $detailParent['menge_aendern'] = 'meine_anfragen';   // Menge einer Produktanfra
 $detailParent['anfrage_ansehen'] = 'meine_anfragen';   // eigene Rezepturanfrage read-only ansehen (kein Menuepunkt)
 if (!empty($k['portal_rezeptur_ableiten'])) $detailParent['rezeptur_ableiten'] = 'rezepturen';   // Katalog weiterentwickeln (kein Menuepunkt)
 $detailParent['agb'] = 'start';   // AGB: kein Menuepunkt, aber eine echte Seite (Fussleiste + Bestaetigungsdialog)
+// Report 6 (03.11.2026): „Angebote" und „Meine Anfragen" sind EIN Ort („Angebote & Anfragen", Reiter Zu bestätigen / In Prüfung /
+// Archiv); die vier „… anfragen"-Punkte sind EIN Menüpunkt „Neue Anfrage" mit Auswahl – die Formulare bleiben Unterseiten.
+$neuAnfrLbl = [];
+foreach (['anfrage', 'prodanfrage', 'rohanfrage', 'dienstleistung'] as $x)
+    if (isset($L[$x])) { $neuAnfrLbl[$x] = $L[$x]; unset($L[$x]); $detailParent[$x] = 'neue_anfrage'; }
+if ($neuAnfrLbl) $L['neue_anfrage'] = 'Neue Anfrage';
+if (isset($L['meine_anfragen'])) { $L['meine_anfragen'] = 'Angebote & Anfragen'; unset($L['angebote']); $detailParent['angebote'] = 'meine_anfragen'; }
 $view = $_GET['v'] ?? 'start';
+if ($view === 'angebote' && isset($L['meine_anfragen'])) { $view = 'meine_anfragen'; $_GET['oatab'] = $_GET['oatab'] ?? 'zubestaetigen'; }
 if ($view === 'labortest') $view = 'dokumente';   // alter Menüpunkt/Links (Mails) -> neue Dokumente-Seite
 if (!isset($L[$view]) && !isset($detailParent[$view])) $view = 'start';
 $activeItem = $detailParent[$view] ?? $view;
@@ -2512,7 +2520,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </form>
   </div>
 
-  <div class="bx-panel"><div class="muted">Alle Ihre Anfragen und deren Stand finden Sie unter <a href="<?= $portalLink('meine_anfragen') ?>">Meine Anfragen</a>.</div></div>
+  <div class="bx-panel"><div class="muted">Alle Ihre Anfragen und deren Stand finden Sie unter <a href="<?= $portalLink('meine_anfragen') ?>">Angebote &amp; Anfragen</a>.</div></div>
   <script>
   // Spaltenkopf der Zutaten an die gewählte Darreichungsform anpassen (Menge je Kapsel / pro Stick / pro Portion …).
   (function(){
@@ -2527,7 +2535,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     $aid = (int)($_GET['aid'] ?? 0);
     $an  = $aid ? one("SELECT * FROM rezeptur_anfrage WHERE id=? AND kunde_id=?", [$aid, $kid]) : null;
     if (!$an): ?>
-      <div class="bx-panel">Anfrage nicht gefunden. <a href="<?= $portalLink('meine_anfragen') ?>">Zurück zu Meine Anfragen</a></div>
+      <div class="bx-panel">Anfrage nicht gefunden. <a href="<?= $portalLink('meine_anfragen') ?>">Zurück zu Angebote &amp; Anfragen</a></div>
     <?php else:
       $wunsch  = all("SELECT bezeichnung, wunsch_menge, einheit FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort,id", [$aid]);
       $formLbl = $DFORM_P[$an['darreichungsform']] ?? ($an['darreichungsform'] ?? '');
@@ -2556,8 +2564,23 @@ portal_head('Kundenportal · ' . $k['firma']);
   <p style="margin-top:16px"><a class="btn btn-ghost" href="<?= $portalLink('meine_anfragen') ?>">Zurück zu Meine Anfragen</a></p>
     <?php endif; ?>
 
+<?php elseif ($view === 'neue_anfrage'):
+    $naDesc = ['anfrage' => 'Eigene Rezeptur von uns entwickeln lassen.', 'prodanfrage' => 'Fertiges Produkt aus unserem Katalog.',
+               'rohanfrage' => 'Einzelnen Rohstoff anfragen.', 'dienstleistung' => 'z. B. Abfüllung, Verpackung oder Laboranalyse.']; ?>
+  <h1 style="margin-bottom:4px">Neue Anfrage</h1>
+  <p class="muted" style="margin-top:0">Was dürfen wir für Sie tun? Ihre Anfragen und unsere Angebote finden Sie danach unter <a href="<?= $portalLink('meine_anfragen') ?>">Angebote &amp; Anfragen</a>.</p>
+  <div class="pt-choice">
+    <?php foreach ($neuAnfrLbl as $r => $t): ?>
+    <a class="pt-choice-card" href="<?= $portalLink($r) ?>">
+      <div class="t"><?= h($t) ?></div>
+      <div class="s"><?= h($naDesc[$r] ?? '') ?></div>
+      <span class="pt-choice-go">Anfragen →</span>
+    </a>
+    <?php endforeach; ?>
+  </div>
+
 <?php elseif ($view === 'meine_anfragen'): ?>
-  <h1 style="margin-bottom:4px">Meine Anfragen</h1>
+  <h1 style="margin-bottom:4px">Angebote &amp; Anfragen</h1>
   <p class="bx-sub">Alle Ihre Anfragen und deren Stand. Liegt ein Angebot vor, wählen Sie hier die Menge und bestätigen verbindlich.</p>
   <?php if (isset($_GET['freigabefehlt'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Für die verbindliche Annahme fehlen die Bestätigung und Ihr Name.</div><?php endif; ?>
   <?php if (isset($_GET['annahmefehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Das Angebot konnte nicht automatisch angenommen werden. Wir sind informiert und melden uns kurzfristig – es ist noch nichts bestellt.</div><?php endif; ?>
@@ -2675,7 +2698,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php // Drei Reiter in Prioritätsreihenfolge: Zu bestätigen (Handlungsbedarf) · Offen · Archiv. ($oatab oben gesetzt.) ?>
   <div class="settabs" style="margin:0 0 8px">
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen&atab=<?= $atab ?>" class="<?= $oatab === 'zubestaetigen' ? 'on' : '' ?>">Zu bestätigen<?= $nZuBest ? ' (' . $nZuBest . ')' : '' ?></a>
-    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">Offen<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
+    <a href="<?= $portalLink('meine_anfragen') ?>&oatab=offen&atab=<?= $atab ?>"      class="<?= $oatab === 'offen' ? 'on' : '' ?>">In Prüfung<?= $nOffen ? ' (' . $nOffen . ')' : '' ?></a>
     <a href="<?= $portalLink('meine_anfragen') ?>&oatab=archiv&atab=<?= $atab ?>" class="<?= $oatab === 'archiv' ? 'on' : '' ?>">Archiv<?= ($sumBest + $sumAbgel) ? ' (' . ($sumBest + $sumAbgel) . ')' : '' ?></a>
   </div>
   <?php if (count($anfTabs) > 1): ?>
@@ -4629,7 +4652,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         }
         foreach ($angebote as $a) {
             if ($hit(($a['nummer'] ?? '') . ' ' . ($a['produkt_name'] ?? '')))
-                $add('Angebot', ($a['nummer'] ?? '') . ' – ' . ($a['produkt_name'] ?? '–'), 'Angebot', $portalLink('angebote') . '#a' . (int)$a['id'], $a['angelegt'] ?? null, 'ok');
+                $add('Angebot', ($a['nummer'] ?? '') . ' – ' . ($a['produkt_name'] ?? '–'), 'Angebot', $portalLink(isset($L['meine_anfragen']) ? 'meine_anfragen' : 'angebote') . (isset($L['meine_anfragen']) ? '&oatab=' . (($a['status'] ?? '') === 'gesendet' ? 'zubestaetigen' : 'archiv') : '') . '#a' . (int)$a['id'], $a['angelegt'] ?? null, 'ok');
         }
         foreach ($rechnungen as $r) {
             if ($hit((string)($r['nummer'] ?? '')))
