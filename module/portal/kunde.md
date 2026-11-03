@@ -378,7 +378,7 @@ Produktionsdatum, Status „in Qualitätsprüfung/freigegeben“) – immer, sob
 (Laboranalyse) hat Vorrang vor der berechneten Übersicht (`hochgeladen_von='coa_ueb'`); Hinweis zur Übersicht darunter.
 Produktionsbericht-Link im selben Block (ersetzt das frühere eigene Panel). Das Laborprüfung-Panel zeigt die Übersicht nicht doppelt.
 
-**PIB vor der Bestellung (03.11.2026):** Produkt- und Rezepturseite haben den Button „Produktinfo für Ihr Etikett (PIB)“ mit Tagesdosis-Feld („Kapseln pro Tag“, „Portionen pro Tag“ …). Aufruf `v=pib_katalog&pid=…|rid=…&td=…` – gleiche Sichtbarkeit wie die Detailseite (`$prodDetail`/`$rezDetail`), sonst 404; Produkt mit kundenspezifischem Namen, ohne Tagesdosis gilt ein hochgeladenes PIB. Bestellseite: Feld heißt jetzt „Kapseln pro Tag“ statt „pro Tag“.
+**PIB bewusst erst ab Bestellung (Nico 03.11.2026):** Das PIB ist bulkifys Papier – vor der Bestellung könnte der Kunde es mitnehmen und woanders herstellen lassen. Darum KEIN PIB-Button auf Produkt-/Rezepturseite (Report 3 nicht umgesetzt, der kurz gebaute `v=pib_katalog` ist wieder entfernt). Der Button bleibt an der Bestellung; das Tagesdosis-Feld heißt dort „Kapseln pro Tag“/„Portionen pro Tag“.
 
 **Versand an der Bestellung (Report 4, 03.11.2026):** Im Dokumente-Kasten „Versand“: Lieferscheine als PDF
 (`v=lieferschein_pdf&lid=`, nur eigene Bestellungen) und Sendungen (`auftrag_sendungen()`, „Sendung verfolgen“). Über dem
