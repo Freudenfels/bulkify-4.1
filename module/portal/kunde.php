@@ -4345,7 +4345,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h2 style="margin:0 0 8px;font-size:16px">Charge &amp; Qualität</h2>
     <?php if ($cqCh): ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Charge</th><th>Mindesthaltbar bis</th><th>Produktionsdatum</th><th>Status</th><th>Analysenzertifikat (CoA)</th></tr></thead>
+      <thead><tr><th>Charge</th><th>Mindesthaltbar bis</th><th>Produktionsdatum</th><th>Status</th><th>Dokumente zur Charge</th></tr></thead>
       <tbody>
       <?php foreach ($cqCh as $ch):
           $gem = array_values(array_filter($cqDoks, fn($d) => $d['quelle'] !== 'coa_ueb' && ((string)$d['charge_nr'] === '' || (string)$d['charge_nr'] === (string)$ch['charge_nr'])));
@@ -4357,7 +4357,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <td style="white-space:nowrap"><?= $ch['angelegt'] ? h(fmt_zeit((string)$ch['angelegt'], 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
           <td><?= (string)$ch['status'] === 'quarantaene' ? bx_badge('in Qualitätsprüfung', 'warn') : ((string)$ch['status'] === 'gesperrt' ? bx_badge('gesperrt', 'err') : bx_badge('freigegeben', 'ok')) ?></td>
           <td><?php if ($coa): foreach ($coa as $d): $bf = laboranalyse_befund_label($d['befund'] ?? null); ?>
-              <a class="btn btn-ghost btn-sm" href="<?= $portalLink('analyse_datei') ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= $d['quelle'] === 'coa_ueb' ? 'CoA (Übersicht aus Rohstoff-Analysen)' : 'CoA (Laboranalyse)' ?></a>
+              <a class="btn btn-ghost btn-sm" href="<?= $portalLink('analyse_datei') ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= $d['quelle'] === 'coa_ueb' ? 'Informationsdokument zum Produkt' : 'CoA (Laboranalyse)' ?></a>
               <?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '' ?>
             <?php endforeach; else: ?><span class="muted"><?= (string)$ch['status'] === 'quarantaene' ? 'nach der Qualitätsprüfung' : '–' ?></span><?php endif; ?></td>
         </tr>
@@ -4365,7 +4365,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       </tbody>
     </table></div>
     <?php if (array_filter($cqDoks, fn($d) => $d['quelle'] === 'coa_ueb')): ?>
-    <p class="muted" style="margin:8px 0 0;font-size:12px">Die CoA-Übersicht fasst die Analysen der eingesetzten Rohstoffe (stichprobenhaft geprüft) und die Produktdaten zusammen; sie ist nicht am Fertigprodukt gemessen. Eine Laboranalyse des Fertigprodukts können Sie separat dazubuchen.</p>
+    <p class="muted" style="margin:8px 0 0;font-size:12px">Das Informationsdokument fasst die Analysen der eingesetzten Rohstoffe, den Novel-Food-Status und die Produktdaten zusammen. Eine Laboranalyse des Fertigprodukts können Sie separat dazubuchen.</p>
     <?php endif; endif; ?>
     <?php if ($pbFrei): ?>
     <div style="margin-top:12px"><a class="btn btn-primary btn-sm" href="<?= $portalLink('produktionsbericht') ?>&aid=<?= (int)$a['id'] ?>">Produktionsbericht ansehen</a>

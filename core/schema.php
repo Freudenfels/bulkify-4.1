@@ -10446,7 +10446,7 @@ function fertigware_qm_freigabe_nach(int $charge_id, string $wer = ''): array {
                 if (@file_put_contents(BX_UPLOADS . '/' . $fn, $pdf) !== false) {
                     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von,charge_nr,dok_datum)
                        VALUES ('auftrag',?,'analyse',?,?,?,1,'coa_ueb',?,CURDATE())",
-                      [$aid, 'CoA (Übersicht aus Rohstoff-Analysen) · Charge ' . $c['charge_nr'], $fn, 'CoA_Uebersicht_' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)$c['charge_nr']) . '.pdf', (string)$c['charge_nr']]);
+                      [$aid, 'Informationsdokument zum Produkt · Charge ' . $c['charge_nr'], $fn, 'Informationsdokument_' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)$c['charge_nr']) . '.pdf', (string)$c['charge_nr']]);
                     $out['coa'] = (int) insert_id();
                 }
             }

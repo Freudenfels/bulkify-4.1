@@ -31,3 +31,13 @@ Fertigcharge, QS-Freigabeblock.
 **Ablage:** `dokument` typ='analyse', objekt_typ='auftrag', `hochgeladen_von='coa_ueb'`, `charge_nr`, `kunde_sichtbar=1`
 (Datei `coa_uebersicht_<charge>_….pdf` in BX_UPLOADS). Erzeugt von `fertigware_qm_freigabe_nach()` (core/schema.php),
 je Charge nur einmal; Schalter `app_meta coa_uebersicht_auto` (Standard 0 = aus, bis QM das Muster gegengelesen hat).
+
+**Umbau nach Nico (03.11.2026):**
+- Name **„Informationsdokument zum Produkt“** (Titel INFORMATIONSDOKUMENT, Dokumenttitel „Informationsdokument zum Produkt · Charge …“).
+- **Keine** hervorgehobene Pflichtkennzeichnung im Kopf – der Hinweis („fasst die Analysen … zusammen; nicht am Fertigprodukt
+  gemessen; Laboranalyse separat erhältlich“) steht im Kleingedruckten am Ende.
+- **Novel-Food-Status** je Zutat mit Datum des Abgleichs; beim Erzeugen wird der automatische Abgleich mit dem EU-Katalog frisch
+  ausgeführt (`item_novelfood_aktualisieren`, nur wenn der Katalog geladen ist), Hinweis „Automatischer Abgleich … keine Rechtsberatung“.
+- Kontaminanten nur für Parameter, die für alle Zutaten berechenbar sind (sonst entfällt die Zeile bzw. der Abschnitt).
+- **Kein** Unterschrift-/Stempelblock; die Fußzeile (`spec_fuss`) bringt Haftungsausschluss und „maschinell erstellt, ohne Unterschrift gültig“.
+- Abschnitts-Überschriften brechen nie allein am Seitenende um.

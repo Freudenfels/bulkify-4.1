@@ -108,18 +108,29 @@ function coa_uebersicht_daten(int $charge_id): ?array {
         if (!$zut) { $erg = 'nicht berechenbar (keine Rezeptur)'; }
         elseif ($b['fehlt']) { $erg = 'nicht berechenbar – keine Werte für: ' . implode(', ', $b['fehlt']); }
         else { $erg = ($b['grenze'] ? 'max. ' : '') . coa_uebersicht_zahl($b['summe']) . ' mg/kg'; }   // „max." statt „≤" (PDF-Schrift)
-        $ergebnis[] = ['parameter' => $lbl, 'referenz' => $hg, 'ergebnis' => $erg,
+        $ergebnis[] = ['parameter' => $lbl, 'referenz' => $hg, 'ergebnis' => $erg, 'ok' => $zut && !$b['fehlt'],
                        'methode' => 'aus Rohstoff-Analysen (Massenbilanz)' . ($b['gw'] && !$b['fehlt'] ? ', teils Grenzwert/worst case' : '')];
     }
+    // Novel-Food-Status je Zutat (gespeicherter Abgleich mit Datum, wie im PIB) + Gesamtstatus des Produkts.
+    // Beim Erzeugen frisch abgleichen (Datum = heute), sofern der EU-Katalog geladen ist – sonst gilt der gespeicherte Stand.
+    $nfFrisch = function_exists('novelfood_begriffe') && function_exists('item_novelfood_aktualisieren') && novelfood_begriffe();
+    $nf = [];
+    foreach ($zut as $z) {
+        if ($nfFrisch && !empty($z['item_id'])) item_novelfood_aktualisieren((int)$z['item_id']);
+        $it = !empty($z['item_id']) ? one("SELECT novelfood_status, novelfood_geprueft_am FROM item WHERE id=?", [(int)$z['item_id']]) : null;
+        $nf[] = ['zutat' => (string)$z['name'], 'status' => (string)($it['novelfood_status'] ?? ''), 'am' => (string)($it['novelfood_geprueft_am'] ?? '')];
+    }
+    $nfSnap = $pid && function_exists('produkt_novelfood_snapshot') ? produkt_novelfood_snapshot($pid) : ['status' => 'unklar', 'geprueft_am' => null, 'ungeprueft' => 0, 'auffaellig' => []];
     $form = (string)($rez['darreichungsform'] ?? '');
     return ['charge' => $c, 'pa' => $pa, 'produkt' => $prod, 'rezeptur' => $rez, 'name' => $name, 'form' => $form,
-            'zutaten' => $zut, 'fuell_mg' => $summe, 'ergebnis' => $ergebnis, 'mikro' => $mikro, 'quellen' => $quellen,
+            'zutaten' => $zut, 'fuell_mg' => $summe, 'ergebnis' => $ergebnis, 'mikro' => $mikro, 'quellen' => $quellen, 'novelfood' => $nf, 'nf_snap' => $nfSnap,
             'herstellung' => (string)($c['angelegt'] ?? ''), 'freigabe_am' => (string)($c['qm_freigabe_am'] ?? ''), 'freigabe_von' => (string)($c['qm_freigabe_von'] ?? '')];
 }
 
-// Kennzeichnung im Kopf – fester Text (nicht wegkonfigurierbar).
-const COA_UEBERSICHT_HINWEIS = 'Zusammenfassendes CoA – Übersicht aus den Analysen der eingesetzten Rohstoffe (stichprobenhaft geprüft) und den Produktdaten; '
-    . 'nicht am Fertigprodukt gemessen. Eine Fertigprodukt-Laboranalyse ist separat erhältlich.';
+// Hinweis im Kleingedruckten (Nico 03.11.2026: kein Kasten im Kopf, Name „Informationsdokument zum Produkt").
+const COA_UEBERSICHT_HINWEIS = 'Dieses Informationsdokument fasst die Analysen der eingesetzten Rohstoffe (stichprobenhaft geprüft) und die Produktdaten zusammen; '
+    . 'die Werte sind nicht am Fertigprodukt gemessen. Eine Laboranalyse des Fertigprodukts ist separat erhältlich.';
+const COA_UEBERSICHT_TITEL = 'Informationsdokument zum Produkt';
 
 function build_coa_uebersicht_pdf(int $charge_id): ?string {
     $d = coa_uebersicht_daten($charge_id);
@@ -127,14 +138,17 @@ function build_coa_uebersicht_pdf(int $charge_id): ?string {
     $c = $d['charge']; $L = 40; $R = 555;
     $fmtD = fn($x) => $x ? date('d.m.Y', strtotime((string)$x)) : '–';
     $p = new MiniPDF();
+    $y = 0.0;
+    $klein = function (string $txt) use (&$y, $p, $L, $R): void {
+        foreach ($p->wrap($txt, $R - $L, 8, false) as $wl) { if ($y > 785) { $p->addPage(); $y = 48; } $p->text($L, $y + 8, $wl, 8, false, SPEC_GRAU); $y += 11; }
+    };
+    // Abschnitts-Überschrift nie allein am Seitenende (Platz für Kopf + ein paar Zeilen).
+    $abschnitt = function (string $titel, float $platz = 110) use (&$y, $p): void {
+        if ($y + $platz > 790) { $p->addPage(); $y = 48; }
+        $y = spec_h($p, $y, $titel);
+    };
     spec_wasserzeichen($p);
-    $y = spec_kopf($p, 'ZUSAMMENFASSENDES CoA', 'Übersicht aus Rohstoff-Analysen · ' . $d['name']);
-    // Pflicht-Kennzeichnung als hervorgehobener Kasten direkt unter dem Titel.
-    $zeilen = $p->wrap(COA_UEBERSICHT_HINWEIS, $R - $L - 20, 9, true);
-    $h = 14 + count($zeilen) * 12;
-    $p->rect($L, $y, $R - $L, $h, SPEC_LABEL); $p->rectStroke($L, $y, $R - $L, $h, 0.6, SPEC_LINE);
-    $yy = $y + 15; foreach ($zeilen as $zl) { $p->text($L + 10, $yy, $zl, 9, true, SPEC_INK); $yy += 12; }
-    $y += $h + 14;
+    $y = spec_kopf($p, 'INFORMATIONSDOKUMENT', 'zum Produkt · ' . $d['name'] . ' · Charge ' . (string)($c['charge_nr'] ?: '–'));
 
     $kopf = [['Produkt', $d['name']], ['Charge', (string)($c['charge_nr'] ?: '–')], ['Mindesthaltbar bis', $fmtD($c['mhd'] ?? '')],
              ['Herstellungsdatum', $fmtD($d['herstellung'])]];
@@ -142,32 +156,46 @@ function build_coa_uebersicht_pdf(int $charge_id): ?string {
     if ($d['form'] !== '') $kopf[] = ['Darreichungsform', function_exists('form_plural') ? ucfirst(form_plural($d['form'])) : $d['form']];
     $y = spec_grid($p, $y, $kopf);
 
-    $y = spec_h($p, $y, 'Kontaminanten (berechnet, bezogen auf das Füllgut ohne Kapselhülle)');
-    $y = spec_table($p, $y, [[$L, 'Parameter'], [170, 'Höchstgehalt NEM (Referenz)'], [300, 'Ergebnis'], [430, 'Methode']],
-                    array_map(fn($e) => [$e['parameter'], $e['referenz'], $e['ergebnis'], $e['methode']], $d['ergebnis']));
-    foreach ($p->wrap('Referenz: Höchstgehalte für Nahrungsergänzungsmittel nach VO (EU) 2023/915. „max.“ = berechnete Obergrenze (Rohstoffwert als „kleiner als“ angegeben oder Grenzwert/worst case).', $R - $L, 8, false) as $wl) {
-        if ($y > 780) { $p->addPage(); $y = 48; } $p->text($L, $y + 8, $wl, 8, false, SPEC_GRAU); $y += 11;
-    }
-    $y += 6;
-
-    $y = spec_h($p, $y, 'Mikrobiologie – Rohstoff-Stichproben (nicht am Fertigprodukt gemessen)');
-    if ($d['mikro']) {
-        $y = spec_table($p, $y, [[$L, 'Rohstoff (Charge)'], [210, 'Parameter'], [340, 'Spezifikation'], [450, 'Ergebnis Rohstoff']],
-                        array_map(fn($m) => [$m['zutat'] . ' (' . $m['charge'] . ')', $m['parameter'], $m['spezifikation'] ?: '–', $m['ergebnis'] ?: '–'], $d['mikro']));
-    } else { $p->text($L, $y + 10, 'Für die eingesetzten Rohstoff-Chargen liegen keine mikrobiologischen Stichproben vor.', 9, false, SPEC_GRAU); $y += 22; }
-
-    $y = spec_h($p, $y, 'Eingesetzte Rohstoffe und Quellchargen');
+    $abschnitt('Eingesetzte Rohstoffe und Quellchargen');
     $y = spec_table($p, $y, [[$L, 'Zutat'], [230, 'mg je Einheit'], [310, 'Anteil Füllgut'], [390, 'Rohstoff-Charge(n)'], [480, 'Datenbasis']],
                     array_map(fn($q) => [$q['zutat'], coa_uebersicht_zahl($q['mg']), number_format($q['anteil'] * 100, 1, ',', '.') . ' %', $q['chargen'], $q['basis']], $d['quellen']));
 
+    // Novel-Food-Status je Zutat (gespeicherter automatischer Abgleich, mit Datum).
+    $nfL = ['konform' => 'konform (nicht neuartig)', 'pruefung' => 'Status prüfen', 'novel_food' => 'Novel Food – Zulassung nötig'];
+    if ($d['novelfood']) {
+        $abschnitt('Novel-Food-Status');
+        $y = spec_table($p, $y, [[$L, 'Zutat'], [300, 'Status'], [450, 'Abgleich am']],
+                        array_map(fn($n) => [$n['zutat'], $nfL[$n['status']] ?? 'noch nicht abgeglichen', $n['am'] !== '' ? $fmtD($n['am']) : '–'], $d['novelfood']));
+        $sn = $d['nf_snap'];
+        if (($sn['status'] ?? '') === 'konform' && (int)($sn['ungeprueft'] ?? 0) === 0)
+            $klein('Alle eingesetzten Rohstoffe gelten nach dem EU-Novel-Food-Katalog als nicht-neuartig (konform), Stand ' . $fmtD($sn['geprueft_am'] ?? '') . '.');
+        $klein('Automatischer Abgleich mit dem EU-Novel-Food-Katalog – Einschätzung, keine Rechtsberatung; maßgeblich ist der jeweils aktuelle EU-Katalog.');
+        $y += 6;
+    }
+
+    // Kontaminanten: nur Parameter, die sich für ALLE Zutaten aus Messwerten/Grenzwerten berechnen lassen.
+    $berechnet = array_values(array_filter($d['ergebnis'], fn($e) => !empty($e['ok'])));
+    if ($berechnet) {
+        $abschnitt('Kontaminanten (berechnet, bezogen auf das Füllgut ohne Kapselhülle)', 160);
+        $y = spec_table($p, $y, [[$L, 'Parameter'], [170, 'Höchstgehalt NEM (Referenz)'], [300, 'Ergebnis'], [430, 'Methode']],
+                        array_map(fn($e) => [$e['parameter'], $e['referenz'], $e['ergebnis'], $e['methode']], $berechnet));
+        $klein('Referenz: Höchstgehalte für Nahrungsergänzungsmittel nach VO (EU) 2023/915. „max.“ = berechnete Obergrenze (Rohstoffwert als „kleiner als“ angegeben oder Grenzwert/worst case).');
+        $y += 6;
+    }
+
+    if ($d['mikro']) {
+        $abschnitt('Mikrobiologie – Rohstoff-Stichproben', 140);
+        $y = spec_table($p, $y, [[$L, 'Rohstoff (Charge)'], [210, 'Parameter'], [340, 'Spezifikation'], [450, 'Ergebnis Rohstoff']],
+                        array_map(fn($m) => [$m['zutat'] . ' (' . $m['charge'] . ')', $m['parameter'], $m['spezifikation'] ?: '–', $m['ergebnis'] ?: '–'], $d['mikro']));
+        $klein('Werte der Rohstoff-Stichproben, nicht am Fertigprodukt gemessen.');
+        $y += 6;
+    }
+
     $y = spec_qr_panel($p, $y, function_exists('charge_echt_url') ? charge_echt_url($charge_id) : '', 'Echtheit online prüfen',
                        'QR-Code scannen – bestätigt Produkt, Charge und Mindesthaltbarkeit dieser Charge.');
-    $y += 14;
-    foreach ($p->wrap('Diese Übersicht fasst die Analysenzertifikate der eingesetzten Rohstoff-Chargen und die Produktdaten zusammen. '
-                    . 'Sie ersetzt keine Laboranalyse des Fertigprodukts.', $R - $L, 9, false) as $wl) {
-        if ($y > 780) { $p->addPage(); $y = 48; } $p->text($L, $y, $wl, 9, false, SPEC_INK); $y += 12;
-    }
-    $y = spec_release($p, $y, $d['freigabe_am'] !== '' ? date('d.m.Y', strtotime($d['freigabe_am'])) : date('d.m.Y'));
-    spec_fuss($p, $y + 18);
+    $y += 12;
+    $klein(COA_UEBERSICHT_HINWEIS);
+    // Kein Unterschrifts-/Stempelblock: spec_fuss schreibt Haftungsausschluss + „maschinell erstellt, ohne Unterschrift gültig".
+    spec_fuss($p, $y + 14);
     return $p->output();
 }

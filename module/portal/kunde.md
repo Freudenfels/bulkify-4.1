@@ -385,3 +385,5 @@ Produktionsbericht-Link im selben Block (ersetzt das frühere eigene Panel). Das
 Fortschritt der voraussichtliche Termin (`auftrag_liefertermin_text()`).
 
 Der voraussichtliche Termin erscheint nur, wenn er zentral eingeschaltet ist (`portal_liefertermin_aktiv()`, Einstellungen; Standard aus).
+
+Die berechnete Übersicht heißt im Portal „Informationsdokument zum Produkt“ (Spalte „Dokumente zur Charge“).
