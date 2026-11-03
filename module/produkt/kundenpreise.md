@@ -38,3 +38,5 @@ oder geändert.**
 
 **Einschränkung:** `produkt_kundenpreis` ist je (Produkt, Kunde, Menge je Packung) eindeutig – ein Herstellungspreis je
 Packungsgröße und Kunde, keine Staffel nach Bestellmenge.
+
+Hinweis „ohne Etikett-Preis“: Der Behälter braucht ein Etikett, es ist aber kein Maß-Etikett (Etikett-Endformat am Behälter) mit Preis hinterlegt – das Etikett steckt dann nicht im VK.

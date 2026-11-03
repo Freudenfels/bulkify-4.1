@@ -52,6 +52,9 @@ function kp_zeilen(): array {
         $neutral = $vp ? (verpackung_neutrale_basis($vp) ?: $vp) : 0;
         $r['verpackung'] = $neutral ? (string) scalar("SELECT name FROM item WHERE id=?", [$neutral]) : '';
         $r['vollbedruckt'] = $vp ? verpackung_ist_bedruckt($vp) : false;
+        // Behälter braucht ein Etikett, aber es gibt kein Maß-Etikett mit Preis -> Etikett fehlt im Preis (sichtbar machen).
+        $rollen = array_column(produkt_verpackung_items($r['pid'], $r['verp_override']), 'rolle');
+        $r['etikett_fehlt'] = $vp && !$r['vollbedruckt'] && !in_array('Etikett', $rollen, true);
         $r['mengen'] = array_values(array_unique(array_map(fn($a) => (int)$a['menge'], $r['auftraege'])));
     }
     unset($r);
@@ -170,7 +173,8 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
         <td class="kp-txt" style="font-size:13px"><?= $r['mengen'] ? h(implode(', ', array_map(fn($m) => number_format($m, 0, ',', '.'), $r['mengen']))) . ' Stk' : ($r['anzahl'] ? h(number_format($r['anzahl'], 0, ',', '.')) . ' Stk' : '<span class="muted">–</span>') ?>
             <?php if ($r['ohne_preis_auftraege']): ?><div style="font-size:12px;color:#8f231b"><?= count($r['ohne_preis_auftraege']) ?> Auftrag/Aufträge ohne Preis: <?php foreach ($r['ohne_preis_auftraege'] as $i => $a): ?><?= $i ? ', ' : '' ?><a href="?p=auftrag&id=<?= (int)$a['id'] ?>"><?= h($a['nummer']) ?></a><?php endforeach; ?></div><?php endif; ?></td>
         <td class="bx-num"><input type="text" inputmode="decimal" name="preis[<?= h($k) ?>]" value="<?= h($preisTxt($r['preis'])) ?>" placeholder="0,00" class="kp-preis" style="width:96px;text-align:right"></td>
-        <td class="bx-num"><?= $eur($verp) ?> €<div class="muted" style="font-size:12px">bei <?= number_format($r['menge'], 0, ',', '.') ?> Stk</div></td>
+        <td class="bx-num"><?= $eur($verp) ?> €<div class="muted" style="font-size:12px">bei <?= number_format($r['menge'], 0, ',', '.') ?> Stk</div>
+            <?php if ($r['etikett_fehlt']): ?><div style="font-size:12px;color:#8f231b" title="Am Behälter ist kein Etikett-Endformat bzw. kein passendes Maß-Etikett mit Preis hinterlegt – das Etikett ist in diesem Preis NICHT enthalten.">ohne Etikett-Preis</div><?php endif; ?></td>
         <td class="bx-num kp-vk"><?= $vk !== null ? $eur($vk) . ' €' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num kp-ges"><?= $vk !== null ? $eur($vk * $r['menge']) . ' €' : '<span class="muted">–</span>' ?></td>
         <td><button class="btn btn-ghost btn-sm" type="submit" name="nur" value="<?= h($k) ?>">Speichern</button></td>
