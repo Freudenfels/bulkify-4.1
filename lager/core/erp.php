@@ -585,11 +585,63 @@ function erp_items_eingang(): array {
 // Produkte, zu denen es einen Etikett-Artikel gibt (Kundenetikett je Produkt+Kunde oder Etikett-Slot am Produkt).
 function erp_etikett_produkte(): array {
     if (!tabelle_da('produkt') || !tabelle_da('item')) return [];
-    return all("SELECT p.id, p.nummer, p.name, COALESCE(NULLIF(p.kundenname,''),'') AS kundenname
-                FROM produkt p
-                WHERE EXISTS (SELECT 1 FROM item i WHERE i.verpackung_rolle='etikett' AND COALESCE(i.gesperrt,0)=0
-                              AND (i.produkt_id=p.id OR i.id=p.etikett_id))
-                ORDER BY p.name");
+    // Je Produkt UND Kunde ein Eintrag (Nico 03.11.2026: im Dropdown fehlte der Kundenname) – so findet man das
+    // Etikett auch über den Kunden. Dazu Etiketten ohne Produkt (von Hand angelegt, Maß-Etiketten) als eigene Einträge.
+    $rows = all("SELECT p.id AS pid, p.nummer, p.name, COALESCE(NULLIF(p.kundenname,''),'') AS kundenname,
+                        COALESCE(i.kunde_id,0) AS kid, COALESCE(MAX(k.firma),'') AS firma, 0 AS iid
+                 FROM item i
+                 JOIN produkt p ON (i.produkt_id = p.id OR p.etikett_id = i.id)
+                 LEFT JOIN kunden k ON k.id = i.kunde_id
+                 WHERE i.verpackung_rolle='etikett' AND COALESCE(i.gesperrt,0)=0
+                 GROUP BY p.id, p.nummer, p.name, p.kundenname, COALESCE(i.kunde_id,0)
+                 ORDER BY p.name, firma");
+    $ohne = all("SELECT 0 AS pid, i.artikelnummer AS nummer, i.name, '' AS kundenname,
+                        COALESCE(i.kunde_id,0) AS kid, COALESCE(k.firma,'') AS firma, i.id AS iid
+                 FROM item i LEFT JOIN kunden k ON k.id = i.kunde_id
+                 WHERE i.verpackung_rolle='etikett' AND COALESCE(i.gesperrt,0)=0 AND i.produkt_id IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM produkt p WHERE p.etikett_id = i.id)
+                 ORDER BY i.name");
+    $out = [];
+    foreach (array_merge($rows, $ohne) as $r) {
+        $titel = trim(((string)$r['nummer'] !== '' ? $r['nummer'] . ' · ' : '') . $r['name']);
+        $wer   = (string)$r['firma'] !== '' ? (string)$r['firma'] : ((int)$r['iid'] ? 'ohne Kunde' : 'Standard-Etikett');
+        // Von Hand angelegte Etiketten tragen den Kunden schon im Namen -> nicht doppelt anhängen.
+        $mitWer = (int)$r['iid'] && (string)$r['firma'] !== '' && mb_stripos($titel, ' · ' . $r['firma']) !== false ? $titel : $titel . ' · ' . $wer;
+        $out[] = ['id' => (int)$r['pid'], 'kunde_id' => (int)$r['kid'], 'item_id' => (int)$r['iid'],
+                  'n' => $mitWer, 'kundenname' => (string)$r['kundenname'], 'kunde' => (string)$r['firma']];
+    }
+    return $out;
+}
+// Ein Etikett-Artikel (item-Zeile mit Vorlage, Kunde, Design) -> Anzeige-Daten für die Sichtprüfung.
+function erp_etikett_eintrag(array $r, int $produkt_id = 0): array {
+    $dok = (int)($r['dok'] ?? 0);
+    $datei = (string)($r['datei_orig'] ?: $r['datei'] ?? '');
+    return [
+        'id'       => (int)$r['id'],
+        'name'     => (string)$r['name'],
+        'kunde'    => (string)($r['firma'] ?? ''),
+        'kunde_id' => (int)($r['kunde_id'] ?? 0),
+        'version'  => (int)$r['version'],
+        'kundenetikett' => $produkt_id > 0 && (int)($r['produkt_id'] ?? 0) === $produkt_id,
+        'dok'      => $dok > 0 && (string)($r['datei'] ?? '') !== '' ? $dok : 0,
+        'pdf'      => $datei === '' || strtolower(pathinfo($datei, PATHINFO_EXTENSION)) === 'pdf',
+        'format'   => trim((string)($r['format'] ?? '')),
+        'breite'   => $r['breite'] !== null ? (float)$r['breite'] : null,
+        'hoehe'    => $r['hoehe'] !== null ? (float)$r['hoehe'] : null,
+        'material' => trim((string)($r['material'] ?? '')),
+    ];
+}
+function erp_etikett_sql(string $where): string {
+    return "SELECT i.id, i.name, i.kunde_id, COALESCE(i.etikett_version,1) AS version, i.etikett_dokument_id AS dok,
+                   COALESCE(NULLIF(i.etikett_format,''), v.etikett_format) AS format,
+                   COALESCE(i.breite_mm, v.breite_mm) AS breite, COALESCE(i.hoehe_mm, v.hoehe_mm) AS hoehe,
+                   COALESCE(NULLIF(i.material,''), v.material) AS material, i.produkt_id,
+                   k.firma, d.datei, d.datei_orig
+            FROM item i
+            LEFT JOIN item v ON v.id=i.etikett_vorlage_id
+            LEFT JOIN kunden k ON k.id=i.kunde_id
+            LEFT JOIN dokument d ON d.id=i.etikett_dokument_id
+            WHERE i.verpackung_rolle='etikett' AND COALESCE(i.gesperrt,0)=0 AND $where";
 }
 // Etikett-Artikel eines Produkts: je Kunde die aktuelle (nicht gesperrte) Version, dazu der Etikett-Slot des Produkts,
 // falls er kein Kundenetikett ist. Masse/Material vom Artikel, sonst von der Mass-Vorlage (etikett_vorlage_id).
@@ -597,37 +649,73 @@ function erp_etikett_produkte(): array {
 function erp_etikett_zu_produkt(int $produkt_id): array {
     if ($produkt_id <= 0 || !tabelle_da('item')) return [];
     $slot = (int) scalar("SELECT COALESCE(etikett_id,0) FROM produkt WHERE id=?", [$produkt_id]);
-    $rows = all("SELECT i.id, i.name, i.kunde_id, COALESCE(i.etikett_version,1) AS version, i.etikett_dokument_id AS dok,
-                        COALESCE(NULLIF(i.etikett_format,''), v.etikett_format) AS format,
-                        COALESCE(i.breite_mm, v.breite_mm) AS breite, COALESCE(i.hoehe_mm, v.hoehe_mm) AS hoehe,
-                        COALESCE(NULLIF(i.material,''), v.material) AS material, i.produkt_id,
-                        k.firma, d.datei, d.datei_orig
-                 FROM item i
-                 LEFT JOIN item v ON v.id=i.etikett_vorlage_id
-                 LEFT JOIN kunden k ON k.id=i.kunde_id
-                 LEFT JOIN dokument d ON d.id=i.etikett_dokument_id
-                 WHERE i.verpackung_rolle='etikett' AND COALESCE(i.gesperrt,0)=0 AND (i.produkt_id=? OR i.id=?)
-                 ORDER BY (i.produkt_id IS NULL), k.firma, i.etikett_version DESC", [$produkt_id, $slot]);
-    $out = [];
-    foreach ($rows as $r) {
-        $dok = (int)($r['dok'] ?? 0);
-        $datei = (string)($r['datei_orig'] ?: $r['datei'] ?? '');
-        $out[] = [
-            'id'       => (int)$r['id'],
-            'name'     => (string)$r['name'],
-            'kunde'    => (string)($r['firma'] ?? ''),
-            'kunde_id' => (int)($r['kunde_id'] ?? 0),
-            'version'  => (int)$r['version'],
-            'kundenetikett' => (int)($r['produkt_id'] ?? 0) === $produkt_id,
-            'dok'      => $dok > 0 && (string)($r['datei'] ?? '') !== '' ? $dok : 0,
-            'pdf'      => $datei === '' || strtolower(pathinfo($datei, PATHINFO_EXTENSION)) === 'pdf',
-            'format'   => trim((string)($r['format'] ?? '')),
-            'breite'   => $r['breite'] !== null ? (float)$r['breite'] : null,
-            'hoehe'    => $r['hoehe'] !== null ? (float)$r['hoehe'] : null,
-            'material' => trim((string)($r['material'] ?? '')),
-        ];
+    $rows = all(erp_etikett_sql('(i.produkt_id=? OR i.id=?)') . " ORDER BY (i.produkt_id IS NULL), k.firma, i.etikett_version DESC", [$produkt_id, $slot]);
+    return array_map(fn($r) => erp_etikett_eintrag($r, $produkt_id), $rows);
+}
+// Ein einzelnes Etikett (Eintrag ohne Produkt im Dropdown, frisch angelegtes Etikett).
+function erp_etikett_artikel(int $item_id): array {
+    if ($item_id <= 0 || !tabelle_da('item')) return [];
+    $r = one(erp_etikett_sql('i.id=?'), [$item_id]);
+    return $r ? [erp_etikett_eintrag($r, (int)($r['produkt_id'] ?? 0))] : [];
+}
+
+// Etikett von Hand anlegen (Lager „Etiketten einbuchen“ -> „Anderes Etikett anlegen“, Nico 03.11.2026): Kunde und
+// Produkt wählbar, beide optional. Mit Produkt gilt dieselbe Regel wie im Dashboard (Kundenetikett je Produkt +
+// Kunde): gibt es dort schon ein aktuelles Etikett, wird KEIN zweites angelegt, sondern dieses zurückgegeben
+// ('vorhanden'). Neue Kette = v1 (bzw. nach gesperrten Versionen die nächste). Maße leer -> vom Etikett-Slot des
+// Produkts übernehmen. Ohne Produkt: Bezeichnung Pflicht, gleicher Name -> vorhandener Artikel.
+// Rückgabe: ['ok'=>bool, 'id'=>int, 'vorhanden'=>bool, 'fehler'=>string].
+function erp_etikett_anlegen(array $d): array {
+    if (!tabelle_da('item')) return ['ok' => false, 'fehler' => 'Artikel-Tabelle fehlt.'];
+    $kid = (int)($d['kunde_id'] ?? 0); $pid = (int)($d['produkt_id'] ?? 0);
+    $kunde = $kid > 0 ? (string) scalar("SELECT firma FROM kunden WHERE id=?", [$kid]) : '';
+    if ($kid > 0 && $kunde === '') return ['ok' => false, 'fehler' => 'Kunde nicht gefunden.'];
+    $p = $pid > 0 ? one("SELECT id, name, kundenname, kunde_id, etikett_id FROM produkt WHERE id=?", [$pid]) : null;
+    if ($pid > 0 && !$p) return ['ok' => false, 'fehler' => 'Produkt nicht gefunden.'];
+    $bez = mb_substr(trim((string)($d['bezeichnung'] ?? '')), 0, 120);
+    if (!$p && $bez === '') return ['ok' => false, 'fehler' => 'Bitte ein Produkt wählen oder eine Bezeichnung eingeben.'];
+    $zahl = function ($v): ?float { $v = str_replace(',', '.', trim((string)$v)); return is_numeric($v) && (float)$v > 0 ? round((float)$v, 1) : null; };
+    $b = $zahl($d['breite'] ?? ''); $h = $zahl($d['hoehe'] ?? ''); $mat = mb_substr(trim((string)($d['material'] ?? '')), 0, 100);
+    $version = 1; $vorlage = null;
+    if ($p) {
+        $ex = (int) scalar("SELECT id FROM item WHERE verpackung_rolle='etikett' AND produkt_id=? AND COALESCE(kunde_id,0)=? AND COALESCE(gesperrt,0)=0
+                            ORDER BY COALESCE(etikett_version,1) DESC, id DESC LIMIT 1", [$pid, $kid]);
+        if ($ex) return ['ok' => true, 'id' => $ex, 'vorhanden' => true, 'fehler' => ''];
+        $version = 1 + (int) scalar("SELECT COALESCE(MAX(etikett_version),0) FROM item WHERE verpackung_rolle='etikett' AND produkt_id=? AND COALESCE(kunde_id,0)=?", [$pid, $kid]);
+        // Maße/Material vom Etikett-Slot des Produkts (bzw. dessen Maß-Vorlage), wenn nichts eingegeben.
+        $slot = (int)($p['etikett_id'] ?? 0) ? one("SELECT COALESCE(i.breite_mm, v.breite_mm) AS b, COALESCE(i.hoehe_mm, v.hoehe_mm) AS h,
+                                                           COALESCE(NULLIF(i.material,''), v.material) AS m, COALESCE(i.etikett_vorlage_id, v.id) AS vl
+                                                    FROM item i LEFT JOIN item v ON v.id=i.etikett_vorlage_id WHERE i.id=?", [(int)$p['etikett_id']]) : null;
+        if ($slot) {
+            if ($b === null && $h === null) { $b = $slot['b'] !== null ? (float)$slot['b'] : null; $h = $slot['h'] !== null ? (float)$slot['h'] : null; }
+            if ($mat === '') $mat = (string)($slot['m'] ?? '');
+            $vorlage = $slot['vl'] ? (int)$slot['vl'] : null;
+        }
+        $pname = trim((string)($p['kundenname'] ?: $p['name']));
+        $name = 'Etikett · ' . ($bez !== '' ? $bez : $pname) . ($kunde !== '' ? ' · ' . $kunde : '') . ' · v' . $version;
+    } else {
+        $name = 'Etikett · ' . $bez . ($kunde !== '' ? ' · ' . $kunde : '');
+        $ex = (int) scalar("SELECT id FROM item WHERE verpackung_rolle='etikett' AND name=? AND COALESCE(gesperrt,0)=0 LIMIT 1", [$name]);
+        if ($ex) return ['ok' => true, 'id' => $ex, 'vorhanden' => true, 'fehler' => ''];
     }
-    return $out;
+    $name = mb_substr($name, 0, 190);
+    q("INSERT INTO item (artikelnummer, name, kategorie, verpackungsart, verpackung_rolle, produkt_id, kunde_id, einheit, preis_bezug,
+                         breite_mm, hoehe_mm, material, etikett_version, etikett_vorlage_id, gesperrt, notiz)
+       VALUES (?, ?, 'verpackung', 'etikett', 'etikett', ?, ?, 'Stk', 'Stk', ?, ?, ?, ?, ?, 0, ?)",
+      [erp_naechste_nummer('VP'), $name, $p ? $pid : null, $kid ?: null, $b, $h, $mat !== '' ? $mat : null,
+       $p ? $version : null, $vorlage, 'Im Lager unter „Etiketten einbuchen“ von Hand angelegt.']);
+    $id = (int) insert_id();
+    // Wie im Dashboard: ohne Kunden bzw. beim Kunden eines exklusiven Produkts ist es das Etikett des Produkts – aber nur,
+    // wenn der Slot noch leer ist (ein vorhandenes Etikett am Produkt wird hier nie ersetzt).
+    if ($p && $id && (int)($p['etikett_id'] ?? 0) === 0 && (!$kid || (int)($p['kunde_id'] ?? 0) === $kid))
+        q("UPDATE produkt SET etikett_id=? WHERE id=?", [$id, $pid]);
+    return ['ok' => $id > 0, 'id' => $id, 'vorhanden' => false, 'fehler' => $id > 0 ? '' : 'Anlegen fehlgeschlagen.'];
+}
+
+// Alle Produkte für die Auswahl „Anderes Etikett anlegen“ (Nummer · Name).
+function erp_produkt_auswahl(): array {
+    if (!tabelle_da('produkt')) return [];
+    return all("SELECT id, nummer, name FROM produkt ORDER BY name");
 }
 
 // Typen fuer die Lager-2-Einbuchung -> item.kategorie (+ Verpackungs-Rolle + Verpackungsart) + ob "neu anlegen" erlaubt.

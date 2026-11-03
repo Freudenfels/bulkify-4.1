@@ -95,3 +95,7 @@ Eigene Kachel **„Etiketten einbuchen“** (`data-weg="etikett"`), direkt errei
 4. Erst nach **„Design und Größe stimmen – Menge erfassen“** erscheinen Ziel/Lieferant und die Position. Der Etikett-Artikel ist vorbelegt, die Warenart steht auf Etikett (Rolle), sichtbar sind nur Gesamtmenge und Anzahl Rollen. Gebucht wird unverändert (`erp_etikett_rollen_verteilen`).
 
 Nebenbei behoben: Die Start-Kacheln blieben nach der Wahl eines Wegs sichtbar (`display:grid` schlug `hidden`).
+
+**Nachtrag 03.11.2026 (Nico):**
+- Das Dropdown zeigt den **Kundennamen** („P-3218 · Spermidin Kapsel · Kunde GmbH“), je Produkt + Kunde ein Eintrag, und man kann auch nach dem Kunden suchen. Ist ein Eintrag mit Kunde gewählt, erscheint nur dessen Etikett. Etiketten ohne Produkt stehen als eigene Einträge drin (AJAX `etikett_produkt` mit `item_id`).
+- **„Anderes Etikett anlegen“**: Kunde (Textsuche), Produkt (Textsuche), beides optional; dazu Bezeichnung, Breite/Höhe (mm) und Material. AJAX `aktion=etikett_anlegen` → `erp_etikett_anlegen()`, danach geht es direkt zur Sichtprüfung und Menge. Für Produkt + Kunde mit vorhandenem Etikett wird das vorhandene genommen. Die Felder haben keine name-Attribute (sie liegen im Buchungsformular `weForm`), gesendet wird per fetch. Das Design lädt das Büro am Produkt hoch.

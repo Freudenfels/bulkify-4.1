@@ -85,7 +85,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rstic
 // --- AJAX: Etiketten einbuchen – Produkt gewählt -> Kundenetiketten (Kunde/Version, Design, Maße) -----
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_produkt') {
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['ok' => true, 'etiketten' => erp_etikett_zu_produkt((int)($_POST['produkt_id'] ?? 0))], JSON_UNESCAPED_UNICODE);
+    $iid = (int)($_POST['item_id'] ?? 0);   // Etikett ohne Produkt (Eintrag direkt am Artikel)
+    echo json_encode(['ok' => true, 'etiketten' => $iid ? erp_etikett_artikel($iid) : erp_etikett_zu_produkt((int)($_POST['produkt_id'] ?? 0))], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+// --- AJAX: Anderes Etikett von Hand anlegen (Kunde/Produkt optional) -> direkt zur Sichtprüfung --------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_anlegen') {
+    header('Content-Type: application/json; charset=utf-8');
+    $r = erp_etikett_anlegen($_POST);
+    if (!empty($r['ok'])) $r['etiketten'] = erp_etikett_artikel((int)$r['id']);
+    echo json_encode($r, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -256,7 +265,9 @@ $items   = erp_items_eingang();
 $rezepturen = function_exists('erp_rezeptur_liste') ? erp_rezeptur_liste() : [];   // für Fertigware/Bulk: Rezeptur-Picker
 $ki      = lg_ki_bereit();
 $erwartet = erp_erwartete_lieferungen();   // für Kachel "aus Liste wählen"
-$etProdukte = erp_etikett_produkte();       // für Kachel "Etiketten einbuchen"
+$etProdukte = erp_etikett_produkte();       // für Kachel "Etiketten einbuchen" (je Produkt + Kunde)
+$etKunden   = erp_kunden_liste();            // „Anderes Etikett anlegen“
+$etAlleProd = erp_produkt_auswahl();
 $heute    = date('Y-m-d');
 
 // Nach dem Buchen: Erfolgspanel mit Sammel-Etikett.
@@ -392,13 +403,37 @@ if ($gebucht):
     <div class="bx-panel we-weg" data-w="etikett" hidden>
       <h2 style="margin-top:0">Etiketten einbuchen</h2>
       <div class="bx-field" style="margin:0;max-width:560px">
-        <label>Produkt</label>
-        <input type="text" id="weEtProdukt" list="weEtProdList" autocomplete="off" placeholder="Produktname tippen, z. B. Magnesium">
+        <label>Produkt oder Kunde</label>
+        <input type="text" id="weEtProdukt" list="weEtProdList" autocomplete="off" placeholder="Produkt oder Kunde tippen, z. B. Magnesium">
         <datalist id="weEtProdList">
-          <?php foreach ($etProdukte as $ep): ?><option value="<?= h(trim(($ep['nummer'] ? $ep['nummer'] . ' · ' : '') . $ep['name'])) ?>"><?= $ep['kundenname'] !== '' ? h($ep['kundenname']) : '' ?></option><?php endforeach; ?>
+          <?php foreach ($etProdukte as $ep): ?><option value="<?= h($ep['n']) ?>"><?= $ep['kundenname'] !== '' ? h($ep['kundenname']) : '' ?></option><?php endforeach; ?>
         </datalist>
       </div>
-      <div id="weEtInfo" class="muted" style="margin-top:var(--sp-2)"><?= $etProdukte ? 'Produkt wählen – danach erscheinen das Etikett-Design und die Maße zum Abgleich mit der gelieferten Rolle.' : 'Es gibt noch kein Produkt mit Etikett.' ?></div>
+      <div id="weEtInfo" class="muted" style="margin-top:var(--sp-2)"><?= $etProdukte ? 'Etikett wählen – danach erscheinen das Etikett-Design und die Maße zum Abgleich mit der gelieferten Rolle.' : 'Es gibt noch kein Etikett.' ?></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="weEtNeuAuf" style="margin-top:var(--sp-3)">Anderes Etikett anlegen</button>
+      <!-- Von Hand anlegen: keine name-Attribute (liegt im Buchungsformular, wird per fetch gesendet) -->
+      <div id="weEtNeu" class="we-et-neu" hidden>
+        <h3 style="margin:0 0 var(--sp-2)">Anderes Etikett anlegen</h3>
+        <div class="muted" style="font-size:13px;margin-bottom:var(--sp-3)">Kunde und Produkt sind optional. Gibt es für Produkt und Kunde schon ein Etikett, wird dieses genommen statt ein zweites anzulegen. Das Design lädt das Büro am Produkt hoch.</div>
+        <div class="we-et-neu-raster">
+          <div class="bx-field" style="margin:0"><label>Kunde</label>
+            <input type="text" id="weEtNKunde" list="weEtNKundeList" autocomplete="off" placeholder="Kunde tippen (leer = ohne Kunde)">
+            <datalist id="weEtNKundeList"><?php foreach ($etKunden as $k): ?><option value="<?= h($k['firma']) ?>"></option><?php endforeach; ?></datalist></div>
+          <div class="bx-field" style="margin:0"><label>Produkt</label>
+            <input type="text" id="weEtNProd" list="weEtNProdList" autocomplete="off" placeholder="Produkt tippen (leer = ohne Produkt)">
+            <datalist id="weEtNProdList"><?php foreach ($etAlleProd as $pp): ?><option value="<?= h(trim(($pp['nummer'] ? $pp['nummer'] . ' · ' : '') . $pp['name'])) ?>"></option><?php endforeach; ?></datalist></div>
+          <div class="bx-field" style="margin:0;grid-column:1/-1"><label>Bezeichnung</label>
+            <input type="text" id="weEtNBez" maxlength="120" autocomplete="off" placeholder="z. B. Rückenetikett, Siegeletikett (ohne Produkt Pflicht)"></div>
+          <div class="bx-field" style="margin:0"><label>Breite (mm)</label><input type="text" id="weEtNB" inputmode="decimal" autocomplete="off" placeholder="leer = vom Produkt"></div>
+          <div class="bx-field" style="margin:0"><label>Höhe (mm)</label><input type="text" id="weEtNH" inputmode="decimal" autocomplete="off" placeholder="leer = vom Produkt"></div>
+          <div class="bx-field" style="margin:0;grid-column:1/-1"><label>Material</label><input type="text" id="weEtNMat" maxlength="100" autocomplete="off" placeholder="z. B. PP weiß, Papier"></div>
+        </div>
+        <div id="weEtNFehler" class="we-et-warn" hidden></div>
+        <div class="bx-row" style="gap:8px;margin-top:var(--sp-3);flex-wrap:wrap">
+          <button type="button" class="btn btn-primary" id="weEtNAnlegen">Anlegen und weiter</button>
+          <button type="button" class="btn btn-ghost" id="weEtNAbbr">Abbrechen</button>
+        </div>
+      </div>
       <div id="weEtWahl" class="we-et-wahl"></div>
       <div id="weEtPruef" class="we-et-pruef" hidden>
         <div class="we-et-vorschau" id="weEtVorschau"></div>
@@ -539,6 +574,10 @@ if ($gebucht):
   .we-scan-side{flex:1 1 300px;min-width:240px}
   .we-et-wahl{display:flex;flex-wrap:wrap;gap:8px;margin-top:var(--sp-3)}
   .we-et-wahl:empty{display:none}
+  .we-et-neu{border:1px solid var(--line);border-radius:12px;padding:var(--sp-4);margin-top:var(--sp-3);background:var(--panel-2);max-width:560px}
+  .we-et-neu[hidden]{display:none}
+  .we-et-neu-raster{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3)}
+  @media (max-width:560px){ .we-et-neu-raster{grid-template-columns:1fr} }
   .we-et-opt{text-align:left;border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:var(--panel-2);color:var(--text);cursor:pointer;line-height:1.35}
   .we-et-opt.on{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen)}
   .we-et-pruef{display:flex;flex-wrap:wrap;gap:var(--sp-4);margin-top:var(--sp-4);align-items:flex-start}
@@ -988,7 +1027,9 @@ if ($gebucht):
   }
 
   // --- Etiketten einbuchen: Produkt -> Kunde/Version -> Design + Maße prüfen -> erst dann Menge/Rollen ---
-  var ET_PROD = <?= json_encode(array_map(fn($ep)=>['id'=>(int)$ep['id'],'n'=>trim(($ep['nummer'] ? $ep['nummer'] . ' · ' : '') . $ep['name'])], $etProdukte), JSON_UNESCAPED_UNICODE) ?>;
+  var ET_PROD = <?= json_encode(array_map(fn($ep)=>['id'=>$ep['id'],'k'=>$ep['kunde_id'],'i'=>$ep['item_id'],'n'=>$ep['n']], $etProdukte), JSON_UNESCAPED_UNICODE) ?>;
+  var ET_KUNDEN = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['firma']], $etKunden), JSON_UNESCAPED_UNICODE) ?>;
+  var ET_ALLE = <?= json_encode(array_map(fn($pp)=>['id'=>(int)$pp['id'],'n'=>trim(($pp['nummer'] ? $pp['nummer'] . ' · ' : '') . $pp['name'])], $etAlleProd), JSON_UNESCAPED_UNICODE) ?>;
   var kopfP=document.getElementById('weKopf'), posP=document.getElementById('wePosPanel'), buchBtn=document.getElementById('weBuchen'),
       etProd=document.getElementById('weEtProdukt'), etInfo=document.getElementById('weEtInfo'), etWahl=document.getElementById('weEtWahl'),
       etPruef=document.getElementById('weEtPruef'), etOk=document.getElementById('weEtOk'), etGewaehlt=null, etLetzt='';
@@ -1017,7 +1058,9 @@ if ($gebucht):
     etPruef.hidden=false; etPanels(false);
     if(etOk) etOk.disabled=false;
   }
-  function etWaehle(liste){
+  function etWaehle(liste, kunde){
+    // Eintrag mit Kunde gewählt -> nur dessen Etikett(en) zeigen (sonst alle des Produkts).
+    if(kunde!=null){ var nurK=liste.filter(function(e){ return (e.kunde_id||0)===kunde; }); if(nurK.length) liste=nurK; }
     etWahl.innerHTML=''; etPruef.hidden=true; etGewaehlt=null; etPanels(false);
     if(!liste.length){ etInfo.textContent='Zu diesem Produkt gibt es keinen Etikett-Artikel.'; return; }
     etInfo.textContent = liste.length>1 ? 'Mehrere Etiketten – bitte Kunde/Version wählen:' : 'Etikett gefunden:';
@@ -1034,12 +1077,43 @@ if ($gebucht):
     var m=ET_PROD.filter(function(p){ return p.n.toLowerCase()===v; })[0];
     if(!m){ etLetzt=''; return; }
     etLetzt=v; etInfo.textContent='Lade Etiketten …';
-    var fd=new FormData(); fd.append('aktion','etikett_produkt'); fd.append('produkt_id', m.id);
+    var fd=new FormData(); fd.append('aktion','etikett_produkt'); fd.append('produkt_id', m.id); fd.append('item_id', m.i||0);
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();})
-      .then(function(j){ etWaehle((j&&j.etiketten)||[]); })
+      .then(function(j){ etWaehle((j&&j.etiketten)||[], m.i?null:m.k); })
       .catch(function(){ etInfo.textContent='Netzwerk-/Serverfehler.'; etLetzt=''; });
   }
   if(etProd){ etProd.addEventListener('input', etProduktSuchen); etProd.addEventListener('change', etProduktSuchen); }
+  // --- Anderes Etikett von Hand anlegen ---
+  var etNeu=document.getElementById('weEtNeu'), etNeuAuf=document.getElementById('weEtNeuAuf'), etNF=document.getElementById('weEtNFehler');
+  function etFeld(id){ return document.getElementById(id); }
+  function etTreffer(liste, v){ v=(v||'').trim().toLowerCase(); return v ? liste.filter(function(x){ return x.n.toLowerCase()===v; })[0] : null; }
+  if(etNeuAuf) etNeuAuf.addEventListener('click', function(){
+    etNeu.hidden=false; etNeuAuf.hidden=true; etWahl.innerHTML=''; etPruef.hidden=true; etGewaehlt=null; etPanels(false); etNF.hidden=true;
+    ['weEtNKunde','weEtNProd','weEtNBez','weEtNB','weEtNH','weEtNMat'].forEach(function(id){ etFeld(id).value=''; });   // frisch beginnen
+    etInfo.textContent='Neues Etikett: Angaben eintragen, danach folgen Prüfung und Menge.';
+    var k=etTreffer(ET_PROD, etProd.value);   // aus dem oberen Feld vorbelegen, falls schon etwas gewählt war
+    if(k){ var kk=ET_KUNDEN.filter(function(x){ return x.id===k.k; })[0]; if(kk) etFeld('weEtNKunde').value=kk.n; var pp=ET_ALLE.filter(function(x){ return x.id===k.id; })[0]; if(pp) etFeld('weEtNProd').value=pp.n; }
+    setTimeout(function(){ etFeld('weEtNKunde').focus(); }, 60);
+  });
+  if(etFeld('weEtNAbbr')) etFeld('weEtNAbbr').addEventListener('click', function(){ etNeu.hidden=true; etNeuAuf.hidden=false; });
+  if(etFeld('weEtNAnlegen')) etFeld('weEtNAnlegen').addEventListener('click', function(){
+    var kv=etFeld('weEtNKunde').value.trim(), pv=etFeld('weEtNProd').value.trim(), k=etTreffer(ET_KUNDEN, kv), p=etTreffer(ET_ALLE, pv), bez=etFeld('weEtNBez').value.trim();
+    var f=[];
+    if(kv && !k) f.push('Kunde „'+kv+'“ nicht gefunden – bitte aus der Liste wählen oder leer lassen.');
+    if(pv && !p) f.push('Produkt „'+pv+'“ nicht gefunden – bitte aus der Liste wählen oder leer lassen.');
+    if(!p && !bez) f.push('Ohne Produkt bitte eine Bezeichnung eingeben.');
+    etNF.hidden=!f.length; etNF.textContent=f.join(' '); if(f.length) return;
+    var btn=this; btn.disabled=true;
+    var fd=new FormData(); fd.append('aktion','etikett_anlegen'); fd.append('kunde_id', k?k.id:0); fd.append('produkt_id', p?p.id:0);
+    fd.append('bezeichnung', bez); fd.append('breite', etFeld('weEtNB').value); fd.append('hoehe', etFeld('weEtNH').value); fd.append('material', etFeld('weEtNMat').value);
+    fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+      btn.disabled=false;
+      if(!j||!j.ok){ etNF.hidden=false; etNF.textContent=(j&&j.fehler)||'Anlegen fehlgeschlagen.'; return; }
+      etNeu.hidden=true; etNeuAuf.hidden=false;
+      etWaehle(j.etiketten||[]);
+      etInfo.textContent = j.vorhanden ? 'Für Produkt und Kunde gibt es dieses Etikett schon – es wird verwendet:' : 'Etikett angelegt:';
+    }).catch(function(){ btn.disabled=false; etNF.hidden=false; etNF.textContent='Netzwerk-/Serverfehler.'; });
+  });
   if(etOk) etOk.addEventListener('click', function(){
     if(!etGewaehlt) return;
     rows.innerHTML='';
@@ -1058,7 +1132,7 @@ if ($gebucht):
     // Etiketten einbuchen: Ziel/Positionen erst nach der Sichtprüfung (Design + Größe) zeigen.
     etPanels(w!=='etikett');
     if(buchBtn) buchBtn.textContent = w==='etikett' ? 'Etiketten buchen' : BUCH_TXT;
-    if(w==='etikett'){ etProd.value=''; etLetzt=''; etWahl.innerHTML=''; etPruef.hidden=true; etGewaehlt=null; setTimeout(function(){ etProd.focus(); },60); }
+    if(w==='etikett'){ etProd.value=''; etLetzt=''; etWahl.innerHTML=''; etPruef.hidden=true; etGewaehlt=null; if(etNeu){ etNeu.hidden=true; etNeuAuf.hidden=false; } setTimeout(function(){ etProd.focus(); },60); }
     rows.innerHTML=''; addRow();   // frische, leere Position
     var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value='';   // kein Lieferungsbezug bei manuellem/Scan-Weg
     if(w==='tracking'){ var t=document.getElementById('weTrack'); if(t) setTimeout(function(){t.focus();},60); }

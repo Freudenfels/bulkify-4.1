@@ -91,7 +91,10 @@ Neue letzte Station **„Wareneingang bei bulkify"** (`eingegangen`, de/en/zh). 
 das per Loopback `?p=api_qm_freigabe` ans Dashboard (Token wie api_einlager) -> dort Produktionsbericht + CoA für den Kunden.
 
 ## Etiketten einbuchen (03.11.2026)
-- `erp_etikett_produkte()` – Produkte mit Etikett-Artikel (Kundenetikett `item.produkt_id` oder Slot `produkt.etikett_id`), für die Produktsuche.
+- `erp_etikett_produkte()` – je **Produkt + Kunde** ein Eintrag (Kundenetikett `item.produkt_id` oder Slot `produkt.etikett_id`), Text „Nummer · Produkt · Kunde“ (ohne Kunde: „Standard-Etikett“), dazu Etiketten ohne Produkt (`item_id`). Seit 03.11.2026 mit Kundenname, damit man auch über den Kunden sucht.
+- `erp_etikett_artikel($item_id)` – ein einzelnes Etikett in derselben Form wie `erp_etikett_zu_produkt` (gemeinsam: `erp_etikett_sql`, `erp_etikett_eintrag`).
+- `erp_etikett_anlegen($d)` – Etikett von Hand anlegen (kunde_id, produkt_id optional, bezeichnung, breite, hoehe, material). Mit Produkt: Gibt es für Produkt + Kunde schon ein aktuelles Etikett, wird es zurückgegeben (`vorhanden`), kein Duplikat. Sonst nächste Version (v1), Maße/Material leer → vom Etikett-Slot des Produkts. Ohne Produkt: Bezeichnung Pflicht, Name „Etikett · Bezeichnung · Kunde“, gleicher Name → vorhandener Artikel. Nummer VP-… aus dem gemeinsamen Nummernkreis. `produkt.etikett_id` wird nur gesetzt, wenn der Slot leer ist und kein bzw. der Produkt-Kunde gewählt ist.
+- `erp_produkt_auswahl()` – alle Produkte (id, nummer, name) für die Auswahl.
 - `erp_etikett_zu_produkt($produkt_id)` – je Kunde die aktuelle (nicht gesperrte) Etikett-Version + Slot. Liefert id, name, kunde, version, kundenetikett, dok (freigegebenes Design), pdf, format, breite, hoehe und material (mit Fallback auf die Maß-Vorlage `etikett_vorlage_id`). Liest nur.
 
 ## Inventaraufkleber 8-stellig (03.11.2026)
