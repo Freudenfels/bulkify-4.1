@@ -31,3 +31,6 @@
 
 ## Menü-Badge „Anfragen & Preise" (Stand 2026-10-08)
 `bx_nav()` setzt `$anfCount['lief_anfragen']` = Anzahl neu abgegebener, noch nicht bearbeiteter Lieferantenpreise (`lieferant_anfrage` JOIN `lieferant_angebot` WHERE `ag.status='offen'`). So sieht der Einkauf am Menü, wenn ein Lieferant einen Preis abgegeben hat (zusätzlich zur E-Mail `mail_team_preisanfrage` und der „Preis da"-Ansicht auf der Seite).
+
+## Produktionsfreigabe im Menü (03.11.2026)
+Gruppe Produktion, Key `produktionsfreigabe` (Route `produktion_vorbereitung`, nur Admin). Ein eigener Key, damit ein früher ausgeblendeter `produktion_vorbereitung` im gespeicherten `menu_layout` ihn nicht verdeckt. Bei gespeichertem Menü hängt er hinten an die Gruppe Produktion und lässt sich im Menü-Editor verschieben. Zähler `$anfCount['produktionsfreigabe']` = Produktionsaufträge mit Status `vorbereitung` ohne stornierte Aufträge, also dieselbe Menge wie die Liste.

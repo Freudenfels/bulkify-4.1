@@ -246,7 +246,7 @@ $kpi = function(string $label, int $wert, string $href, string $farbe = '', bool
        . '<div style="font-size:24px;line-height:1.2;margin-top:2px' . ($farbe && $wert > 0 ? ';color:' . $farbe : '') . '">' . $wert . '</div></a>';
 };
 echo '<div class="bx-cards" style="margin-bottom:16px">';
-if (has_role('admin')) $kpi('Wartet auf Freigabe', (int)$vorbereitungN, '?p=auftraege&tab=freigabe', '#f59e0b');
+if (has_role('admin')) $kpi('Wartet auf Freigabe', (int)$vorbereitungN, '?p=produktion_vorbereitung', '#f59e0b');
 $kpi('In Produktion', $anzLaufend, '?p=produktion&tab=laufend', '', $tab === 'laufend');
 $kpi('Produktionsbereit', $anzBereit, '?p=produktion&tab=bereit', 'var(--gruen)', $tab === 'bereit');
 $kpi('Wartet auf Material', $anzWartet, '?p=produktion&tab=wartet', '#f59e0b', $tab === 'wartet');
@@ -256,7 +256,7 @@ echo '</div>';
 if (!empty($vorbereitungN) && has_role('admin'))
     echo '<div class="bx-panel badge-warn" style="padding:10px 14px">' . (int)$vorbereitungN
        . ' Auftrag(e) warten auf <strong>Freigabe</strong> – am Auftrag Quelle festlegen und freigeben: '
-       . bx_btn('Wartet auf Freigabe', '?p=auftraege&tab=freigabe', 'ghost') . '</div>';
+       . bx_btn('Zur Produktionsfreigabe', '?p=produktion_vorbereitung', 'ghost') . '</div>';
 
 if ($zeigeNeu):
     // Produkte für die Auswahl (tippbar mit Live-Filter). Mit Rezeptur zuerst (dort ist die Darreichungsform bekannt).

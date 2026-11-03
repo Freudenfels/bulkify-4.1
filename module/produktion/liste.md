@@ -43,3 +43,5 @@ Beim Öffnen läuft `material_komplett_pruefen()` gedrosselt (höchstens alle 5 
 ## Storno und „Material bestellt“ (03.11.2026)
 - Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief.
 - Neuer Reiter und neue Kachel **„Material bestellt“**: Produktionsaufträge, deren fehlendes Material komplett bestellt ist, mit Badge und Termin („bis TT.MM.JJJJ“). „Wartet auf Material“ zeigt nur noch, was wirklich fehlt und nicht bestellt ist. Ist nur ein Teil bestellt, bleibt der Auftrag unter „Wartet auf Material“.
+
+Kachel und Hinweis „Wartet auf Freigabe“ führen seit 03.11.2026 zur Produktionsfreigabe (`?p=produktion_vorbereitung`).

@@ -79,3 +79,5 @@ Bei Füllmengen-Formen ist die Packungsgröße des PA (`produktion_stueck_je_pac
 
 „Als Standard übernehmen“ beim Glas (03.11.2026): Der Behälter-Teil im Produktnamen zieht mit (`produkt_name_behaelter_nachziehen`).
 Glas nur für diesen Auftrag: Der Behälter-Teil im Auftrags-Namen zieht mit (`auftrag_name_behaelter_nachziehen`).
+
+Seit 03.11.2026 heißt die Liste „Produktionsfreigabe“ und hat wieder einen Menüpunkt mit Zähler (Gruppe Produktion). Die Kachel „Wartet auf Freigabe“ in der Produktionsliste führt hierher. Stornierte Aufträge erscheinen nicht (`vorbereitung_liste` mit `pa_aktiv_sql`).

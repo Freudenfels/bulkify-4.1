@@ -31,7 +31,10 @@ function bx_nav_default(): array {
         // Vor-Produktion als eigener Menüpunkt entfernt (Block I): Quelle festlegen + Freigeben laufen jetzt
         // am Auftrag; „Wartet auf Freigabe" ist ein Reiter in der Auftragsliste (?p=auftraege&tab=freigabe).
         // Die Route produktion_vorbereitung&id=… (Glas/Verpackung je PA) bleibt bestehen, nur ohne Nav-Eintrag.
-        'Produktion'   => ['produktion' => 'Produktion', 'easy_production' => 'Easy Production', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
+        // Produktionsfreigabe (Nico 03.11.2026): Liste der PAs in Vorbereitung mit Zähler im Menü. Eigener Key (nicht
+        // 'produktion_vorbereitung'), damit ein früher ausgeblendeter Eintrag im gespeicherten Menü ihn nicht verdeckt.
+        'Produktion'   => ['produktionsfreigabe' => ['label'=>'Produktionsfreigabe', 'route'=>'produktion_vorbereitung', 'href'=>'?p=produktion_vorbereitung'],
+                           'produktion' => 'Produktion', 'easy_production' => 'Easy Production', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         // Warenlager = Gesamtsystem (alle Lager), darunter die Einzel-Sichten Lager 1 und Fremdlager (Lager 2).
         // Alle drei nutzen dieselbe Seite (?p=lager) mit dem Filter ?ort=…; der aktive Punkt entscheidet sich über 'ort'.
         'Lager'        => [
@@ -209,6 +212,9 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
               + (int) scalar("SELECT COUNT(*) FROM charge c WHERE COALESCE(c.coa_freigegeben,0)=0 AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)");
             // Offene Lieferanten-Uploads (Mein Katalog: Katalog/CoA/Spec/manuell), die auf unsere Prüfung warten.
             $anfCount['katalog_freigaben'] = (int) scalar("SELECT COUNT(*) FROM lieferant_katalog WHERE status='neu'");
+            // Noch nicht freigegebene Produktionsaufträge (Vorbereitung), ohne stornierte Aufträge – wie die Liste.
+            $anfCount['produktionsfreigabe'] = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag pa WHERE pa.status='vorbereitung'
+                AND NOT EXISTS (SELECT 1 FROM auftrag ax WHERE ax.id=pa.auftrag_id AND ax.status='storniert')");
             // Neu abgegebene Lieferantenpreise (Preisanfrage beantwortet, noch nicht angenommen/abgelehnt).
             $anfCount['lief_anfragen'] = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage la JOIN lieferant_angebot ag ON ag.anfrage_id=la.id WHERE ag.status='offen'");
             // Ungelesene Lieferanten-Nachrichten (Sicht Team) – deutlich, weil die Software den ganzen Tag offen ist.
@@ -240,6 +246,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 'auftraege'     => "$n Aufträge noch nicht fertig",
                 'freigaben'     => "$n offene Freigaben (Spezifikationen/CoA)",
                 'katalog_freigaben' => "$n Lieferanten-Uploads zu prüfen",
+                'produktionsfreigabe' => "$n Produktionsaufträge noch nicht freigegeben",
                 'lief_anfragen' => "$n neue Lieferantenpreise (abgegeben, noch nicht bearbeitet)",
                 'lief_nachrichten' => "$n ungelesene Nachrichten von Lieferanten",
                 default         => "$n offene Anfragen",

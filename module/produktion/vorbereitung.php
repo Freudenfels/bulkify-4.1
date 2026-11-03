@@ -430,8 +430,8 @@ if ($q !== '') {
         return false;
     }));
 }
-render_header('produktion_vorbereitung', 'Vor-Produktion');
-bx_head('Vor-Produktion / Freigabe', count($rows) . ' Auftrag(e) in Vorbereitung' . ($q !== '' ? ' (gefiltert)' : '') . ' – offene Aufträge erscheinen automatisch; zum Bearbeiten anklicken.',
+render_header('produktion_vorbereitung', 'Produktionsfreigabe');
+bx_head('Produktionsfreigabe', count($rows) . ' Produktionsauftrag/-aufträge noch nicht freigegeben' . ($q !== '' ? ' (gefiltert)' : '') . ' – offene Aufträge erscheinen automatisch; zum Bearbeiten anklicken.',
         bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
 if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag zur Produktion freigegeben – jetzt im Produktionsmodul startbar.'
     . (isset($_GET['split']) ? ' ' . h((string)$_GET['split']) : '') . '</div>';
