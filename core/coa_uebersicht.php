@@ -180,9 +180,10 @@ function build_coa_uebersicht_pdf(int $charge_id): ?string {
     $berechnet = array_values(array_filter($d['ergebnis'], fn($e) => !empty($e['ok'])));
     if ($berechnet) {
         $abschnitt('Kontaminanten', 140);
-        $y = spec_table($p, $y, [[$L, 'Parameter'], [190, 'Höchstgehalt NEM'], [330, 'Bewertung'], [430, 'Grundlage']],
-                        array_map(fn($e) => [$e['parameter'], $e['referenz'], $e['ergebnis'], $e['methode']], $berechnet));
-        $klein('Höchstgehalte für Nahrungsergänzungsmittel nach VO (EU) 2023/915; bewertet aus den Analysen bzw. Spezifikationen der eingesetzten Rohstoffe, bezogen auf das Füllgut.');
+        // Nico 03.11.2026: KEINE Höchstgehalt-Spalte – nur Gehalt (berechnet) + Bewertung, sonst verwirrt „Höchstwert + konform".
+        $y = spec_table($p, $y, [[$L, 'Parameter'], [190, 'Gehalt'], [330, 'Bewertung'], [430, 'Grundlage']],
+                        array_map(fn($e) => [$e['parameter'], coa_uebersicht_zahl((float)$e['wert']) . ' mg/kg', $e['ergebnis'], $e['methode']], $berechnet));
+        $klein('Gehalt berechnet aus den Analysen bzw. Spezifikationen der eingesetzten Rohstoffe, bezogen auf das Füllgut; „konform“ = innerhalb der Höchstgehalte für Nahrungsergänzungsmittel nach VO (EU) 2023/915.');
         $y += 6;
     }
 

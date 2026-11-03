@@ -47,3 +47,5 @@ Pb, Cd, Hg (mit NEM-Höchstgehalt; Arsen entfällt) mit Bewertung „konform“.
 ein Wert vorliegt (Messwert der Charge oder Rohstoff-Spezifikation) – sonst entfällt er ganz. Datenbasis-Spalte: „Analyse der Charge“
 bzw. „Spezifikation“. Sicherheitsnetz: liegt die Rechnung über einem Höchstgehalt, steht „Höchstgehalt überschritten“, das Dokument
 wird **nicht** für den Kunden sichtbar abgelegt und das Team bekommt einen Verlaufseintrag am Auftrag.
+
+**Nachtrag:** Keine Höchstgehalt-Spalte (verwirrt neben „konform“). Spalten: Parameter · Gehalt (berechnet, mg/kg, ohne „max.“) · Bewertung „konform“ · Grundlage. Die NEM-Höchstgehalte (VO (EU) 2023/915) stehen nur als Bezug im Kleingedruckten.
