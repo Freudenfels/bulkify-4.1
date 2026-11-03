@@ -45,3 +45,5 @@ Optional `zeilen => fn(array $rows): array` ergänzt Spalten, die sich nicht in 
 `pulver_auftrag` ist seit 03.11.2026 behebbar: Fix-Typ `aktion` (eigene Korrektur je Zeile über mehrere Tabellen, protokolliert selbst) → `pulver_auftrag_fuellmenge_korrigieren()` setzt auftrag.stueck und die PA-stueck auf die Füllmenge des Produkts, nur wo noch die alte Zahl steht.
 
 **kundenetikett_fehlt** (03.11.2026): je Produkt + Kunde (Zeile = jüngster Auftrag) Aufträge mit Etikett ohne Kundenetikett-Artikel. Beheben (`aktion`) ruft `auftrag_kundenetikett_sicherstellen()` für alle Aufträge dieses Produkts + Kunden auf: v1 wird angelegt, ein freigegebenes Design übernommen, offene Aufträge gebunden. Danach findet die Lager-App „Etiketten einbuchen“ das Produkt für diesen Kunden. Bestand auf dem allgemeinen Maß-Etikett bleibt dort.
+
+**produkt_name_behaelter** (03.11.2026): Produkte, deren Name einen anderen Primärbehälter nennt als im Slot steht (längster Treffer je Produkt; bedruckte Kundenbehälter ausgenommen). Beheben (`aktion`) zieht den Namen auf den hinterlegten Behälter. Ist der Behälter falsch, am Produkt korrigieren.

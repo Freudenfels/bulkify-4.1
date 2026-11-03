@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             log_aktivitaet('kunde', (int)($kunde_id ?: 0), 'team', 'Produkt „' . $name . '" angelegt.', 'produkt', (int)$id);
         } else {
             // Umbenennung: den bisherigen Anzeigenamen (Kundenname bevorzugt) automatisch als Synonym merken.
-            $alt = one("SELECT name, kundenname FROM produkt WHERE id=?", [(int)$id]);
+            $alt = one("SELECT name, kundenname, verpackung_id FROM produkt WHERE id=?", [(int)$id]);
             $altAnzeige = trim((string)($alt['kundenname'] ?? '')) !== '' ? (string)$alt['kundenname'] : (string)($alt['name'] ?? '');
             $neuAnzeige = $kdname ?: $name;
             if ($altAnzeige !== '' && $altAnzeige !== $neuAnzeige && mb_stripos($synonyme, $altAnzeige) === false) {
@@ -160,6 +160,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             }
             q("UPDATE produkt SET name=?,synonyme=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,karton_inhalt=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
               [$name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $kartonInh, $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
+            // Behälter gewechselt, Name nicht von Hand geändert -> „· 100 ml Glas" im Namen auf den neuen Behälter ziehen.
+            if ((string)($alt['name'] ?? '') === $name && (int)($alt['verpackung_id'] ?? 0) !== (int)($verp_id ?? 0))
+                produkt_name_behaelter_nachziehen((int)$id, (int)($alt['verpackung_id'] ?? 0), (int)($verp_id ?? 0), 'produkt');
         }
         // USt-Satz je Produkt – NUR Admin. Leer = Standard (NULL -> 19 % aus den Einstellungen). Auf zulässigen Satz gezogen.
         if (has_role('admin') && array_key_exists('mwst_satz', $_POST)) {

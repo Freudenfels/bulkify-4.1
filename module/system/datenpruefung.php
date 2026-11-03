@@ -309,6 +309,34 @@ $CHECKS = [
                         return $n;
                     }],
     ],
+    'produkt_name_behaelter' => [
+        'titel' => 'Produkt: Name nennt einen anderen Behälter als hinterlegt',
+        'info'  => 'Der Produktname bekommt den Behälter beim Anlegen („… · 120 Kapseln · 100 ml Glas“). Wurde der Behälter später geändert (Produktseite, Vorbereitung „als Standard“), blieb der Name stehen – oben 100 ml, unten 150 ml. Beheben zieht den Behälter-Teil im Namen auf den hinterlegten Behälter; der alte Name wird Synonym. Ist stattdessen der Behälter falsch, am Produkt den Behälter korrigieren.',
+        'sql'   => "SELECT p.id AS _id, CONCAT('?p=produkt&id=', p.id) AS _link, p.nummer, p.name, vi.id AS _alt_vp, vi.name AS behaelter_im_namen,
+                           p.verpackung_id AS _neu_vp, vc.name AS behaelter_am_produkt, CHAR_LENGTH(vi.name) AS _len
+                    FROM produkt p
+                    JOIN item vc ON vc.id = p.verpackung_id
+                    JOIN item vi ON vi.kategorie = 'verpackung' AND COALESCE(vi.verpackung_rolle,'primaer') = 'primaer' AND vi.id <> p.verpackung_id
+                                AND CHAR_LENGTH(vi.name) >= 3 AND INSTR(p.name, CONCAT(' · ', vi.name)) > 0
+                    WHERE INSTR(p.name, CONCAT(' · ', vc.name)) = 0 AND COALESCE(vc.kundenspezifisch,0) = 0
+                    ORDER BY p.id, CHAR_LENGTH(vi.name) DESC",
+        'zeilen' => function (array $rows): array {
+            // Je Produkt nur den längsten passenden Behälternamen (z. B. „100 ml Glas braun“ statt „100 ml Glas“).
+            $out = [];
+            foreach ($rows as $r) if (!isset($out[(int)$r['_id']])) $out[(int)$r['_id']] = $r;
+            foreach ($out as &$r) {
+                $neu = preg_replace('/\s+v\d+$/i', '', preg_replace('/ · ' . preg_quote((string)$r['behaelter_im_namen'], '/') . '(?=$|\s+v\d+$)/u', ' · ' . $r['behaelter_am_produkt'], (string)$r['name'], 1));
+                $r['neuer_name'] = $neu !== preg_replace('/\s+v\d+$/i', '', (string)$r['name']) ? $neu : null;
+                $r['aenderung'] = $r['neuer_name'] ? 'Name -> ' . $r['neuer_name'] : 'nicht automatisch: Behälter steht nicht am Namensende';
+            }
+            return array_values($out);
+        },
+        'korrektur' => "-- je angehaktem Produkt: Behälter-Teil im Namen auf den hinterlegten Behälter ziehen (alter Name -> Synonyme)\nproduktname: ' · <Behälter im Namen>' -> ' · <Behälter am Produkt>'   (produkt_name_behaelter_nachziehen)",
+        'ohne_fix'  => 'Nur der Name ändert sich (Auftrags-Namen sind als Snapshot gespeichert und bleiben). Ist der Behälter am Produkt falsch, bitte dort korrigieren statt hier zu beheben.',
+        'fix'   => ['tabelle' => 'produkt', 'typ' => 'produkt',
+                    'waehlbar' => fn(array $r) => !empty($r['neuer_name']),
+                    'aktion' => fn(array $r) => produkt_name_behaelter_nachziehen((int)$r['_id'], (int)$r['_alt_vp'], (int)$r['_neu_vp'], 'datenpruefung') !== '' ? 1 : 0],
+    ],
     'pulver_kundenpreis' => [
         'titel' => 'Pulver: Kundenpreis mit Portionen statt g je Packung',
         'info'  => 'Bei Pulver/Granulat ist die Menge je Packung die Füllmenge in g. Alte Zeilen (v3) tragen die Portionszahl (z. B. 31 statt 275 g). Treffer: Menge kleiner als die Füllmenge des Produkts UND Menge × Portionsgröße liegt höchstens 25 % neben der Füllmenge (dann sind es Portionen). Korrektur: Menge = Füllmenge des Produkts.',

@@ -390,3 +390,9 @@ kunde_id, auftrag_id ODER angebot_id, akteur kunde|team, text, benutzer, erstell
 - Nicht bei Handelsware, Bulk ohne Behälter oder vollbedrucktem Behälter.
 
 Aufgerufen in `auftrag_aus_import()` und `kontingent_abruf()` (dort fehlte der Hook) sowie über die Datenprüfung `kundenetikett_fehlt`. Die Kopie `auftrag_aus_import()` in `buchhaltung/core/erp.php` darf core/schema.php nicht laden; diese Aufträge fängt die Datenprüfung.
+
+## Produktname zieht den Behälter mit (03.11.2026)
+`produkt_name_behaelter_nachziehen($pid, $alt_vp, $neu_vp, $route)`: Der Name trägt den Behälter seit dem Anlegen („… · 100 ml Glas“). Wechselt der Behälter-Slot, wird der Namensteil „ · <alter Behälter>“ durch den neuen ersetzt.
+- Die Version wird neu bestimmt; der alte Name wird Synonym; Feld-Protokoll.
+- Nicht bei bedrucktem Kundenbehälter (Blocker 1).
+- Aufgerufen in der Produktseite (Behälter geändert, Name nicht von Hand geändert), in der Vorbereitung „als Standard“ und in der Datenprüfung `produkt_name_behaelter`.

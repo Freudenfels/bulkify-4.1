@@ -4863,6 +4863,31 @@ function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int
     return $neu;
 }
 
+// Der Produktname trägt den Behälter („Rezeptur · 120 Kapseln · 100 ml Glas", produkt_variante_id). Wird der Behälter-
+// Slot geändert, zieht der Behälter-Teil im Namen mit – sonst steht oben „100 ml Glas", unten 150 ml (03.11.2026).
+// Nur wenn der alte Behältername als Namensteil („ · <Name>", ggf. vor „ vN") vorkommt; der bisherige Name wandert in
+// die Synonyme, die Versionsnummer wird neu bestimmt (keine Doppelnamen). Rückgabe: neuer Name ('' = nichts geändert).
+function produkt_name_behaelter_nachziehen(int $produkt_id, int $alt_vp, int $neu_vp, string $route = ''): string {
+    if ($produkt_id <= 0 || $alt_vp <= 0 || $neu_vp <= 0 || $alt_vp === $neu_vp) return '';
+    $p = one("SELECT * FROM produkt WHERE id=?", [$produkt_id]);
+    $alt = (string) scalar("SELECT name FROM item WHERE id=?", [$alt_vp]);
+    $neu = (string) scalar("SELECT name FROM item WHERE id=?", [$neu_vp]);
+    if (!$p || trim($alt) === '' || trim($neu) === '') return '';
+    // Bedruckter Kundenbehälter (Blocker 1) gehört nicht in den Produktnamen – der Name bleibt beim neutralen Behälter.
+    if ((int) scalar("SELECT COALESCE(kundenspezifisch,0) FROM item WHERE id=?", [$neu_vp]) === 1) return '';
+    $name = (string)$p['name'];
+    $muster = '/ · ' . preg_quote($alt, '/') . '(?=$|\s+v\d+$)/u';
+    if (!preg_match($muster, $name)) return '';
+    $basis = preg_replace('/\s+v\d+$/i', '', preg_replace($muster, ' · ' . $neu, $name, 1));
+    $neuName = mb_substr(produkt_name_versioniert($basis, $produkt_id), 0, 190);
+    if ($neuName === $name) return '';
+    $syn = trim((string)($p['synonyme'] ?? ''));
+    if (mb_stripos($syn, $name) === false) $syn = trim(($syn !== '' ? $syn . "\n" : '') . $name);
+    q("UPDATE produkt SET name=?, synonyme=? WHERE id=?", [$neuName, $syn ?: null, $produkt_id]);
+    $nach = one("SELECT * FROM produkt WHERE id=?", [$produkt_id]) ?: [];
+    if (function_exists('aenderung_protokollieren')) aenderung_protokollieren('produkt', $produkt_id, $p, $nach, $route ?: 'behaelter_name');
+    return $neuName;
+}
 // Das Produkt zu (Rezeptur des Vorlage-Produkts x Packungsgröße + Behälter) finden – oder anlegen.
 // Katalogprodukt (nicht exklusiv, ohne Kunde): der Preis ist kundenspezifisch, das Produkt nicht.
 // Deckel/Etikett/Karton/Beipack und Verzehrempfehlung kommen aus dem Vorlage-Produkt.

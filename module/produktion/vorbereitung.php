@@ -28,7 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         [$aid, $pid] = vp_ids($paId);
         $vid = ($_POST['verpackung_id'] ?? '') !== '' ? (int)$_POST['verpackung_id'] : null;
         if ($aid) q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vid, $aid]);
-        if (($_POST['verp_scope'] ?? '') === 'standard' && $vid && $pid) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vid, $pid]);
+        if (($_POST['verp_scope'] ?? '') === 'standard' && $vid && $pid) {
+            $altVp = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$pid]);
+            q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vid, $pid]);
+            produkt_name_behaelter_nachziehen((int)$pid, $altVp, (int)$vid, 'vorbereitung');   // „· 100 ml Glas" im Namen mitziehen
+        }
         bedarf_bump(); header('Location: ' . $back . '&saved=1#glas'); exit;
     }
     if ($aktion === 'kapsel_setzen' && $paId) {

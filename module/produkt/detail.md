@@ -100,3 +100,5 @@ Abgelöst durch den Abschnitt unten (Rezeptur = Tagesdosis).
 - Sticks/Kapseln/Tabletten unverändert.
 
 „Kundenpreis hinzufügen“ (03.11.2026): gleiche Größe UND gleiche Anzahl Verpackungen → vorhandene Zeile aktualisieren; andere Anzahl = eigene Staffel.
+
+Behälter gewechselt, Name nicht von Hand geändert (03.11.2026): Der Behälter-Teil im Namen zieht mit (`produkt_name_behaelter_nachziehen`), der alte Name wird Synonym. Vorher stand oben „100 ml Glas“, unten 150 ml.

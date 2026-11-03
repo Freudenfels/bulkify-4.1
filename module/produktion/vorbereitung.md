@@ -76,3 +76,5 @@ Mit Aufteilung: `produktionsart` = `eigen`, wenn ein Eigen-Anteil existiert (Mix
 
 ## Pulver/Granulat/Flüssig: Füllmenge = Packungsgröße (St-13)
 Bei Füllmengen-Formen ist die Packungsgröße des PA (`produktion_stueck_je_packung`) die **Füllmenge je Packung** (g bzw. ml). Die Kopfkacheln zeigen „Füllmenge je Packung 100 g · Gesamtmenge 100 kg" und „Portionen je Packung (NRV)" = g × 1000 / mg je Portion. Vorher wurde die Packungsgröße als Portionszahl × mg je Portion gerechnet (100 g → „500 g", 1.000 Pkg → „500 kg"). Die am Rezept hinterlegte Füllmenge („Gewicht pro Bag") ist nur Rückfall. Die Zutatenspalte heißt „mg je Portion"; die Bereitschaft zeigt fehlendes Pulver lesbar („fehlt noch 100 kg" statt „100.000 g").
+
+„Als Standard übernehmen“ beim Glas (03.11.2026): Der Behälter-Teil im Produktnamen zieht mit (`produkt_name_behaelter_nachziehen`).
