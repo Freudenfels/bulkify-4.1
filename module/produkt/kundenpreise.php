@@ -125,20 +125,21 @@ $eur = fn(float $v, int $d = 2) => number_format($v, $d, ',', '.');
 $preisTxt = fn(?float $v) => $v === null ? '' : rtrim(rtrim(number_format($v, 4, ',', ''), '0'), ',');
 
 render_header('kundenpreise', 'Kundenpreise');
+$info = 'Herstellungspreis je Packung eintragen (nur Herstellung/Kapseln, ohne Verpackung). Verpackung, Deckel und Etikett rechnet das System bei der Bestellmenge dazu (inkl. Kundenrabatt); ein vollbedruckter Beutel ohne Etikett. '
+      . ($fuellen ? 'Beim Speichern bekommen unbepreiste Aufträge dieser Kombination den Preis (VK je Packung, Gesamt netto); Belege werden nicht angelegt oder geändert.'
+                  : 'Unbepreiste Aufträge werden dabei noch nicht automatisch gefüllt (erst nach Freigabe).');
 bx_head('Kundenpreise', count($zeilen) . ' Kombinationen · ' . $ohnePreisN . ' ohne Preis', bx_btn('Aufträge ohne Preis', '?p=auftrag_preise', 'ghost'));
 if (isset($_GET['ok']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['ok']) . '</div>';
 if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['err']) . '</div>';
 ?>
-<p class="muted" style="margin-top:0">Hier den <strong>Herstellungspreis je Packung</strong> (nur Herstellung/Kapseln, ohne Verpackung) eintragen. Verpackung, Deckel und Etikett rechnet das System bei der Bestellmenge dazu (inkl. Kundenrabatt) – ein vollbedruckter Beutel ohne Etikett.
-<?= $fuellen ? 'Beim Speichern bekommen unbepreiste Aufträge dieser Kombination den Preis (VK je Packung, Gesamt netto); Belege werden nicht angelegt oder geändert.'
-              : 'Unbepreiste Aufträge werden dabei noch <strong>nicht</strong> automatisch gefüllt (erst nach Freigabe).' ?></p>
 
+<p class="muted" style="margin:0 0 10px">Herstellungspreis je Packung eintragen, Verpackung und Etikett rechnet das System dazu. <?= bx_hint($info) ?></p>
 <form class="bx-listbar" method="get" style="flex-wrap:wrap;gap:8px">
   <input type="hidden" name="p" value="kundenpreise">
   <label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" name="ohne" value="1" <?= $fOhne ? 'checked' : '' ?> onchange="this.form.submit()"> nur ohne Preis</label>
-  <select name="kunde" class="rscombo" style="min-width:220px" onchange="this.form.submit()"><option value="">Alle Kunden</option>
+  <select name="kunde" class="rscombo" data-ph="Kunde wählen …" style="min-width:220px" onchange="this.form.submit()"><option value="">Alle Kunden</option>
     <?php foreach ($kundenOpt as $id => $n): ?><option value="<?= (int)$id ?>" <?= $fKunde === (int)$id ? 'selected' : '' ?>><?= h($n) ?></option><?php endforeach; ?></select>
-  <select name="produkt" class="rscombo" style="min-width:260px" onchange="this.form.submit()"><option value="">Alle Produkte</option>
+  <select name="produkt" class="rscombo" data-ph="Produkt wählen …" style="min-width:260px" onchange="this.form.submit()"><option value="">Alle Produkte</option>
     <?php foreach ($prodOpt as $id => $n): ?><option value="<?= (int)$id ?>" <?= $fProd === (int)$id ? 'selected' : '' ?>><?= h($n) ?></option><?php endforeach; ?></select>
   <input class="bx-search" type="text" name="q" value="<?= h($fQ) ?>" placeholder="Suchen: Kunde, Produkt, Rezeptur, Auftrag …">
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
@@ -150,22 +151,23 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   <button type="submit" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px">Alle speichern</button><?php // Enter = alle speichern, nicht die erste Zeile ?>
   <input type="hidden" name="f_ohne" value="<?= $fOhne ? '1' : '' ?>"><input type="hidden" name="f_kunde" value="<?= $fKunde ?: '' ?>">
   <input type="hidden" name="f_produkt" value="<?= $fProd ?: '' ?>"><input type="hidden" name="f_q" value="<?= h($fQ) ?>">
-  <div class="bx-tablewrap"><table class="bx-table">
+  <style>.kp-tab td{font-size:14px}.kp-tab .kp-txt{white-space:normal;max-width:210px}.kp-tab .bx-num{white-space:nowrap}</style>
+  <div class="bx-tablewrap"><table class="bx-table kp-tab">
     <thead><tr>
       <th>Kunde</th><th>Produkt</th><th class="bx-num">Menge je Pkg</th><th>Verpackung</th><th>Bestellmenge(n)</th>
-      <th class="bx-num">Herstellung je Pkg (€)</th><th class="bx-num">Verpackung + Etikett je Pkg</th><th class="bx-num">VK je Pkg</th><th class="bx-num">Gesamt netto</th><th></th>
+      <th class="bx-num">Herstellung je Pkg (€)</th><th class="bx-num">Verp. + Etikett je Pkg</th><th class="bx-num">VK je Pkg</th><th class="bx-num">Gesamt netto</th><th></th>
     </tr></thead>
     <tbody>
     <?php if (!$sicht): ?><tr><td colspan="10" class="muted">Keine Einträge.</td></tr><?php endif; ?>
     <?php foreach ($sicht as $k => $r):
         $verp = $r['verp_cent'] / 100; $vk = $r['preis'] !== null ? (round($r['preis'] * 100) + $r['verp_cent']) / 100 : null; ?>
       <tr class="kp-row" data-verp="<?= (int)$r['verp_cent'] ?>" data-menge="<?= (int)$r['menge'] ?>">
-        <td><?= kunde_link($r['kid'], $r['firma']) ?></td>
-        <td><a href="?p=produkt&id=<?= $r['pid'] ?>"><?= h($r['rezeptur'] !== '' ? $r['rezeptur'] : $r['produkt']) ?></a>
+        <td class="kp-txt"><?= kunde_link($r['kid'], $r['firma']) ?></td>
+        <td class="kp-txt"><a href="?p=produkt&id=<?= $r['pid'] ?>"><?= h($r['rezeptur'] !== '' ? $r['rezeptur'] : $r['produkt']) ?></a>
             <div class="muted" style="font-size:12px"><?= h($r['produkt_nr']) ?><?= $r['preis'] === null ? ' · ' . bx_badge('ohne Preis', 'warn') : '' ?></div></td>
         <td class="bx-num" style="white-space:nowrap"><?= h(form_groessen_label($r['form'], (float)$r['stk'])) ?></td>
-        <td><?= $r['verpackung'] !== '' ? h($r['verpackung']) : '<span class="muted">–</span>' ?><?= $r['vollbedruckt'] ? '<div class="muted" style="font-size:12px">vollbedruckt</div>' : '' ?></td>
-        <td style="font-size:13px"><?= $r['mengen'] ? h(implode(', ', array_map(fn($m) => number_format($m, 0, ',', '.'), $r['mengen']))) . ' Stk' : ($r['anzahl'] ? h(number_format($r['anzahl'], 0, ',', '.')) . ' Stk' : '<span class="muted">–</span>') ?>
+        <td class="kp-txt"><?= $r['verpackung'] !== '' ? h($r['verpackung']) : '<span class="muted">–</span>' ?><?= $r['vollbedruckt'] ? '<div class="muted" style="font-size:12px">vollbedruckt</div>' : '' ?></td>
+        <td class="kp-txt" style="font-size:13px"><?= $r['mengen'] ? h(implode(', ', array_map(fn($m) => number_format($m, 0, ',', '.'), $r['mengen']))) . ' Stk' : ($r['anzahl'] ? h(number_format($r['anzahl'], 0, ',', '.')) . ' Stk' : '<span class="muted">–</span>') ?>
             <?php if ($r['ohne_preis_auftraege']): ?><div style="font-size:12px;color:#8f231b"><?= count($r['ohne_preis_auftraege']) ?> Auftrag/Aufträge ohne Preis: <?php foreach ($r['ohne_preis_auftraege'] as $i => $a): ?><?= $i ? ', ' : '' ?><a href="?p=auftrag&id=<?= (int)$a['id'] ?>"><?= h($a['nummer']) ?></a><?php endforeach; ?></div><?php endif; ?></td>
         <td class="bx-num"><input type="text" inputmode="decimal" name="preis[<?= h($k) ?>]" value="<?= h($preisTxt($r['preis'])) ?>" placeholder="0,00" class="kp-preis" style="width:96px;text-align:right"></td>
         <td class="bx-num"><?= $eur($verp) ?> €<div class="muted" style="font-size:12px">bei <?= number_format($r['menge'], 0, ',', '.') ?> Stk</div></td>
