@@ -387,3 +387,7 @@ Fortschritt der voraussichtliche Termin (`auftrag_liefertermin_text()`).
 Der voraussichtliche Termin erscheint nur, wenn er zentral eingeschaltet ist (`portal_liefertermin_aktiv()`, Einstellungen; Standard aus).
 
 Die berechnete Übersicht heißt im Portal „Informationsdokument zum Produkt“ (Spalte „Dokumente zur Charge“).
+
+**Kleinigkeiten (Report 10, 03.11.2026):** Etikettenzähler an der Bestellung: bei versendeter Bestellung „Die Etiketten dieser
+Bestellung sind verbraucht“ statt „0 von 1.000 bestellten“. Produktseite: unter der Zusammensetzung „Füllung … mg + Kapselhülle … mg
+= … mg je gefüllter Kapsel“ (`produkt_kapselhuelle_mg()`, gleiche Quelle wie das PIB). „Kapseln pro Tag“ am PIB-Button der Bestellung.

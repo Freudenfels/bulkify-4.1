@@ -366,3 +366,5 @@ der Lager-App (`lg_versand` über Positionen mit Fertigware-Chargen des Auftrags
 `auftrag_versenden_menge()` gibt zusätzlich `ls_id` zurück.
 
 `portal_liefertermin_aktiv()`: zentraler Schalter (app_meta portal_liefertermin, Standard 0) für die Termin-Anzeige im Portal.
+
+`produkt_kapselhuelle_mg($produkt_id)`: Hüllengewicht wie im PIB (Leerkapsel-Artikel am Produkt, sonst Standard der Kapselgröße).

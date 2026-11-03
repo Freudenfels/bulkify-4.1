@@ -3060,6 +3060,12 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php endforeach; ?>
         </tbody>
       </table></div>
+      <?php // Kapselhülle mit ausweisen, damit Produktseite (Füllung) und PIB (gefüllte Kapsel) nicht widersprüchlich wirken (Report 10).
+            $pdHuelle = produkt_kapselhuelle_mg((int)$prodDetail['id']);
+            $pdFuell = array_sum(array_map(fn($z) => (float)$z['menge_mg'], $prodZutaten));
+            if ($pdHuelle > 0 && $pdFuell > 0): $mgF = fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', '.'), '0'), ','); ?>
+      <p class="muted" style="margin:10px 0 0;font-size:13px">Füllung <?= $mgF($pdFuell) ?> mg + Kapselhülle <?= $mgF($pdHuelle) ?> mg = <strong><?= $mgF($pdFuell + $pdHuelle) ?> mg</strong> je gefüllter Kapsel.</p>
+      <?php endif; ?>
     </div>
     <?php endif; ?>
 
@@ -4389,7 +4395,9 @@ portal_head('Kundenportal · ' . $k['firma']);
       ob_start(); ?>
       <h2 style="margin:0 0 12px;font-size:16px"><?= auftrag_vollbedruckt((int)$a['id']) ? 'Ihr Beutel-Design (vollbedruckt)' : 'Ihr Etikett' ?></h2>
       <?php $__etbK = etikett_bestand_info((int)($a['produkt_id'] ?? 0), (int)$k['id']);
-            if (!empty($__etbK['hat_etikett']) && $__etbK['bezahlt'] > 0): ?>
+            if ((string)($a['status'] ?? '') === 'versendet' && !empty($__etbK['hat_etikett'])): ?>
+        <p class="muted" style="font-size:12px;margin:0 0 8px">Die Etiketten dieser Bestellung sind verbraucht (Bestellung versendet).</p>
+      <?php elseif (!empty($__etbK['hat_etikett']) && $__etbK['bezahlt'] > 0): ?>
         <p class="muted" style="font-size:12px;margin:0 0 8px">Ihre Etiketten im Lager: <strong><?= number_format($__etbK['kunde_sichtbar'], 0, ',', '.') ?></strong> von <?= number_format($__etbK['bezahlt'], 0, ',', '.') ?> bestellten</p>
       <?php endif; ?>
       <?php if (isset($_GET['etikett'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Etikett-Design gespeichert – bitte unten noch freigeben.</div><?php endif; ?>

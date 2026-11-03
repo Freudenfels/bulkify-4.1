@@ -2761,6 +2761,16 @@ function kapsel_kapazitaet_mg(array $kg, ?float $dichte): float {
     if ($dichte !== null && $dichte > 0 && $vol > 0) return $vol * $dichte * 1000.0;
     return (float)($kg['fuellmenge_mg'] ?? 0);   // Backup, wenn keine Dichte/Volumen
 }
+// Gewicht der Kapselhülle (mg) eines Kapsel-Produkts – gleiche Quelle wie das PIB: Leerkapsel-Artikel am Produkt
+// (item.leergewicht_mg), sonst Standardwert der Kapselgröße der Rezeptur. 0 = keine Kapsel / unbekannt.
+function produkt_kapselhuelle_mg(int $produkt_id): float {
+    $p = $produkt_id > 0 ? one("SELECT p.leerkapsel_id, p.rezeptur_id, r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [$produkt_id]) : null;
+    if (!$p || !in_array((string)$p['darreichungsform'], ['kapsel', 'softgel'], true)) return 0.0;
+    if (function_exists('seed_kapsel_leergewicht')) seed_kapsel_leergewicht();
+    $mg = !empty($p['leerkapsel_id']) ? (float) scalar("SELECT leergewicht_mg FROM item WHERE id=?", [(int)$p['leerkapsel_id']]) : 0.0;
+    if ($mg <= 0 && !empty($p['rezeptur_id'])) { $kg = rezeptur_kapselgroesse((int)$p['rezeptur_id']); $mg = (float)($kg['leergewicht_mg'] ?? 0); }
+    return max(0.0, $mg);
+}
 function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     $gid = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=?", [$rezeptur_id]);
     if ($gid > 0) { $kg = one("SELECT * FROM kapselgroesse WHERE id=?", [$gid]); if ($kg) return $kg; }
