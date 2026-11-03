@@ -383,3 +383,5 @@ Produktionsbericht-Link im selben Block (ersetzt das frühere eigene Panel). Das
 **Versand an der Bestellung (Report 4, 03.11.2026):** Im Dokumente-Kasten „Versand“: Lieferscheine als PDF
 (`v=lieferschein_pdf&lid=`, nur eigene Bestellungen) und Sendungen (`auftrag_sendungen()`, „Sendung verfolgen“). Über dem
 Fortschritt der voraussichtliche Termin (`auftrag_liefertermin_text()`).
+
+Der voraussichtliche Termin erscheint nur, wenn er zentral eingeschaltet ist (`portal_liefertermin_aktiv()`, Einstellungen; Standard aus).

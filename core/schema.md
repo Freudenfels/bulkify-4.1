@@ -364,3 +364,5 @@ Aufrufer: module/lager/wareneingang.php (Dashboard-Quarantäne) und `?p=api_qm_f
 der Lager-App (`lg_versand` über Positionen mit Fertigware-Chargen des Auftrags). `auftrag.liefertermin_von/_bis` +
 `auftrag_liefertermin_text()` (Zeitraum, sonst „Produktion geplant ab …“ aus `produktionsauftrag.geplant_am`).
 `auftrag_versenden_menge()` gibt zusätzlich `ls_id` zurück.
+
+`portal_liefertermin_aktiv()`: zentraler Schalter (app_meta portal_liefertermin, Standard 0) für die Termin-Anzeige im Portal.

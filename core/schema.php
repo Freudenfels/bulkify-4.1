@@ -10487,6 +10487,9 @@ function auftrag_sendungen(int $auftrag_id): array {
 }
 // Voraussichtlicher Termin für den Kunden (Portal-Fortschritt): vom Team gepflegter Zeitraum (auftrag.liefertermin_von/_bis),
 // sonst der geplante Produktionstermin. '' = nichts bekannt bzw. schon versendet/storniert.
+// Zentral schaltbar (Nico 03.11.2026, Einstellungen „Liefertermin im Kundenportal anzeigen", app_meta portal_liefertermin,
+// Standard AUS – lieber kein Datum als ein falsches). Die Portal-Anzeige fragt portal_liefertermin_aktiv() ab.
+function portal_liefertermin_aktiv(): bool { return (string) meta_get('portal_liefertermin', '0') === '1'; }
 function auftrag_liefertermin_text(array $a): string {
     if (in_array((string)($a['status'] ?? ''), ['versendet', 'storniert'], true)) return '';
     $f = fn($d) => date('d.m.Y', strtotime((string)$d));

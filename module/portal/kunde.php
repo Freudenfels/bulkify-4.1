@@ -4261,7 +4261,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if ($track): ?>
   <div class="bx-panel">
     <h2 style="margin:0 0 18px;font-size:16px">Fortschritt</h2>
-    <?php $ltTxt = auftrag_liefertermin_text($a); if ($ltTxt !== ''): ?><p style="margin:-8px 0 14px;font-size:14px"><?= h($ltTxt) ?></p><?php endif; ?>
+    <?php $ltTxt = portal_liefertermin_aktiv() ? auftrag_liefertermin_text($a) : ''; if ($ltTxt !== ''): ?><p style="margin:-8px 0 14px;font-size:14px"><?= h($ltTxt) ?></p><?php endif; ?>
     <div style="overflow-x:auto">
       <ul class="bx-htrack">
         <?php foreach ($track as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>

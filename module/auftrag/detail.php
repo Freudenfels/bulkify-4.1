@@ -908,7 +908,8 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
     <input type="date" name="liefertermin_bis" value="<?= h((string)($a['liefertermin_bis'] ?? '')) ?>">
     <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
     <?php if (isset($_GET['ltok'])): ?><span class="muted" style="font-size:12px">gespeichert</span><?php endif; ?>
-    <?php if ($ltTxt !== ''): ?><span class="muted" style="font-size:12px">Kunde sieht: <?= h($ltTxt) ?></span><?php endif; ?>
+    <?php if (!portal_liefertermin_aktiv()): ?><span class="muted" style="font-size:12px">Im Kundenportal zentral ausgeblendet (Einstellungen) – nur intern.</span>
+    <?php elseif ($ltTxt !== ''): ?><span class="muted" style="font-size:12px">Kunde sieht: <?= h($ltTxt) ?></span><?php endif; ?>
   </form>
   <?php endif; ?>
   <h2>Details</h2>
