@@ -408,3 +408,8 @@ Dokumente“ -> Etiketten) und „Etiketten“ getrennt.
 auf „Zu bestätigen“. Die vier „… anfragen“-Punkte sind ein Menüpunkt „Neue Anfrage“ (`v=neue_anfrage`, Auswahl-Kacheln); die
 Formulare `anfrage`/`prodanfrage`/`rohanfrage`/`dienstleistung` bleiben Unterseiten (`$detailParent` -> neue_anfrage). Übersicht-Kachel
 „Offene Angebote“ und Info & Tools zeigen schon auf „Zu bestätigen“.
+
+**Übersicht als To-do-Liste (Report 7, 03.11.2026):** Statt „Schnellzugriff“ (Menü-Kacheln) zwei Blöcke: **Zu erledigen**
+(Etikett-/Beutel-Design freigeben, Etikett hochladen, Rezeptur-Vorschlag prüfen, Angebot annehmen, Preis einer Nachbestellung
+bestätigen – je mit Link) und **Neu für Sie** (letzte 21 Tage: Informationsdokument/Laboranalyse eingetroffen, Produktionsbericht
+verfügbar, Ware versendet, Rechnung erstellt; max. 8, neueste zuerst). Leere Zustände mit kurzem Satz.

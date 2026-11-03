@@ -2445,21 +2445,49 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
-  <?php // Schnellzugriff: große Kacheln zu allen freigeschalteten Bereichen – damit die App (v. a. mobil)
-        // direkt bedienbar ist und nicht alles im Hamburger-Menü gesucht werden muss. $L ist bereits je
-        // Freischaltung/Rolle gefiltert; 'start' lassen wir weg.
-    $schnellKeys = [];
-    foreach ($NAVGROUPS as $keys) foreach ($keys as $vk) if ($vk !== 'start' && isset($L[$vk]) && !in_array($vk, $schnellKeys, true)) $schnellKeys[] = $vk;
-    if ($schnellKeys): ?>
-  <div class="bx-panel">
-    <h2 style="margin-top:0">Schnellzugriff</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
-      <?php foreach ($schnellKeys as $vk): ?>
-        <a href="<?= $portalLink($vk) ?>" style="display:flex;align-items:center;justify-content:center;text-align:center;min-height:64px;padding:14px 12px;border:1px solid var(--line);border-radius:12px;text-decoration:none;color:inherit;background:var(--panel-2);font-weight:600"><?= h($L[$vk]) ?></a>
-      <?php endforeach; ?>
+  <?php // Übersicht als To-do-Liste (Report 7, 03.11.2026) statt Menü-Kacheln: „Zu erledigen" (was der Kunde JETZT tun muss) und
+        // „Neu für Sie" (was in den letzten 21 Tagen dazugekommen ist). Nur Einträge mit echtem Inhalt.
+    $todo = [];
+    foreach ($etikettUnbestListe as $eu)
+        $todo[] = [auftrag_design_label((int)$eu['id']) . ' freigeben', 'Bestellung ' . $eu['nummer'] . ' – Design liegt vor, Ihre Freigabe fehlt noch.', $portalLink('bestellung') . '&aid=' . (int)$eu['id']];
+    if ($etikettFehltAnzahl > 0)
+        $todo[] = ['Etikett hochladen', $etikettFehltAnzahl . ' Bestellung(en) warten auf Ihr Etikett-Design.', $portalLink('etiketten')];
+    if (!empty($vorschlaege))
+        $todo[] = ['Rezeptur-Vorschlag prüfen', count($vorschlaege) . ' Vorschlag/Vorschläge liegen zur Freigabe bereit.', $portalLink('meine_anfragen')];
+    if ($offenAngebote > 0)
+        $todo[] = ['Angebot annehmen', $offenAngebote . ' Angebot(e) warten auf Ihre Bestätigung.', $portalLink(isset($L['meine_anfragen']) ? 'meine_anfragen' : 'angebote') . '&oatab=zubestaetigen'];
+    $nbPreis = table_exists('nachbestellung') ? (int) scalar("SELECT COUNT(*) FROM nachbestellung WHERE kunde_id=? AND status='preis_neu'", [$kid]) : 0;
+    if ($nbPreis > 0)
+        $todo[] = ['Preis bestätigen', $nbPreis . ' Nachbestellung(en) mit angepasstem Preis warten auf Ihre Freigabe.', $portalLink(isset($L['nachbestellen']) ? 'nachbestellen' : 'bestellungen')];
+    $neu = []; $seit = gmdate('Y-m-d H:i:s', time() - 21 * 86400);
+    foreach (all("SELECT d.id, d.titel, d.angelegt, a.id AS aid, a.nummer, COALESCE(d.hochgeladen_von,'') AS quelle FROM dokument d JOIN auftrag a ON a.id=d.objekt_id
+                  WHERE d.objekt_typ='auftrag' AND d.typ='analyse' AND d.kunde_sichtbar=1 AND a.kunde_id=? AND d.angelegt>=? ORDER BY d.angelegt DESC LIMIT 5", [$kid, $seit]) as $d)
+        $neu[] = [$d['angelegt'], ($d['quelle'] === 'coa_ueb' ? 'Informationsdokument' : 'Laboranalyse') . ' eingetroffen', 'Bestellung ' . $d['nummer'], $portalLink('bestellung') . '&aid=' . (int)$d['aid']];
+    foreach (all("SELECT pa.bericht_freigegeben_am AS am, a.id AS aid, a.nummer FROM produktionsauftrag pa JOIN auftrag a ON a.id=pa.auftrag_id
+                  WHERE a.kunde_id=? AND pa.bericht_freigegeben_am>=? ORDER BY pa.bericht_freigegeben_am DESC LIMIT 5", [$kid, $seit]) as $d)
+        $neu[] = [$d['am'], 'Produktionsbericht verfügbar', 'Bestellung ' . $d['nummer'], $portalLink('produktionsbericht') . '&aid=' . (int)$d['aid']];
+    foreach (all("SELECT b.nummer AS ls, b.datum, b.angelegt, a.id AS aid, a.nummer FROM beleg b JOIN auftrag a ON a.id=b.auftrag_id
+                  WHERE b.typ='lieferschein' AND a.kunde_id=? AND b.angelegt>=? ORDER BY b.angelegt DESC LIMIT 5", [$kid, $seit]) as $d)
+        $neu[] = [$d['angelegt'], 'Ware versendet', 'Bestellung ' . $d['nummer'] . ' · Lieferschein ' . $d['ls'], $portalLink('bestellung') . '&aid=' . (int)$d['aid']];
+    foreach (all("SELECT b.nummer, b.angelegt FROM beleg b WHERE b.typ='rechnung' AND b.kunde_id=? AND b.kunde_sichtbar=1 AND b.status<>'storniert' AND b.angelegt>=? ORDER BY b.angelegt DESC LIMIT 5", [$kid, $seit]) as $d)
+        $neu[] = [$d['angelegt'], 'Rechnung erstellt', 'Rechnung ' . $d['nummer'], $portalLink('rechnungen')];
+    usort($neu, fn($x, $y) => strcmp((string)$y[0], (string)$x[0]));
+    $neu = array_slice($neu, 0, 8);
+    $zeile = fn(string $t, string $sub, string $href, string $rechts = '') => '<a href="' . h($href) . '" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);text-decoration:none;color:inherit">'
+        . '<span><strong>' . h($t) . '</strong><span class="muted" style="display:block;font-size:13px">' . h($sub) . '</span></span>'
+        . '<span class="muted" style="white-space:nowrap;font-size:13px">' . $rechts . ' &#8250;</span></a>'; ?>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-bottom:16px">
+    <div class="bx-panel" style="margin:0">
+      <h2 style="margin:0 0 4px;font-size:16px">Zu erledigen</h2>
+      <?php if ($todo): foreach ($todo as [$t, $sub, $href]) echo $zeile($t, $sub, $href); ?>
+      <?php else: ?><p class="muted" style="margin:6px 0 0">Alles erledigt – im Moment ist von Ihrer Seite nichts zu tun.</p><?php endif; ?>
+    </div>
+    <div class="bx-panel" style="margin:0">
+      <h2 style="margin:0 0 4px;font-size:16px">Neu für Sie</h2>
+      <?php if ($neu): foreach ($neu as [$am, $t, $sub, $href]) echo $zeile($t, $sub, $href, h(fmt_zeit((string)$am, 'd.m.Y'))); ?>
+      <?php else: ?><p class="muted" style="margin:6px 0 0">In den letzten drei Wochen ist nichts Neues dazugekommen.</p><?php endif; ?>
     </div>
   </div>
-  <?php endif; ?>
 
   <?php if ($offenAngebote): ?>
   <div class="bx-panel" style="border-color:#cfe0cb">
