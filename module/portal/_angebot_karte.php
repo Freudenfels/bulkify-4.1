@@ -275,6 +275,14 @@ if ($a['status'] === 'bestaetigt') {
   </div>
   <?php endif; ?>
 
+  <?php // Rückfrage zum Angebot (Report 5): Verlauf + Formular; offen, sobald es schon Nachrichten gibt.
+        if (isset($rfPanel)): $rfN = count(kunde_nachrichten((int)$k['id'], 0, (int)$a['id'])); ?>
+  <details style="margin-top:12px" <?= $rfN ? 'open' : '' ?> id="rueckfrage">
+    <summary class="btn btn-ghost btn-sm" style="list-style:none">Rückfrage zum Angebot<?= $rfN ? ' (' . $rfN . ')' : '' ?></summary>
+    <div style="margin-top:10px"><?= $rfPanel(0, (int)$a['id']) ?></div>
+  </details>
+  <?php endif; ?>
+
   <?php if (!empty($adminImPortal)): ?>
   <div class="bx-row" style="justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
     <span class="muted" style="font-size:12px;align-self:center">Nur Team sichtbar</span>

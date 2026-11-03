@@ -1439,6 +1439,7 @@ function init_schema(): void {
     // --- additive Migrationen ab hier (Beispielmuster) ---
     ensure_column('kunden', 'zeige_energetisierung', "TINYINT(1) NOT NULL DEFAULT 0");   // Energetisierung im Kundenportal zeigen (Spezialkunde, z. B. Annapurna/Pure Health)
     ensure_column('kunden', 'labortest_extern', "TINYINT(1) NOT NULL DEFAULT 0");        // Externer Labortest (Drittlabor) als paralleler Verlaufs-Punkt im Portal (Spezialkunde, will immer eine Drittlabor-Analyse)
+    ensure_column('kunden', 'betreuer_benutzer_id', "INT NULL");   // fester bulkify-Ansprechpartner dieses Kunden (Portal-Übersicht); leer = Standard aus app_meta portal_ansprechpartner_id
     ensure_column('kunden', 'benachrichtigung_aus', "TINYINT(1) NOT NULL DEFAULT 0");    // 1 = keine E-Mail-Benachrichtigungen an diesen Kunden (z. B. für Nachholbuchungen ohne Kunden-Mails)
     ensure_column('kunden', 'portal_token', "VARCHAR(64) NULL");   // Magic-Link-Zugang zum Kundenportal (Backup/Erstzugang)
     ensure_column('kunden', 'passwort', "VARCHAR(255) NULL");       // Passwort-Hash fuers Kunden-Login (password_hash); leer = noch nicht eingerichtet
@@ -2779,6 +2780,54 @@ function zertifikat_arten(): array {
 }
 function zertifikate(bool $nurSichtbar = true): array {
     return all("SELECT * FROM dokument WHERE objekt_typ='firma' AND typ='zertifikat'" . ($nurSichtbar ? " AND kunde_sichtbar=1" : "") . " ORDER BY kunde_sichtbar DESC, titel, id DESC");
+}
+// Rückfragen/Nachrichten zwischen Kunde und Team an einer Bestellung oder einem Angebot (Report 5, 03.11.2026; der v3-kunde_chat
+// fehlte in 4.1). Kunde schreibt im Portal -> Team-Benachrichtigung + Mail; Team antwortet am Auftrag/Angebot -> Mail an den Kunden
+// + sichtbar im Portal. Selbst-Schema (best effort).
+function kunde_nachricht_schema(): void {
+    static $ok = false; if ($ok) return; $ok = true;
+    try {
+        db()->exec("CREATE TABLE IF NOT EXISTS kunde_nachricht (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            kunde_id INT NOT NULL,
+            auftrag_id INT NULL,
+            angebot_id INT NULL,
+            akteur VARCHAR(10) NOT NULL,              -- kunde | team
+            text TEXT NOT NULL,
+            benutzer VARCHAR(190) NULL,
+            erstellt DATETIME NOT NULL,               -- UTC
+            gelesen_team DATETIME NULL,
+            gelesen_kunde DATETIME NULL,
+            KEY idx_kunde (kunde_id), KEY idx_auftrag (auftrag_id), KEY idx_angebot (angebot_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    } catch (\Throwable $e) {}
+}
+function kunde_nachricht_senden(int $kunde_id, int $auftrag_id, int $angebot_id, string $akteur, string $text, string $benutzer = ''): int {
+    kunde_nachricht_schema();
+    $text = trim(mb_substr($text, 0, 4000));
+    if ($kunde_id <= 0 || $text === '' || !in_array($akteur, ['kunde', 'team'], true)) return 0;
+    q("INSERT INTO kunde_nachricht (kunde_id,auftrag_id,angebot_id,akteur,text,benutzer,erstellt) VALUES (?,?,?,?,?,?,UTC_TIMESTAMP())",
+      [$kunde_id, $auftrag_id ?: null, $angebot_id ?: null, $akteur, $text, $benutzer !== '' ? mb_substr($benutzer, 0, 190) : null]);
+    return (int) insert_id();
+}
+function kunde_nachrichten(int $kunde_id, int $auftrag_id, int $angebot_id): array {
+    kunde_nachricht_schema();
+    if (!table_exists('kunde_nachricht')) return [];
+    return $auftrag_id > 0 ? all("SELECT * FROM kunde_nachricht WHERE kunde_id=? AND auftrag_id=? ORDER BY id", [$kunde_id, $auftrag_id])
+                           : all("SELECT * FROM kunde_nachricht WHERE kunde_id=? AND angebot_id=? AND auftrag_id IS NULL ORDER BY id", [$kunde_id, $angebot_id]);
+}
+// Gelesen markieren: $seite 'team' (Dashboard hat die Kunden-Nachrichten gesehen) bzw. 'kunde' (Portal hat die Team-Antworten gesehen).
+function kunde_nachricht_gelesen(int $kunde_id, int $auftrag_id, int $angebot_id, string $seite): void {
+    if (!table_exists('kunde_nachricht')) return;
+    $sp = $seite === 'team' ? 'gelesen_team' : 'gelesen_kunde'; $von = $seite === 'team' ? 'kunde' : 'team';
+    $w = $auftrag_id > 0 ? 'auftrag_id=?' : 'angebot_id=? AND auftrag_id IS NULL';
+    q("UPDATE kunde_nachricht SET $sp=UTC_TIMESTAMP() WHERE kunde_id=? AND $w AND akteur=? AND $sp IS NULL", [$kunde_id, $auftrag_id > 0 ? $auftrag_id : $angebot_id, $von]);
+}
+// Fester bulkify-Ansprechpartner für einen Kunden (Portal-Übersicht): kunden.betreuer_benutzer_id, sonst der Standard
+// (app_meta portal_ansprechpartner_id, Einstellungen → Firma). Rückgabe benutzer-Zeile (name, position, telefon, email) oder null.
+function portal_ansprechpartner(array $k): ?array {
+    $uid = (int)($k['betreuer_benutzer_id'] ?? 0) ?: (int) meta_get('portal_ansprechpartner_id', '0');
+    return $uid > 0 ? (one("SELECT id, name, position, telefon, email FROM benutzer WHERE id=? AND aktiv=1", [$uid]) ?: null) : null;
 }
 function rezeptur_kapselgroesse(int $rezeptur_id): ?array {
     $gid = (int) scalar("SELECT kapselgroesse_id FROM rezeptur WHERE id=?", [$rezeptur_id]);

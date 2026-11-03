@@ -11,6 +11,19 @@ $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
 $fehler = '';
+// Nachricht an den Kunden zu diesem Angebot (Antwort auf eine Portal-Rückfrage, Report 5): speichern, Mail, im Portal sichtbar.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$neu && ($_POST['aktion'] ?? '') === 'kunde_nachricht') {
+    $an = one("SELECT nummer, kunde_id FROM angebot WHERE id=?", [(int)$id]);
+    $txt = trim((string)($_POST['text'] ?? ''));
+    if ($an && (int)$an['kunde_id'] > 0 && $txt !== '') {
+        $cu = function_exists('current_user') ? current_user() : null;
+        kunde_nachricht_senden((int)$an['kunde_id'], 0, (int)$id, 'team', $txt, (string)($cu['name'] ?? ''));
+        kunde_nachricht_gelesen((int)$an['kunde_id'], 0, (int)$id, 'team');
+        if (mail_bereit()) { $kidM = (int)$an['kunde_id']; $nrM = (string)$an['nummer'];
+            nach_antwort(fn() => mail_kunde_einfach($kidM, 'Antwort zu Ihrem Angebot ' . $nrM, "Wir haben Ihnen zu Ihrem Angebot " . $nrM . " geantwortet:\n\n" . $txt, 'meine_anfragen')); }
+    }
+    header('Location: ?p=angebot&id=' . (int)$id . '&knok=1#kundennachricht'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? 'kopf_save';
     $f = fn($k) => trim($_POST[$k] ?? '');
@@ -628,6 +641,8 @@ if (!$neu && !$editMode) {
     </div>
     <?php endif; ?>
     <?php
+    // Rückfragen des Kunden auch in der Lese-Ansicht (Report 5).
+    if (!empty($a['kunde_id'])) { echo kunde_nachricht_panel((int)$a['kunde_id'], 0, (int)$id); kunde_nachricht_gelesen((int)$a['kunde_id'], 0, (int)$id, 'team'); }
     render_footer();
     return;
 }
@@ -1192,4 +1207,5 @@ function posRecalc(){
 })();
 </script>
 <?php endif;
+if (!$neu && !empty($a['kunde_id'])) { echo kunde_nachricht_panel((int)$a['kunde_id'], 0, (int)$id); kunde_nachricht_gelesen((int)$a['kunde_id'], 0, (int)$id, 'team'); }
 render_footer();

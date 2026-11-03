@@ -9,6 +9,11 @@ $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
 // Erstzugang per Mail an den Kunden senden (statt Link kopieren, Paket Mails).
+// Fester bulkify-Ansprechpartner dieses Kunden (Portal-Übersicht, Report 5). Leer = Standard aus den Einstellungen.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'betreuer_setzen') {
+    q("UPDATE kunden SET betreuer_benutzer_id=? WHERE id=?", [(int)($_POST['betreuer_benutzer_id'] ?? 0) ?: null, (int)$id]);
+    header('Location: ?p=kunde&id=' . (int)$id . '&betok=1'); exit;
+}
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zugang_senden') {
     $fz = mail_bereit() ? mail_kunde_zugang((int)$id) : 'Der E-Mail-Versand ist nicht eingerichtet.';
     if ($fz === '') log_aktivitaet('kunde', (int)$id, 'team', 'Zugang zum Kundenportal per Mail gesendet.', 'notiz');
@@ -253,6 +258,16 @@ if (!$neu) {
         <div><div class="k muted">Telefon</div><div><?= $v('telefon') ?: '–' ?></div></div>
         <div><div class="k muted">Zahlungsart</div><div><?= $v('zahlungsart') ?></div></div>
       </div>
+      <form method="post" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 0">
+        <input type="hidden" name="aktion" value="betreuer_setzen">
+        <span class="muted" style="white-space:nowrap">Ansprechpartner bei bulkify <?= bx_hint('Steht im Kundenportal auf der Übersicht (Name, Telefon, E-Mail). Leer = Standard aus Einstellungen → Firma.') ?></span>
+        <select name="betreuer_benutzer_id" class="rscombo" style="min-width:240px"><option value="">– Standard –</option>
+          <?php $btAkt = (int)($k['betreuer_benutzer_id'] ?? 0); foreach (all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name") as $bu): ?>
+          <option value="<?= (int)$bu['id'] ?>" <?= $btAkt === (int)$bu['id'] ? 'selected' : '' ?>><?= h((string)$bu['name']) ?></option>
+          <?php endforeach; ?></select>
+        <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+        <?php if (isset($_GET['betok'])): ?><span class="muted" style="font-size:12px">gespeichert</span><?php endif; ?>
+      </form>
       <?php if ($marken): ?>
       <hr class="bx">
       <div class="k muted">Marken &amp; Webseiten</div>

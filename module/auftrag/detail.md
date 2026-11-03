@@ -225,3 +225,5 @@ Die Kacheln oben am Auftrag sind ein responsives Raster (`auto-fill, minmax(160p
 
 **Voraussichtliche Lieferung (03.11.2026):** Reiter Details, Zeitraum von/bis (`auftrag.liefertermin_von/_bis`, Aktion
 `liefertermin_setzen`, protokolliert). Der Kunde sieht ihn im Portal über dem Fortschritt; leer = geplanter Produktionstermin.
+
+**Nachrichten mit dem Kunden (Report 5):** Kasten oben im Reiter Details (`kunde_nachricht_panel`), Antwort = Aktion `kunde_nachricht` -> gespeichert, Mail an den Kunden (`mail_kunde_einfach`, Link auf die Bestellung), im Portal sichtbar; Kunden-Nachrichten werden beim Öffnen als gelesen markiert.

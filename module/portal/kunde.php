@@ -312,6 +312,25 @@ if ($k && ($_GET['v'] ?? '') === 'analyse_datei') {
     header('Content-Length: ' . filesize($pf));
     readfile($pf); exit;
 }
+// Rückfrage an einer Bestellung oder einem Angebot (Report 5, 03.11.2026): speichern, Team benachrichtigen (Dashboard + Mail),
+// Antwort des Teams kommt per Mail und steht hier im Portal. Nur eigene Bestellungen/Angebote.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rueckfrage') {
+    $rfA = (int)($_POST['auftrag_id'] ?? 0); $rfG = (int)($_POST['angebot_id'] ?? 0);
+    $rfTxt = trim((string)($_POST['text'] ?? ''));
+    $rfObj = $rfA > 0 ? one("SELECT id, nummer FROM auftrag WHERE id=? AND kunde_id=?", [$rfA, (int)$k['id']])
+                      : ($rfG > 0 ? one("SELECT id, nummer FROM angebot WHERE id=? AND kunde_id=?", [$rfG, (int)$k['id']]) : null);
+    $rfZiel = $rfA > 0 ? 'v=bestellung&aid=' . $rfA : 'v=meine_anfragen';
+    if ($rfObj && $rfTxt !== '') {
+        $rfWer = trim((string)($_SESSION['portal_name'] ?? '')) ?: trim((string)($k['ansprechpartner'] ?? ''));
+        kunde_nachricht_senden((int)$k['id'], $rfA > 0 ? $rfA : 0, $rfA > 0 ? 0 : $rfG, 'kunde', $rfTxt, $rfWer);
+        $rfBez = ($rfA > 0 ? 'Bestellung ' : 'Angebot ') . $rfObj['nummer'];
+        $rfLink = $rfA > 0 ? '?p=auftrag&id=' . $rfA . '#kundennachricht' : '?p=angebot&id=' . $rfG . '#kundennachricht';
+        $rfFirma = (string)($k['firma'] ?? ('Kunde ' . (int)$k['id']));
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Rückfrage im Portal zu ' . $rfBez . ': ' . mb_substr($rfTxt, 0, 160), 'rueckfrage', $rfA > 0 ? 'auftrag' : 'angebot', $rfA > 0 ? $rfA : $rfG);
+        nach_antwort(fn() => mail_team('Rückfrage von ' . $rfFirma . ' zu ' . $rfBez, "Der Kunde " . $rfFirma . " fragt zu " . $rfBez . ":\n\n" . $rfTxt . "\n\nAntworten: " . $rfLink));
+    }
+    header('Location: ?p=portal&token=' . $token . '&' . $rfZiel . (($rfObj && $rfTxt !== '') ? '&rfok=1' : '') . '#rueckfrage'); exit;
+}
 // Herstellerzertifikat herunterladen (Report 8): global für alle Kunden, nur sichtbar geschaltete.
 if ($k && ($_GET['v'] ?? '') === 'zertifikat') {
     $zd = one("SELECT * FROM dokument WHERE id=? AND objekt_typ='firma' AND typ='zertifikat' AND kunde_sichtbar=1", [(int)($_GET['id'] ?? 0)]);
@@ -1756,6 +1775,35 @@ $prodDetail = $pid ? one("SELECT p.*, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kun
     )", [$pid, (int)!empty($k['portal_produkte']), $kid, $kid, $kid, $kid]) : null;
 $prodZutaten = ($prodDetail && $prodDetail['rezeptur_id']) ? all("SELECT z.item_id, z.bezeichnung, z.menge_mg, i.allergene, i.vegan, i.gvo_frei
     FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [(int)$prodDetail['rezeptur_id']]) : [];
+// Rückfrage-Verlauf + Formular (Bestellung/Angebot) für das Portal.
+$rfPanel = function (int $auftrag_id, int $angebot_id) use ($k, $token, $darfBestellen): string {
+    $msgs = kunde_nachrichten((int)$k['id'], $auftrag_id, $angebot_id);
+    if ($msgs) kunde_nachricht_gelesen((int)$k['id'], $auftrag_id, $angebot_id, 'kunde');
+    $o = '';
+    foreach ($msgs as $m) {
+        $team = $m['akteur'] === 'team';
+        $o .= '<div style="margin:0 0 8px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);' . ($team ? 'background:var(--panel-2);margin-right:12%' : 'margin-left:12%') . '">'
+            . '<div class="muted" style="font-size:12px;margin-bottom:3px">' . ($team ? 'bulkify' . ($m['benutzer'] ? ' · ' . h((string)$m['benutzer']) : '') : 'Sie') . ' · ' . h(fmt_zeit((string)$m['erstellt'], 'd.m.Y H:i')) . '</div>'
+            . nl2br(h((string)$m['text'])) . '</div>';
+    }
+    if ($darfBestellen)
+        $o .= '<form method="post" style="margin-top:8px"><input type="hidden" name="aktion" value="rueckfrage">'
+            . '<input type="hidden" name="auftrag_id" value="' . $auftrag_id . '"><input type="hidden" name="angebot_id" value="' . $angebot_id . '">'
+            . '<textarea name="text" rows="3" required placeholder="Ihre Frage an uns – wir antworten per E-Mail und hier im Portal." style="width:100%"></textarea>'
+            . '<div style="margin-top:8px"><button class="btn btn-primary btn-sm" type="submit">Frage senden</button></div></form>';
+    return $o;
+};
+$apKunde = portal_ansprechpartner($k);
+$apHtml = function () use ($apKunde): string {
+    if (!$apKunde) return '';
+    $tel = trim((string)$apKunde['telefon']); $mail = trim((string)$apKunde['email']);
+    return '<div class="bx-panel" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+        . '<div><div class="muted" style="font-size:13px">Ihr Ansprechpartner bei bulkify</div><strong>' . h((string)$apKunde['name']) . '</strong>'
+        . (trim((string)$apKunde['position']) !== '' ? ' <span class="muted">· ' . h((string)$apKunde['position']) . '</span>' : '') . '</div>'
+        . '<div class="bx-row" style="gap:8px;flex-wrap:wrap">'
+        . ($tel !== '' ? '<a class="btn btn-ghost btn-sm" href="tel:' . h(preg_replace('/[^0-9+]/', '', $tel)) . '">' . h($tel) . '</a>' : '')
+        . ($mail !== '' ? '<a class="btn btn-ghost btn-sm" href="mailto:' . h($mail) . '">' . h($mail) . '</a>' : '') . '</div></div>';
+};
 // Beschriftung der Tagesdosis am PIB-Button der Bestellung: „Kapseln pro Tag", „Portionen pro Tag" … (PIB bewusst erst ab Bestellung, Nico 03.11.2026)
 $pibTagLabel = fn(?string $form) => (in_array((string)$form, ['pulver', 'granulat', 'fluessig', 'gel', ''], true) ? 'Portionen' : form_plural((string)$form)) . ' pro Tag';
 // Aus den verknüpften Rohstoffen: Wirkstoffe je Zutat (Anzeige in der Zusammensetzung) + Allergen/Vegan/GVO.
@@ -2488,6 +2536,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php else: ?><p class="muted" style="margin:6px 0 0">In den letzten drei Wochen ist nichts Neues dazugekommen.</p><?php endif; ?>
     </div>
   </div>
+  <?= $apHtml() ?>
 
   <?php if ($offenAngebote): ?>
   <div class="bx-panel" style="border-color:#cfe0cb">
@@ -4654,6 +4703,12 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="bx-panel" style="margin:0 0 var(--sp-5)"><?= $etHtml ?></div>
   <?php endif; ?>
 
+  <div class="bx-panel" id="rueckfrage">
+    <h2 style="margin:0 0 8px;font-size:16px">Rückfrage zu dieser Bestellung</h2>
+    <?php if (isset($_GET['rfok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Danke – Ihre Frage ist bei uns angekommen. Wir antworten per E-Mail und hier.</div><?php endif; ?>
+    <?= $rfPanel((int)$a['id'], 0) ?>
+  </div>
+
   <?php endif; ?>
 
 <?php elseif ($view === 'suche'):
@@ -5372,6 +5427,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
+  <?= $apHtml() ?>
   <div class="bx-panel">
     <h2 style="margin-top:0">Noch Fragen? Wir sind für Sie da.</h2>
     <p class="muted" style="margin:0 0 10px;font-size:14px">Schreiben Sie uns jederzeit – wir helfen gern weiter.</p>

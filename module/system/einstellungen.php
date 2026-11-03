@@ -33,6 +33,11 @@ if (!isset($TABS[$tab]) && $tab !== 'crmdemo') $tab = 'firma';   // 'crmdemo' = 
 
 $aktion = $_POST['aktion'] ?? '';
 
+// --- Ansprechpartner im Kundenportal (Standard für alle Kunden ohne eigenen Betreuer) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'portal_ap_save') {
+    meta_set('portal_ansprechpartner_id', (string)(int)($_POST['portal_ansprechpartner_id'] ?? 0));
+    header('Location: ?p=einstellungen&tab=firma&apok=1#ansprechpartner'); exit;
+}
 // --- Herstellerzertifikate (für alle Kunden im Portal unter Info & Tools) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'zertifikat_upload') {
     $art = (string)($_POST['art'] ?? '');
@@ -367,6 +372,19 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <script>function bankAdd(){var t=document.getElementById('bankTpl');document.getElementById('bankListe').appendChild(t.content.cloneNode(true));}</script>
 
     <div style="margin-top:12px"><button class="btn btn-primary" type="submit">Speichern</button></div>
+  </form>
+</div>
+
+<div class="bx-panel" id="ansprechpartner">
+  <h2 style="margin-top:0">Ansprechpartner im Kundenportal <?= bx_hint('Steht auf der Portal-Übersicht jedes Kunden mit Name, Telefon und E-Mail (aus dem Benutzer). Je Kunde kann im Kundenkonto ein eigener Betreuer gesetzt werden – dieser hier gilt für alle anderen.') ?></h2>
+  <?php if (isset($_GET['apok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Gespeichert.</div><?php endif; ?>
+  <form method="post" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:0">
+    <input type="hidden" name="aktion" value="portal_ap_save">
+    <select name="portal_ansprechpartner_id" class="rscombo" style="min-width:280px"><option value="0">– keiner –</option>
+      <?php $apAkt = (int) meta_get('portal_ansprechpartner_id', '0'); foreach (all("SELECT id, name, telefon FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name") as $bu): ?>
+      <option value="<?= (int)$bu['id'] ?>" <?= $apAkt === (int)$bu['id'] ? 'selected' : '' ?>><?= h((string)$bu['name']) ?><?= trim((string)$bu['telefon']) === '' ? ' (ohne Telefon)' : '' ?></option>
+      <?php endforeach; ?></select>
+    <button class="btn btn-primary btn-sm" type="submit">Speichern</button>
   </form>
 </div>
 

@@ -121,6 +121,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&rezverk=1'); exit;
 }
 
+// Nachricht an den Kunden zu diesem Auftrag (Antwort auf eine Portal-Rückfrage, Report 5): speichern, Mail an den Kunden, im Portal sichtbar.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'kunde_nachricht') {
+    $au = one("SELECT nummer, kunde_id FROM auftrag WHERE id=?", [$id]);
+    $txt = trim((string)($_POST['text'] ?? ''));
+    if ($au && (int)$au['kunde_id'] > 0 && $txt !== '') {
+        $cu = function_exists('current_user') ? current_user() : null;
+        kunde_nachricht_senden((int)$au['kunde_id'], $id, 0, 'team', $txt, (string)($cu['name'] ?? ''));
+        kunde_nachricht_gelesen((int)$au['kunde_id'], $id, 0, 'team');
+        if (mail_bereit()) { $kidM = (int)$au['kunde_id']; $nrM = (string)$au['nummer'];
+            nach_antwort(fn() => mail_kunde_einfach($kidM, 'Antwort zu Ihrer Bestellung ' . $nrM, "Wir haben Ihnen zu Ihrer Bestellung " . $nrM . " geantwortet:\n\n" . $txt, 'bestellung&aid=' . $id)); }
+    }
+    header('Location: ?p=auftrag&id=' . $id . '&knok=1#kundennachricht'); exit;
+}
+
 // Voraussichtlicher Liefertermin (Zeitraum) – der Kunde sieht ihn im Portal-Fortschritt (Report 4, 03.11.2026).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'liefertermin_setzen') {
     if (!(has_role('admin') || has_role('sales') || has_role('production'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
@@ -898,6 +912,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
 </div>
 <?php endif; ?>
 
+<?php if (!empty($a['kunde_id'])) { echo kunde_nachricht_panel((int)$a['kunde_id'], (int)$a['id'], 0, 'details'); kunde_nachricht_gelesen((int)$a['kunde_id'], (int)$a['id'], 0, 'team'); } ?>
 <div class="bx-panel" data-panel="details">
   <?php $kachelnRender(); // Kennzahl-Kacheln (aus dem Seitenkopf in den Details-Reiter verschoben) ?>
   <?php if (!in_array((string)$a['status'], ['versendet', 'storniert'], true)): $ltTxt = auftrag_liefertermin_text($a); ?>

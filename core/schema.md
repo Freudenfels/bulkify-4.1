@@ -370,3 +370,8 @@ der Lager-App (`lg_versand` über Positionen mit Fertigware-Chargen des Auftrags
 `produkt_kapselhuelle_mg($produkt_id)`: Hüllengewicht wie im PIB (Leerkapsel-Artikel am Produkt, sonst Standard der Kapselgröße).
 
 `zertifikat_arten()`, `zertifikate($nurSichtbar)`: globale Herstellerzertifikate (dokument objekt_typ='firma', typ='zertifikat').
+
+**Rückfragen + Ansprechpartner (Report 5, 03.11.2026):** Tabelle `kunde_nachricht` (Selbst-Schema `kunde_nachricht_schema()`;
+kunde_id, auftrag_id ODER angebot_id, akteur kunde|team, text, benutzer, erstellt UTC, gelesen_team/_kunde). `kunde_nachricht_senden()`,
+`kunde_nachrichten()`, `kunde_nachricht_gelesen()`. Ansprechpartner: `kunden.betreuer_benutzer_id` (je Kunde) sonst
+`app_meta portal_ansprechpartner_id` (Standard) -> `portal_ansprechpartner($k)` liefert name/position/telefon/email aus `benutzer`.

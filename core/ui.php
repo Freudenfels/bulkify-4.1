@@ -177,6 +177,27 @@ function bx_table(array $cols, array $rows, array $opts = []): void {
     echo '</tbody></table></div>';
 }
 
+// Nachrichten mit dem Kunden an einem Auftrag/Angebot (Rückfragen aus dem Portal + Team-Antworten). Formular schickt
+// aktion=kunde_nachricht an die aktuelle Seite; die Seite speichert, mailt den Kunden und leitet zurück.
+function kunde_nachricht_panel(int $kunde_id, int $auftrag_id, int $angebot_id, string $dataPanel = ''): string {
+    if ($kunde_id <= 0 || !function_exists('kunde_nachrichten')) return '';
+    $msgs = kunde_nachrichten($kunde_id, $auftrag_id, $angebot_id);
+    $offen = count(array_filter($msgs, fn($m) => $m['akteur'] === 'kunde' && empty($m['gelesen_team'])));
+    $o = '<div class="bx-panel" id="kundennachricht"' . ($dataPanel !== '' ? ' data-panel="' . h($dataPanel) . '"' : '') . '>';
+    $o .= '<h2 style="margin-top:0">Nachrichten mit dem Kunden' . ($offen ? ' ' . bx_badge($offen . ' neu', 'warn') : '') . '</h2>';
+    if (!$msgs) $o .= '<p class="muted" style="margin-top:0">Noch keine Rückfragen. Der Kunde kann im Portal an der Bestellung bzw. am Angebot fragen; Sie können hier auch zuerst schreiben.</p>';
+    foreach ($msgs as $m) {
+        $team = $m['akteur'] === 'team';
+        $o .= '<div style="margin:0 0 10px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);' . ($team ? 'background:var(--panel-2);margin-right:15%' : 'margin-left:15%') . '">'
+            . '<div class="muted" style="font-size:12px;margin-bottom:4px">' . ($team ? 'bulkify' . ($m['benutzer'] ? ' · ' . h((string)$m['benutzer']) : '') : 'Kunde' . ($m['benutzer'] ? ' · ' . h((string)$m['benutzer']) : '')) . ' · ' . h(fmt_zeit((string)$m['erstellt'], 'd.m.Y H:i')) . '</div>'
+            . nl2br(h((string)$m['text'])) . '</div>';
+    }
+    $o .= '<form method="post" style="margin-top:10px"><input type="hidden" name="aktion" value="kunde_nachricht">'
+        . '<textarea name="text" rows="3" required placeholder="Antwort an den Kunden – geht per E-Mail raus und steht im Portal" style="width:100%"></textarea>'
+        . '<div style="margin-top:8px"><button class="btn btn-primary btn-sm" type="submit">Senden</button></div></form></div>';
+    return $o;
+}
+
 // Verknüpftes Objekt -> Ziel-URL. Zentral: sobald ein Modul steht, greift der Sprung automatisch.
 function aktivitaet_link(?string $ref_typ, $ref_id): ?string {
     $ref_id = (int)$ref_id;

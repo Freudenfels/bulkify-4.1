@@ -39,3 +39,5 @@ Textfeld `mail_signatur_vorlage` (app_meta) im E-Mail-Block: zentrale HTML-Signa
 **Liefertermin im Kundenportal (03.11.2026):** Schalter „Voraussichtlichen Liefertermin im Kundenportal anzeigen“ (`app_meta portal_liefertermin`, Standard aus – lieber kein Datum als ein falsches). Gilt für alle Kunden; am Auftrag bleibt der Termin intern pflegbar.
 
 **Herstellerzertifikate (Reiter Firma, 03.11.2026):** Upload je Art (IFS/HACCP, Bio, Registrierung Lebensmittelbetrieb, Haftpflicht, Sonstiges) mit Bezeichnung und „gültig bis“; Ausblenden/Wieder anzeigen statt Löschen. Global für alle Kunden (Portal Info & Tools). Ablage `dokument` objekt_typ='firma', typ='zertifikat'.
+
+**Ansprechpartner im Kundenportal (Reiter Firma):** Standard-Benutzer (`app_meta portal_ansprechpartner_id`) für alle Kunden ohne eigenen Betreuer; Name/Telefon/E-Mail kommen aus dem Benutzer.

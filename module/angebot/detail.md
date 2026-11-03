@@ -201,3 +201,5 @@ Gibt das Team die Preise eines gesendeten Angebots wieder frei (nach Bearbeitung
 **Beutel-Typ (03.11.2026):** An der Verpackungs-Position eines Standbodenbeutels steht statt des Häkchens eine Auswahl
 „vollbedruckt (Standard, ohne Etikett)“ / „blanko + Etikett (Ausnahme)“ (`p_blanko[]` -> `angebot_position.blanko_etikett`).
 Andere Behälter behalten das Häkchen „bedruckt / kundenspezifisch (ohne Etikett)“.
+
+**Nachrichten mit dem Kunden (Report 5):** Kasten am Ende (Bearbeiten- und Lese-Ansicht), Antwort = Aktion `kunde_nachricht` -> Mail an den Kunden + im Portal.

@@ -413,3 +413,8 @@ Formulare `anfrage`/`prodanfrage`/`rohanfrage`/`dienstleistung` bleiben Untersei
 (Etikett-/Beutel-Design freigeben, Etikett hochladen, Rezeptur-Vorschlag prüfen, Angebot annehmen, Preis einer Nachbestellung
 bestätigen – je mit Link) und **Neu für Sie** (letzte 21 Tage: Informationsdokument/Laboranalyse eingetroffen, Produktionsbericht
 verfügbar, Ware versendet, Rechnung erstellt; max. 8, neueste zuerst). Leere Zustände mit kurzem Satz.
+
+**Rückfrage + Ansprechpartner (Report 5, 03.11.2026):** An jeder Bestellung („Rückfrage zu dieser Bestellung“) und an Angebotskarten
+(„Rückfrage zum Angebot“) Verlauf + Formular (aktion=rueckfrage, nur eigene Bestellung/Angebot, nur mit Bestellrecht). Speichern ->
+`mail_team()` (Dashboard-Benachrichtigung mit Link zum Auftrag/Angebot + Admin-Mail). Team-Antworten erscheinen hier und kommen per Mail.
+Übersicht und Info & Tools zeigen „Ihr Ansprechpartner bei bulkify“ (Name, Position, Telefon, E-Mail) aus `portal_ansprechpartner()`.

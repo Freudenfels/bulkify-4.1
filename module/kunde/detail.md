@@ -43,3 +43,5 @@ Admin-Abschnitt über der Gefahrenzone: einen doppelten Kunden (Suchfeld-Dropdow
 
 ## Zugang per Mail (Paket Mails)
 Am Erstzugang gibt es neben „Link kopieren" den Knopf **„Per Mail senden"** (eigenes Formular `ezMailForm` außerhalb des Hauptformulars, Knopf über `form=…`): POST `aktion=zugang_senden` → `mail_kunde_zugang()`; Rückmeldung `zugangok` / `zugangfehler`. Ohne E-Mail-Adresse ist der Knopf gesperrt.
+
+**Ansprechpartner bei bulkify (Report 5):** im Kontakt-Kasten wählbar (`kunden.betreuer_benutzer_id`); leer = Standard aus Einstellungen → Firma. Steht im Kundenportal auf der Übersicht.
