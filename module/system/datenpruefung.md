@@ -14,7 +14,8 @@ Die Seite führt die Prüf-Abfragen aus der Liste „Nicos manuelle Live-DB-Aufg
 | S-10 Pulver-Verbrauch als „Stk" gebucht | nein (keine Korrektur dokumentiert) |
 | S-10 Pulver-Fremdpreise mit Einheit „Stk" | ja: `einheit='kg'` |
 | Fertigware-Altchargen ohne Auftrag | ja: `auftrag_id` aus dem Produktionsauftrag (nur Zeilen mit Vorschlag) |
-| S-16 Fremdlager-Altbestand (Chargen und Aufträge) | **nein, bewusst**: Migration nur nach separater Freigabe |
+| S-16 Fremdlager-Altbestand: Chargen ohne Besitzer | ja (Freigabe Nico 03.11.): `fremd_kunde_id` = Kunde des Produkts, `standort='lager2'` |
+| S-16 Aufträge „ins Fremdlager" ohne Lieferschein | **nein, bewusst**: wird separat geklärt |
 | Zukauf „fertig" mit alten Schritten | nein (am Auftrag Zukauf-Art neu speichern) |
 | Wer hat die Rolle QM (labor)? | nein (Warnung, wenn niemand) |
 | Doppelte Nummern | nein (Einzelentscheidung, freigegebene Rechnungen nie umnummerieren) |

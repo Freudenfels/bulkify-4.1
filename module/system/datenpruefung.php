@@ -3,7 +3,7 @@
 // direkt im Dashboard. Je Prüfung: Überschrift, Trefferzahl, Treffer-Tabelle und die dokumentierte Korrektur als
 // Text. Es wird NICHTS automatisch geändert. Wo eine Korrektur dokumentiert ist, gibt es EINEN „Beheben"-Knopf, der
 // genau diese UPDATE nur für die angehakten Zeilen ausführt (Bestätigung, Transaktion, Eintrag ins Feld-Änderungs-
-// protokoll aenderung_log). Ausnahme: Fremdlager-Altbestand (S-16) bleibt reine Anzeige (Migration nur nach Freigabe).
+// protokoll aenderung_log). S-16 Chargen ohne Besitzer: Beheben freigegeben (03.11.); S-16 Aufträge bleiben reine Anzeige.
 // Route: ?p=datenpruefung
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
@@ -92,14 +92,22 @@ $CHECKS = [
     's16_bestand' => [
         'titel' => 'S-16: Fremdlager-Altbestand – freie Fertigware ohne Besitzer',
         'info'  => 'Fertigware auf Artikeln von Fulfillment-Kunden (Produkt gehört dem Kunden), noch ohne Besitzer. Bis zur Migration gilt sie im FEFO als Rückfall.',
-        'sql'   => "SELECT c.id AS _id, c.charge_nr, i.name, c.menge_verfuegbar, c.standort, p.kunde_id, k.firma
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=kunde&id=', p.kunde_id) AS _link, c.charge_nr, i.name, c.menge_verfuegbar, c.status, c.standort, p.kunde_id, k.firma
                     FROM charge c JOIN item i ON i.id = c.item_id AND i.kategorie = 'verkaufsfertig'
                     JOIN produkt p ON p.id = i.produkt_id JOIN kunden k ON k.id = p.kunde_id AND k.nutzt_fulfillment = 1
                     WHERE c.fremd_kunde_id IS NULL AND c.status IN ('frei','quarantaene') AND c.menge_verfuegbar > 0
                     ORDER BY p.kunde_id, c.id",
-        'korrektur' => "-- Nach Freigabe: UPDATE charge SET fremd_kunde_id=<kunde>, standort='lager2' WHERE id IN (...);",
-        'ohne_fix'  => 'Migration nur nach separater Freigabe – bewusst kein Beheben-Knopf.',
-        'fix'   => null,
+        'korrektur' => "UPDATE charge c JOIN item i ON i.id=c.item_id AND i.kategorie='verkaufsfertig'
+  JOIN produkt p ON p.id=i.produkt_id JOIN kunden k ON k.id=p.kunde_id AND k.nutzt_fulfillment=1
+   SET c.fremd_kunde_id = p.kunde_id, c.standort = 'lager2'
+ WHERE c.fremd_kunde_id IS NULL AND c.status IN ('frei','quarantaene') AND c.menge_verfuegbar>0 AND c.id IN (...);",
+        'ohne_fix'  => 'Freigegeben von Nico am 03.11.2026. Die Charge gehört danach dem Kunden der Zeile und zählt nicht mehr als unser Bestand (Lager 1).',
+        // Freigabe Nico 03.11.2026: Besitzer = Kunde des Produkts, Standort Fremdlager.
+        'fix'   => ['tabelle' => 'charge', 'typ' => 'charge',
+                    'update' => "UPDATE charge c JOIN item i ON i.id=c.item_id AND i.kategorie='verkaufsfertig'
+                                   JOIN produkt p ON p.id=i.produkt_id JOIN kunden k ON k.id=p.kunde_id AND k.nutzt_fulfillment=1
+                                    SET c.fremd_kunde_id = p.kunde_id, c.standort = 'lager2'
+                                 WHERE c.fremd_kunde_id IS NULL AND c.status IN ('frei','quarantaene') AND c.menge_verfuegbar>0 AND c.id IN ({IDS})"],
     ],
     's16_auftraege' => [
         'titel' => 'S-16: Aufträge schon „ins Fremdlager" übergeben',
@@ -110,7 +118,7 @@ $CHECKS = [
                     WHERE a.status = 'versendet' AND NOT EXISTS (SELECT 1 FROM beleg b WHERE b.auftrag_id = a.id AND b.typ = 'lieferschein')
                     ORDER BY a.id DESC",
         'korrektur' => '',
-        'ohne_fix'  => 'Teil der Fremdlager-Migration, nur nach separater Freigabe – bewusst kein Beheben-Knopf.',
+        'ohne_fix'  => 'Wird separat geklärt – bewusst kein Beheben-Knopf.',
         'fix'   => null,
     ],
     'zukauf_fertig' => [
