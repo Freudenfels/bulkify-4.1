@@ -430,6 +430,18 @@ if ($q !== '') {
         return false;
     }));
 }
+// Material je Zeile (Nico 04.11.2026): Rohstoffe/Bulk da? Und ein grüner Punkt, wenn produziert werden kann.
+// Gleiche Quelle wie Produktionsliste und Material-Übersicht (auftrag_bedarf_rest). Ab hier wird nichts mehr
+// geschrieben -> Bestandsabfragen request-lokal cachen (viele Aufträge teilen dieselben Artikel).
+$GLOBALS['bx_stock_cache'] = [];
+$matRollen = ['Rohstoff', 'Leerkapsel', 'Fertigware'];   // Rohstoffe bzw. Bulkware; der Rest ist Verpackung/Etikett
+// Kurzname: Bulkware heißt nur „Bulkware“, sonst der Artikelname bis zum ersten „ · “ (volle Namen im Tooltip).
+$kurzName = fn(array $f) => (string)$f['rolle'] === 'Fertigware' ? 'Bulkware' : explode(' · ', (string)($f['name'] ?? ''))[0];
+$fmtFehlt = function(array $liste) use ($kurzName): string {
+    $n = array_values(array_unique(array_map($kurzName, $liste)));
+    return h($n[0] ?? '') . (count($n) > 1 ? ' +' . (count($n) - 1) : '');
+};
+$punkt = fn(string $farbe, string $titel) => '<span title="' . h($titel) . '" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' . $farbe . ';vertical-align:-1px"></span>';
 render_header('produktion_vorbereitung', 'Produktionsfreigabe');
 bx_head('Produktionsfreigabe', count($rows) . ' Produktionsauftrag/-aufträge noch nicht freigegeben' . ($q !== '' ? ' (gefiltert)' : '') . ' – offene Aufträge erscheinen automatisch; zum Bearbeiten anklicken.',
         bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
@@ -450,8 +462,8 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
 <div class="bx-panel" style="padding:0;overflow:hidden">
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr>
-      <th>Prio</th><th>Nummer</th><th>Kunde</th><th>Produkt</th><th class="bx-num">Pack.</th>
-      <th>Glas</th><th>Etikett</th><th>Eigen/Fremd</th><th></th>
+      <th>Prio</th><th>Bereit</th><th>Nummer</th><th>Kunde</th><th>Produkt</th><th class="bx-num">Pack.</th>
+      <th>Glas</th><th>Etikett</th><th>Rohstoffe / Bulk</th><th>Verpackung</th><th>Eigen/Fremd</th><th></th>
     </tr></thead>
     <tbody>
     <?php foreach ($rows as $r):
@@ -463,15 +475,35 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
         $brauchtEt = auftrag_braucht_etikett((int)$aid);
         $etFrei = $brauchtEt && $aid ? etikett_freigegeben($aid) : false;
         $href = '?p=produktion_vorbereitung&id=' . $paId;
+        $fehltMat = []; $fehltVp = [];
+        foreach (auftrag_bedarf_rest($paId) as $b) {
+            if ((float)$b['fehlt'] <= 1e-6) continue;
+            if (in_array((string)$b['rolle'], $matRollen, true)) $fehltMat[] = $b; else $fehltVp[] = $b;
+        }
+        $matBest = $fehltMat ? produktion_material_bestellt($fehltMat, (int)$aid) : ['ja' => false, 'eta' => ''];
+        $grund = [];
+        if (!$glasOk) $grund[] = 'Glas nicht gewählt';
+        if ($brauchtEt && !$etFrei) $grund[] = 'Etikett nicht freigegeben';
+        if ($fehltMat) $grund[] = $matBest['ja'] ? 'Rohstoffe/Bulk bestellt' : 'Rohstoffe/Bulk fehlen';
+        $vpRollen = array_values(array_unique(array_map(fn($f) => (string)$f['rolle'], $fehltVp)));
+        if ($fehltVp) $grund[] = implode(', ', $vpRollen) . ' nicht auf Lager';
+        $kann = !$grund;
     ?>
       <tr onclick="location.href='<?= $href ?>'" style="cursor:pointer">
         <td><?= $prioDot($r['prio']) ?></td>
+        <td title="<?= h($kann ? 'Alles da – kann produziert werden' : 'Noch nicht: ' . implode(' · ', $grund)) ?>"><?= $kann ? $punkt('#1D9E75', 'Alles da – kann produziert werden') . ' <span style="font-size:12px;color:#1D9E75">ja</span>'
+                                    : $punkt('#f59e0b', 'Noch nicht produzierbar') . ' <span class="muted" style="font-size:12px">nein</span>' ?></td>
         <td><a href="<?= $href ?>"><?= h($r['nummer'] ?: ('PR#' . $paId)) ?></a><?php if ($r['auftrag_nr']): ?><br><a class="muted" style="font-size:12px" href="?p=auftrag&id=<?= (int)$r['auftrag_id'] ?>" onclick="event.stopPropagation()" title="Zum Auftrag"><?= h($r['auftrag_nr']) ?></a><?php endif; ?></td>
         <td><?= $r['kunde'] ? h(firma_kurz($r['kunde'])) : '<span class="muted">–</span>' ?></td>
-        <td><?= h($r['produkt'] ?: '–') ?></td>
+        <td style="white-space:normal;min-width:220px"><?= h($r['produkt'] ?: '–') ?></td>
         <td class="bx-num"><?= number_format((int)$r['menge'], 0, ',', '.') ?></td>
         <td><?= $glasOk ? $flagOk(true) : '<span style="color:#d64545">fehlt</span>' ?></td>
         <td><?php if (!$brauchtEt): ?><span class="muted">–</span><?php else: ?><?= $etFrei ? $flagOk(true) : '<span style="color:#d64545">fehlt</span>' ?><?php endif; ?></td>
+        <td><?php if (!$fehltMat): ?><?= $flagOk(true) ?> <span class="muted" style="font-size:12px">da</span>
+            <?php elseif ($matBest['ja']): ?><span style="color:#2b6cd4" title="<?= h(implode(', ', array_map(fn($f) => (string)$f['name'], $fehltMat))) ?>">bestellt<?= $matBest['eta'] !== '' ? ', bis ' . h(date('d.m.Y', strtotime($matBest['eta']))) : '' ?></span>
+            <?php else: ?><span style="color:#d64545" title="<?= h(implode(', ', array_map(fn($f) => (string)$f['name'], $fehltMat))) ?>">fehlt: <?= $fmtFehlt($fehltMat) ?></span><?php endif; ?></td>
+        <td><?= !$fehltVp ? $flagOk(true) . ' <span class="muted" style="font-size:12px">da</span>'
+                          : '<span style="color:#d64545" title="' . h(implode(', ', array_map(fn($f) => (string)$f['name'], $fehltVp))) . '">fehlt: ' . h(implode(', ', $vpRollen)) . '</span>' ?></td>
         <td><?= ($r['produktionsart'] ?? 'fremd') === 'eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info') ?></td>
         <td style="text-align:right"><span class="muted" style="font-size:18px">&#8250;</span></td>
       </tr>
@@ -480,4 +512,4 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
   </table></div>
 </div>
 <?php endif; ?>
-<?php render_footer(); ?>
+<?php unset($GLOBALS['bx_stock_cache']); render_footer(); ?>

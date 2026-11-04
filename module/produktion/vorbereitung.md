@@ -81,3 +81,10 @@ Bei Füllmengen-Formen ist die Packungsgröße des PA (`produktion_stueck_je_pac
 Glas nur für diesen Auftrag: Der Behälter-Teil im Auftrags-Namen zieht mit (`auftrag_name_behaelter_nachziehen`).
 
 Seit 03.11.2026 heißt die Liste „Produktionsfreigabe“ und hat wieder einen Menüpunkt mit Zähler (Gruppe Produktion). Die Kachel „Wartet auf Freigabe“ in der Produktionsliste führt hierher. Stornierte Aufträge erscheinen nicht (`vorbereitung_liste` mit `pa_aktiv_sql`).
+
+## Material und „Bereit“ in der Liste (04.11.2026)
+- Spalte **Bereit**: grüner Punkt „ja“ = kann produziert werden (Glas gewählt, Etikett freigegeben falls nötig, Rohstoffe/Bulk und Verpackung auf Lager). Sonst oranger Punkt „nein“, die Gründe stehen im Tooltip.
+- Spalte **Rohstoffe / Bulk**: Rollen Rohstoff, Leerkapsel, Fertigware (Bulk-Zukauf). „da“, „fehlt: …“ (Bulk heißt kurz „Bulkware“, ein Name + „+N“, alle im Tooltip) oder blau „bestellt, bis TT.MM.JJJJ“, wenn alles Fehlende laufend bestellt ist (`produktion_material_bestellt`).
+- Spalte **Verpackung**: Bestand von Verpackung, Deckel, Etikett, Karton, Beipackzettel („da“ / „fehlt: Verpackung, Etikett“).
+- Quelle ist `auftrag_bedarf_rest()` wie Produktionsliste und Material-Übersicht, also netto (Reservierungen anderer abgezogen) und je nach gewählter Herstellung (Eigen = Rohstoffe, Fremd = Bulk). Jeder Auftrag wird für sich gegen den Bestand geprüft; zwei Aufträge können beide grün sein und um dieselbe Ware konkurrieren.
+- Bestandsabfragen sind request-lokal gecacht (`bx_stock_cache`), erst nach `vorbereitung_auto_sync()`.
