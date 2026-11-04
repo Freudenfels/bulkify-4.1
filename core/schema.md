@@ -449,3 +449,5 @@ Soll-Kette 2e (04.11.2026): `produktionsschritte_fuer()` ohne Schritt „Produkt
 - `auftrag_beschaffungsweg_setzen()`: Eigen/Fremd + Schritte; PA in Vorbereitung wird dabei freigegeben (Teil 4). Nur ohne erledigten Schritt.
 - `auftrag_beschaffung_bestellen()`: Bestellung als Entwurf beim gewählten Lieferanten (Kapsel: Freitext-Bulk-Position; Premix: Premix-Artikel in kg), Position am Auftrag, Bedarf gemeldet.
 - Premix: `rezeptur_premixitem()` (Rohstoff, Form premix, an der Stammrezeptur, kg). `produktion_materialbedarf()` ersetzt bei Weg premix die Zutaten durch den Premix-Artikel (Parameter `$ohnePremix` für die Kostenrechnung).
+
+Soll-Kette 4a (04.11.2026): Spalte `produktionsauftrag.menge_vor_etikett`. `produktion_schritt_erledigen()`: Etikett-Freigabe sperrt nur noch das Etikettieren; Vorbereitung meldet „kein Beschaffungsweg festgelegt“.

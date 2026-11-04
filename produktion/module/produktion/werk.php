@@ -26,6 +26,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_fehler'] = $T['pin_wrong']; weiter('?p=werk');
     }
     if ($aktion === 'werk_logout') { unset($_SESSION['werk_uid']); weiter('?p=werk'); }
+    // Soll-Kette 4: Teilmenge am Tablet melden – komplett (mit Etikett, bucht Fertigware) oder bis vor dem Etikettieren.
+    if ($werkUid && $aktion === 'werk_teilmenge') {
+        $paId = (int)($_POST['pa_id'] ?? 0);
+        $mT = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['menge'] ?? '0'));
+        $r = ($_POST['umfang'] ?? '') === 'vor_etikett' ? erp_teilmenge_vor_etikett($paId, $mT, $werkName ?: 'Mitarbeiter')
+                                                         : erp_teilmenge_produzieren($paId, $mT, $werkName ?: 'Mitarbeiter');
+        $fehltTxt = implode(', ', array_map(fn($f) => (string)($f['name'] ?? ''), $r['fehlt'] ?? []));
+        $_SESSION['werk_flash'] = (string)($r['msg'] ?? '') . ($fehltTxt !== '' ? ' (' . $fehltTxt . ')' : '');
+        $_SESSION['werk_flash_ok'] = !empty($r['ok']);
+        weiter('?p=werk&id=' . $paId);
+    }
     if ($werkUid && $aktion === 'werk_erledigt') {
         $sid = (int)($_POST['schritt_id'] ?? 0);
         $paId = (int)($_POST['pa_id'] ?? 0);
@@ -283,7 +294,11 @@ header('Content-Type: text/html; charset=utf-8');
     foreach (erp_produktionsauftraege('') as $pa) {
         $f = (int)$pa['schritte_fertig'];
         $ber = erp_pa_bereitschaft((int)$pa['id'], (string)$pa['status'], $f);
-        if ((string)$pa['status'] === 'laufend' || ($ber['status'] ?? '') === 'bereit') { $pa['_lauf'] = (string)$pa['status'] === 'laufend'; $jobs[] = $pa; }
+        // Soll-Kette 4: jeder Auftrag, sobald IRGENDEIN Schritt machbar ist (auch ohne Etiketten / mit Teilmenge) – mit Hinweis.
+        $mbL = in_array((string)$pa['status'], ['offen', 'laufend'], true) ? erp_stufen_machbar((int)$pa['id']) : null;
+        $pa['_hinweis'] = $mbL ? erp_machbar_hinweis($mbL, $T) : '';
+        $machbar = $mbL && ($mbL['herstellung'] > 0 || $mbL['vor_etikett'] > 0 || $mbL['komplett'] > 0 || $mbL['vorproduziert'] > 0);
+        if ((string)$pa['status'] === 'laufend' || ($ber['status'] ?? '') === 'bereit' || $machbar) { $pa['_lauf'] = (string)$pa['status'] === 'laufend'; $pa['_teil'] = ($ber['status'] ?? '') !== 'bereit' && !$pa['_lauf']; $jobs[] = $pa; }
     }
     usort($jobs, function ($a, $b) {   // laufend zuerst, dann nach geplantem Termin
         if (($a['_lauf'] ?? false) !== ($b['_lauf'] ?? false)) return ($a['_lauf'] ?? false) ? -1 : 1;
@@ -310,7 +325,8 @@ header('Content-Type: text/html; charset=utf-8');
       <div class="nr"><?= h((string)$pa['nummer']) ?></div>
       <div class="prod"><?= h((string)($pa['produkt_name'] ?: '–')) ?></div>
       <div class="meta"><?= menge_txt($pa['menge']) ?> <?= h($T['packages']) ?><?= !empty($pa['kunde']) ? ' · ' . h((string)$pa['kunde']) : '' ?></div>
-      <span class="badge <?= !empty($pa['_lauf']) ? 'b-lauf' : 'b-bereit' ?>"><?= !empty($pa['_lauf']) ? h($T['in_production']) : h($T['producible']) ?></span>
+      <span class="badge <?= !empty($pa['_lauf']) ? 'b-lauf' : 'b-bereit' ?>"><?= !empty($pa['_lauf']) ? h($T['in_production']) : (!empty($pa['_teil']) ? h($T['partly_producible'] ?? 'teilweise machbar') : h($T['producible'])) ?></span>
+      <?php if (($pa['_hinweis'] ?? '') !== ''): ?><div class="meta" style="margin-top:6px;color:#e0b54c"><?= h((string)$pa['_hinweis']) ?></div><?php endif; ?>
       <div class="prog"><div style="width:<?= (int)$proz ?>%"></div></div>
       <div class="meta" style="margin-top:6px"><?= $g > 0 ? h($T['step']) . ' ' . $f . ' / ' . $g : h($T['ready']) ?></div>
     </a>
@@ -365,6 +381,27 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endif; ?>
   </div>
 
+  <?php // Soll-Kette 4: Teilmenge am Tablet – was jetzt je Stufe machbar ist, Rest bleibt offen im Auftrag.
+    $mbW = (!$alleFertig && in_array((string)$pa['status'], ['offen', 'laufend'], true)) ? erp_stufen_machbar($id) : null;
+    if ($mbW && $mbW['rest'] > 0): $nW = fn($x) => menge_txt($x); ?>
+  <div class="panel">
+    <div class="step-sub"><?= h($T['tm_h'] ?? 'Teilmenge produzieren') ?></div>
+    <div style="font-size:17px;margin:6px 0 10px;line-height:1.6">
+      <?= h($T['tm_production'] ?? 'Herstellung') ?>: <strong><?= $nW($mbW['herstellung']) ?></strong> ·
+      <?= h($T['doable_before_label']) ?>: <strong><?= $nW($mbW['vor_etikett']) ?></strong> ·
+      <?= h($T['doable_full']) ?>: <strong><?= $nW($mbW['komplett']) ?></strong> <?= h($T['packages']) ?>
+      <?php if ($mbW['vorproduziert'] > 0): ?><br><span class="muted"><?= h(sprintf($T['hint_prelabeled'] ?? '%s Pkg bis vor dem Etikett fertig', $nW($mbW['vorproduziert']))) ?></span><?php endif; ?>
+      <?php if ($mbW['sperre'] !== ''): ?><br><span style="color:#e0786c"><?= h($mbW['sperre']) ?></span><?php endif; ?>
+    </div>
+    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0">
+      <input type="hidden" name="aktion" value="werk_teilmenge"><input type="hidden" name="pa_id" value="<?= (int)$id ?>">
+      <input type="text" inputmode="numeric" name="menge" placeholder="<?= h($T['packages']) ?>" style="font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px">
+      <button class="btn btn-ghost" type="submit" name="umfang" value="vor_etikett" style="min-height:52px" <?= $mbW['vor_etikett'] > 0 ? '' : 'disabled' ?>><?= h($T['tm_prelabel_btn'] ?? 'bis vor dem Etikettieren') ?></button>
+      <button class="btn btn-lime" type="submit" name="umfang" value="komplett" style="min-height:52px" <?= $mbW['komplett'] > 0 ? '' : 'disabled' ?>><?= h($T['tm_full_btn'] ?? 'komplett fertig') ?></button>
+    </form>
+    <div class="muted" style="font-size:14px;margin-top:8px"><?= h($T['tm_note'] ?? 'Gemeldet wird, was wirklich gemacht wurde. Der Rest bleibt im Auftrag offen, bis das Material da ist.') ?></div>
+  </div>
+  <?php endif; ?>
   <?php if ($probenPflicht): ?>
     <div class="panel" style="border-color:var(--lime)">
       <div class="step-sub"><?= h($T['before_mixing']) ?></div>

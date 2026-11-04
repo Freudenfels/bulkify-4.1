@@ -733,10 +733,11 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur, int $uid = 0)
 
     // PreProduktionsauftrag: ein noch in Vorbereitung stehender Auftrag ist gesperrt (noch nicht freigegeben).
     if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
-        return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Dieser Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
+        return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Für diesen Auftrag ist noch kein Beschaffungsweg festgelegt (Auftrag → Reiter Beschaffungsweg).', 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
 
-    // Etikett-Freigabe = echte Sperre (S-12), nicht nur in der Liste: gilt auch bei Direkt-URL und in der Werk-App.
-    if (($sperre = erp_etikett_sperre($pa_id)) !== '')
+    // Etikett-Freigabe sperrt nur noch das ETIKETTIEREN (Soll-Kette 4, 04.11.2026: bis vor dem Etikett darf produziert werden).
+    // Die Schritte danach (Beipack, Umkarton, QK, Versand) kommen erst nach dem Etikettieren an die Reihe.
+    if ($station === 'Etikettieren' && ($sperre = erp_etikett_sperre($pa_id)) !== '')
         return ['ok'=>false, 'fehler'=>'etikett', 'msg'=>$sperre, 'fertig'=>false, 'station'=>$station, 'fehlt'=>[]];
 
     // Reihenfolge: nur der erste noch offene Schritt des Auftrags darf abgeschlossen werden.
@@ -1251,6 +1252,80 @@ function erp_teilmenge_produzieren(int $pa_id, float $m, string $akteur): array 
             'Teilmenge ' . number_format($m, 0, ',', '.') . ' Stk produziert (Charge ' . $nr . ', Produktion ' . $pa['nummer'] . ').',
             'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
     return ['ok'=>true, 'msg'=>'Teilmenge eingebucht (Charge ' . $nr . ').', 'charge_nr'=>$nr, 'fehlt'=>[]];
+}
+// ===== Soll-Kette 4: Schritt-Logik statt Auftrags-Freigabe (Nico/Dustin 04.11.2026) =====
+// Packungen, die schon BIS VOR DEM ETIKETTIEREN produziert sind (abgefüllt, warten auf Etiketten), kumuliert am PA.
+function erp_vor_etikett_stand(int $pa_id): float {
+    if (!erp_spalte_da('produktionsauftrag', 'menge_vor_etikett')) return erp_produktion_gebucht($pa_id);
+    return max(erp_produktion_gebucht($pa_id), (float) scalar("SELECT COALESCE(menge_vor_etikett,0) FROM produktionsauftrag WHERE id=?", [$pa_id]));
+}
+// Größte Packungszahl m (0..$max), für die das Material der Stationen $stat bis kumuliert $basis+m reicht (Trockenlauf, Binärsuche).
+function erp_machbar_bis(int $pa_id, array $stat, float $basis, int $max): array {
+    $ok = function (int $m) use ($pa_id, $stat, $basis): ?array {
+        foreach ($stat as $st) { $r = erp_station_entnahme($pa_id, $st, $basis + $m, true); if (!($r['ok'] ?? true)) return $r['fehlt'] ?? [['name' => $st]]; }
+        return null;
+    };
+    if ($max <= 0) return [0, ''];
+    if ($ok($max) === null) return [$max, ''];                 // Abkürzung: alles machbar
+    if (($f1 = $ok(1)) !== null) return [0, (string)($f1[0]['name'] ?? '')];   // Abkürzung: gar nichts machbar
+    $lo = 1; $hi = $max - 1;
+    while ($lo < $hi) { $mid = intdiv($lo + $hi + 1, 2); if ($ok($mid) === null) $lo = $mid; else $hi = $mid - 1; }
+    return [$lo, $lo < $max ? (string)(($ok($lo + 1)[0]['name'] ?? '')) : ''];
+}
+// Was ist JETZT je Stufe machbar? herstellung = bis zur fertigen Kapsel/Mischung (Rohstoffe/Premix, Leerkapseln),
+// vor_etikett = zusätzlich abgefüllt (Dosen/Deckel), komplett = fertig mit Etikett (nur mit Etikett-Freigabe).
+// vorproduziert = schon bis vor dem Etikett produziert, wartet auf Etiketten.
+function erp_stufen_machbar(int $pa_id): array {
+    $gebucht = erp_produktion_gebucht($pa_id);
+    $rest = (int) floor(erp_produktion_rest($pa_id));
+    $ve = erp_vor_etikett_stand($pa_id);
+    $vorprod = (int) round($ve - $gebucht);
+    $offenVe = max(0, $rest - $vorprod);
+    $st = erp_pa_stationen($pa_id);
+    $ausbau = ['Verpacken', 'Etikettieren', 'Beipackzettel beilegen', 'Umkarton'];
+    [$h, $hl] = erp_machbar_bis($pa_id, array_values(array_filter($st, fn($s) => !in_array($s, $ausbau, true))), $ve, $offenVe);
+    [$v, $vl] = erp_machbar_bis($pa_id, array_values(array_filter($st, fn($s) => $s !== 'Etikettieren')), $ve, $offenVe);
+    $sperre = erp_etikett_sperre($pa_id);
+    [$k, $kl] = $sperre !== '' ? [0, ''] : erp_machbar_bis($pa_id, $st, $gebucht, $rest);
+    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]) ?: [];
+    return ['rest' => $rest, 'vorproduziert' => $vorprod, 'herstellung' => $h, 'vor_etikett' => $v, 'komplett' => $k,
+            'limit_h' => $hl, 'limit_v' => $vl, 'limit_k' => $kl, 'sperre' => $sperre, 'stk' => $pa ? erp_stueck_je_packung($pa) : 0];
+}
+// Klarer Hinweis für die Produktion, wie weit es geht ('' = alles machbar). $T = werk_texte().
+function erp_machbar_hinweis(array $m, array $T): string {
+    $n = fn($x) => number_format((float)$x, 0, ',', '.');
+    $t = [];
+    if ($m['vorproduziert'] > 0) $t[] = sprintf($T['hint_prelabeled'] ?? '%s Pkg bis vor dem Etikett fertig', $n($m['vorproduziert']));
+    if ($m['komplett'] >= $m['rest']) return implode(' · ', $t);
+    if ($m['komplett'] > 0) $t[] = sprintf($T['hint_only_full'] ?? 'nur %1$s von %2$s Pkg komplett machbar', $n($m['komplett']), $n($m['rest']));
+    elseif ($m['vor_etikett'] > 0) $t[] = sprintf($m['sperre'] !== '' ? ($T['hint_label_not_released'] ?? 'Etikett nicht freigegeben – nur bis vor dem Etikettieren: %s Pkg') : ($T['hint_no_labels'] ?? 'keine Etiketten – nur bis vor dem Etikettieren: %s Pkg'), $n($m['vor_etikett']));
+    elseif ($m['herstellung'] > 0) $t[] = sprintf($T['hint_only_production'] ?? 'keine Verpackung – nur Herstellung: %1$s Pkg (= %2$s Stk)', $n($m['herstellung']), $n($m['herstellung'] * max(1, (int)$m['stk'])));
+    elseif ($m['vorproduziert'] <= 0) $t[] = $T['hint_no_material'] ?? 'kein Material';
+    return implode(' · ', $t);
+}
+// Teilmenge BIS VOR DEM ETIKETTIEREN produzieren (Soll-Kette 4): Material aller Stationen außer Etikettieren anteilig nach FEFO
+// abbuchen (Restbuchung), Stand am PA merken. Die Fertigware entsteht erst mit dem Etikett (erp_teilmenge_produzieren). Alles-oder-nichts.
+function erp_teilmenge_vor_etikett(int $pa_id, float $m, string $akteur): array {
+    $m = round($m);
+    $st = one("SELECT status, nummer, kunde_id, auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$st) return ['ok' => false, 'msg' => 'Auftrag nicht gefunden.', 'fehlt' => []];
+    if ((string)$st['status'] === 'vorbereitung') return ['ok' => false, 'msg' => 'Für diesen Auftrag ist noch kein Beschaffungsweg festgelegt.', 'fehlt' => []];
+    if (!erp_spalte_da('produktionsauftrag', 'menge_vor_etikett')) return ['ok' => false, 'msg' => 'Bitte einmal das Dashboard öffnen (Datenbank-Spalte fehlt noch).', 'fehlt' => []];
+    $mb = erp_stufen_machbar($pa_id);
+    $offen = max(0, $mb['rest'] - $mb['vorproduziert']);
+    if ($m <= 0) return ['ok' => false, 'msg' => 'Bitte eine Menge größer 0 angeben.', 'fehlt' => []];
+    if ($m > $offen) return ['ok' => false, 'msg' => 'Es sind nur noch ' . number_format($offen, 0, ',', '.') . ' Pkg offen.', 'fehlt' => []];
+    $ve = erp_vor_etikett_stand($pa_id);
+    $stat = array_values(array_filter(erp_pa_stationen($pa_id), fn($s) => $s !== 'Etikettieren'));
+    $fehlt = [];
+    foreach ($stat as $s) { $r = erp_station_entnahme($pa_id, $s, $ve + $m, true); if (!($r['ok'] ?? true)) foreach (($r['fehlt'] ?? []) as $f) $fehlt[] = $f; }
+    if ($fehlt) return ['ok' => false, 'fehler' => 'mangel', 'msg' => 'Nicht genug Material für diese Teilmenge.', 'fehlt' => $fehlt];
+    foreach ($stat as $s) erp_station_entnahme($pa_id, $s, $ve + $m, false);
+    q("UPDATE produktionsauftrag SET menge_vor_etikett=?, status=IF(status='offen','laufend',status) WHERE id=?", [(int) round($ve + $m), $pa_id]);
+    erp_reservierung_abgleichen($pa_id);
+    if (!empty($st['kunde_id']))
+        erp_log_aktivitaet('kunde', (int)$st['kunde_id'], 'team', number_format($m, 0, ',', '.') . ' Pkg bis vor dem Etikettieren produziert (Produktion ' . $st['nummer'] . ', ' . $akteur . ').', 'auftrag', 'auftrag', (int)($st['auftrag_id'] ?? 0));
+    return ['ok' => true, 'msg' => number_format($m, 0, ',', '.') . ' Pkg bis vor dem Etikettieren gebucht.', 'fehlt' => []];
 }
 // Teilproduktion-Rechner (Werk-/Prod-App): wie viele Packungen sind JETZT komplett machbar (alle Stationen inkl. Etikett) und wie viele
 // bis vor dem Etikettieren? Exakt per Trockenlauf der Stationsentnahmen (Binärsuche über 0..Rest) – dieselbe Prüfung wie beim Buchen.

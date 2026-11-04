@@ -58,3 +58,7 @@ Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … �
 
 ## QM-Gate Schritte (St-11a)
 Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schließt nur QM (Rolle `labor`) oder Admin ab: Dashboard `produktion_schritt_erledigen()` (`produktion_qm_stationen()`, `darf_qm_freigeben()`), Prod-App/Werk-App `erp_schritt_abschliessen($id, $akteur, $uid)` (`erp_darf_qm()`). Die Produktion bekommt „… schließt QM ab (Vier-Augen-Prinzip)", in der Werk-App ist der Knopf gesperrt. Auch die QS-Freigabe in der Prod-App (`?p=qs`) und ihr Zurückziehen sind nur für QM/Admin. Admin-Overrides/God-Mode bleiben. Noch nicht gebaut: echtes Personen-Vier-Augen (b).
+
+## Soll-Kette 4a (04.11.2026)
+- Kachel-Liste zeigt jeden Auftrag, sobald **irgendein** Schritt machbar ist (vorher nur, wenn das Material für die ganze Menge da war), Badge „teilweise machbar“ und Hinweis, wie weit es geht.
+- Schritt-Ansicht: Box **Teilmenge produzieren** mit machbaren Packungen je Stufe (Herstellung / bis vor dem Etikettieren / komplett) und Knöpfen „bis vor dem Etikettieren“ bzw. „komplett fertig“ (Aktion `werk_teilmenge`). Der Rest bleibt offen im Auftrag.

@@ -807,7 +807,8 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'geplant_am', "DATE NULL");               // Baustein 2: geplantes Produktionsdatum
     ensure_column('produktionsauftrag', 'produktionsart', "VARCHAR(10) NOT NULL DEFAULT 'fremd'");   // eigen|fremd (Make-or-Buy); Standard = fremd (90% der Kapseln extern gefüllt)
     ensure_column('produktionsauftrag', 'zukauf_art', "VARCHAR(10) NOT NULL DEFAULT 'bulk'");
-    ensure_column('produktionsauftrag', 'beschaffungsweg', "VARCHAR(10) NULL");   // Soll-Kette 1: kapsel|premix|rohstoffe (am Auftrag festgelegt)        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
+    ensure_column('produktionsauftrag', 'beschaffungsweg', "VARCHAR(10) NULL");
+    ensure_column('produktionsauftrag', 'menge_vor_etikett', "INT NULL");   // Soll-Kette 4: bis vor dem Etikettieren produziert (kumuliert, Pkg)   // Soll-Kette 1: kapsel|premix|rohstoffe (am Auftrag festgelegt)        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
     // Eigen/Fremd wird im Backend FESTGELEGT, bevor der Auftrag in die Produktion geht. NULL = noch offen
     // -> erscheint NICHT im Produktions-Arbeitsplatz. Entscheidung trifft Admin/Backend, nicht die Produktion.
     ensure_column('produktionsauftrag', 'art_festgelegt_am', "DATETIME NULL");
@@ -10594,15 +10595,16 @@ function produktion_schritt_erledigen(int $pa_id, int $schritt_id, string $scan 
     // PreProduktionsauftrag: solange der Auftrag in Vorbereitung ist (noch nicht vom Admin freigegeben),
     // kann in der Produktion kein Schritt gestartet/abgeschlossen werden. Sichtbar ja – startbar nein. (God-Mode überspringt das.)
     if (!$god && (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'vorbereitung')
-        return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Dieser Auftrag ist noch in Vorbereitung und nicht zur Produktion freigegeben.', 'fertig'=>false, 'station'=>''];
+        return ['ok'=>false, 'fehler'=>'vorbereitung', 'msg'=>'Für diesen Auftrag ist noch kein Beschaffungsweg festgelegt (Auftrag → Reiter Beschaffungsweg).', 'fertig'=>false, 'station'=>''];
     // Etikett-Freigabe ist eine ECHTE Sperre (S-12): nicht nur die Liste blendet aus – auch Direkt-URL, Detailseite und Teilmenge
     // laufen hier durch. Ohne Kundenfreigabe des Etiketts gibt es keinen Produktionsschritt (God-Mode des Admins ausgenommen).
-    if (!$god && ($sperre = produktion_etikett_sperre($pa_id)) !== '')
-        return ['ok'=>false, 'fehler'=>'etikett', 'msg'=>$sperre, 'fertig'=>false, 'station'=>''];
     $firstOpen = one("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort LIMIT 1", [$pa_id]);
     if (!$firstOpen || (int)$firstOpen['id'] !== $schritt_id)
         return ['ok'=>false, 'fehler'=>'reihenfolge', 'msg'=>'Dieser Schritt ist gerade nicht an der Reihe.', 'fertig'=>false, 'station'=>''];
     $station = (string)$firstOpen['station'];
+    // Soll-Kette 4 (04.11.2026): die Etikett-Freigabe sperrt nur noch das Etikettieren – bis vor dem Etikett darf produziert werden.
+    if (!$god && $station === 'Etikettieren' && ($sperre = produktion_etikett_sperre($pa_id)) !== '')
+        return ['ok'=>false, 'fehler'=>'etikett', 'msg'=>$sperre, 'fertig'=>false, 'station'=>$station];
     if (in_array($station, produktion_qm_stationen(), true) && !(function_exists('darf_qm_freigeben') && darf_qm_freigeben()))
         return ['ok'=>false, 'fehler'=>'qm', 'msg'=>'„' . $station . '" schließt QM ab (Vier-Augen-Prinzip) – bitte an QM/Labor übergeben.', 'fertig'=>false, 'station'=>$station];
     $anl  = station_anleitung($station);
