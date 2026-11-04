@@ -469,6 +469,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 }
 // Punkt 1: „Reservieren" und „Lagerware zuweisen" in EINEM Schritt. Eine Quelle-Auswahl, eine Mengeneingabe.
 // Quelle "bestellung:<bp_id>" -> reservieren (auch unterwegs), "charge:<id>" -> konkrete Charge fest zuweisen.
+// „Ware da, aber nicht zugeordnet“ (Nico 04.11.2026): Rohstoff-Charge als Bulk übernehmen bzw. freie Bulk-Charge binden.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bulk_diag') {
+    $zur = (string)($_POST['zurueck'] ?? '');
+    if (!preg_match('/^\?p=[a-z_]+(&[A-Za-z0-9_=%-]*)*$/', $zur)) $zur = '?p=auftrag&id=' . $id;   // nur interne Rücksprünge
+    if (!has_role('admin')) { header('Location: ' . $zur . '&diagfehler=' . urlencode('Nur Admins.')); exit; }
+    $r = auftrag_bulk_diagnose_aktion($id, (string)($_POST['was'] ?? ''), (int)($_POST['charge_id'] ?? 0));
+    header('Location: ' . $zur . (!empty($r['ok']) ? '&diagok=' : '&diagfehler=') . urlencode((string)$r['meldung'])); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'material_binden') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
     [$qTyp, $qId] = array_pad(explode(':', (string)($_POST['quelle'] ?? ''), 2), 2, '');
@@ -1270,6 +1278,9 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
     <?php endforeach; ?>
     </tbody>
   </table></div>
+  <?php if (isset($_GET['diagok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-top:10px"><?= h((string)$_GET['diagok']) ?></div><?php endif; ?>
+  <?php if (isset($_GET['diagfehler'])): ?><div style="color:#8f231b;margin-top:10px"><?= h((string)$_GET['diagfehler']) ?></div><?php endif; ?>
+  <?= auftrag_bulk_diagnose_block((int)$a['id'], '?p=auftrag&id=' . (int)$a['id']) ?>
   <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„frei" = im Lager verfügbar · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
 </div>
 <?php endif; endif; ?>

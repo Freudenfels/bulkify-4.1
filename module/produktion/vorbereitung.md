@@ -88,3 +88,5 @@ Seit 03.11.2026 heißt die Liste „Produktionsfreigabe“ und hat wieder einen 
 - Spalte **Verpackung**: Bestand von Verpackung, Deckel, Etikett, Karton, Beipackzettel („da“ / „fehlt: Verpackung, Etikett“).
 - Quelle ist `auftrag_bedarf_rest()` wie Produktionsliste und Material-Übersicht, also netto (Reservierungen anderer abgezogen) und je nach gewählter Herstellung (Eigen = Rohstoffe, Fremd = Bulk). Jeder Auftrag wird für sich gegen den Bestand geprüft; zwei Aufträge können beide grün sein und um dieselbe Ware konkurrieren.
 - Bestandsabfragen sind request-lokal gecacht (`bx_stock_cache`), erst nach `vorbereitung_auto_sync()`.
+
+Detailseite (04.11.2026): unter „Bereitschaft“ der Block **„Ware da, aber nicht zugeordnet“** (gleicher Block wie am Auftrag). Er zeigt als Rohstoff gebuchte Kapseln, Bulk in Quarantäne und freie Bulk-Chargen ohne Auftrag mit den Knöpfen „Als Bulkware übernehmen“ bzw. „An Auftrag binden“.

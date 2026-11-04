@@ -240,3 +240,5 @@ Ist der Produktionsauftrag in Vorbereitung (nur Admin, Auftrag nicht storniert),
 ## Material-Übersicht: Bulk-Zukauf (04.11.2026)
 - Bulk-Zeilen (Fertigware ohne Lagerartikel) zeigen die Menge in Quarantäne und „in Quarantäne – freigeben“, wenn die Ware da ist, aber auf die QM-Freigabe wartet.
 - Badge **„nicht eingebucht“** (rot, Tooltip): eine Bestellung für diesen Auftrag ist eingegangen, am Auftrag hängt aber keine Bulk-Charge. Lösung: in der Lager-App einbuchen oder unter „Bulkware binden“ eine Charge zuweisen.
+
+Material-Übersicht (04.11.2026): darunter der Block **„Ware da, aber nicht zugeordnet“** (`auftrag_bulk_diagnose_block`). Handler `aktion=bulk_diag` (nur Admin, Rücksprung nur auf interne `?p=`-Adressen), Meldungen `diagok` / `diagfehler`.

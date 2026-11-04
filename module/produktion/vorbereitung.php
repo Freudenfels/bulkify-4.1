@@ -269,6 +269,9 @@ if ($pa):
       </div>
     </div>
 
+    <?php if (isset($_GET['diagok'])): ?><div class="bx-panel badge-ok" style="padding:10px 14px"><?= h((string)$_GET['diagok']) ?></div><?php endif; ?>
+    <?php if (isset($_GET['diagfehler'])): ?><div class="bx-panel" style="color:#8f231b;padding:10px 14px"><?= h((string)$_GET['diagfehler']) ?></div><?php endif; ?>
+    <?= $aid ? auftrag_bulk_diagnose_block((int)$aid, '?p=produktion_vorbereitung&id=' . $paId) : '' ?>
     <?php // C4 (2026-10-28): orange „Teilproduktion – was ist jetzt machbar?"-Box entfernt (unnötig). ?>
     <div class="bx-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
       <!-- Verpackung / Glas -->

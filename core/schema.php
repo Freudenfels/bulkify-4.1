@@ -7742,6 +7742,94 @@ function auftrag_lagerware_zugewiesen(int $auftrag_id): array {
                 WHERE c.auftrag_id=? AND i.kategorie='fertig'
                 ORDER BY c.id DESC", [$auftrag_id]);
 }
+// „Ware da, aber nicht zugeordnet“ (Nico 04.11.2026, PA 54 / AB 542): Bei Zukauf zählt als Bulkware nur eine freie Charge
+// der Warenart Bulk (kategorie 'fertig') MIT auftrag_id. Die Diagnose sucht Ware, die da ist, aber deshalb nicht zählt:
+//  'falsche_art'  Chargen am Auftrag (oder mit der Auftragsnummer in der Notiz), die als Rohstoff gebucht sind
+//  'quarantaene'  Bulk-Chargen am Auftrag, die noch in Quarantäne stehen
+//  'ohne_auftrag' freie Chargen des Bulk-Artikels ohne Auftrag (bindbar)
+// Rückgabe zusätzlich 'bulk_item', 'bulk_einheit', 'fehlt' (Bulk-Restbedarf in Charge-Einheit) und 'pa_id'.
+function auftrag_bulk_diagnose(int $auftrag_id): array {
+    $out = ['bulk_item' => 0, 'bulk_einheit' => '', 'fehlt' => 0.0, 'pa_id' => 0, 'falsche_art' => [], 'quarantaene' => [], 'ohne_auftrag' => []];
+    $a = one("SELECT id, nummer FROM auftrag WHERE id=?", [$auftrag_id]);
+    $paId = (int) scalar("SELECT pa.id FROM produktionsauftrag pa WHERE pa.auftrag_id=? AND " . pa_aktiv_sql() . " ORDER BY pa.id DESC LIMIT 1", [$auftrag_id]);
+    if (!$a || !$paId) return $out;
+    $out['pa_id'] = $paId;
+    $pa = pa_row_cached($paId);
+    $einh = max(1, (int) produktion_stueck_je_packung($pa));
+    foreach (auftrag_bedarf_rest($paId) as $r)   // nur Bulk-Zukauf ohne Lagerartikel (item_id 0) – die anderen Zeilen zählen über den Artikel
+        if ((string)$r['rolle'] === 'Fertigware' && (int)($r['item_id'] ?? 0) === 0)
+            $out['fehlt'] += (float)$r['fehlt'] * ((string)($r['einheit'] ?? '') === 'Pkg' ? $einh : 1);
+    if ($out['fehlt'] <= 1e-6) return $out;
+    $out['bulk_item'] = auftrag_bulk_item($auftrag_id);
+    if ($out['bulk_item']) $out['bulk_einheit'] = (string) scalar("SELECT einheit FROM item WHERE id=?", [$out['bulk_item']]);
+    $sel = "SELECT c.id, c.charge_nr, c.item_id, c.status, c.menge_verfuegbar, c.einheit, c.auftrag_id, COALESCE(c.wareneingang, DATE(c.angelegt)) AS eingang,
+                   i.name, i.kategorie FROM charge c JOIN item i ON i.id=c.item_id";
+    $nrLike = '%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], (string)$a['nummer']) . '%';
+    $out['falsche_art'] = all("$sel WHERE c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0 AND i.kategorie='rohstoff'
+                                AND (c.auftrag_id=? OR (c.auftrag_id IS NULL AND c.notiz LIKE ? ESCAPE '='))
+                                ORDER BY c.id DESC LIMIT 10", [$auftrag_id, $nrLike]);
+    $out['quarantaene'] = all("$sel WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='quarantaene' AND c.menge_verfuegbar>0", [$auftrag_id]);
+    if ($out['bulk_item'])
+        $out['ohne_auftrag'] = all("$sel WHERE c.item_id=? AND c.auftrag_id IS NULL AND c.status='frei' AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL
+                                     ORDER BY COALESCE(c.mhd,'9999-12-31'), c.id LIMIT 10", [$out['bulk_item']]);
+    return $out;
+}
+// Einheiten gleich (Stk = Stück, Groß/Klein egal)? Eine als Rohstoff in kg gebuchte Charge darf nicht auf einen Bulk-Artikel in Stk.
+function einheit_gleich(string $a, string $b): bool {
+    $n = fn($e) => in_array(mb_strtolower(trim($e)), ['stk', 'stück', 'stueck', 'st'], true) ? 'stk' : mb_strtolower(trim($e));
+    return $n($a) === $n($b);
+}
+// Aktion aus dem Diagnose-Block: 'umhaengen' (Rohstoff-Charge -> Bulk-Artikel + Auftrag) oder 'binden' (freie Bulk-Charge an den Auftrag).
+// Prüft gegen die aktuelle Diagnose (nur dort gelistete Chargen). Rückgabe ['ok'=>bool, 'meldung'=>string].
+function auftrag_bulk_diagnose_aktion(int $auftrag_id, string $was, int $charge_id): array {
+    $d = auftrag_bulk_diagnose($auftrag_id);
+    if ($was === 'umhaengen') {
+        $c = null; foreach ($d['falsche_art'] as $r) if ((int)$r['id'] === $charge_id) $c = $r;
+        if (!$c) return ['ok' => false, 'meldung' => 'Charge passt nicht (mehr) zu diesem Auftrag.'];
+        if (!$d['bulk_item']) return ['ok' => false, 'meldung' => 'Zum Produkt gibt es keinen Bulk-Artikel (Rezeptur fehlt?).'];
+        if (!einheit_gleich((string)$c['einheit'], $d['bulk_einheit'])) return ['ok' => false, 'meldung' => 'Einheit passt nicht (' . $c['einheit'] . ' statt ' . $d['bulk_einheit'] . ') – bitte im Lager korrigieren.'];
+        $vor = ['item_id' => (int)$c['item_id'], 'auftrag_id' => $c['auftrag_id'] !== null ? (int)$c['auftrag_id'] : null];
+        q("UPDATE charge SET item_id=?, auftrag_id=? WHERE id=?", [$d['bulk_item'], $auftrag_id, $charge_id]);
+        aenderung_protokollieren('charge', $charge_id, $vor, ['item_id' => $d['bulk_item'], 'auftrag_id' => $auftrag_id], 'bulk_diagnose');
+        bedarf_bump();
+        return ['ok' => true, 'meldung' => 'Charge ' . ($c['charge_nr'] ?: '#' . $charge_id) . ' ist jetzt Bulkware dieses Auftrags.'];
+    }
+    if ($was === 'binden') {
+        $ok = false; foreach ($d['ohne_auftrag'] as $r) if ((int)$r['id'] === $charge_id) $ok = true;
+        if (!$ok) return ['ok' => false, 'meldung' => 'Charge passt nicht (mehr) zu diesem Auftrag.'];
+        $r = charge_auftrag_zuweisen($charge_id, $auftrag_id, $d['fehlt']);   // nur den Restbedarf, der Rest bleibt frei im Lager
+        if (!empty($r['ok'])) bedarf_bump();
+        return ['ok' => !empty($r['ok']), 'meldung' => !empty($r['ok']) ? 'Charge an den Auftrag gebunden.' . (!empty($r['warnung']) ? ' ' . $r['warnung'] : '') : (string)($r['fehler'] ?? 'Binden nicht möglich.')];
+    }
+    return ['ok' => false, 'meldung' => 'Unbekannte Aktion.'];
+}
+// HTML-Block zur Diagnose (leer, wenn nichts auffällt). Formulare gehen an den Auftrag (Handler dort), $zurueck = Rücksprung.
+function auftrag_bulk_diagnose_block(int $auftrag_id, string $zurueck): string {
+    $d = auftrag_bulk_diagnose($auftrag_id);
+    if (!$d['falsche_art'] && !$d['quarantaene'] && !$d['ohne_auftrag']) return '';
+    $admin = has_role('admin');
+    $mng = fn($r) => number_format((float)$r['menge_verfuegbar'], fmod((float)$r['menge_verfuegbar'], 1) == 0 ? 0 : 3, ',', '.') . ' ' . h((string)($r['einheit'] ?: 'Stk'));
+    $form = fn(string $was, int $cid, string $label, string $frage) => $admin
+        ? '<form method="post" action="?p=auftrag&id=' . $auftrag_id . '" style="margin:0;display:inline" onsubmit="return confirm(\'' . h($frage) . '\')">'
+          . '<input type="hidden" name="aktion" value="bulk_diag"><input type="hidden" name="was" value="' . $was . '"><input type="hidden" name="charge_id" value="' . $cid . '">'
+          . '<input type="hidden" name="zurueck" value="' . h($zurueck) . '"><button class="btn btn-primary btn-sm" type="submit">' . $label . '</button></form>'
+        : '<span class="muted">nur Admin</span>';
+    $zeile = fn($r, $aktion) => '<tr><td>' . h((string)$r['name']) . '</td><td class="muted">' . h(kategorie_label((string)$r['kategorie'])) . '</td><td>' . h($r['charge_nr'] ?: '#' . (int)$r['id'])
+        . '</td><td class="bx-num">' . $mng($r) . '</td><td>' . h(date('d.m.Y', strtotime((string)$r['eingang']))) . '</td><td style="text-align:right">' . $aktion . '</td></tr>';
+    $rows = '';
+    foreach ($d['falsche_art'] as $r) {
+        $passt = $d['bulk_item'] && einheit_gleich((string)$r['einheit'], $d['bulk_einheit']);
+        $rows .= $zeile($r, bx_badge('als Rohstoff gebucht', 'warn') . ' ' . ($passt ? $form('umhaengen', (int)$r['id'], 'Als Bulkware übernehmen', 'Charge als Bulkware dieses Auftrags übernehmen?')
+                 : '<span class="muted" title="Einheit der Charge passt nicht zum Bulk-Artikel">Einheit ' . h((string)$r['einheit']) . ' passt nicht</span>'));
+    }
+    foreach ($d['quarantaene'] as $r) $rows .= $zeile($r, bx_badge('in Quarantäne', 'warn') . ' <a class="btn btn-ghost btn-sm" href="?p=freigaben">zur Freigabe</a>');
+    foreach ($d['ohne_auftrag'] as $r) $rows .= $zeile($r, bx_badge('frei, ohne Auftrag', 'info') . ' ' . $form('binden', (int)$r['id'], 'An Auftrag binden', 'Charge an diesen Auftrag binden (nur der fehlende Teil)?'));
+    return '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:14px 16px;margin:14px 0">'
+        . '<div style="font-weight:600;margin-bottom:4px">Ware da, aber nicht zugeordnet</div>'
+        . '<div class="muted" style="font-size:12px;margin-bottom:8px">Als Bulkware zählt nur eine freie Charge der Warenart Bulk, die an diesem Auftrag hängt. Diese Chargen passen, zählen aber noch nicht:</div>'
+        . '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Artikel</th><th>Warenart</th><th>Charge</th><th class="bx-num">Menge</th><th>Eingang</th><th></th></tr></thead><tbody>'
+        . $rows . '</tbody></table></div></div>';
+}
 // Teilmenge (oder ganze Charge) einer freien Lager-Charge dem Auftrag zuweisen. Es kann JEDE freie
 // Fertigware-(Bulk-)Charge gewählt werden – stimmt der Artikel nicht mit dem Bulk-Artikel der Rezeptur
 // überein, wird nur gewarnt (Admin-Entscheidung), nicht blockiert.

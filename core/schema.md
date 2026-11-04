@@ -415,3 +415,8 @@ Aufgerufen in `auftrag_aus_import()` und `kontingent_abruf()` (dort fehlte der H
 - `wareneingang_mit_quarantaene()`: Schalter `app_meta wareneingang_quarantaene` (Standard 0). Aus = `wareneingang_buchen()` bucht alles sofort frei, an = Rohstoffe/Bulk/Fertigware in Quarantäne wie bisher.
 - `charge_quarantaene_freigeben($id)`: eine Charge aus der Quarantäne freigeben, inklusive `fertigware_qm_freigabe_nach()`. Genutzt von Wareneingang (Dashboard) und Lager → Freigaben. `bedarf_bump()` und `material_komplett_pruefen()` macht der Aufrufer.
 - Eigene Fertigware aus der Produktion kommt weiter immer in Quarantäne (Produktionsbericht und CoA hängen an der QM-Freigabe).
+
+## Ware da, aber nicht zugeordnet (04.11.2026, PA 54)
+- `auftrag_bulk_diagnose($aid)`: Bei Bulk-Zukauf (Fertigware ohne item_id fehlt) sucht sie Ware, die da ist, aber nicht zählt: als Rohstoff gebuchte Chargen am Auftrag oder mit der Auftragsnummer in der Notiz (`falsche_art`), Bulk-Chargen am Auftrag in Quarantäne, freie Chargen des Bulk-Artikels ohne Auftrag (`ohne_auftrag`). Liefert dazu `fehlt` (in Charge-Einheit) und `bulk_item`.
+- `auftrag_bulk_diagnose_aktion($aid, 'umhaengen'|'binden', $charge_id)`: Umhängen setzt `item_id` auf den Bulk-Artikel und `auftrag_id`, nur bei gleicher Einheit (`einheit_gleich`), protokolliert (Route bulk_diagnose). Binden nutzt `charge_auftrag_zuweisen()` mit dem Restbedarf; der Rest der Charge bleibt frei.
+- `auftrag_bulk_diagnose_block($aid, $zurueck)`: HTML-Block „Ware da, aber nicht zugeordnet“, Formulare an `?p=auftrag&id=…` (aktion `bulk_diag`), nur Admin.
