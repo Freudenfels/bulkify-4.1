@@ -454,10 +454,10 @@ $fmtFehlt = function(array $liste) use ($kurzName): string {
     return h($n[0] ?? '') . (count($n) > 1 ? ' +' . (count($n) - 1) : '');
 };
 $punkt = fn(string $farbe, string $titel) => '<span title="' . h($titel) . '" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:' . $farbe . ';vertical-align:-1px"></span>';
-render_header('produktion_vorbereitung', 'Produktionsfreigabe');
-bx_head('Produktionsfreigabe', count($rows) . ' Produktionsauftrag/-aufträge noch nicht freigegeben' . ($q !== '' ? ' (gefiltert)' : '') . ' – offene Aufträge erscheinen automatisch; zum Bearbeiten anklicken.',
+render_header('produktion_vorbereitung', 'Beschaffungsweg offen');
+bx_head('Beschaffungsweg offen', count($rows) . ' Auftrag/Aufträge ohne festgelegten Beschaffungsweg' . ($q !== '' ? ' (gefiltert)' : '') . ' – offene Aufträge erscheinen automatisch; zum Bearbeiten anklicken.',
         bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
-if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag zur Produktion freigegeben – jetzt im Produktionsmodul startbar.'
+if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Beschaffungsweg festgelegt – der Auftrag ist in der Produktion.'
     . (isset($_GET['split']) ? ' ' . h((string)$_GET['split']) : '') . '</div>';
 if (isset($_GET['splitoffen'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">' . (int)$_GET['splitoffen'] . ' Pkg aus dem Lager-/Fremd-Anteil konnten (noch) nicht reserviert werden – es ist nicht genug vorhandene/bestellte Bulkware da. Bitte den Rest über den Einkauf als Bulk-Zukauf bestellen oder später am Auftrag reservieren.</div>';
 if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['geholt'] . ' Auftrag(e) in die Vor-Produktion geholt.</div>';
@@ -486,7 +486,7 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
         $glasOk = $verpAkt > 0;
         $brauchtEt = auftrag_braucht_etikett((int)$aid);
         $etFrei = $brauchtEt && $aid ? etikett_freigegeben($aid) : false;
-        $href = '?p=produktion_vorbereitung&id=' . $paId;
+        $href = $aid ? '?p=auftrag&id=' . (int)$aid . '&tab=beschaffung' : '?p=produktion_vorbereitung&id=' . $paId;   // Soll-Kette 4c: direkt zum Weg
         $fehltMat = []; $fehltVp = [];
         foreach (auftrag_bedarf_rest($paId) as $b) {
             if ((float)$b['fehlt'] <= 1e-6) continue;

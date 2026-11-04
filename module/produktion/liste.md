@@ -47,3 +47,5 @@ Beim Öffnen läuft `material_komplett_pruefen()` gedrosselt (höchstens alle 5 
 Kachel und Hinweis „Wartet auf Freigabe“ führen seit 03.11.2026 zur Produktionsfreigabe (`?p=produktion_vorbereitung`).
 
 Vorladen `fw:` je Auftrag enthält auch `quar` (Bulk-Chargen in Quarantäne, 04.11.2026).
+
+Kachel/Hinweis „Beschaffungsweg offen“ statt „Wartet auf Freigabe“ (04.11.2026).

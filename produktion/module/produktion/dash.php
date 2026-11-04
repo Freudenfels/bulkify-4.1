@@ -50,7 +50,7 @@ $kpi = function (string $label, string $wert, string $sub = '') {
 ?>
 <div class="bx-cards" style="margin-bottom:20px">
   <?php
-  $kpi('In Vorbereitung', (string)count($vorbereitung), 'warten auf Freigabe');
+  $kpi('Beschaffungsweg offen', (string)count($vorbereitung), 'noch nicht festgelegt');
   $kpi('Offen (zu planen)', (string)count($zuPlanen));
   $kpi('In Planung', (string)count($inPlanung));
   $kpi('Laufend', (string)count($laufend));
@@ -95,7 +95,7 @@ $liste = function (string $titel, array $rows, string $alleTab, string $art) {
     echo '</tbody></table></div></div>';
 };
 
-$liste('In Vorbereitung · warten auf Freigabe', $vorbereitung, 'alle', 'offen');
+$liste('Beschaffungsweg offen · noch nicht festgelegt', $vorbereitung, 'alle', 'offen');
 $liste('Laufende Produktionen', $laufend, 'laufend', 'laufend');
 $liste('In Planung', $inPlanung, 'alle', 'planung');
 $liste('Offen · zu planen', $zuPlanen, 'alle', 'offen');

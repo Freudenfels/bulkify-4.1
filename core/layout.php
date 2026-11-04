@@ -33,7 +33,8 @@ function bx_nav_default(): array {
         // Die Route produktion_vorbereitung&id=… (Glas/Verpackung je PA) bleibt bestehen, nur ohne Nav-Eintrag.
         // Produktionsfreigabe (Nico 03.11.2026): Liste der PAs in Vorbereitung mit Zähler im Menü. Eigener Key (nicht
         // 'produktion_vorbereitung'), damit ein früher ausgeblendeter Eintrag im gespeicherten Menü ihn nicht verdeckt.
-        'Produktion'   => ['produktionsfreigabe' => ['label'=>'Produktionsfreigabe', 'route'=>'produktion_vorbereitung', 'href'=>'?p=produktion_vorbereitung'],
+        // Soll-Kette 4c (04.11.2026): heißt jetzt „Beschaffungsweg offen“ – es gibt keine eigene Freigabe mehr, nur den Weg.
+        'Produktion'   => ['produktionsfreigabe' => ['label'=>'Beschaffungsweg offen', 'route'=>'produktion_vorbereitung', 'href'=>'?p=produktion_vorbereitung'],
                            'produktion' => 'Produktion', 'easy_production' => 'Easy Production', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         // Warenlager = Gesamtsystem (alle Lager), darunter die Einzel-Sichten Lager 1 und Fremdlager (Lager 2).
         // Alle drei nutzen dieselbe Seite (?p=lager) mit dem Filter ?ort=…; der aktive Punkt entscheidet sich über 'ort'.
@@ -248,7 +249,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 'auftraege'     => "$n Aufträge noch nicht fertig",
                 'freigaben'     => "$n offene Freigaben (Quarantäne/Spezifikationen/CoA)",
                 'katalog_freigaben' => "$n Lieferanten-Uploads zu prüfen",
-                'produktionsfreigabe' => "$n Produktionsaufträge noch nicht freigegeben",
+                'produktionsfreigabe' => "$n Aufträge ohne festgelegten Beschaffungsweg",
                 'lief_anfragen' => "$n neue Lieferantenpreise (abgegeben, noch nicht bearbeitet)",
                 'lief_nachrichten' => "$n ungelesene Nachrichten von Lieferanten",
                 default         => "$n offene Anfragen",

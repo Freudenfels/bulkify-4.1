@@ -254,3 +254,5 @@ Drei Karten nebeneinander: Zukauf fertige Kapsel/Tablette (bei Pulver: fertige M
 Block **Bereitschaft** (vorher eigene Seite „Vor-Produktion“): je Punkt grüner/roter Punkt (Glas gewählt, Etikett freigegeben, Material da, Gläser/Kartons/Etiketten vorrätig) aus `pa_vorbereitung_checks()`, dazu Kapselgröße / Tablettenform / Füllmenge (an der Rezeptur, Formular geht an `produktion_vorbereitung` mit Rücksprung `zurueck`). Material-Übersicht: Deckung „da“ (grün) bzw. „fehlt“ (rot).
 
 Reiter Produktion (Soll-Kette 4b, 04.11.2026): Block **Teilmenge produzieren** – Packungen, Umfang (komplett / bis vor dem Etikettieren = Schritt vorziehen), Priorität → Anweisung ans Werk (`teilmenge_anweisen`); offene Anweisungen mit Restmenge und „Zurückziehen“ (`teilmenge_zurueck`).
+
+Soll-Kette 4c (04.11.2026): Schrittleiste 1 Material prüfen · 2 Beschaffungsweg · 3 Bestellen · 4 Wareneingang · 5 Produktion & Versand (vorher „Quelle festlegen“ + „Freigeben“). Block oben heißt „Beschaffungsweg für PR-… festlegen“ (Schnellwahl Herstellen/Einkaufen + Mehrmenge, Link zum Reiter), Badge „Beschaffungsweg offen“.

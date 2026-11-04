@@ -787,11 +787,11 @@ if (($a['status'] ?? '') !== 'storniert'):
     $S = fn(bool $done, bool $active) => $done ? 'erledigt' : ($active ? 'laeuft' : 'offen');
     $steps = [
         ['n'=>1,'label'=>'Material prüfen',       'state'=>$S($matOk, $hasPA && !$matOk),                     'goto'=>'material'],
-        ['n'=>2,'label'=>'Quelle festlegen',      'state'=>$S($quelleOk || $freigabeOk, !($quelleOk || $freigabeOk)), 'goto'=>'produktion'],
-        ['n'=>3,'label'=>'Freigeben',             'state'=>$S($freigabeOk, $quelleOk && !$freigabeOk),        'goto'=>'produktion'],
-        ['n'=>4,'label'=>'Bestellen',             'state'=>$S($matOk, $freigabeOk && $hatBest && !$matOk),    'href'=>'?p=einkaufsliste'],
-        ['n'=>5,'label'=>'Wareneingang',          'state'=>$S($matOk && $hatWE, $freigabeOk && ($hatBest || $hatWE) && !$matOk), 'goto'=>'lager'],
-        ['n'=>6,'label'=>'Produktion & Versand',  'state'=>$S($versendet, $inGang && !$versendet),            'goto'=>'produktion'],
+        // Soll-Kette 4c: „Quelle festlegen“ + „Freigeben“ sind EIN Schritt – der Beschaffungsweg (keine eigene Freigabe mehr).
+        ['n'=>2,'label'=>'Beschaffungsweg',       'state'=>$S($freigabeOk, !$freigabeOk),                     'goto'=>'beschaffung'],
+        ['n'=>3,'label'=>'Bestellen',             'state'=>$S($matOk, $freigabeOk && $hatBest && !$matOk),    'href'=>'?p=einkaufsliste'],
+        ['n'=>4,'label'=>'Wareneingang',          'state'=>$S($matOk && $hatWE, $freigabeOk && ($hatBest || $hatWE) && !$matOk), 'goto'=>'lager'],
+        ['n'=>5,'label'=>'Produktion & Versand',  'state'=>$S($versendet, $inGang && !$versendet),            'goto'=>'produktion'],
     ];
     // Markenfarben: erledigt = Grün, läuft = Lime (hervorgehoben), offen = ruhig.
     $farbe = ['erledigt'=>['#1D9E75','#ffffff'], 'laeuft'=>['#C0F24E','#10210f'], 'offen'=>['var(--panel-2)','var(--muted)']];
@@ -799,7 +799,7 @@ if (($a['status'] ?? '') !== 'storniert'):
 <div class="bx-panel" style="margin-bottom:16px;padding:14px 16px">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
     <span style="color:var(--muted);font-size:13px">Ablauf dieses Auftrags</span>
-    <?php if ($pa && ($pa['status'] ?? '') === 'vorbereitung'): ?><span><?= bx_badge('wartet auf Freigabe','warn') ?></span><?php endif; ?>
+    <?php if ($pa && ($pa['status'] ?? '') === 'vorbereitung'): ?><span><?= bx_badge('Beschaffungsweg offen','warn') ?></span><?php endif; ?>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <?php foreach ($steps as $st): [$bg,$fg] = $farbe[$st['state']];
@@ -819,8 +819,8 @@ if (($a['status'] ?? '') !== 'storniert'):
 // Gleicher Handler wie bisher (aktion=pa_freigeben -> produktionsauftrag_freigeben). Nur Admin, nicht bei Storno.
 if ($paVorbereitung && has_role('admin') && (string)$a['status'] !== 'storniert'): ?>
 <div class="bx-panel" style="border:2px solid var(--gruen,#1D9E75);padding:14px 16px;margin:0 0 16px">
-  <div style="font-size:15px;margin-bottom:4px"><strong>Produktionsauftrag <?= h((string)$pa['nummer']) ?> wartet auf Freigabe</strong></div>
-  <div class="muted" style="font-size:12px;margin-bottom:10px">Erst mit der Freigabe erscheint der Auftrag in der Produktion und der Einkauf darf dafür bestellen. Offene Punkte (Etikett/Material) sind nur ein Hinweis.</div>
+  <div style="font-size:15px;margin-bottom:4px"><strong>Beschaffungsweg für <?= h((string)$pa['nummer']) ?> festlegen</strong></div>
+  <div class="muted" style="font-size:12px;margin-bottom:10px">Mit dem Beschaffungsweg geht der Auftrag in Produktion und Einkauf – eine eigene Freigabe gibt es nicht mehr. Alle drei Wege mit Kosten: <a href="#" <?= "onclick=\"var t=document.querySelector(String.fromCharCode(35)+'auftabs [data-tab=beschaffung]');if(t)t.click();return false;\"" ?>>Reiter Beschaffungsweg</a>. Hier schnell: Herstellen oder Einkaufen, optional mit Mehrmenge.</div>
   <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
     <input type="hidden" name="aktion" value="pa_freigeben">
     <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
@@ -832,12 +832,12 @@ if ($paVorbereitung && has_role('admin') && (string)$a['status'] !== 'storniert'
     <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (<?= $bulkEinh ?>)<?= $bulkLes($freigabeBedarf) ?>
       <input type="text" inputmode="<?= $bulkInM ?>" name="menge_produktion" value="<?= $bulkInput($freigabeBedarf) ?>" <?= $bulkTaus ?> style="min-width:150px">
     </label>
-    <button class="btn btn-primary" type="submit">Zur Produktion freigeben</button>
+    <button class="btn btn-primary" type="submit">Festlegen</button>
   </form>
-  <div class="muted" style="font-size:12px;margin-top:6px">Mehrmenge über den Bedarf wird als Bulk gebucht. Flaschen, Verpackung und Kapselgröße: <a href="?p=produktion_vorbereitung&id=<?= (int)$pa['id'] ?>">Vor-Produktion</a>.</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">Mehrmenge über den Bedarf wird als Bulk gebucht. Glas, Etikett und Kapselgröße: Reiter Material.</div>
 </div>
 <?php elseif (isset($_GET['freigabeok'])): ?>
-<div class="bx-panel badge-ok" style="padding:10px 14px;margin:0 0 16px">Zur Produktion freigegeben.</div>
+<div class="bx-panel badge-ok" style="padding:10px 14px;margin:0 0 16px">Beschaffungsweg festgelegt – der Auftrag ist in Produktion und Einkauf.</div>
 <?php endif; ?>
 <div class="settabs" id="auftabs" style="margin-bottom:16px">
   <a href="#" class="on" data-tab="details">Details</a>
@@ -1111,7 +1111,7 @@ if (auftrag_braucht_etikett($id)):
   }
   $nsTon = 'info'; $nsLager = false;
   if (!$pa)                                    { $nsText = 'Beschaffung wählen: Herstellen (aus Rohstoffen) oder Einkaufen (fertige Bulkware) – unten.'; }
-  elseif ($paVorbereitung)                     { $nsText = 'Produktionsauftrag ist in Vorbereitung – oben „Zur Produktion freigeben".'; $nsTon = 'warn'; }
+  elseif ($paVorbereitung)                     { $nsText = 'Beschaffungsweg noch offen – oben festlegen oder im Reiter Beschaffungsweg.'; $nsTon = 'warn'; }
   elseif ($berSt === 'wartet' && $fehlDetail && !array_filter($fehlDetail, fn($fd) => $fd['quar'] + 1e-6 < $fd['fehlt']))
                                                { $nsText = 'Produktion wartet auf die QM-Freigabe – das Material liegt in Quarantäne:'; $nsTon = 'warn'; }
   elseif ($berSt === 'wartet')                 { $nsText = 'Produktion noch nicht möglich – es fehlt Material:'; $nsTon = 'err'; }
@@ -1537,8 +1537,8 @@ if ($pa && in_array((string)($pa['status'] ?? ''), ['offen', 'laufend'], true) &
       <?php else: ?><span class="muted">–</span><?php endif; ?>
     </div></div>
     <?php if ($paVorbereitung): ?>
-    <div style="grid-column:1/-1"><div class="k muted">Zur Produktion freigeben</div>
-      <div>Noch nicht freigegeben – der Knopf <strong>„Zur Produktion freigeben“</strong> steht oben über den Reitern.</div>
+    <div style="grid-column:1/-1"><div class="k muted">Beschaffungsweg</div>
+      <div>Noch nicht festgelegt – oben über den Reitern bzw. im Reiter Beschaffungsweg.</div>
     </div>
     <?php endif; ?>
     <?php // „Einlagern" (In Lager 1 buchen) steht jetzt im Reiter „Lager". ?>

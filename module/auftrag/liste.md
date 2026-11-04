@@ -22,3 +22,5 @@ Neben „Aufträge ohne Preis“: „Preise nachtragen“ -> `?p=kundenpreise&oh
 **Etikett-Status + Spaltenreihenfolge (03.11.2026):** Neue Spalte „Etikett“ als kleiner Punkt – rot = kein Design hochgeladen, gelb = hochgeladen (auch aus Vorbestellung), noch nicht freigegeben, grün = freigegeben; „–“ = braucht kein Etikett (z. B. Bulk) bzw. storniert. Gilt auch für das Beutel-Design (vollbedruckt), Tooltip nennt es. Sortierbar (rot zuerst). Spalte „Art“ steht jetzt ganz hinten.
 
 Reiter „wartet auf Freigabe“: ohne Produktionsaufträge stornierter Aufträge (`pa_aktiv_sql()`, 03.11.2026).
+
+Reiter „Beschaffungsweg offen“ statt „Wartet auf Freigabe“ (04.11.2026).

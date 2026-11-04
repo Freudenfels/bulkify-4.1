@@ -189,7 +189,7 @@ $cols = [
 ];
 
 $TABS = ['offen' => 'Offen'];
-if ($anzWartet > 0) $TABS['freigabe'] = 'Wartet auf Freigabe';   // Reiter nur zeigen, wenn etwas auf Freigabe wartet
+if ($anzWartet > 0) $TABS['freigabe'] = 'Beschaffungsweg offen';   // Reiter nur zeigen, wenn etwas auf Freigabe wartet
 $TABS['abgeschlossen'] = 'Abgeschlossen';
 if ($anzStorno > 0) $TABS['storniert'] = 'Storniert';   // Reiter nur zeigen, wenn es stornierte gibt
 $TABCOUNT = ['offen' => $anzOffen, 'freigabe' => $anzWartet, 'abgeschlossen' => $anzAbg, 'storniert' => $anzStorno];
@@ -198,7 +198,7 @@ render_header('auftraege', 'Aufträge');
 $ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('finance') || has_role('sales')))
     ? (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status<>'storniert' AND COALESCE(gesamt_netto,0) <= 0") : 0;
 $kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') . ' ' . bx_btn('Preise nachtragen', '?p=kundenpreise&ohne=1', 'ghost') : '';
-$tabWort = match ($tab) { 'freigabe' => 'warten auf Freigabe', 'abgeschlossen' => 'abgeschlossene (versendet)', 'storniert' => 'stornierte', default => 'offene' };
+$tabWort = match ($tab) { 'freigabe' => 'ohne Beschaffungsweg', 'abgeschlossen' => 'abgeschlossene (versendet)', 'storniert' => 'stornierte', default => 'offene' };
 bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer unter „' . h((string)($TABS[$tab] ?? ucfirst($tab))) . '" (andere Reiter separat durchsuchen)' : count($rows) . ' ' . $tabWort, $kopfAktion);
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag' . (isset($_GET['nr']) ? ' ' . h((string)$_GET['nr']) : '') . ' gelöscht.</div>';
 ?>
@@ -221,7 +221,7 @@ bx_table($cols, array_values($rows), [
     'dir'     => $dir,
     'rowUrl'  => fn($r) => '?p=auftrag&id=' . $r['id'],
     'empty'   => match ($tab) {
-        'freigabe'      => 'Kein Auftrag wartet auf Freigabe – alles freigegeben.',
+        'freigabe'      => 'Bei allen Aufträgen ist der Beschaffungsweg festgelegt.',
         'abgeschlossen' => 'Noch keine abgeschlossenen (versendeten) Aufträge.',
         'storniert'     => 'Keine stornierten Aufträge.',
         default         => 'Kein offener Auftrag – entstehen automatisch aus bestätigten Angeboten.',

@@ -36,3 +36,5 @@
 Gruppe Produktion, Key `produktionsfreigabe` (Route `produktion_vorbereitung`, nur Admin). Ein eigener Key, damit ein früher ausgeblendeter `produktion_vorbereitung` im gespeicherten `menu_layout` ihn nicht verdeckt. Bei gespeichertem Menü hängt er hinten an die Gruppe Produktion und lässt sich im Menü-Editor verschieben. Zähler `$anfCount['produktionsfreigabe']` = Produktionsaufträge mit Status `vorbereitung` ohne stornierte Aufträge, also dieselbe Menge wie die Liste.
 
 Badge **Freigaben** (Lager) zählt seit 04.11.2026 auch Chargen in Quarantäne (Lager 1, mit Bestand).
+
+Menüpunkt `produktionsfreigabe` heißt seit 04.11.2026 **Beschaffungsweg offen** (Zähler = Aufträge ohne festgelegten Weg).
