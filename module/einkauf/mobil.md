@@ -11,3 +11,5 @@ Beides sind **dieselben Aktionen wie auf der Detailseite** (`einkauf/detail.php`
 **Filter:** Suchfeld oben (Lieferant oder Bestellnummer). Gelieferte Bestellungen erscheinen nicht (die sind erledigt – im Bestellarchiv der Desktop-Liste).
 
 **Technik:** POST-Handler prüfen den aktuellen Status serverseitig (nur `offen`→bestellt bzw. `bestellt`→geliefert), danach Redirect zurück auf `?p=einkauf_mobil&ok=…#b<id>` mit kurzer Erfolgsmeldung. Rechte: `einkauf` (core/auth.php), Route in `public/index.php`. Der Wareneingang bucht echten Bestand – deshalb die Sicherheits-Rückfrage.
+
+„liefern“ (04.11.2026): Bestellungen mit Bulk-Freitext-Positionen werden nicht gebucht, Meldung „bitte in der Lager-App einbuchen“ (`ok=lager`).

@@ -95,10 +95,11 @@ if ($vorProd) { $in = implode(',', array_fill(0, count($vorProd), '?'));
 if ($vorAuf) { $in = implode(',', array_fill(0, count($vorAuf), '?'));
     foreach (all("SELECT * FROM auftrag WHERE id IN ($in)", $vorAuf) as $row) $sc['auf:' . (int)$row['id']] = $row;
     // Fertigware-Zukauf je Auftrag gebündelt: Anzahl fertig-Chargen + freie Summe (default 0).
-    foreach ($vorAuf as $id) $sc['fw:' . $id] = ['n'=>0, 'frei'=>0.0];
-    foreach (all("SELECT c.auftrag_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN c.status='frei' THEN c.menge_verfuegbar ELSE 0 END),0) AS frei
+    foreach ($vorAuf as $id) $sc['fw:' . $id] = ['n'=>0, 'frei'=>0.0, 'quar'=>0.0];
+    foreach (all("SELECT c.auftrag_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN c.status='frei' THEN c.menge_verfuegbar ELSE 0 END),0) AS frei,
+                         COALESCE(SUM(CASE WHEN c.status='quarantaene' THEN c.menge_verfuegbar ELSE 0 END),0) AS quar
                   FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id IN ($in) AND i.kategorie='fertig' GROUP BY c.auftrag_id", $vorAuf) as $row)
-        $sc['fw:' . (int)$row['auftrag_id']] = ['n'=>(int)$row['n'], 'frei'=>(float)$row['frei']]; }
+        $sc['fw:' . (int)$row['auftrag_id']] = ['n'=>(int)$row['n'], 'frei'=>(float)$row['frei'], 'quar'=>(float)$row['quar']]; }
 unset($sc);
 foreach ($alle as &$r) {
     if ($r['status'] === 'erledigt')        $r['_bereit'] = 'erledigt';

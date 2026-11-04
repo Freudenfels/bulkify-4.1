@@ -358,6 +358,23 @@ $CHECKS = [
                     'waehlbar' => fn(array $r) => (int)$r['schritte_erledigt'] === 0,
                     'aktion' => fn(array $r) => pa_storno_nachziehen((int)$r['_id'], 'datenpruefung')],
     ],
+    'bulk_eingegangen_ohne_charge' => [
+        'titel' => 'Einkauf: Bulk-Bestellung eingegangen, aber keine Bulk-Charge am Auftrag',
+        'info'  => 'Die Bestellung enthält Bulkware als Freitext (ohne Lagerartikel) für einen Auftrag und steht auf eingegangen/geliefert, am Auftrag hängt aber keine Bulk-Charge. Die Material-Übersicht zeigt dann „nicht eingebucht“. Entstanden über „liefern“ im Dashboard (bis 04.11.2026) oder „Als angekommen markieren“. Lösung: die Ware in der Lager-App einbuchen oder am Auftrag unter „Bulkware binden“ eine vorhandene Charge zuweisen.',
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer AS auftrag, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt, k.firma AS kunde,
+                           b.nummer AS bestellung, CONCAT('?p=bestellung&id=', b.id) AS _link_bestellung, bp.bezeichnung AS position, bp.menge, bp.einheit,
+                           b.status AS bestell_status, b.angekommen_am
+                    FROM bestellung_position bp
+                    JOIN bestellung b ON b.id = bp.bestellung_id
+                    JOIN auftrag a ON a.id = bp.auftrag_id
+                    LEFT JOIN produkt p ON p.id = a.produkt_id
+                    LEFT JOIN kunden k ON k.id = a.kunde_id
+                    WHERE bp.item_id IS NULL AND bp.menge > 0 AND a.status <> 'storniert'
+                      AND (b.status = 'geliefert' OR b.angekommen_am IS NOT NULL)
+                      AND NOT EXISTS (SELECT 1 FROM charge c JOIN item i ON i.id = c.item_id WHERE c.auftrag_id = a.id AND i.kategorie = 'fertig')
+                    ORDER BY b.id DESC",
+        'ohne_fix'  => 'Nur Anzeige: Einbuchen braucht Charge, MHD und Menge der echten Lieferung – bitte in der Lager-App buchen oder am Auftrag eine Charge binden.',
+    ],
     'auftrag_name_behaelter' => [
         'titel' => 'Auftrag: Name nennt einen anderen Behälter als der Auftrag',
         'info'  => 'Der Auftrag speichert den Produktnamen zur Auftragszeit (Kopf, AB-PDF). Wurde der Behälter danach geändert, steht oben z. B. „100 ml Glas“, der Auftrag läuft aber im 150 ml Glas. Maßgeblich ist der Behälter am Auftrag, sonst der am Produkt. Beheben tauscht nur den Behälter-Teil im Auftrags-Namen. Bedruckte Kundenbehälter sind ausgenommen.',

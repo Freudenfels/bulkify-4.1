@@ -10,7 +10,12 @@ $neu = ($id === 'neu' || !is_numeric($id));
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
-    if ($aktion === 'liefern' && !$neu) { bestellung_wareneingang((int)$id); header('Location: ?p=bestellung&id=' . $id . '&geliefert=1'); exit; }
+    if ($aktion === 'liefern' && !$neu) {
+        if (bestellung_freitext_positionen((int)$id) > 0) {   // Bulk-Freitext braucht den Wareneingang im Lager (Charge, MHD, Quarantäne)
+            header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode('Diese Bestellung enthält Bulkware ohne Lagerartikel. Bitte in der Lager-App unter Wareneingang einbuchen (Lieferung wählen) – dort bekommt sie Charge, MHD und hängt am Auftrag.')); exit;
+        }
+        bestellung_wareneingang((int)$id); header('Location: ?p=bestellung&id=' . $id . '&geliefert=1'); exit;
+    }
     // Ablauf beim Lieferanten – dieselben Aktionen nutzt spaeter das Lieferantenportal.
     if ($aktion === 'lief_bestaetigen' && !$neu) {
         $f = bestellung_bestaetigen((int)$id, (string)($_POST['eta_geplant'] ?? ''), trim((string)($_POST['wer'] ?? 'Team')));

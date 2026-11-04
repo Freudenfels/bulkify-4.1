@@ -4372,10 +4372,18 @@ function bestellung_als_angekommen(int $bestellung_id): void {
     bedarf_bump();
 }
 // Bestellung als geliefert verbuchen: für jede Position eine Charge (Wareneingang) anlegen. Idempotent.
+// Hat die Bestellung Bulk-Freitext-Positionen (ohne Artikel)? Die kann „liefern“ nicht einbuchen – sie brauchen
+// Rezeptur, Charge, MHD und Quarantäne über den Wareneingang im Lager.
+function bestellung_freitext_positionen(int $bestellung_id): int {
+    return (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL AND menge>0", [$bestellung_id]);
+}
 function bestellung_wareneingang(int $bestellung_id): bool {
     $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
     // Schon geliefert ODER im Lager (?p=we) als angekommen gebucht -> nichts ein zweites Mal einbuchen (S-06).
     if (!$b || $b['status'] === 'geliefert' || !empty($b['angekommen_am'])) return false;
+    // Freitext-Bulk (Zukauf) wurde hier früher übersprungen, die Bestellung trotzdem als geliefert geschlossen –
+    // dann stand sie auf „angekommen“, ohne Charge am Auftrag („Fehlbestand“, Nico 04.11.2026 AB 542). Jetzt: nichts tun.
+    if (bestellung_freitext_positionen($bestellung_id) > 0) return false;
     foreach (all("SELECT * FROM bestellung_position WHERE bestellung_id=?", [$bestellung_id]) as $p) {
         if (!$p['item_id'] || (float)$p['menge'] <= 0) continue;   // Bulk-Freitext (item_id NULL) manuell als Fertigware buchen
         wareneingang_buchen((int)$p['item_id'], (float)$p['menge'], 'zu ' . $b['nummer'], null,
@@ -8252,6 +8260,8 @@ function auftrag_fertigware_cached(int $auftrag_id): array {
     $r = [
         'n'    => (int) scalar("SELECT COUNT(*) FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig'", [$auftrag_id]),
         'frei' => (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei'", [$auftrag_id]),
+        // Zugekaufte Bulkware kommt in Quarantäne (QM-Gate) – bis zur Freigabe nicht „frei“, aber da (Nico 04.11.2026, AB 542).
+        'quar' => (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='quarantaene'", [$auftrag_id]),
     ];
     if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache']['fw:' . $auftrag_id] = $r;
     return $r;
@@ -8587,7 +8597,9 @@ function auftrag_bedarf(int $pa_id): array {
     // und selbst abfüllen -> die Verpackung (z. B. Beutel) bleibt eigener Bedarf (unten angehängt).
     $zukaufFertig = $zukauf && ($pa['zukauf_art'] ?? 'bulk') === 'fertig';
     if ($zukauf) {
-        $verf = auftrag_fertigware_cached((int)$pa['auftrag_id'])['frei'];
+        $fwA  = auftrag_fertigware_cached((int)$pa['auftrag_id']);
+        $verf = $fwA['frei'];
+        $quarFw = (float)($fwA['quar'] ?? 0);   // in Quarantäne (wartet auf QM) – Zeilen ohne item_id bekommen sie unten mit
         $af = auftrag_row_cached($aid);
         $bi = produkt_bulk_info((int)$pa['produkt_id'], (string)($af['produkt_bezeichnung'] ?? ''), (string)($af['produkt_form'] ?? ''));
         $schuettZ = in_array((string)($bi['form'] ?? ''), ['pulver', 'granulat', 'gel', 'fluessig', 'oel'], true);
@@ -8601,18 +8613,18 @@ function auftrag_bedarf(int $pa_id): array {
             // Bulk/Pulver-Zukauf (wir füllen selbst ab): die zugekaufte Ware ist das PULVER, gemessen in Gramm
             // (lesbar als kg/t). Der Beutel ist KEINE zugekaufte Fertigware, sondern steht als eigene Verpackungs-
             // Position unten. Bedarf = Menge × Füllgewicht je Packung (Gramm).
-            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'] . ' – Bulk (Pulver)','benoetigt'=>(float)$einheiten,'verfuegbar'=>(float)$verf,'fehlt'=>max(0.0,(float)$einheiten-(float)$verf),'einheit'=>'g'];
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'] . ' – Bulk (Pulver)','benoetigt'=>(float)$einheiten,'verfuegbar'=>(float)$verf,'fehlt'=>max(0.0,(float)$einheiten-(float)$verf),'einheit'=>'g','quarantaene'=>$quarFw];
         } elseif ($schuettZ && $menge > 0) {
             // Fertige Ware zukaufen (schon im Beutel abgefüllt): wir kaufen FERTIGE PACKUNGEN (z. B. 6.000 Beutel),
             // nicht die Portionen. Fertigware-Bestand wird intern in Portionen geführt -> in Packungen umrechnen.
             $verfPkg = $einh > 0 ? $verf / $einh : $verf;
-            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>(float)$menge,'verfuegbar'=>$verfPkg,'fehlt'=>max(0.0,(float)$menge-$verfPkg),'einheit'=>'Pkg'];
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>(float)$menge,'verfuegbar'=>$verfPkg,'fehlt'=>max(0.0,(float)$menge-$verfPkg),'einheit'=>'Pkg','quarantaene'=>$einh > 0 ? $quarFw / $einh : $quarFw];
         } else {
             // Bedarf = Einheiten (Menge × Einheiten/Packung). Ist keine „Einheiten pro Packung" gepflegt
             // (z. B. v3-Fälle), fällt der Bedarf auf die Packungsmenge zurück – sonst käme 0 heraus
             // und ein Fremdauftrag OHNE zugekaufte Fertigware würde faelschlich als „produktionsbereit" gelten.
             $benoetigt = $einheiten > 0 ? $einheiten : (float)$menge;
-            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$benoetigt,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$benoetigt-$verf),'einheit'=>$bi['einheit']];
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$benoetigt,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$benoetigt-$verf),'einheit'=>$bi['einheit'],'quarantaene'=>$quarFw];
         }
     } else {
         foreach (produktion_materialbedarf($pa_id) as $m)
@@ -8669,9 +8681,10 @@ function auftrag_bedarf(int $pa_id): array {
             $r['quarantaene']      = $r['fehlt'] > 1e-6 ? item_quarantaene($iid) : 0.0;
             $r['zu_bestellen']     = max(0.0, (float)$r['fehlt'] - (float)$r['quarantaene']);
         } else {
+            // Bulk-Zukauf ohne item_id: Quarantäne kommt aus den Chargen am Auftrag (oben gesetzt), höchstens bis „fehlt“.
             $r['reserviert_eigen'] = 0.0;
-            $r['quarantaene']      = 0.0;
-            $r['zu_bestellen']     = (float)($r['fehlt'] ?? 0);
+            $r['quarantaene']      = min((float)($r['fehlt'] ?? 0), (float)($r['quarantaene'] ?? 0));
+            $r['zu_bestellen']     = max(0.0, (float)($r['fehlt'] ?? 0) - $r['quarantaene']);
         }
     }
     unset($r);

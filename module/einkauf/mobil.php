@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=einkauf_mobil&ok=bestellt#b' . $id); exit;
     }
     if ($id && $aktion === 'liefern' && $st === 'bestellt') {
+        if (bestellung_freitext_positionen($id) > 0) { header('Location: ?p=einkauf_mobil&ok=lager#b' . $id); exit; }   // Bulk-Freitext: im Lager einbuchen
         bestellung_wareneingang($id);
         header('Location: ?p=einkauf_mobil&ok=eingang#b' . $id); exit;
     }
@@ -50,7 +51,7 @@ render_header('einkauf_mobil', 'Einkauf schnell');
   .em-badge { display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px; background:var(--panel-2); border:1px solid var(--line); color:var(--muted) }
 </style>
 <div class="em-wrap">
-  <?php if (isset($_GET['ok'])): $t = $_GET['ok'] === 'eingang' ? 'Wareneingang gebucht – Bestand aktualisiert.' : 'Als bestellt markiert.'; ?>
+  <?php if (isset($_GET['ok'])): $t = $_GET['ok'] === 'eingang' ? 'Wareneingang gebucht – Bestand aktualisiert.' : ($_GET['ok'] === 'lager' ? 'Nicht gebucht: Die Bestellung enthält Bulkware ohne Lagerartikel – bitte in der Lager-App unter Wareneingang einbuchen.' : 'Als bestellt markiert.'); ?>
     <div class="bx-panel badge-ok" style="padding:12px 16px"><?= h($t) ?></div>
   <?php endif; ?>
 

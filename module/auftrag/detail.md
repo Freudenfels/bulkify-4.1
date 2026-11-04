@@ -236,3 +236,7 @@ Je Position die Bestellungen aus `item_bestellungen()`: Nummer (Link), Lieferant
 
 ## Freigabe oben (03.11.2026)
 Ist der Produktionsauftrag in Vorbereitung (nur Admin, Auftrag nicht storniert), steht der Block **„Produktionsauftrag … wartet auf Freigabe“** über den Reitern: Herstellung, Produktionsmenge und Knopf „Zur Produktion freigeben“, gleicher Handler `pa_freigeben`. Im Reiter Produktion steht nur noch ein Hinweis. Die Erfolgsmeldung „Zur Produktion freigegeben.“ erscheint ebenfalls oben.
+
+## Material-Übersicht: Bulk-Zukauf (04.11.2026)
+- Bulk-Zeilen (Fertigware ohne Lagerartikel) zeigen die Menge in Quarantäne und „in Quarantäne – freigeben“, wenn die Ware da ist, aber auf die QM-Freigabe wartet.
+- Badge **„nicht eingebucht“** (rot, Tooltip): eine Bestellung für diesen Auftrag ist eingegangen, am Auftrag hängt aber keine Bulk-Charge. Lösung: in der Lager-App einbuchen oder unter „Bulkware binden“ eine Charge zuweisen.

@@ -45,3 +45,5 @@ Beim Öffnen läuft `material_komplett_pruefen()` gedrosselt (höchstens alle 5 
 - Neuer Reiter und neue Kachel **„Material bestellt“**: Produktionsaufträge, deren fehlendes Material komplett bestellt ist, mit Badge und Termin („bis TT.MM.JJJJ“). „Wartet auf Material“ zeigt nur noch, was wirklich fehlt und nicht bestellt ist. Ist nur ein Teil bestellt, bleibt der Auftrag unter „Wartet auf Material“.
 
 Kachel und Hinweis „Wartet auf Freigabe“ führen seit 03.11.2026 zur Produktionsfreigabe (`?p=produktion_vorbereitung`).
+
+Vorladen `fw:` je Auftrag enthält auch `quar` (Bulk-Chargen in Quarantäne, 04.11.2026).

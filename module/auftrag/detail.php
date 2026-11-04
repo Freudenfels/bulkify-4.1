@@ -1240,7 +1240,11 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         $quar = (float)($r['quarantaene'] ?? 0);
         $decktMitQuar = !$deckt && $quar > 1e-6 && ($frei + $quar + 1e-6 >= $ben);
         $decktMitUnterwegs = !$deckt && !$decktMitQuar && ($frei + $quar + $unterwegs + 1e-6 >= $ben);
-        $bestellungen = item_bestellungen($iid, (int)$a['id'], (string)($r['rolle'] ?? '') === 'Fertigware'); ?>
+        $bestellungen = item_bestellungen($iid, (int)$a['id'], (string)($r['rolle'] ?? '') === 'Fertigware');
+        // Bulk-Zukauf: Bestellung eingegangen, aber keine Bulk-Charge am Auftrag gebucht (z. B. früher über „liefern“
+        // geschlossen oder nur „als angekommen markiert“) -> klar sagen statt nur „Fehlbestand“ (Nico 04.11.2026, AB 542).
+        $nichtEingebucht = !$deckt && $iid === 0 && (string)($r['rolle'] ?? '') === 'Fertigware' && $quar <= 1e-9
+            && array_filter($bestellungen, fn($b) => $b['eingang']) && auftrag_fertigware_cached((int)$a['id'])['n'] === 0; ?>
       <tr>
         <td style="white-space:normal;min-width:200px;max-width:320px"><?= h((string)($r['name'] ?? '–')) ?></td>
         <td class="muted"><?= h((string)($r['rolle'] ?? '–')) ?></td>
@@ -1248,7 +1252,9 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         <td class="bx-num"><?= $mng($frei, $einh) ?></td>
         <td class="bx-num"><?= $quar > 1e-9 ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '">' . $mng($quar, $einh) . '</a>' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
-        <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>' : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn'))) ?></td>
+        <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>'
+                 : ($nichtEingebucht ? '<span title="Die Bestellung ist als eingegangen markiert, im Lager ist aber keine Bulk-Charge für diesen Auftrag gebucht. Bitte in der Lager-App unter Wareneingang einbuchen oder unten bei „Bulkware binden“ eine vorhandene Charge zuweisen.">' . bx_badge('nicht eingebucht','err') . '</span>'
+                 : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn')))) ?></td>
         <td style="white-space:normal;min-width:240px;font-size:12px">
           <?php if (!$bestellungen): ?><span class="muted">nicht bestellt</span>
           <?php else: foreach (array_slice($bestellungen, 0, 4) as $bs): ?>
