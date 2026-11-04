@@ -84,6 +84,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         else flash((string)($r['fehler'] ?? 'Label konnte nicht erstellt werden.'), 'warn');
         weiter('?p=versand_detail&id=' . $id);
     }
+    // Soll-Kette 7b: Packstücke aufbauen (Paletten, Kartons aus der Produktion, Pakete) und Kartons Paletten zuordnen.
+    if (in_array($aktion, ['ps_palette', 'ps_paket', 'ps_kartons', 'ps_zuordnen', 'ps_del', 'ps_gewicht'], true) && (string)$v['status'] === 'geplant') {
+        if ($aktion === 'ps_palette') lg_packstueck_anlegen($id, 'palette');
+        if ($aktion === 'ps_paket')   lg_packstueck_anlegen($id, 'paket');
+        if ($aktion === 'ps_kartons') { $nK = lg_packstueck_kartons_uebernehmen($id); flash($nK ? $nK . ' Karton(s) aus der Produktion übernommen.' : 'Keine Kartonwerte aus der Produktion (Schritt Verpacken) gefunden.', $nK ? 'ok' : 'warn'); }
+        if ($aktion === 'ps_zuordnen') {
+            $ziel = (int)($_POST['palette_id'] ?? 0);
+            $ok = $ziel === 0 || (int) scalar("SELECT COUNT(*) FROM lg_packstueck WHERE id=? AND versand_id=? AND art='palette'", [$ziel, $id]) > 0;
+            if ($ok) foreach (array_map('intval', (array)($_POST['ps_ids'] ?? [])) as $pid) q("UPDATE lg_packstueck SET parent_id=? WHERE id=? AND versand_id=? AND art<>'palette'", [$ziel ?: null, $pid, $id]);
+        }
+        if ($aktion === 'ps_del') { $pid = (int)($_POST['ps_id'] ?? 0); q("UPDATE lg_packstueck SET parent_id=NULL WHERE parent_id=? AND versand_id=?", [$pid, $id]); q("DELETE FROM lg_packstueck WHERE id=? AND versand_id=?", [$pid, $id]); }
+        if ($aktion === 'ps_gewicht') foreach ((array)($_POST['gew'] ?? []) as $pid => $g) q("UPDATE lg_packstueck SET gewicht_kg=? WHERE id=? AND versand_id=?", [trim((string)$g) !== '' ? (float)str_replace(',', '.', (string)$g) : null, (int)$pid, $id]);
+        // Pakete/Paletten zählen für Label und Lieferschein mit.
+        $nPs = (int) scalar("SELECT COUNT(*) FROM lg_packstueck WHERE versand_id=? AND (art='palette' OR (art<>'palette' AND parent_id IS NULL))", [$id]);
+        if ($nPs > 0) q("UPDATE lg_versand SET pakete=? WHERE id=?", [$nPs, $id]);
+        weiter('?p=versand_detail&id=' . $id . '#packstuecke');
+    }
     if ($aktion === 'storno') {
         require_once __DIR__ . '/../../core/versand.php';
         $r = versand_storno($id);
@@ -305,6 +322,52 @@ flash_zeigen();
     <a class="btn btn-ghost" href="?p=lieferschein&id=<?= $id ?>" target="_blank" data-no-busy>Öffnen (PDF)</a>
   </div>
 
+  </div>
+  <?php // Soll-Kette 7b: Packstücke – Paletten aufbauen, Kartons aus der Produktion übernehmen und den Paletten zuordnen.
+    $ps = lg_packstueck_liste($id); $psPal = array_values(array_filter($ps, fn($x) => $x['art'] === 'palette')); $psGeplant = (string)$v['status'] === 'geplant'; ?>
+  <div class="bx-panel" id="packstuecke" style="margin-bottom:var(--sp-5)">
+    <h2 style="margin-top:0">Packstücke</h2>
+    <?php if ($psGeplant): ?>
+    <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-3)">
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="ps_kartons"><button class="btn btn-primary" type="submit">Kartons aus der Produktion übernehmen</button></form>
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="ps_palette"><button class="btn btn-ghost" type="submit">+ Palette</button></form>
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="ps_paket"><button class="btn btn-ghost" type="submit">+ Paket</button></form>
+      <?php if ($psPal): ?><button type="button" class="btn btn-ghost" data-druck="palette" data-id="<?= $id ?>">Paletten-Etiketten drucken</button><a class="btn btn-ghost" href="?p=lieferschein&id=<?= $id ?>&art=palette" target="_blank" data-no-busy>Paletten-Etiketten öffnen</a><?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <?php if (!$ps): ?><div class="muted">Noch keine Packstücke. Kartons aus der Produktion übernehmen und Paletten anlegen – der Lieferschein gliedert sich dann nach Packstück.</div>
+    <?php else: ?>
+    <form method="post">
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th></th><th>Packstück</th><th>Inhalt</th><th>Charge</th><th class="bx-num">Menge</th><th>Auf Palette</th><th>Gewicht (kg)</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($ps as $x): $istPal = $x['art'] === 'palette'; $kinder = $istPal ? count(array_filter($ps, fn($y) => (int)$y['parent_id'] === (int)$x['id'])) : 0; ?>
+          <tr<?= $istPal ? ' style="background:var(--panel-2)"' : '' ?>>
+            <td><?php if (!$istPal && $psGeplant): ?><input type="checkbox" name="ps_ids[]" value="<?= (int)$x['id'] ?>"><?php endif; ?></td>
+            <td><strong><?= h(['palette' => 'Palette', 'karton' => 'Karton', 'paket' => 'Paket'][$x['art']] ?? $x['art']) ?> <?= (int)$x['nr'] ?></strong><?= $istPal ? ' <span class="muted">von ' . count($psPal) . '</span>' : '' ?></td>
+            <td style="white-space:normal"><?= $istPal ? h($kinder . ' Karton(s)') : h((string)$x['bezeichnung']) ?></td>
+            <td><?= h((string)$x['charge_nr']) ?></td>
+            <td class="bx-num"><?= $x['menge'] !== null ? h(menge_txt($x['menge'])) . ' Pkg' : '' ?></td>
+            <td><?php if (!$istPal): $par = null; foreach ($psPal as $pp) if ((int)$pp['id'] === (int)$x['parent_id']) $par = $pp; ?><?= $par ? 'Palette ' . (int)$par['nr'] : '<span class="muted">–</span>' ?><?php endif; ?></td>
+            <td><?php if ($psGeplant && ($istPal || empty($x['parent_id']))): ?><input type="text" inputmode="decimal" name="gew[<?= (int)$x['id'] ?>]" value="<?= $x['gewicht_kg'] !== null ? h(rtrim(rtrim(number_format((float)$x['gewicht_kg'], 3, ',', ''), '0'), ',')) : '' ?>" style="width:90px"><?php else: ?><?= $x['gewicht_kg'] !== null ? h(menge_txt($x['gewicht_kg'])) : '' ?><?php endif; ?></td>
+            <td style="text-align:right"><?php if ($psGeplant): ?><button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="ps_del" onclick="this.form.ps_id.value='<?= (int)$x['id'] ?>'; return confirm('Packstück entfernen?')">×</button><?php endif; ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <input type="hidden" name="ps_id" value="">
+      <?php if ($psGeplant): ?>
+      <div class="bx-row" style="gap:var(--sp-3);margin-top:var(--sp-3);flex-wrap:wrap;align-items:center">
+        <span class="muted">Angehakte</span>
+        <select name="palette_id"><option value="0">– ohne Palette –</option><?php foreach ($psPal as $pp): ?><option value="<?= (int)$pp['id'] ?>">auf Palette <?= (int)$pp['nr'] ?></option><?php endforeach; ?></select>
+        <button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="ps_zuordnen">Zuordnen</button>
+        <button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="ps_gewicht" style="margin-left:auto">Gewichte speichern</button>
+      </div>
+      <?php endif; ?>
+    </form>
+    <?php endif; ?>
+  </div>
+  <div class="bx-panel" style="margin-bottom:var(--sp-5)">
   <div style="font-weight:600;margin-bottom:6px">Versand-Label</div>
   <?php if ((string)$v['typ'] === 'abholung'): ?><div class="muted" style="margin-bottom:6px">Selbstabholung – kein Versand-Label nötig. Lieferschein mitgeben, dann „Als versendet markieren“.</div><?php endif; ?>
   <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">

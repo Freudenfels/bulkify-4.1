@@ -105,6 +105,9 @@ foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' 
         $drucker = $druckerGebinde ?: $druckerEtikett;        // Eimer-/Gebinde-Etikett auf den (festgelegten) Gebinde-Drucker
         $pdf = function_exists('lg_mischgebinde_etikett_pdf') ? lg_mischgebinde_etikett_pdf((int)$j['ids']) : null;
         $fehlt = 'Gebinde nicht gefunden';
+    } elseif ($typ === 'palette') {
+        $pdf = function_exists('lg_paletten_etikett_pdf') ? lg_paletten_etikett_pdf((int)$j['ids']) : null;   // 100 x 150 auf den Etikettendrucker
+        $fehlt = 'Keine Paletten in der Sendung';
     } elseif ($typ === 'karton') {
         $drucker = $druckerKarton ?: $druckerEtikett;         // Kartonetiketten der Produktion (100 x 150) auf den Produktionsdrucker
         $pdf = function_exists('lg_produktion_karton_pdf') ? lg_produktion_karton_pdf((int)$j['ids']) : null;

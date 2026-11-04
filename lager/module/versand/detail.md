@@ -44,3 +44,5 @@ Drucker. „Öffnen (PDF)" zeigt das Dokument im Browser (`?p=lieferschein` / `?
 Bearbeiten nur solange Status `geplant`. Carrier-Label/Tracking: Phase 2/3.
 
 Soll-Kette 7 (04.11.2026): „Als versendet markieren“ bucht Positionen aus Aufträgen über das Dashboard (je Auftrag die Summe; Lieferschein-Belege werden an der Sendung vermerkt) – übrige Positionen wie bisher selbst. Versandart **Selbstabholung**: kein Versand-Label.
+
+Packstücke (Soll-Kette 7b, 04.11.2026): Panel „Packstücke“ – „Kartons aus der Produktion übernehmen“ (`ps_kartons`, aus den Kartonwerten des PA), „+ Palette“/„+ Paket“ (`ps_palette`/`ps_paket`), angehakte Kartons einer Palette zuordnen (`ps_zuordnen`, „ohne Palette“ löst), Gewichte speichern (`ps_gewicht`), einzeln entfernen (`ps_del`, Kartons einer gelöschten Palette werden frei). Nur im Status geplant; die Paketzahl der Sendung folgt den Packstücken (Paletten + Pakete + lose Kartons). „Paletten-Etiketten drucken/öffnen“ über Druckjob `palette` bzw. `?p=lieferschein&art=palette`.

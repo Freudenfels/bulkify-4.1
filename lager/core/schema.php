@@ -243,6 +243,24 @@ function lg_schema(): void {
         KEY v (versand_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    // Soll-Kette 7b: Packstücke einer Sendung – Paletten, Kartons (aus der Produktion, Schritt 6) und Pakete. Ein Karton kann auf
+    // einer Palette liegen (parent_id). Inhalt je Packstück: Produkt, Charge, Menge.
+    q("CREATE TABLE IF NOT EXISTS lg_packstueck (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        versand_id INT NOT NULL,
+        art VARCHAR(10) NOT NULL DEFAULT 'karton',
+        nr INT NOT NULL DEFAULT 1,
+        parent_id INT NULL,
+        auftrag_id INT NULL,
+        pa_id INT NULL,
+        bezeichnung VARCHAR(255) NULL,
+        charge_nr VARCHAR(80) NULL,
+        menge DECIMAL(14,3) NULL,
+        gewicht_kg DECIMAL(10,3) NULL,
+        angelegt DATETIME NOT NULL,
+        KEY v (versand_id, art, nr)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     // Druckjob kann jetzt verschiedene Dokumente drucken (Etikett/Lieferschein/Versand-Label). Additiv.
     lg_spalte('lg_druckjob', 'typ', "VARCHAR(16) NOT NULL DEFAULT 'etikett'");
 
@@ -449,6 +467,37 @@ function lg_lieferschein_erstellen(array $d): int {
     return $vid;
 }
 function lg_versand(int $id): ?array { return one("SELECT * FROM lg_versand WHERE id=?", [$id]); }
+// ---- Packstücke (Soll-Kette 7b) ----
+function lg_packstueck_liste(int $versand_id): array {
+    return tabelle_da('lg_packstueck') ? all("SELECT * FROM lg_packstueck WHERE versand_id=? ORDER BY FIELD(art,'palette','karton','paket'), nr, id", [$versand_id]) : [];
+}
+function lg_packstueck_anlegen(int $versand_id, string $art, array $d = []): int {
+    $art = in_array($art, ['palette', 'karton', 'paket'], true) ? $art : 'karton';
+    $nr = (int) scalar("SELECT COALESCE(MAX(nr),0)+1 FROM lg_packstueck WHERE versand_id=? AND art=?", [$versand_id, $art]);
+    q("INSERT INTO lg_packstueck (versand_id,art,nr,parent_id,auftrag_id,pa_id,bezeichnung,charge_nr,menge,gewicht_kg,angelegt) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [$versand_id, $art, $nr, ($d['parent_id'] ?? null) ?: null, ($d['auftrag_id'] ?? null) ?: null, ($d['pa_id'] ?? null) ?: null,
+       mb_substr((string)($d['bezeichnung'] ?? ''), 0, 255), mb_substr((string)($d['charge_nr'] ?? ''), 0, 80), $d['menge'] ?? null, $d['gewicht_kg'] ?? null, jetzt_utc()]);
+    return (int) insert_id();
+}
+// Kartons aus der Produktion übernehmen: je Auftrag der Sendung die Kartonwerte des PA (Schritt 6: Pkg je Karton, Packungen, Charge).
+// Je Karton ein Packstück („Karton 1 …“, letzter Karton = Rest). Schon übernommene Aufträge werden übersprungen. Rückgabe: Anzahl.
+function lg_packstueck_kartons_uebernehmen(int $versand_id): int {
+    $n = 0;
+    $aids = array_unique(array_map(fn($p) => (int)$p['auftrag_id'], array_filter(lg_versand_pos_liste($versand_id), fn($p) => !empty($p['auftrag_id']))));
+    foreach ($aids as $aid) {
+        if ((int) scalar("SELECT COUNT(*) FROM lg_packstueck WHERE versand_id=? AND auftrag_id=? AND art='karton'", [$versand_id, $aid]) > 0) continue;
+        foreach (all("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert' ORDER BY id", [$aid]) as $pa) {
+            $d = function_exists('erp_karton_etikett_daten') ? erp_karton_etikett_daten((int)$pa['id']) : null;
+            if (!$d) continue;
+            $je = (int)$d['karton_stueck']; $menge = (int)$d['karton_menge']; $k = (int) ceil($menge / $je);
+            for ($i = 1; $i <= $k; $i++)
+                lg_packstueck_anlegen($versand_id, 'karton', ['auftrag_id' => $aid, 'pa_id' => (int)$pa['id'], 'bezeichnung' => (string)$d['produkt'],
+                    'charge_nr' => (string)$d['karton_charge'], 'menge' => $i < $k ? $je : $menge - ($k - 1) * $je]);
+            $n += $k;
+        }
+    }
+    return $n;
+}
 function lg_versand_liste(string $status = '', int $limit = 100): array {
     $w = ''; $p = [];
     if ($status !== '') { $w = 'WHERE status=?'; $p[] = $status; }

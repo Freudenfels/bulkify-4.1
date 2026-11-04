@@ -19,3 +19,5 @@ Der Lieferschein zeigt jetzt zusätzlich **Gewicht** (gesamt + kg/Paket), **Ware
 Generator erfasst).
 
 Versandart „Selbstabholung“ im Kopf (Soll-Kette 7, 04.11.2026).
+
+Packstücke (Soll-Kette 7b, 04.11.2026): Unter den Positionen ein Block „Packstücke“ – je Palette „Palette i von n“ mit Kartonzahl, Summe und Gewicht, darunter die Kartons (Nr., Produkt, Charge, Menge); Kartons/Pakete ohne Palette folgen gesammelt. Neu `lg_paletten_etikett_pdf($versand_id)`: ein Etikett 100×150 mm je Palette (Empfänger, Inhalt nach Produkt/Charge gruppiert, Gewicht, Code128 `<Sendungsnr>-P01`).

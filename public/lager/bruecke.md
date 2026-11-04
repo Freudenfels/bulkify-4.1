@@ -13,3 +13,5 @@ ist in `bruecke/bruecke.ps1`.
 Jeder Aufruf gilt als Lebenszeichen der Brücke. Geschützt ist das Ganze durch den Schlüssel in `lg_meta.bruecke_token`.
 
 Druckjob-Typ **karton** (Soll-Kette 6) → `lg_produktion_karton_pdf()` auf `drucker_karton` (sonst Standard-Etikettendrucker).
+
+Druckjob-Typ **palette** (Soll-Kette 7b) → `lg_paletten_etikett_pdf()` auf den Etikettendrucker.

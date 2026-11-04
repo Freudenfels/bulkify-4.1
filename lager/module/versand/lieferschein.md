@@ -2,3 +2,5 @@
 
 Route `?p=lieferschein&id=<versand_id>`. Gibt den Lieferschein einer Sendung als PDF aus (inline).
 Erzeugung zentral in [../../core/lieferschein_pdf.md](../../core/lieferschein_pdf.md) (`lg_lieferschein_pdf()`).
+
+`&art=palette` liefert statt des Lieferscheins die Paletten-Etiketten der Sendung (`lg_paletten_etikett_pdf()`, Soll-Kette 7b).
