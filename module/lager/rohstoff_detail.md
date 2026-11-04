@@ -160,3 +160,5 @@ Die Kundenauswahl zeigt nur Fulfillment-Kunden (`kunden.nutzt_fulfillment=1`); s
 - Hinweis mit Knopf **„Als Leerkapsel einstufen“** (`aktion=als_leerkapsel`), wenn ein Rohstoff nach Leerkapseln aussieht (Name oder gespeicherte Kapselgröße), die Form aber nicht Kapselhülle ist. Setzt Form Kapselhülle und die Kapselgröße aus dem Namen, protokolliert.
 - Hinweis „Leerkapsel ohne Kapselgröße“. Kacheln: Warenart „Leerkapsel“ und **Kapselgröße**.
 - Form-Auswahl zeigt „– nicht festgelegt –“, wenn keine Form gesetzt ist (vorher stand fälschlich „Pulver“ da).
+
+„Artikel zusammenführen“ nutzt jetzt `item_zusammenfuehren()` (gleiche Logik wie die Datenprüfung, 04.11.2026).

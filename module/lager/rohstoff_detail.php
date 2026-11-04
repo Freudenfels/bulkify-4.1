@@ -327,21 +327,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einhe
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'artikel_merge' && !$neu) {
     if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=1'); exit; }
     $ziel = (int)($_POST['ziel_item_id'] ?? 0);
-    $z = $ziel ? one("SELECT id, name, einheit FROM item WHERE id=?", [$ziel]) : null;
-    $src = one("SELECT id, name, einheit FROM item WHERE id=?", [(int)$id]);
-    if (!$z || $ziel === (int)$id) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=ziel'); exit; }
-    // Einheiten müssen übereinstimmen (sonst würde der Bestand vermischt) – erst Einheit angleichen.
-    if ((string)($z['einheit'] ?? '') !== (string)($src['einheit'] ?? '')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=einheit'); exit; }
-    $nChg = q("UPDATE charge SET item_id=? WHERE item_id=?", [$ziel, (int)$id])->rowCount();
-    q("UPDATE reservierung SET item_id=? WHERE item_id=?", [$ziel, (int)$id]);
-    $hatSpalte = column_exists('item', 'zusammengefuehrt_in');
-    if ($hatSpalte) q("UPDATE item SET gesperrt=1, zusammengefuehrt_in=?, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?",
-                       [$ziel, "\n[zusammengeführt in Artikel #" . $ziel . ' – ' . mb_substr((string)$z['name'], 0, 80) . ']', (int)$id]);
-    else            q("UPDATE item SET gesperrt=1, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?",
-                       ["\n[zusammengeführt in Artikel #" . $ziel . ' – ' . mb_substr((string)$z['name'], 0, 80) . ']', (int)$id]);
-    log_aktivitaet('item', (int)$id, 'team', 'Zusammengeführt in „' . (string)$z['name'] . '" (#' . $ziel . '): ' . $nChg . ' Charge(n) + Reservierungen verschoben, Doppel-Artikel deaktiviert.', 'notiz');
-    log_aktivitaet('item', $ziel, 'team', 'Doppel-Artikel „' . (string)$src['name'] . '" (#' . (int)$id . ') hierher zusammengeführt: ' . $nChg . ' Charge(n) übernommen.', 'notiz');
-    if (function_exists('bedarf_bump')) bedarf_bump();
+    $r = item_zusammenfuehren((int)$id, $ziel);   // gemeinsame Logik (auch Datenprüfung)
+    if (!$r['ok']) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=' . $r['fehler']); exit; }
     header('Location: ?p=rohstoff&id=' . $ziel . '&merged=1'); exit;
 }
 // Rohstoff löschen (Bereinigung, z. B. Import-Dublette). Nur Admin; abgesichert in rohstoff_loeschen().

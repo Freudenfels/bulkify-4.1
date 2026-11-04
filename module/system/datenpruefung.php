@@ -375,6 +375,78 @@ $CHECKS = [
                     ORDER BY b.id DESC",
         'ohne_fix'  => 'Nur Anzeige: Einbuchen braucht Charge, MHD und Menge der echten Lieferung – bitte in der Lager-App buchen oder am Auftrag eine Charge binden.',
     ],
+    'quarantaene_wareneingang' => [
+        'titel' => 'Lager: Ware aus dem Wareneingang steht noch in Quarantäne',
+        'info'  => 'Seit der Soll-Kette (04.11.2026) ist eingebuchte Ware frei; Quarantäne nur noch bei bewusst gewähltem Problem. Diese Chargen kamen noch nach der alten Regel in Quarantäne (Altbestand). Eigene Fertigware aus der Produktion ist hier nicht dabei. Beheben gibt die Charge frei (wie Lager → Freigaben), protokolliert.',
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=chargen&id=', c.id) AS _link, i.name AS artikel, c.charge_nr, c.menge_verfuegbar AS menge, c.einheit,
+                           COALESCE(c.wareneingang, DATE(c.angelegt)) AS eingang,
+                           (SELECT b.name FROM lg_bewegung lb JOIN benutzer b ON b.id = lb.benutzer_id WHERE lb.charge_id = c.id ORDER BY lb.id LIMIT 1) AS eingebucht_von,
+                           l.firma AS lieferant
+                    FROM charge c JOIN item i ON i.id = c.item_id LEFT JOIN lieferanten l ON l.id = c.lieferant_id
+                    WHERE c.status = 'quarantaene' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar > 0 AND c.pa_id IS NULL
+                    ORDER BY COALESCE(c.wareneingang, DATE(c.angelegt)), i.name",
+        'korrektur' => "UPDATE charge SET status='frei' WHERE id = <ID> AND status='quarantaene';   (charge_quarantaene_freigeben)",
+        'fix'   => ['tabelle' => 'charge', 'typ' => 'charge',
+                    'aktion' => function (array $r) {
+                        if (!charge_quarantaene_freigeben((int)$r['_id'])) return 0;
+                        aenderung_protokollieren('charge', (int)$r['_id'], ['status' => 'quarantaene'], ['status' => 'frei'], 'datenpruefung');
+                        bedarf_bump();
+                        return 1;
+                    }],
+    ],
+    'charge_ohne_kapselgroesse' => [
+        'titel' => 'Lager: Kapsel-Charge ohne Kapselgröße',
+        'info'  => 'Bulkware aus Kapsel-/Softgel-Rezepturen und Leerkapseln sollen die Kapselgröße an der Charge tragen (Soll-Kette 2d), damit niemand Kisten öffnen muss. Ableitbar = aus dem Auftrag der Charge, sonst aus der Rezeptur (eine Größe für alle Rezepturen am Bulk-Artikel) bzw. vom Leerkapsel-Artikel. Beheben trägt die abgeleitete Größe nach. Nicht anwählbare Zeilen sind wirklich unklar (Rezeptur in mehreren Größen, kein Auftrag) – nur diese Kisten muss das Lager prüfen und die Größe auf der Charge eintragen.',
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=chargen&id=', c.id) AS _link, i.name AS artikel, c.charge_nr, c.menge_verfuegbar AS menge, c.einheit,
+                           a.nummer AS auftrag, IF(c.auftrag_id IS NULL, NULL, CONCAT('?p=auftrag&id=', c.auftrag_id)) AS _link_auftrag
+                    FROM charge c JOIN item i ON i.id = c.item_id LEFT JOIN auftrag a ON a.id = c.auftrag_id
+                    WHERE c.kapselgroesse_id IS NULL AND c.menge_verfuegbar > 0 AND c.fremd_kunde_id IS NULL
+                      AND ( i.form = 'kapselhuelle'
+                         OR (i.kategorie = 'fertig' AND EXISTS (SELECT 1 FROM rezeptur r WHERE (r.id = i.rezeptur_id OR r.stamm_rezeptur_id = i.rezeptur_id)
+                                                               AND r.darreichungsform IN ('kapsel','softgel'))) )
+                    ORDER BY i.name, c.id",
+        'korrektur' => "UPDATE charge SET kapselgroesse_id = <abgeleitete Größe> WHERE id = <ID> AND kapselgroesse_id IS NULL;   (charge_kapselgroesse_setzen)",
+        'ohne_fix'  => 'Nicht anwählbar = Größe nicht eindeutig ableitbar: im Lager prüfen.',
+        'fix'   => ['tabelle' => 'charge', 'typ' => 'charge',
+                    'waehlbar' => fn(array $r) => charge_kapselgroesse_ermitteln((int) scalar("SELECT item_id FROM charge WHERE id=?", [(int)$r['_id']]), (int) scalar("SELECT COALESCE(auftrag_id,0) FROM charge WHERE id=?", [(int)$r['_id']])) > 0,
+                    'aktion' => function (array $r) {
+                        $g = charge_kapselgroesse_setzen((int)$r['_id']);
+                        if ($g <= 0) return 0;
+                        aenderung_protokollieren('charge', (int)$r['_id'], ['kapselgroesse_id' => null], ['kapselgroesse_id' => $g], 'datenpruefung');
+                        return 1;
+                    }],
+    ],
+    'bulk_artikel_lose' => [
+        'titel' => 'Lager: loser Bulk-Artikel ohne Rezeptur (z. B. „… – Bulk #0“)',
+        'info'  => 'Bulkware gehört auf den Bulk-Artikel ihrer Rezeptur (Soll-Kette 2c) – sonst sieht der Auftrag die Ware nicht. Vorschlag aus dem Auftrag der Chargen, sonst über den Rezepturnamen. Beheben führt den losen Artikel in den Rezeptur-Artikel zusammen (Chargen + Reservierungen wandern, der lose Artikel wird deaktiviert, nicht gelöscht). Nur bei eindeutigem Vorschlag und gleicher Einheit anwählbar.',
+        'sql'   => "SELECT x.*, z.name AS ziel, z.einheit AS ziel_einheit, CONCAT('?p=rohstoff&id=', x._ziel_id) AS _link_ziel
+                    FROM (SELECT i.id AS _id, CONCAT('?p=rohstoff&id=', i.id) AS _link, i.name AS artikel, i.einheit,
+                                 (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c WHERE c.item_id = i.id) AS bestand,
+                                 COALESCE(
+                                   (SELECT IF(COUNT(DISTINCT bi.id) = 1, MIN(bi.id), NULL) FROM charge c JOIN auftrag a ON a.id = c.auftrag_id LEFT JOIN produkt p ON p.id = a.produkt_id
+                                      JOIN rezeptur r ON r.id = COALESCE(a.rezeptur_id, p.rezeptur_id)
+                                      JOIN item bi ON bi.rezeptur_id = COALESCE(NULLIF(r.stamm_rezeptur_id,0), r.id) AND bi.kategorie = 'fertig'
+                                     WHERE c.item_id = i.id),
+                                   (SELECT IF(COUNT(DISTINCT bi.id) = 1, MIN(bi.id), NULL) FROM rezeptur r
+                                      JOIN item bi ON bi.rezeptur_id = COALESCE(NULLIF(r.stamm_rezeptur_id,0), r.id) AND bi.kategorie = 'fertig'
+                                     WHERE r.name <> '' AND i.name LIKE CONCAT(r.name, '%'))
+                                 ) AS _ziel_id
+                          FROM item i
+                          WHERE i.kategorie = 'fertig' AND i.rezeptur_id IS NULL AND COALESCE(i.gesperrt,0) = 0
+                            AND EXISTS (SELECT 1 FROM charge c WHERE c.item_id = i.id)) x
+                    LEFT JOIN item z ON z.id = x._ziel_id
+                    ORDER BY x.artikel",
+        'korrektur' => "-- je Zeile: item_zusammenfuehren(<ID>, <Ziel>): UPDATE charge/reservierung SET item_id=<Ziel> WHERE item_id=<ID>; UPDATE item SET gesperrt=1 WHERE id=<ID>;",
+        'ohne_fix'  => 'Ohne eindeutigen Vorschlag oder mit anderer Einheit bitte auf der Artikelseite von Hand zusammenführen.',
+        'fix'   => ['tabelle' => 'item', 'typ' => 'item',
+                    'waehlbar' => fn(array $r) => !empty($r['_ziel_id']) && (string)$r['einheit'] === (string)$r['ziel_einheit'],
+                    'aktion' => function (array $r) {
+                        $res = item_zusammenfuehren((int)$r['_id'], (int)$r['_ziel_id']);
+                        if (!$res['ok']) return 0;
+                        aenderung_protokollieren('item', (int)$r['_id'], ['zusammengefuehrt_in' => null], ['zusammengefuehrt_in' => (int)$r['_ziel_id']], 'datenpruefung');
+                        return 1;
+                    }],
+    ],
     'pa_schritt_produktionsfreigabe' => [
         'titel' => 'Produktion: offener Schritt „Produktions-Freigabe“ (entfällt)',
         'info'  => 'Seit der Soll-Kette (Nico/Dustin 04.11.2026) gibt es keine eigene Produktions-Freigabe mehr: Material da = startbar, gesteuert über den Auftrag. Neue Produktionsaufträge bekommen den Schritt nicht mehr. Bestehende haben ihn noch offen und würden daran hängen bleiben. Beheben hakt den Schritt als „entfällt“ ab (nichts wird gelöscht, nichts gebucht).',

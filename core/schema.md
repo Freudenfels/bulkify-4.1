@@ -440,3 +440,5 @@ Ablauf: bestellen → Ware kommt an = eingebucht, sofort frei → im System als 
 - `auftrag_lagerware_quellen()` liefert je Charge `kapselgroesse` + `passt`, passende zuerst (Rohdaten: `auftrag_lagerware_quellen_roh()`). `charge_auftrag_zuweisen()` warnt bei anderer Größe; die abgespaltene Teilmenge erbt die Größe.
 
 Soll-Kette 2e (04.11.2026): `produktionsschritte_fuer()` ohne Schritt „Produktions-Freigabe“ (Zukauf und Eigen). Startbar = Material da, gesteuert über den Auftrag. Alte offene Schritte: Datenprüfung `pa_schritt_produktionsfreigabe`.
+
+`item_zusammenfuehren($quelle, $ziel)` (04.11.2026): Chargen + Reservierungen aufs Ziel, Quelle deaktiviert (nicht gelöscht), gleiche Einheit Pflicht. Genutzt von Rohstoff-Seite und Datenprüfung `bulk_artikel_lose`.

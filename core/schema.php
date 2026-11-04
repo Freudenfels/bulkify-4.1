@@ -4345,6 +4345,25 @@ function kapselgroesse_name(int $id): string {
     if ($m === null) { $m = []; foreach (all("SELECT id, name FROM kapselgroesse") as $k) $m[(int)$k['id']] = (string)$k['name']; }
     return $m[$id] ?? '';
 }
+// Losen Doppel-Artikel in den richtigen Artikel zusammenführen: Chargen + Reservierungen wandern auf das Ziel, der leere
+// Doppel-Artikel wird DEAKTIVIERT (gesperrt + zusammengefuehrt_in), nicht gelöscht. Einheiten müssen gleich sein.
+// Genutzt von der Rohstoff-Seite (artikel_merge) und der Datenprüfung (lose Bulk-Artikel, Soll-Kette 8).
+// Rückgabe ['ok'=>bool, 'fehler'=>'ziel'|'einheit'|null, 'chargen'=>int].
+function item_zusammenfuehren(int $quelle_id, int $ziel_id): array {
+    $z = $ziel_id ? one("SELECT id, name, einheit FROM item WHERE id=?", [$ziel_id]) : null;
+    $src = one("SELECT id, name, einheit FROM item WHERE id=?", [$quelle_id]);
+    if (!$z || !$src || $ziel_id === $quelle_id) return ['ok' => false, 'fehler' => 'ziel', 'chargen' => 0];
+    if ((string)($z['einheit'] ?? '') !== (string)($src['einheit'] ?? '')) return ['ok' => false, 'fehler' => 'einheit', 'chargen' => 0];
+    $nChg = q("UPDATE charge SET item_id=? WHERE item_id=?", [$ziel_id, $quelle_id])->rowCount();
+    q("UPDATE reservierung SET item_id=? WHERE item_id=?", [$ziel_id, $quelle_id]);
+    $vermerk = "\n[zusammengeführt in Artikel #" . $ziel_id . ' – ' . mb_substr((string)$z['name'], 0, 80) . ']';
+    if (column_exists('item', 'zusammengefuehrt_in')) q("UPDATE item SET gesperrt=1, zusammengefuehrt_in=?, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", [$ziel_id, $vermerk, $quelle_id]);
+    else                                              q("UPDATE item SET gesperrt=1, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", [$vermerk, $quelle_id]);
+    log_aktivitaet('item', $quelle_id, 'team', 'Zusammengeführt in „' . (string)$z['name'] . '" (#' . $ziel_id . '): ' . $nChg . ' Charge(n) + Reservierungen verschoben, Doppel-Artikel deaktiviert.', 'notiz');
+    log_aktivitaet('item', $ziel_id, 'team', 'Doppel-Artikel „' . (string)$src['name'] . '" (#' . $quelle_id . ') hierher zusammengeführt: ' . $nChg . ' Charge(n) übernommen.', 'notiz');
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return ['ok' => true, 'fehler' => null, 'chargen' => $nChg];
+}
 // Soll-Kette 2a (Nico/Dustin 04.11.2026): Ware ist beim Einbuchen frei. Quarantäne nur bei $problem (bewusst gewählt:
 // Beschädigung, Abweichung) oder wenn der Schalter wareneingang_quarantaene an ist.
 function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd, ?int $lieferant_id, string $notiz = '', ?int $auftrag_id = null, ?int $bestellung_position_id = null, bool $problem = false): ?int {

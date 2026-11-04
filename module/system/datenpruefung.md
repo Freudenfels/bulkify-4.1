@@ -60,3 +60,9 @@ Optional `zeilen => fn(array $rows): array` ergänzt Spalten, die sich nicht in 
 **rohstoff_leerkapsel_form** (04.11.2026): Rohstoffe, die nach Leerkapseln aussehen (Name/Kapselgröße), ohne Form Kapselhülle. Beheben setzt Form + Kapselgröße aus dem Namen (aenderung_log).
 
 **pa_schritt_produktionsfreigabe** (04.11.2026): offene Schritte „Produktions-Freigabe“ aktiver Produktionsaufträge. Beheben hakt sie als „entfällt (Soll-Kette 2e)“ ab (nichts gelöscht, nichts gebucht), aenderung_log.
+
+## Soll-Kette 8: Einmal-Bereinigungen (04.11.2026)
+- **quarantaene_wareneingang**: Chargen aus dem Wareneingang in Quarantäne (Altbestand, ohne eigene Fertigware) mit Artikel, Charge, Menge, Eingang, eingebucht von, Lieferant. Beheben = freigeben (`charge_quarantaene_freigeben`), protokolliert.
+- **charge_ohne_kapselgroesse**: Kapsel-Bulk und Leerkapseln ohne Kapselgröße. Anwählbar, wenn ableitbar; Beheben trägt nach. Der Rest ist wirklich unklar (nur diese Kisten prüft das Lager).
+- **bulk_artikel_lose**: lose Bulk-Artikel ohne Rezeptur mit Vorschlag (Auftrag der Chargen, sonst Rezepturname). Beheben führt zusammen (`item_zusammenfuehren`), nur bei eindeutigem Ziel und gleicher Einheit.
+- Schritt „Produktions-Freigabe“: siehe `pa_schritt_produktionsfreigabe`.
