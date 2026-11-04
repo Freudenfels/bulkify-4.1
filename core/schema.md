@@ -433,3 +433,8 @@ Ablauf: bestellen → Ware kommt an = eingebucht, sofort frei → im System als 
 
 ## Soll-Kette 2a: Wareneingang frei (04.11.2026)
 `wareneingang_buchen(..., bool $problem = false)`: Quarantäne nur bei `$problem` (bewusst gewählt: Beschädigung, Abweichung) oder wenn der Schalter `wareneingang_quarantaene` an ist.
+
+## Soll-Kette 2d: Kapselgröße an der Charge (04.11.2026)
+- Spalte `charge.kapselgroesse_id`. Abgeleitet, nicht im Lager gemessen: Leerkapsel → Artikel; Bulkware → Rezeptur des Auftrags, sonst die eine Größe aller Rezepturen am Bulk-Artikel (Stamm + Varianten). Nicht eindeutig → leer (Wareneingang fragt, Datenprüfung listet).
+- `rezeptur_kapselgroesse_id()`, `auftrag_kapselgroesse_id()`, `charge_kapselgroesse_ermitteln()`, `charge_kapselgroesse_setzen()`, `kapselgroesse_name()`. `wareneingang_buchen()` setzt die Größe.
+- `auftrag_lagerware_quellen()` liefert je Charge `kapselgroesse` + `passt`, passende zuerst (Rohdaten: `auftrag_lagerware_quellen_roh()`). `charge_auftrag_zuweisen()` warnt bei anderer Größe; die abgespaltene Teilmenge erbt die Größe.

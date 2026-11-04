@@ -237,6 +237,7 @@ function erp_charge_umbuchen(int $charge_id, ?int $kunde_id, ?float $menge = nul
        $ziel, $c['notiz'], $c['lieferant_id'], $c['auftrag_id'], $c['pa_id'], $c['bestellung_position_id'] ?? null,
        $c['coa_freigegeben'] ?? 0, gmdate('Y-m-d H:i:s')]);
     $neu = (int) insert_id();
+    if (!empty($c['kapselgroesse_id'])) q("UPDATE charge SET kapselgroesse_id=? WHERE id=?", [(int)$c['kapselgroesse_id'], $neu]);   // Teilmenge erbt die Kapselgröße
     q("UPDATE charge SET menge=GREATEST(menge-?,0), menge_verfuegbar=GREATEST(menge_verfuegbar-?,0) WHERE id=?",
       [$moved, $moved, $charge_id]);
     return ['ok' => true, 'meldung' => $fmt($moved) . ' ' . (string)$c['einheit'] . ' in den ' . $zielname
@@ -499,7 +500,8 @@ function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charg
 function erp_charge_voll(int $id): ?array {
     if (!tabelle_da('charge')) return null;
     $lief = tabelle_da('lieferanten');
-    $sql = "SELECT c.*, i.name AS item_name, i.artikelnummer, i.kategorie, i.form, i.verpackung_rolle, i.notiz AS item_notiz"
+    $kgSel = erp_spalte_da('charge', 'kapselgroesse_id') && tabelle_da('kapselgroesse') ? ", (SELECT kg.name FROM kapselgroesse kg WHERE kg.id=c.kapselgroesse_id) AS kapselgroesse" : ", NULL AS kapselgroesse";
+    $sql = "SELECT c.*, i.name AS item_name, i.artikelnummer, i.kategorie, i.form, i.verpackung_rolle, i.notiz AS item_notiz" . $kgSel
          . ($lief ? ", l.firma AS lieferant, l.lieferantennummer AS lieferant_nr, l.id AS lieferant_id2" : "") . "
             FROM charge c JOIN item i ON i.id=c.item_id"
          . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "") . "
@@ -1032,9 +1034,67 @@ function erp_bestellung_angekommen(int $bestellung_id): void {
 // Eine frisch eingebuchte Charge mit dem Auftrag verknüpfen. Das ist der EINE Schlüssel, an dem
 // sowohl die Produktion „Ware da" erkennt ALS AUCH die Kunden-Statusleiste „Rohstoff angekommen"
 // (mit Datum) auslöst – sonst sieht der Kunde bei Zukauf/Fremdproduktion nichts.
+// ===== Kapselgröße an der Charge (Soll-Kette 2d, 04.11.2026) – Spiegel von charge_kapselgroesse_ermitteln() im Dashboard =====
+function erp_spalte_da(string $tabelle, string $spalte): bool {
+    static $m = [];
+    $k = $tabelle . '.' . $spalte;
+    if (!isset($m[$k])) $m[$k] = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?", [$tabelle, $spalte]) > 0;
+    return $m[$k];
+}
+// Kapselgröße einer Rezeptur wie rezeptur_kapselgroesse(): gespeicherte Größe, sonst die kleinste, in die das Füllgewicht passt
+// (über Dichte × Volumen, sonst Füllmenge). Nur Kapsel/Softgel.
+function erp_rezeptur_kapselgroesse(int $rezeptur_id): int {
+    if ($rezeptur_id <= 0 || !tabelle_da('kapselgroesse')) return 0;
+    $r = one("SELECT kapselgroesse_id, darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!$r || !in_array((string)$r['darreichungsform'], ['kapsel', 'softgel'], true)) return 0;
+    if ((int)$r['kapselgroesse_id'] > 0) return (int)$r['kapselgroesse_id'];
+    $w = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [$rezeptur_id]);
+    if ($w <= 0) return 0;
+    $mS = 0.0; $vS = 0.0;
+    foreach (all("SELECT z.menge_mg, i.dichte FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? AND i.dichte>0", [$rezeptur_id]) as $z) {
+        $mS += (float)$z['menge_mg']; $vS += (float)$z['menge_mg'] / (float)$z['dichte'];
+    }
+    $dichte = $vS > 0 ? $mS / $vS : 0.0;
+    $vol = erp_spalte_da('kapselgroesse', 'volumen_ml');
+    foreach (all("SELECT id, fuellmenge_mg" . ($vol ? ", volumen_ml" : ", 0 AS volumen_ml") . " FROM kapselgroesse ORDER BY fuellmenge_mg ASC") as $kg) {
+        $kap = ($dichte > 0 && (float)$kg['volumen_ml'] > 0) ? (float)$kg['volumen_ml'] * $dichte * 1000.0 : (float)$kg['fuellmenge_mg'];
+        if ($kap + 0.001 >= $w) return (int)$kg['id'];
+    }
+    return 0;
+}
+// Eine Größe für alle Rezepturen am Bulk-Artikel (Stamm + Varianten)? Sonst 0 = nicht eindeutig.
+function erp_bulk_kapselgroesse(int $stamm_rezeptur_id): int {
+    if ($stamm_rezeptur_id <= 0) return 0;
+    $g = [];
+    foreach (all("SELECT id FROM rezeptur WHERE id=? OR stamm_rezeptur_id=?", [$stamm_rezeptur_id, $stamm_rezeptur_id]) as $r)
+        if (($x = erp_rezeptur_kapselgroesse((int)$r['id'])) > 0) $g[$x] = true;
+    return count($g) === 1 ? (int) array_key_first($g) : 0;
+}
+function erp_charge_kapselgroesse_ermitteln(int $item_id, int $auftrag_id = 0): int {
+    $it = one("SELECT kategorie, form, rezeptur_id" . (erp_spalte_da('item', 'kapselgroesse_id') ? ", kapselgroesse_id" : ", NULL AS kapselgroesse_id") . " FROM item WHERE id=?", [$item_id]);
+    if (!$it) return 0;
+    if ((string)$it['form'] === 'kapselhuelle') return (int)($it['kapselgroesse_id'] ?? 0);
+    if ((string)$it['kategorie'] !== 'fertig') return 0;
+    if ($auftrag_id > 0) {
+        $rid = (int) scalar("SELECT COALESCE(a.rezeptur_id, p.rezeptur_id) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+        if ($rid && ($g = erp_rezeptur_kapselgroesse($rid)) > 0) return $g;
+    }
+    return erp_bulk_kapselgroesse((int)($it['rezeptur_id'] ?? 0));
+}
+// An der Charge speichern; $manuell (Auswahl im Wareneingang) gewinnt, sonst nur wenn leer bzw. bei $neu_rechnen (Auftrag kam dazu).
+function erp_charge_kapselgroesse_setzen(int $charge_id, int $manuell = 0, bool $neu_rechnen = false): int {
+    if ($charge_id <= 0 || !erp_spalte_da('charge', 'kapselgroesse_id')) return 0;
+    $c = one("SELECT item_id, auftrag_id, kapselgroesse_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return 0;
+    if ($manuell <= 0 && !$neu_rechnen && (int)$c['kapselgroesse_id'] > 0) return (int)$c['kapselgroesse_id'];
+    $g = $manuell > 0 ? $manuell : erp_charge_kapselgroesse_ermitteln((int)$c['item_id'], (int)($c['auftrag_id'] ?? 0));
+    if ($g > 0 && $g !== (int)$c['kapselgroesse_id']) q("UPDATE charge SET kapselgroesse_id=? WHERE id=?", [$g, $charge_id]);
+    return $g;
+}
 function erp_charge_auftrag_setzen(int $charge_id, int $auftrag_id): void {
     if ($charge_id <= 0 || $auftrag_id <= 0 || !tabelle_da('charge')) return;
     q("UPDATE charge SET auftrag_id=? WHERE id=? AND auftrag_id IS NULL", [$auftrag_id, $charge_id]);
+    erp_charge_kapselgroesse_setzen($charge_id, 0, true);   // mit Auftrag ist die Größe eindeutig (Soll-Kette 2d)
 }
 
 // Charge "umhaengen": einer REZEPTUR zuordnen = an deren kanonisches Bulk-Item haengen (charge.item_id).
@@ -1166,7 +1226,7 @@ function erp_rezeptur_nr(?int $item_id, ?int $auftrag_id): string {
 function erp_rezeptur_liste(): array {
     if (!tabelle_da('rezeptur')) return [];
     try {
-        return all("SELECT r.id, r.nummer, r.name, r.darreichungsform,
+        return all("SELECT r.id, r.nummer, r.name, r.darreichungsform, COALESCE(NULLIF(r.stamm_rezeptur_id,0), r.id) AS stamm_id,
                            kg.name AS kapselgroesse,
                            bi.id AS bulk_item_id, bi.einheit AS bulk_einheit
                       FROM rezeptur r
@@ -1377,6 +1437,7 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
               [$menge, $menge, $einheit, $lief, $mhd ?: null, $status,
                trim(($alt !== '' ? $alt . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
                (int)$vorab['id']]);
+            erp_charge_kapselgroesse_setzen((int)$vorab['id']);
             erp_bedarf_bump();
             return (int)$vorab['id'];
         }
@@ -1385,6 +1446,7 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
        VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $lief, $mhd ?: null, $status, $notiz ?: null, jetzt_utc()]);
     $neu = (int) insert_id();
+    erp_charge_kapselgroesse_setzen($neu);   // Soll-Kette 2d: abgeleitet, nicht gemessen
     erp_bedarf_bump();
     return $neu;
 }

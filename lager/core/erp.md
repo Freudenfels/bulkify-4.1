@@ -112,3 +112,5 @@ Die Aufkleber in den Etikettenrollen sind 8-stellig.
 Leerkapseln (04.11.2026): `erp_item_warenart_setzen($id, 'rohstoff')` lässt die Form Kapselhülle stehen (vorher gelöscht → Kapselgröße/Material verschwanden auf der Rohstoff-Seite). `erp_items_eingang()` liefert `kapselgroesse_id`, neu `erp_kapselgroessen()` und `erp_kapselgroesse_aus_name()` (Spiegel von `kapselgroesse_aus_name()`).
 
 Soll-Kette 2c (04.11.2026): `erp_rezeptur_stamm()` – Bulk-Artikel hängen an der Stammrezeptur (G5). `erp_rezeptur_bulkitem()`, `erp_rezeptur_zu_position()`, Rezepturliste und Rezeptur-Scan suchen jetzt dort. Vorher fand die Lager-App bei einer Rezeptur-Variante keinen Bulk-Artikel.
+
+Soll-Kette 2d (04.11.2026): `erp_rezeptur_kapselgroesse()` (gleiche Regel wie `rezeptur_kapselgroesse()`), `erp_bulk_kapselgroesse()`, `erp_charge_kapselgroesse_ermitteln()`/`_setzen()`, `erp_spalte_da()`. Einbuchen setzt die Größe, `erp_charge_auftrag_setzen()` rechnet sie mit dem Auftrag neu, Umbuchen einer Teilmenge übernimmt sie. `erp_charge_voll()` liefert `kapselgroesse`.

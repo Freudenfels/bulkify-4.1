@@ -1243,6 +1243,7 @@ function init_schema(): void {
     ensure_column('charge', 'qm_freigabe_am', "DATETIME NULL");       // QM-Freigabe (quarantaene -> frei), UTC – Fertigware: Auslöser für Bericht + CoA
     ensure_column('charge', 'qm_freigabe_von', "VARCHAR(190) NULL");
     ensure_column('charge', 'pa_id', "INT NULL");   // Produktionsauftrag der Fertigware-Charge (Rückverfolgung Zusammensetzung)
+    ensure_column('charge', 'kapselgroesse_id', "INT NULL");   // Soll-Kette 2d: Kapselgröße der Ware (abgeleitet, nicht gemessen)
     ensure_column('charge', 'coa_freigegeben', "TINYINT(1) NOT NULL DEFAULT 0");   // bulkify-CoA dieser Charge fuer den Kunden freigegeben?
     ensure_column('charge', 'coa_freigabe_am', "DATETIME NULL");
     ensure_column('charge', 'coa_freigabe_von', "VARCHAR(190) NULL");
@@ -4301,6 +4302,49 @@ function item_verwendung(int $item_id): array {
 }
 
 // Wareneingang buchen -> neue Charge. Rohstoffe landen in Quarantäne, Rest direkt frei.
+// ===== Kapselgröße an der Charge (Soll-Kette 2d, Nico/Dustin 04.11.2026) =====
+// Nicht im Lager messen, sondern ableiten: Leerkapsel -> Artikel; Bulkware -> Rezeptur des Auftrags, sonst die EINE Größe
+// aller Rezepturen am Bulk-Artikel (Stamm + Varianten, „je Kapselgröße eine eigene Rezeptur“). Nicht eindeutig -> 0.
+// Gleiche Regel in der Lager-App: erp_charge_kapselgroesse_ermitteln().
+function rezeptur_kapselgroesse_id(int $rezeptur_id): int {
+    if ($rezeptur_id <= 0) return 0;
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);
+    if (!in_array($form, ['kapsel', 'softgel'], true)) return 0;
+    $kg = rezeptur_kapselgroesse($rezeptur_id);
+    return $kg ? (int)$kg['id'] : 0;
+}
+function auftrag_kapselgroesse_id(int $auftrag_id): int {
+    if ($auftrag_id <= 0) return 0;
+    $rid = (int) scalar("SELECT COALESCE(a.rezeptur_id, p.rezeptur_id) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    return rezeptur_kapselgroesse_id($rid);
+}
+function charge_kapselgroesse_ermitteln(int $item_id, int $auftrag_id = 0): int {
+    $it = one("SELECT kategorie, form, rezeptur_id, kapselgroesse_id FROM item WHERE id=?", [$item_id]);
+    if (!$it) return 0;
+    if ((string)$it['form'] === 'kapselhuelle') return (int)($it['kapselgroesse_id'] ?? 0);
+    if ((string)$it['kategorie'] !== 'fertig') return 0;
+    if ($auftrag_id > 0 && ($g = auftrag_kapselgroesse_id($auftrag_id)) > 0) return $g;
+    $stamm = (int)($it['rezeptur_id'] ?? 0);
+    if ($stamm <= 0) return 0;
+    $groessen = [];
+    foreach (all("SELECT id FROM rezeptur WHERE id=? OR stamm_rezeptur_id=?", [$stamm, $stamm]) as $r)
+        if (($g = rezeptur_kapselgroesse_id((int)$r['id'])) > 0) $groessen[$g] = true;
+    return count($groessen) === 1 ? (int) array_key_first($groessen) : 0;
+}
+// An der Charge speichern. $manuell (Auswahl im Wareneingang) gewinnt; sonst nur setzen, wenn leer (oder $neu_rechnen).
+function charge_kapselgroesse_setzen(int $charge_id, int $manuell = 0, bool $neu_rechnen = false): int {
+    $c = one("SELECT item_id, auftrag_id, kapselgroesse_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return 0;
+    if ($manuell <= 0 && !$neu_rechnen && (int)$c['kapselgroesse_id'] > 0) return (int)$c['kapselgroesse_id'];
+    $g = $manuell > 0 ? $manuell : charge_kapselgroesse_ermitteln((int)$c['item_id'], (int)($c['auftrag_id'] ?? 0));
+    if ($g > 0 && $g !== (int)$c['kapselgroesse_id']) q("UPDATE charge SET kapselgroesse_id=? WHERE id=?", [$g, $charge_id]);
+    return $g;
+}
+function kapselgroesse_name(int $id): string {
+    static $m = null;
+    if ($m === null) { $m = []; foreach (all("SELECT id, name FROM kapselgroesse") as $k) $m[(int)$k['id']] = (string)$k['name']; }
+    return $m[$id] ?? '';
+}
 // Soll-Kette 2a (Nico/Dustin 04.11.2026): Ware ist beim Einbuchen frei. Quarantäne nur bei $problem (bewusst gewählt:
 // Beschädigung, Abweichung) oder wenn der Schalter wareneingang_quarantaene an ist.
 function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd, ?int $lieferant_id, string $notiz = '', ?int $auftrag_id = null, ?int $bestellung_position_id = null, bool $problem = false): ?int {
@@ -4320,6 +4364,7 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
               [$menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, $status,
                trim(($altNotiz !== '' ? $altNotiz . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
                $auftrag_id ?: null, $bestellung_position_id ?: null, (int)$vorab['id']]);
+            charge_kapselgroesse_setzen((int)$vorab['id']);
             return (int)$vorab['id'];
         }
     }
@@ -4327,6 +4372,7 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
        VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?,?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, $status, $notiz ?: null, $auftrag_id ?: null, $bestellung_position_id ?: null, gmdate('Y-m-d H:i:s')]);
     $neu = (int) insert_id();   // ID VOR bedarf_bump() sichern (meta_set() setzt LAST_INSERT_ID sonst auf 0)
+    charge_kapselgroesse_setzen($neu);   // Soll-Kette 2d
     bedarf_bump();   // neuer Bestand -> Bedarf-Cache ungueltig
     return $neu;
 }
@@ -7733,15 +7779,32 @@ function auftrag_bulk_reserviert_stueck(int $auftrag_id): float {
 // Freie Lager-Chargen für die Zuweisung: zuerst die zur Rezeptur passende Bulkware (exakter Bulk-Artikel),
 // dann ALLE anderen freien Fertigware-(Bulk-)Chargen im Lager – der Admin kann bewusst eine andere wählen
 // (z. B. wenn die Ware unter einem anderen Artikel/einer anderen Rezeptur gebucht ist). Je noch keinem Auftrag.
+// Soll-Kette 2d: je Charge kapselgroesse + 'passt' (true/false/null = unbekannt) gegen die Kapselgröße des Auftrags;
+// passende zuerst. Nur passende Chargen sollen gewählt werden, andere sind markiert.
 function auftrag_lagerware_quellen(int $auftrag_id): array {
+    $q = auftrag_lagerware_quellen_roh($auftrag_id);
+    $soll = auftrag_kapselgroesse_id($auftrag_id);
+    foreach (['chargen', 'weitere'] as $k) {
+        foreach ($q[$k] as &$c) {
+            $g = (int)($c['kapselgroesse_id'] ?? 0);
+            $c['kapselgroesse'] = $g ? kapselgroesse_name($g) : '';
+            $c['passt'] = ($soll && $g) ? $g === $soll : null;
+        }
+        unset($c);
+        usort($q[$k], fn($a, $b) => (int)($b['passt'] === true) <=> (int)($a['passt'] === true));
+    }
+    $q['soll_kapselgroesse'] = $soll ? kapselgroesse_name($soll) : '';
+    return $q;
+}
+function auftrag_lagerware_quellen_roh(int $auftrag_id): array {
     $item = auftrag_bulk_item($auftrag_id);
     $exakt = [];
     if ($item) {
-        $exakt = all("SELECT id, charge_nr, menge_verfuegbar, mhd, einheit FROM charge
+        $exakt = all("SELECT id, charge_nr, menge_verfuegbar, mhd, einheit, kapselgroesse_id FROM charge
                       WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL AND auftrag_id IS NULL
                       ORDER BY COALESCE(mhd,'9999-12-31'), id", [$item]);
     }
-    $weitere = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.einheit, i.name AS item_name, i.artikelnummer
+    $weitere = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.einheit, c.kapselgroesse_id, i.name AS item_name, i.artikelnummer
                     FROM charge c JOIN item i ON i.id=c.item_id
                     WHERE i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
                       AND c.fremd_kunde_id IS NULL AND c.auftrag_id IS NULL AND c.item_id<>?
@@ -7750,8 +7813,8 @@ function auftrag_lagerware_quellen(int $auftrag_id): array {
 }
 // Chargen, die diesem Auftrag fest zugewiesen sind (Fertigware) – für Anzeige + „lösen".
 function auftrag_lagerware_zugewiesen(int $auftrag_id): array {
-    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.einheit, c.status, c.pa_id, i.name AS item_name
-                FROM charge c JOIN item i ON i.id=c.item_id
+    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.einheit, c.status, c.pa_id, i.name AS item_name, kg.name AS kapselgroesse
+                FROM charge c JOIN item i ON i.id=c.item_id LEFT JOIN kapselgroesse kg ON kg.id=c.kapselgroesse_id
                 WHERE c.auftrag_id=? AND i.kategorie='fertig'
                 ORDER BY c.id DESC", [$auftrag_id]);
 }
@@ -7862,6 +7925,9 @@ function charge_auftrag_zuweisen(int $charge_id, int $auftrag_id, float $menge):
     // Prüfung. Gewarnt wird nur, wenn mehr angefordert wurde, als die Charge frei hat.
     $nimm = min($menge, $verf);
     $warnung = $menge > $verf + 1e-6 ? 'Angefordert ' . $nf($menge) . ', verfügbar nur ' . $nf($verf) . ' – ' . $nf($nimm) . ' zugewiesen.' : '';
+    // Soll-Kette 2d: andere Kapselgröße als der Auftrag -> deutlich warnen (Admin entscheidet, kein Blockieren).
+    $sollKg = auftrag_kapselgroesse_id($auftrag_id); $istKg = (int)($c['kapselgroesse_id'] ?? 0);
+    if ($sollKg && $istKg && $sollKg !== $istKg) $warnung = trim($warnung . ' Achtung: Charge ist ' . kapselgroesse_name($istKg) . ', der Auftrag braucht ' . kapselgroesse_name($sollKg) . '.');
     if ($nimm >= $verf - 1e-6 && empty($c['auftrag_id'])) {
         // Komplette (Rest-)Charge geht an diesen Auftrag -> kein Split nötig.
         q("UPDATE charge SET auftrag_id=? WHERE id=?", [$auftrag_id, $charge_id]);
@@ -7873,6 +7939,7 @@ function charge_auftrag_zuweisen(int $charge_id, int $auftrag_id, float $menge):
            VALUES (?,?,?,?,?,?,?,?, 'frei', ?,?,?,?,?)",
           [$c['charge_nr'] ?? null, $item, $nimm, $nimm, $c['einheit'] ?? null, $c['lieferant_id'] ?: null,
            $c['mhd'] ?: null, $c['wareneingang'] ?: null, $c['notiz'] ?? null, $auftrag_id, $c['pa_id'] ?: null, null, $c['standort'] ?? 'lager1']);
+        if (!empty($c['kapselgroesse_id'])) q("UPDATE charge SET kapselgroesse_id=? WHERE id=LAST_INSERT_ID()", [(int)$c['kapselgroesse_id']]);   // Teilmenge erbt die Kapselgröße
     }
     if (function_exists('bedarf_bump')) bedarf_bump();
     return ['ok'=>true, 'zugewiesen'=>$nimm, 'warnung'=>$warnung];

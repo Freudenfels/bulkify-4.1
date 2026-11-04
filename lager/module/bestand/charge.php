@@ -235,6 +235,10 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
     </form>
   </div>
 
+  <?php if (!empty($c['kapselgroesse'])): ?>
+  <div class="bx-card"><div class="k">Kapselgröße</div><div class="v" style="font-size:var(--fs-lg)"><?= h((string)$c['kapselgroesse']) ?></div></div>
+  <?php endif; ?>
+
   <!-- Status -->
   <div class="bx-card lg-ecard">
     <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>

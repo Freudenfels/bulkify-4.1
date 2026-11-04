@@ -137,7 +137,7 @@ bx_head('Chargenverfolgung', 'Alle Chargen mit Rückverfolgung Rohstoff ↔ Prod
         <tr style="cursor:pointer" onclick="location.href='?p=chargen&id=<?= (int)$c['id'] ?>'">
           <td><?= h($c['charge_nr'] ?: ('#' . $c['id'])) ?></td>
           <td><?= $c['item_name'] ? h($c['item_name']) : '<span class="muted">–</span>' ?></td>
-          <td><?= h($katLbl[$c['kategorie']] ?? $c['kategorie']) ?></td>
+          <td><?= h($katLbl[$c['kategorie']] ?? $c['kategorie']) ?><?= !empty($c['kapselgroesse_id']) ? ' · ' . h(kapselgroesse_name((int)$c['kapselgroesse_id'])) : '' ?></td>
           <td class="bx-num"><?= $num($c['menge_verfuegbar']) ?> <?= h($c['einheit']) ?></td>
           <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '<span class="muted">–</span>' ?></td>
           <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>

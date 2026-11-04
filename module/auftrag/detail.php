@@ -1468,7 +1468,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
       <?php endforeach; ?>
       <?php foreach ($lwZu as $lz): ?>
       <tr>
-        <td><?= $lz['item_name'] ? h((string)$lz['item_name']) . ' · ' : '' ?>Charge <?= h((string)($lz['charge_nr'] ?: $lz['id'])) ?><?= $lz['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$lz['mhd']))) : '' ?></td>
+        <td><?= $lz['item_name'] ? h((string)$lz['item_name']) . ' · ' : '' ?>Charge <?= h((string)($lz['charge_nr'] ?: $lz['id'])) ?><?= !empty($lz['kapselgroesse']) ? ' · ' . h((string)$lz['kapselgroesse']) : '' ?><?= $lz['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$lz['mhd']))) : '' ?></td>
         <td class="bx-num"><?= $mengeLes($lz['menge_verfuegbar'], ($lz['einheit'] ?? '') !== '' ? $lz['einheit'] : null) ?></td>
         <td><?= bx_badge('fest zugewiesen','ok') ?></td>
         <td><?= ($lz['status'] ?? '') === 'frei' ? bx_badge('im Lager','ok') : bx_badge((string)$lz['status'],'warn') ?></td>
@@ -1491,12 +1491,12 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         </optgroup><?php endif; ?>
         <?php if ($lwQ['chargen']): ?><optgroup label="Passende Charge im Lager – wird fest zugewiesen">
           <?php foreach ($lwQ['chargen'] as $cq): ?>
-          <option value="charge:<?= (int)$cq['id'] ?>">Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['menge_verfuegbar'], ($cq['einheit'] ?? '') !== '' ? $cq['einheit'] : null) ?></option>
+          <option value="charge:<?= (int)$cq['id'] ?>"><?= $cq['passt'] === false ? 'ANDERE GRÖSSE · ' : '' ?>Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['kapselgroesse'] !== '' ? ' · ' . h($cq['kapselgroesse']) : '' ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['menge_verfuegbar'], ($cq['einheit'] ?? '') !== '' ? $cq['einheit'] : null) ?></option>
           <?php endforeach; ?>
         </optgroup><?php endif; ?>
         <?php if ($lwQ['weitere']): ?><optgroup label="Andere Fertigware im Lager – wird fest zugewiesen">
           <?php foreach ($lwQ['weitere'] as $cq): ?>
-          <option value="charge:<?= (int)$cq['id'] ?>"><?= h((string)$cq['item_name']) ?><?= $cq['artikelnummer'] ? ' (' . h((string)$cq['artikelnummer']) . ')' : '' ?> · Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['menge_verfuegbar'], ($cq['einheit'] ?? '') !== '' ? $cq['einheit'] : null) ?></option>
+          <option value="charge:<?= (int)$cq['id'] ?>"><?= $cq['passt'] === false ? 'ANDERE GRÖSSE · ' : '' ?><?= h((string)$cq['item_name']) ?><?= $cq['kapselgroesse'] !== '' ? ' · ' . h($cq['kapselgroesse']) : '' ?><?= $cq['artikelnummer'] ? ' (' . h((string)$cq['artikelnummer']) . ')' : '' ?> · Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['menge_verfuegbar'], ($cq['einheit'] ?? '') !== '' ? $cq['einheit'] : null) ?></option>
           <?php endforeach; ?>
         </optgroup><?php endif; ?>
       </select>

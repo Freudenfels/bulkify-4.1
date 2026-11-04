@@ -19,3 +19,5 @@
 
 ## Bulk-Charge → Kundencharge (2026-10-30)
 Die Detailseite einer Charge zeigt unter „Verwendet in Produktionen" zusätzlich die Spalte **Kundencharge**: die aus diesem PA entstandene Fertigware-/Kundencharge (`charge.pa_id` = PA, `item.kategorie IN ('fertig','verkaufsfertig')`), verlinkt. Damit ist von der Bulk-Charge aus direkt sichtbar, in welche Kundencharge(n) sie geflossen ist (Gegenrichtung zur „Zusammensetzung" der Kundencharge). Gespeist aus Easy Production / `produktion_verbrauch`.
+
+Spalte „Art“ zeigt die Kapselgröße der Charge (Soll-Kette 2d, 04.11.2026).

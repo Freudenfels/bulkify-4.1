@@ -53,3 +53,5 @@ In der Tabelle „Etikettenrollen“ ist die Nummer je Rolle ein Eingabefeld. �
 - jede Änderung im Feld-Protokoll (`aenderung_log`, Route `lager_rollen`) und in der Lager-Bewegung.
 
 Leere Rollen sind gesperrt. Rollen, die nicht 8-stellig sind, tragen den Hinweis „nicht 8-stellig“. Enter springt zur nächsten Rolle (Handscanner).
+
+Kachel **Kapselgröße** (Soll-Kette 2d, 04.11.2026), wenn an der Charge gespeichert.

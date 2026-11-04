@@ -244,3 +244,5 @@ Ist der Produktionsauftrag in Vorbereitung (nur Admin, Auftrag nicht storniert),
 Material-Übersicht (04.11.2026): darunter der Block **„Ware da, aber nicht zugeordnet“** (`auftrag_bulk_diagnose_block`). Handler `aktion=bulk_diag` (nur Admin, Rücksprung nur auf interne `?p=`-Adressen), Meldungen `diagok` / `diagfehler`.
 
 Material-Übersicht, Bulkware (04.11.2026): „frei“ = zugeordnet + freier Lagerbestand, darunter klein „davon zugeordnet X“ bzw. „noch nicht zugeordnet“. Zuordnen bleibt im Reiter Material unter „Bulkware binden“.
+
+Bulkware binden (04.11.2026): Auswahl zeigt die Kapselgröße je Charge, passende zuerst, andere mit „ANDERE GRÖSSE“; zugewiesene Chargen mit Größe. Zuweisen einer anderen Größe gibt eine Warnung.

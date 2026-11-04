@@ -253,6 +253,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             $pAuftragId = erp_auftrag_fuer_bulkitem($item_id);
         if ($ziel !== 'l2' && $pAuftragId > 0 && function_exists('erp_charge_auftrag_setzen'))
             erp_charge_auftrag_setzen((int)$cid, $pAuftragId);
+        // Soll-Kette 2d: Bulk ohne ableitbare Kapselgröße -> Auswahl aus dem Wareneingang an die Charge (sonst bleibt sie leer
+        // und erscheint in der Datenprüfung „Bulk-Charge ohne Kapselgröße“).
+        $kgManuell = (int)($_POST['p_kapselgroesse'][$i] ?? 0);
+        if ($warenart === 'fertig' && $kgManuell > 0 && function_exists('erp_charge_kapselgroesse_setzen')
+            && (int) scalar("SELECT COALESCE(kapselgroesse_id,0) FROM charge WHERE id=?", [(int)$cid]) === 0)
+            erp_charge_kapselgroesse_setzen((int)$cid, $kgManuell);
 
         lg_pakete_set((int)$cid, $pakete);
         $aufteilenPos = (string)($_POST['p_aufteilen'][$i] ?? '0') === '1';
@@ -633,7 +639,10 @@ if ($gebucht):
         'id'=>(int)$r['id'],
         'n'=>trim((($r['nummer']??'')!==''? $r['nummer'].' · ':'').$r['name']),
         'bi'=>(int)($r['bulk_item_id']??0),
-        'e'=>(string)($r['bulk_einheit']??'')
+        'e'=>(string)($r['bulk_einheit']??''),
+        // Soll-Kette 2d: Kapsel-Rezeptur? Und ist die Kapselgröße des Bulk-Artikels eindeutig (sonst Auswahl im Wareneingang)?
+        'kap'=>in_array((string)($r['darreichungsform']??''), ['kapsel','softgel'], true) ? 1 : 0,
+        'kg'=>in_array((string)($r['darreichungsform']??''), ['kapsel','softgel'], true) && function_exists('erp_bulk_kapselgroesse') ? erp_bulk_kapselgroesse((int)($r['stamm_id']??$r['id'])) : 0
       ], $rezepturen), JSON_UNESCAPED_UNICODE) ?>;
   var WEQ = <?= (function_exists('erp_we_quarantaene') && erp_we_quarantaene()) ? 1 : 0 ?>;   // Quarantäne nur, wenn in den Einstellungen an (Standard aus, 04.11.2026)
   var MATRIX = {rohstoff:{mhd:1,charge:1,q:WEQ},leerkapsel:{mhd:1,charge:1,q:WEQ},fertig:{mhd:1,charge:1,q:WEQ},verkaufsfertig:{mhd:1,charge:1,q:WEQ},etikett:{mhd:0,charge:0,inventar:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
@@ -802,11 +811,15 @@ if ($gebucht):
         var box=card.querySelector('.we-aehnlich'); if(box) box.innerHTML='';
       } else { rezId.value='0'; if(rezInfo){rezInfo.textContent='';} }
     }
-    if(rez){ rez.addEventListener('input',pickRez); rez.addEventListener('change',pickRez); }
+    if(rez){ rez.addEventListener('input',pickRez); rez.addEventListener('change',pickRez);
+             rez.addEventListener('change',function(){ kgrSync(); }); rez.addEventListener('input',function(){ kgrSync(); }); }
     // Kapselgröße (nur Leerkapseln, Pflicht): aus dem Artikel, sonst aus dem Namen vorbelegen; eine Wahl des Nutzers bleibt.
     var kgrWrap=card.querySelector('.f-kgr'), kgrSel=card.querySelector('.we-kgr');
     function kgrSync(m){
-      var an = art2.value==='leerkapsel';
+      // Leerkapseln immer; Bulk nur, wenn die Größe NICHT ableitbar ist (Kapsel-Rezeptur in mehreren Größen, kein Auftrag).
+      var rzSel = (art2.value==='fertig' && rezId) ? REZ.filter(function(r){return String(r.id)===String(rezId.value);})[0] : null;
+      var aufH = card.querySelector('input[name="p_auftrag_id[]"]');
+      var an = art2.value==='leerkapsel' || !!(rzSel && rzSel.kap && !rzSel.kg && !(aufH && parseInt(aufH.value,10)>0));
       if(kgrWrap) kgrWrap.style.display = an ? '' : 'none';
       if(!kgrSel) return;
       kgrSel.required = an;
