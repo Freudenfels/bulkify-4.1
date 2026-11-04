@@ -420,3 +420,9 @@ Aufgerufen in `auftrag_aus_import()` und `kontingent_abruf()` (dort fehlte der H
 - `auftrag_bulk_diagnose($aid)`: Bei Bulk-Zukauf (Fertigware ohne item_id fehlt) sucht sie Ware, die da ist, aber nicht zählt: als Rohstoff gebuchte Chargen am Auftrag oder mit der Auftragsnummer in der Notiz (`falsche_art`), Bulk-Chargen am Auftrag in Quarantäne, freie Chargen des Bulk-Artikels ohne Auftrag (`ohne_auftrag`). Liefert dazu `fehlt` (in Charge-Einheit) und `bulk_item`.
 - `auftrag_bulk_diagnose_aktion($aid, 'umhaengen'|'binden', $charge_id)`: Umhängen setzt `item_id` auf den Bulk-Artikel und `auftrag_id`, nur bei gleicher Einheit (`einheit_gleich`), protokolliert (Route bulk_diagnose). Binden nutzt `charge_auftrag_zuweisen()` mit dem Restbedarf; der Rest der Charge bleibt frei.
 - `auftrag_bulk_diagnose_block($aid, $zurueck)`: HTML-Block „Ware da, aber nicht zugeordnet“, Formulare an `?p=auftrag&id=…` (aktion `bulk_diag`), nur Admin.
+
+## Bulkware im Lager = da (04.11.2026, Nico)
+Ablauf: bestellen → Ware kommt an = eingebucht, sofort frei → im System als vorhanden geführt → im Auftrag (Reiter Material, „Bulkware binden“) aus dem Bestand zuordnen.
+- `auftrag_bulk_lager_frei($aid)`: freie, keinem Auftrag zugeordnete Chargen des Rezeptur-Bulk-Artikels minus Reservierungen anderer Aufträge (gecacht `bl:`).
+- `auftrag_bedarf()` Bulk-Zukauf: verfügbar = zugeordnete Bulk-Chargen + `auftrag_bulk_lager_frei()`; Zeile trägt `zugeordnet`. Vorher zählte nur Zugeordnetes, freie Bulkware im Lager stand als „Fehlbestand“. Gilt damit auch für Produktionsfreigabe, Produktionsliste und Bereitschaft. Die Werk-App nahm schon vorher den Bestand des Rezeptur-Bulk-Artikels.
+- `bedarf_bulk()` (Einkauf): Bestand für lose Bulkware = zugeordnete Bulk-Chargen der Aufträge + freie Chargen des Bulk-Artikels minus Reservierungen anderer Aufträge. Vorher zählte nur verkaufsfertige Ware, der Einkauf schlug vorhandene Bulkware zum Bestellen vor.

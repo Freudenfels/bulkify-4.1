@@ -1257,7 +1257,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         <td style="white-space:normal;min-width:200px;max-width:320px"><?= h((string)($r['name'] ?? '–')) ?></td>
         <td class="muted"><?= h((string)($r['rolle'] ?? '–')) ?></td>
         <td class="bx-num"><?= $mng($ben, $einh) ?></td>
-        <td class="bx-num"><?= $mng($frei, $einh) ?></td>
+        <td class="bx-num"><?= $mng($frei, $einh) ?><?php if (isset($r['zugeordnet']) && $frei - (float)$r['zugeordnet'] > 1e-6): ?><br><span class="muted" style="font-size:11px"><?= (float)$r['zugeordnet'] > 1e-6 ? 'davon zugeordnet ' . $mng((float)$r['zugeordnet'], $einh) : 'noch nicht zugeordnet' ?></span><?php endif; ?></td>
         <td class="bx-num"><?= $quar > 1e-9 ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '">' . $mng($quar, $einh) . '</a>' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
         <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>'
@@ -1281,7 +1281,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
   <?php if (isset($_GET['diagok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-top:10px"><?= h((string)$_GET['diagok']) ?></div><?php endif; ?>
   <?php if (isset($_GET['diagfehler'])): ?><div style="color:#8f231b;margin-top:10px"><?= h((string)$_GET['diagfehler']) ?></div><?php endif; ?>
   <?= auftrag_bulk_diagnose_block((int)$a['id'], '?p=auftrag&id=' . (int)$a['id']) ?>
-  <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„frei" = im Lager verfügbar · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
+  <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„frei" = im Lager verfügbar (Bulkware: zugeordnet + freier Lagerbestand; zuordnen unten bei „Bulkware binden“) · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
 </div>
 <?php endif; endif; ?>
 <div class="bx-panel" data-panel="produktion">

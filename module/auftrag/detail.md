@@ -242,3 +242,5 @@ Ist der Produktionsauftrag in Vorbereitung (nur Admin, Auftrag nicht storniert),
 - Badge **„nicht eingebucht“** (rot, Tooltip): eine Bestellung für diesen Auftrag ist eingegangen, am Auftrag hängt aber keine Bulk-Charge. Lösung: in der Lager-App einbuchen oder unter „Bulkware binden“ eine Charge zuweisen.
 
 Material-Übersicht (04.11.2026): darunter der Block **„Ware da, aber nicht zugeordnet“** (`auftrag_bulk_diagnose_block`). Handler `aktion=bulk_diag` (nur Admin, Rücksprung nur auf interne `?p=`-Adressen), Meldungen `diagok` / `diagfehler`.
+
+Material-Übersicht, Bulkware (04.11.2026): „frei“ = zugeordnet + freier Lagerbestand, darunter klein „davon zugeordnet X“ bzw. „noch nicht zugeordnet“. Zuordnen bleibt im Reiter Material unter „Bulkware binden“.

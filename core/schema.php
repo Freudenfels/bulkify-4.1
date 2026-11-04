@@ -8368,6 +8368,21 @@ function auftrag_fertigware_cached(int $auftrag_id): array {
     if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache']['fw:' . $auftrag_id] = $r;
     return $r;
 }
+// Freie Bulkware im Lager für einen Auftrag (Nico 04.11.2026: „Ware kommt an = eingebucht = da“, Zuordnen ist ein eigener
+// Schritt im Reiter Material): Chargen des Rezeptur-Bulk-Artikels, die noch KEINEM Auftrag zugeordnet sind, abzüglich
+// Reservierungen anderer Aufträge. Dem Auftrag zugeordnete Chargen zählen separat (auftrag_fertigware_cached). Einheit wie Charge.
+function auftrag_bulk_lager_frei(int $auftrag_id): float {
+    $ck = 'bl:' . $auftrag_id;
+    if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
+    $item = $auftrag_id > 0 ? auftrag_bulk_item($auftrag_id) : 0;
+    $v = 0.0;
+    if ($item) {
+        $frei = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei' AND auftrag_id IS NULL AND fremd_kunde_id IS NULL", [$item]);
+        $v = max(0.0, $frei - item_reserviert_andere($item, $auftrag_id));
+    }
+    if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
+    return $v;
+}
 // Netto verfügbar FÜR diesen Auftrag = freier Bestand − Reservierungen ANDERER Aufträge (eigene Reservierung zählt als verfügbar).
 function item_verfuegbar_fuer(int $item_id, int $auftrag_id): float {
     return max(0.0, item_bestand($item_id, true) - item_reserviert_andere($item_id, $auftrag_id));
@@ -8700,7 +8715,9 @@ function auftrag_bedarf(int $pa_id): array {
     $zukaufFertig = $zukauf && ($pa['zukauf_art'] ?? 'bulk') === 'fertig';
     if ($zukauf) {
         $fwA  = auftrag_fertigware_cached((int)$pa['auftrag_id']);
-        $verf = $fwA['frei'];
+        // Verfügbar = dem Auftrag zugeordnete Bulk-Chargen + freie, noch nicht zugeordnete Bulkware im Lager (Nico 04.11.2026).
+        $zugeordnet = (float)$fwA['frei'];
+        $verf = $zugeordnet + ($zukaufFertig ? 0.0 : auftrag_bulk_lager_frei((int)$pa['auftrag_id']));
         $quarFw = (float)($fwA['quar'] ?? 0);   // in Quarantäne (wartet auf QM) – Zeilen ohne item_id bekommen sie unten mit
         $af = auftrag_row_cached($aid);
         $bi = produkt_bulk_info((int)$pa['produkt_id'], (string)($af['produkt_bezeichnung'] ?? ''), (string)($af['produkt_form'] ?? ''));
@@ -8715,18 +8732,18 @@ function auftrag_bedarf(int $pa_id): array {
             // Bulk/Pulver-Zukauf (wir füllen selbst ab): die zugekaufte Ware ist das PULVER, gemessen in Gramm
             // (lesbar als kg/t). Der Beutel ist KEINE zugekaufte Fertigware, sondern steht als eigene Verpackungs-
             // Position unten. Bedarf = Menge × Füllgewicht je Packung (Gramm).
-            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'] . ' – Bulk (Pulver)','benoetigt'=>(float)$einheiten,'verfuegbar'=>(float)$verf,'fehlt'=>max(0.0,(float)$einheiten-(float)$verf),'einheit'=>'g','quarantaene'=>$quarFw];
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'] . ' – Bulk (Pulver)','benoetigt'=>(float)$einheiten,'verfuegbar'=>(float)$verf,'fehlt'=>max(0.0,(float)$einheiten-(float)$verf),'einheit'=>'g','quarantaene'=>$quarFw,'zugeordnet'=>$zugeordnet];
         } elseif ($schuettZ && $menge > 0) {
             // Fertige Ware zukaufen (schon im Beutel abgefüllt): wir kaufen FERTIGE PACKUNGEN (z. B. 6.000 Beutel),
             // nicht die Portionen. Fertigware-Bestand wird intern in Portionen geführt -> in Packungen umrechnen.
             $verfPkg = $einh > 0 ? $verf / $einh : $verf;
-            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>(float)$menge,'verfuegbar'=>$verfPkg,'fehlt'=>max(0.0,(float)$menge-$verfPkg),'einheit'=>'Pkg','quarantaene'=>$einh > 0 ? $quarFw / $einh : $quarFw];
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>(float)$menge,'verfuegbar'=>$verfPkg,'fehlt'=>max(0.0,(float)$menge-$verfPkg),'einheit'=>'Pkg','quarantaene'=>$einh > 0 ? $quarFw / $einh : $quarFw,'zugeordnet'=>$einh > 0 ? $zugeordnet / $einh : $zugeordnet];
         } else {
             // Bedarf = Einheiten (Menge × Einheiten/Packung). Ist keine „Einheiten pro Packung" gepflegt
             // (z. B. v3-Fälle), fällt der Bedarf auf die Packungsmenge zurück – sonst käme 0 heraus
             // und ein Fremdauftrag OHNE zugekaufte Fertigware würde faelschlich als „produktionsbereit" gelten.
             $benoetigt = $einheiten > 0 ? $einheiten : (float)$menge;
-            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$benoetigt,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$benoetigt-$verf),'einheit'=>$bi['einheit'],'quarantaene'=>$quarFw];
+            $rows[] = ['rolle'=>'Fertigware','item_id'=>0,'name'=>$bi['bezeichnung'],'benoetigt'=>$benoetigt,'verfuegbar'=>$verf,'fehlt'=>max(0.0,$benoetigt-$verf),'einheit'=>$bi['einheit'],'quarantaene'=>$quarFw,'zugeordnet'=>$zugeordnet];
         }
     } else {
         foreach (produktion_materialbedarf($pa_id) as $m)
@@ -10113,6 +10130,15 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
         // Bei Schüttgut den Packungs-Bestand in dieselbe Einheit wie den Bedarf bringen (Packungen × Füllmenge = g/ml),
         // sonst würden Beutel von Gramm abgezogen. Stück-Formen bleiben wie bisher (Packungs-Bestand).
         $stock = $g['gewicht'] ? $stockRaw * (float)$g['ep'] : $stockRaw;
+        // Lose Bulkware (Kapseln/Pulver) zählt ebenfalls (Nico 04.11.2026): den Aufträgen zugeordnete Bulk-Chargen + freie,
+        // nicht zugeordnete Chargen des Rezeptur-Bulk-Artikels (minus Reservierungen anderer Aufträge). Einheit = Bedarf (Stk bzw. g/ml).
+        if ($g['art'] === 'bulk' && $aids) {
+            $stock += (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
+                                      WHERE c.auftrag_id IN ($in) AND i.kategorie='fertig' AND c.status='frei'");
+            $bItem = auftrag_bulk_item((int)$aids[0]);
+            if ($bItem) $stock += max(0.0, (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei' AND auftrag_id IS NULL AND fremd_kunde_id IS NULL", [$bItem])
+                                        - (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND (auftrag_id IS NULL OR auftrag_id NOT IN ($in))", [$bItem]));
+        }
         $g['bestellt'] = $bestellt;
         $g['stock'] = $stock;
         $g['zu_bestellen'] = max(0.0, $g['need'] - $stock - $bestellt);
