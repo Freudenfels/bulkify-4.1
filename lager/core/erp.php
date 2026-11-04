@@ -301,8 +301,10 @@ function erp_charge_umbuchen(int $charge_id, ?int $kunde_id, ?float $menge = nul
     $fmt = fn(float $v): string => rtrim(rtrim(number_format($v, 3, ',', '.'), '0'), ',');
 
     // Ganze Charge umbuchen (keine/zu grosse Teilmenge).
+    // Standort folgt dem Besitzer (S-16: Kundenware steht in Lager 2, eigene in Lager 1).
+    $hatOrt = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='charge' AND COLUMN_NAME='standort'") > 0;
     if ($menge === null || $menge <= 0 || $menge + 1e-9 >= $verf) {
-        q("UPDATE charge SET fremd_kunde_id=? WHERE id=?", [$ziel, $charge_id]);
+        q("UPDATE charge SET fremd_kunde_id=?" . ($hatOrt ? ", standort=?" : "") . " WHERE id=?", $hatOrt ? [$ziel, $ziel ? 'lager2' : 'lager1', $charge_id] : [$ziel, $charge_id]);
         return ['ok' => true, 'meldung' => 'Komplett in den ' . $zielname . ' umgebucht.'];
     }
 
@@ -314,6 +316,7 @@ function erp_charge_umbuchen(int $charge_id, ?int $kunde_id, ?float $menge = nul
        $ziel, $c['notiz'], $c['lieferant_id'], $c['auftrag_id'], $c['pa_id'], $c['bestellung_position_id'] ?? null,
        $c['coa_freigegeben'] ?? 0, gmdate('Y-m-d H:i:s')]);
     $neu = (int) insert_id();
+    if ($hatOrt) q("UPDATE charge SET standort=? WHERE id=?", [$ziel ? 'lager2' : 'lager1', $neu]);
     if (!empty($c['kapselgroesse_id'])) q("UPDATE charge SET kapselgroesse_id=? WHERE id=?", [(int)$c['kapselgroesse_id'], $neu]);   // Teilmenge erbt die Kapselgröße
     q("UPDATE charge SET menge=GREATEST(menge-?,0), menge_verfuegbar=GREATEST(menge_verfuegbar-?,0) WHERE id=?",
       [$moved, $moved, $charge_id]);
@@ -322,6 +325,63 @@ function erp_charge_umbuchen(int $charge_id, ?int $kunde_id, ?float $menge = nul
                          . ' umgebucht, ' . $fmt($verf - $moved) . ' bleiben.', 'neu_id' => $neu];
 }
 
+// --- Umlagern Lager 1 -> Lager 2 (Nico 04.11.2026) --------------------------------------------------------------
+// Freie, fertig produzierte Ware (verkaufsfertig, eigener Bestand in Lager 1, nicht Quarantäne) zum Umlagern ins Fremdlager
+// des Kunden. Besitzer = Kunde des Auftrags der Charge, sonst des Produktionsauftrags, sonst der Kunde am Produkt (exklusiv).
+// Gibt es keinen davon, bleibt der Besitzer offen (die Seite fragt nach – es wird nie geraten).
+function erp_umlagern_kandidaten(): array {
+    if (!tabelle_da('charge') || !tabelle_da('item')) return [];
+    $pkn = tabelle_da('produkt_kunde_name');
+    $rows = all("SELECT c.id, c.charge_nr, c.mhd, c.menge_verfuegbar, COALESCE(NULLIF(c.einheit,''), i.einheit, 'Stk') AS einheit,
+                        c.auftrag_id, c.pa_id, i.id AS item_id, i.name AS item_name, i.produkt_id,
+                        a.nummer AS auftrag_nr,
+                        COALESCE(NULLIF(a.kunde_id,0), NULLIF(pa.kunde_id,0), NULLIF(p.kunde_id,0)) AS besitzer_id,
+                        p.name AS produkt_name, p.kundenname AS produkt_kundenname
+                 FROM charge c JOIN item i ON i.id=c.item_id
+                 LEFT JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                 LEFT JOIN auftrag a ON a.id=COALESCE(c.auftrag_id, pa.auftrag_id)
+                 LEFT JOIN produkt p ON p.id=i.produkt_id
+                 WHERE i.kategorie='verkaufsfertig' AND c.status='frei' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0
+                   AND (c.standort IS NULL OR c.standort<>'lager2')
+                 ORDER BY i.name, (c.mhd IS NULL), c.mhd, c.id");
+    foreach ($rows as &$r) {
+        $kid = (int)($r['besitzer_id'] ?? 0);
+        $r['besitzer_id'] = $kid;
+        $k = $kid ? one("SELECT firma, COALESCE(nutzt_fulfillment,0) AS ff FROM kunden WHERE id=?", [$kid]) : null;
+        $r['besitzer'] = $k ? (string)$k['firma'] : '';
+        $r['fulfillment'] = $k ? (int)$k['ff'] === 1 : false;
+        // Anzeigename: kundenspezifischer Produktname des Besitzers, sonst Kundenname am Produkt, sonst Produkt/Artikel.
+        $kn = ($pkn && $kid && !empty($r['produkt_id'])) ? (string) scalar("SELECT name FROM produkt_kunde_name WHERE produkt_id=? AND kunde_id=?", [(int)$r['produkt_id'], $kid]) : '';
+        $r['anzeige'] = $kn !== '' ? $kn : ((string)($r['produkt_kundenname'] ?? '') !== '' ? (string)$r['produkt_kundenname'] : ((string)($r['produkt_name'] ?? '') ?: (string)$r['item_name']));
+    }
+    unset($r);
+    return $rows;
+}
+// Eine Teilmenge (oder die ganze) Charge ins Lager 2 des Kunden umlagern: Lager 1 sinkt, die Menge liegt danach NUR im Lager 2
+// (fremd_kunde_id = Kunde, standort lager2) – gleiche Charge-Nr./MHD/Auftrag. Bewegungslog Ausgang (Lager 1) + Eingang (Lager 2). Rückgabe ['ok','meldung'].
+function erp_umlagern_lager2(int $charge_id, float $menge, int $kunde_id): array {
+    $c = one("SELECT c.*, i.kategorie, i.name AS item_name FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
+    if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
+    if ((string)$c['kategorie'] !== 'verkaufsfertig') return ['ok' => false, 'meldung' => 'Nur fertig produzierte Ware wird hier umgelagert.'];
+    if ((string)$c['status'] !== 'frei' || !empty($c['fremd_kunde_id'])) return ['ok' => false, 'meldung' => 'Charge ' . (string)$c['charge_nr'] . ' ist nicht frei in Lager 1.'];
+    $verf = (float)$c['menge_verfuegbar'];
+    $fmt = fn(float $v): string => rtrim(rtrim(number_format($v, 3, ',', '.'), '0'), ',');
+    if ($menge <= 0) return ['ok' => false, 'meldung' => 'Bitte eine Menge größer 0 angeben.'];
+    if ($menge > $verf + 1e-9) return ['ok' => false, 'meldung' => 'Charge ' . (string)$c['charge_nr'] . ': nur ' . $fmt($verf) . ' verfügbar.'];
+    $k = $kunde_id > 0 ? one("SELECT firma, COALESCE(nutzt_fulfillment,0) AS ff FROM kunden WHERE id=?", [$kunde_id]) : null;
+    if (!$k) return ['ok' => false, 'meldung' => 'Charge ' . (string)$c['charge_nr'] . ': Besitzer (Kunde) fehlt.'];
+    if ((int)$k['ff'] !== 1) return ['ok' => false, 'meldung' => (string)$k['firma'] . ' nutzt kein Fulfillment – Lager 2 gibt es nur für Fulfillment-Kunden.'];
+    $r = erp_charge_umbuchen($charge_id, $kunde_id, $menge);
+    if (empty($r['ok'])) return $r;
+    $ziel = !empty($r['neu_id']) ? (int)$r['neu_id'] : $charge_id;
+    if (function_exists('lg_bewegung_log')) {   // Lager 1 raus, Lager 2 rein – keine Doppelzählung, beides nachvollziehbar
+        lg_bewegung_log($charge_id, 'aus', $menge, (string)($c['einheit'] ?: 'Stk'), (string)$c['item_name'], 'Umlagern nach Lager 2 (' . (string)$k['firma'] . ')');
+        lg_bewegung_log($ziel, 'ein', $menge, (string)($c['einheit'] ?: 'Stk'), (string)$c['item_name'], 'Umlagern aus Lager 1 (' . (string)$k['firma'] . ')' . ($ziel !== $charge_id ? ', aus Charge #' . $charge_id : ''));
+    }
+    erp_bedarf_bump();
+    return ['ok' => true, 'meldung' => $fmt($menge) . ' ' . (string)($c['einheit'] ?: 'Stk') . ' ' . (string)$c['charge_nr'] . ' ins Lager 2 von ' . (string)$k['firma'] . ' umgelagert.'];
+}
+
 // Wahrscheinlicher Kunde einer (Fertigwaren-)Charge: aus Auftrag, sonst Produktionsauftrag, sonst Produkt.
 function erp_charge_kunde_vorschlag(int $charge_id): ?int {
     if (!tabelle_da('charge')) return null;
