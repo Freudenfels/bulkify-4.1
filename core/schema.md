@@ -454,3 +454,6 @@ Soll-Kette 4a (04.11.2026): Spalte `produktionsauftrag.menge_vor_etikett`. `prod
 
 ## Soll-Kette 4b: Anweisung „Teilmenge produzieren“ (04.11.2026)
 `aufgabe.menge` / `aufgabe.umfang` (komplett | vor_etikett). `pa_teilmenge_anweisen()` legt die Aufgabe (ref_typ teilmenge) an und hebt die PA-Priorität; `pa_teilmenge_anweisungen()`; `teilmenge_anweisung_verrechnen()` zieht gemeldete Mengen ab („komplett“ deckt auch „bis vor dem Etikett“) – auch aus `produktion_teilmenge_produzieren()`.
+
+## Soll-Kette 5: Fertigware sofort frei (04.11.2026, Nico „ok“)
+`produktion_teilmenge_einbuchen()` bucht eigene Fertigware **frei** (kein QM-Gate mehr) und ruft `fertigware_qm_freigabe_nach($cid, '', $mitBericht, 'Produktionsabschluss')`: CoA-Stempel/Informationsdokument je Charge sofort, Produktionsbericht erst, wenn die ganze Menge produziert ist. `fertigware_qm_freigabe_nach()` hat dafür `$mitBericht` und `$anlass`.

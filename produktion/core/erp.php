@@ -1208,11 +1208,33 @@ function erp_teilmenge_einbuchen(int $pa_id, float $menge): ?int {
     if (!$item_id) return null;
     $charge_nr = erp_charge_naechste_nr($pa_id);
     // Fertigcharge an den Auftrag binden (S-09, Spiegel von produktion_teilmenge_einbuchen): auftrag_id + pa_id.
-    // QM-Gate (St-11d): eigene Fertigware kommt in Quarantäne, frei erst nach der QM-Freigabe (wie im Dashboard).
+    // Soll-Kette 5 (04.11.2026): eigene Fertigware ist sofort FREI (kein QM-Gate). Bericht + CoA entstehen im Dashboard (Loopback).
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'quarantaene', ?, ?, ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?, ?)",
       [$charge_nr, $item_id, $menge, $menge, erp_mhd_standard(), 'Aus Produktion ' . $pa['nummer'], $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
-    return insert_id();
+    $cid = (int) insert_id();
+    erp_fertigware_dokumente_melden($cid, erp_produktion_rest($pa_id) <= 0.0001);
+    return $cid;
+}
+// Soll-Kette 5: frisch produzierte Fertigware ans Dashboard melden (?p=api_qm_freigabe, Token wie Einlagern) – dort entstehen das CoA
+// je Charge und, wenn die ganze Menge produziert ist ($bericht), die Freigabe des Produktionsberichts. Fehler werden geschluckt
+// (die Buchung steht); die Datenprüfung zeigt freie Fertigware ohne Bericht nicht, aber der Bericht lässt sich am PA freigeben.
+function erp_fertigware_dokumente_melden(int $charge_id, bool $bericht): array {
+    if ($charge_id <= 0 || !function_exists('curl_init') || !tabelle_da('app_meta')) return ['ok' => false];
+    try {
+        $t = (string) scalar("SELECT v FROM app_meta WHERE k='einlager_api_token'");
+        if ($t === '') { $t = bin2hex(random_bytes(16)); q("INSERT INTO app_meta (k,v) VALUES ('einlager_api_token', ?) ON DUPLICATE KEY UPDATE v=VALUES(v)", [$t]); }
+        $u = function_exists('pr_benutzer') ? pr_benutzer() : null;
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $ch = curl_init($scheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro') . '/?p=api_qm_freigabe');
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_POSTFIELDS => http_build_query(['charge_id' => $charge_id, 'token' => $t, 'wer' => (string)($u['name'] ?? ''), 'bericht' => $bericht ? '1' : '0', 'anlass' => 'produktion']),
+            CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 2, CURLOPT_POSTREDIR => 7]);
+        if (defined('CURLSSLOPT_NATIVE_CA')) curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+        $res = curl_exec($ch); curl_close($ch);
+        $j = json_decode((string)$res, true);
+        return is_array($j) ? $j : ['ok' => false];
+    } catch (\Throwable $e) { return ['ok' => false]; }
 }
 
 // Stationen (mit Material) dieses Auftrags in Reihenfolge – Grundlage für Prüfung und anteilige Abbuchung einer Teilmenge.

@@ -375,6 +375,23 @@ $CHECKS = [
                     ORDER BY b.id DESC",
         'ohne_fix'  => 'Nur Anzeige: Einbuchen braucht Charge, MHD und Menge der echten Lieferung – bitte in der Lager-App buchen oder am Auftrag eine Charge binden.',
     ],
+    'fertigware_quarantaene' => [
+        'titel' => 'Produktion: eigene Fertigware steht noch in Quarantäne',
+        'info'  => 'Seit der Soll-Kette (Teil 5, 04.11.2026) ist eigene Fertigware nach der Produktion sofort frei – Bericht und CoA entstehen beim Produktionsabschluss. Diese Chargen kamen noch nach der alten Regel (QM-Gate) in Quarantäne. Beheben gibt sie frei; dabei entstehen wie bisher Produktionsbericht und CoA für den Kunden.',
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=chargen&id=', c.id) AS _link, i.name AS artikel, c.charge_nr, c.menge_verfuegbar AS menge, c.einheit,
+                           pa.nummer AS produktion, a.nummer AS auftrag, IF(c.auftrag_id IS NULL, NULL, CONCAT('?p=auftrag&id=', c.auftrag_id)) AS _link_auftrag, DATE(c.angelegt) AS produziert
+                    FROM charge c JOIN item i ON i.id = c.item_id JOIN produktionsauftrag pa ON pa.id = c.pa_id LEFT JOIN auftrag a ON a.id = c.auftrag_id
+                    WHERE c.status = 'quarantaene' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar > 0
+                    ORDER BY c.id",
+        'korrektur' => "UPDATE charge SET status='frei' WHERE id = <ID> AND status='quarantaene';   (charge_quarantaene_freigeben: + Bericht/CoA)",
+        'fix'   => ['tabelle' => 'charge', 'typ' => 'charge',
+                    'aktion' => function (array $r) {
+                        if (!charge_quarantaene_freigeben((int)$r['_id'])) return 0;
+                        aenderung_protokollieren('charge', (int)$r['_id'], ['status' => 'quarantaene'], ['status' => 'frei'], 'datenpruefung');
+                        bedarf_bump();
+                        return 1;
+                    }],
+    ],
     'quarantaene_wareneingang' => [
         'titel' => 'Lager: Ware aus dem Wareneingang steht noch in Quarantäne',
         'info'  => 'Seit der Soll-Kette (04.11.2026) ist eingebuchte Ware frei; Quarantäne nur noch bei bewusst gewähltem Problem. Diese Chargen kamen noch nach der alten Regel in Quarantäne (Altbestand). Eigene Fertigware aus der Produktion ist hier nicht dabei. Beheben gibt die Charge frei (wie Lager → Freigaben), protokolliert.',

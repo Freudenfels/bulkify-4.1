@@ -48,7 +48,9 @@ if (($_GET['p'] ?? '') === 'api_qm_freigabe') {
     if ($soll === '' || !hash_equals($soll, $token)) { http_response_code(401); echo json_encode(['ok'=>false, 'meldung'=>'Token ungültig.']); exit; }
     $cid = (int)($_POST['charge_id'] ?? 0);
     if ($cid <= 0) { http_response_code(400); echo json_encode(['ok'=>false, 'meldung'=>'charge_id fehlt.']); exit; }
-    $r = fertigware_qm_freigabe_nach($cid, mb_substr(trim((string)($_POST['wer'] ?? '')), 0, 150));
+    // Soll-Kette 5: die Werk-App meldet frisch produzierte (sofort freie) Fertigware; Bericht nur, wenn die ganze Menge da ist.
+    $r = fertigware_qm_freigabe_nach($cid, mb_substr(trim((string)($_POST['wer'] ?? '')), 0, 150), (string)($_POST['bericht'] ?? '1') === '1',
+                                     ($_POST['anlass'] ?? '') === 'produktion' ? 'Produktionsabschluss' : 'QM-Freigabe');
     echo json_encode(['ok'=>$r['fehler'] === '', 'bericht'=>$r['bericht'], 'coa'=>$r['coa'], 'meldung'=>$r['fehler']]);
     exit;
 }

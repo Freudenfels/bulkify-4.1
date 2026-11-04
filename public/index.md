@@ -16,3 +16,5 @@
 Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route, erstellt). `public/index.php` ruft bei jedem POST `aenderung_beobachten($route, $id)` auf: Der Hauptdatensatz der Seite (`aenderung_routen()`: Auftrag, Angebot, Produkt, Rezeptur, Kunde, Lieferant, Bestellung, Artikel, Produktionsauftrag, Kontingent, Dienstleistung, Benutzer) wird vorher gelesen und nach der Antwort (auch nach Redirect) verglichen. Jedes geänderte Feld wird mit alt/neu, Person und Zeit protokolliert (`aenderung_protokollieren()`). Technische und geheime Felder (Zeitstempel, Token, Passwort-Hash, Caches) sind ausgenommen. Anzeige: `?p=protokoll&ansicht=felder`, filterbar nach Bereich, Objekt-ID und Text. Positionen und Untertabellen werden nicht erfasst.
 
 `?p=api_qm_freigabe` (POST charge_id, token, wer): Loopback der Lager-App nach einer QM-Freigabe -> `fertigware_qm_freigabe_nach()`.
+
+`api_qm_freigabe` (04.11.2026): zusätzlich `bericht` (1/0) und `anlass` (`produktion` = Produktionsabschluss) – die Werk-App meldet frisch produzierte Fertigware.

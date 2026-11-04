@@ -106,3 +106,5 @@ Soll-Kette 1 (04.11.2026): `erp_materialbedarf()` nimmt bei Weg „premix“ den
 - Etikett-Freigabe sperrt nur noch den Schritt **Etikettieren** (vorher alle Schritte).
 
 Soll-Kette 4b (04.11.2026): `erp_teilmenge_anweisungen()` (offene Anweisungen vom Büro), `erp_teilmenge_anweisung_verrechnen()` – aufgerufen von `erp_teilmenge_produzieren()` und `erp_teilmenge_vor_etikett()`.
+
+Soll-Kette 5 (04.11.2026): `erp_teilmenge_einbuchen()` bucht Fertigware frei und meldet sie per `erp_fertigware_dokumente_melden()` (Loopback `?p=api_qm_freigabe`, Token wie Einlagern) – dort entstehen CoA und, bei voller Menge, die Bericht-Freigabe.

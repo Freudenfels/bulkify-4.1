@@ -3680,12 +3680,14 @@ function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd =
     $notiz = trim($notiz);
     // Die Fertigcharge gehört zu DIESEM Auftrag (S-09): auftrag_id (und über den Auftrag der Kunde) + pa_id. Versand und Lieferschein
     // arbeiten nur mit den Chargen des eigenen Auftrags – kein gemeinsamer Topf mehr, keine Verwechslung zwischen Kunden.
-    // QM-Gate (St-11d): eigene Fertigware (Bulk + verkaufsfertig) kommt in QUARANTÄNE – Versand, Fremdlager und
-    // Weiterverarbeitung erst nach der Freigabe durch QM (Lager-App „Quarantäne" / Dashboard-Wareneingang).
+    // Soll-Kette 5 (Nico 04.11.2026): eigene Fertigware ist nach der Produktion SOFORT frei (kein QM-Gate mehr) und steht in Lager 1
+    // zum Bewegen/Versand. Bericht + CoA für den Kunden: CoA je Fertigcharge sofort, Produktionsbericht, sobald die ganze Menge da ist.
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'quarantaene', ?, ?, ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?, ?)",
       [$charge_nr, $item_id, $menge, $menge, $mhd, 'Aus Produktion ' . $pa['nummer'] . ($notiz !== '' ? ' – ' . mb_substr($notiz, 0, 200) : ''), $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
-    return ['ok'=>true, 'msg'=>'', 'charge_id'=>insert_id(), 'charge_nr'=>$charge_nr];
+    $cidNeu = (int) insert_id();
+    fertigware_qm_freigabe_nach($cidNeu, '', produktion_rest($pa_id) <= 0.0001, 'Produktionsabschluss');
+    return ['ok'=>true, 'msg'=>'', 'charge_id'=>$cidNeu, 'charge_nr'=>$charge_nr];
 }
 // Fertigware eines abgeschlossenen Produktionsauftrags als Charge einbuchen.
 // Bucht den noch OFFENEN Rest der Produktionsmenge (Teilchargen, die vorher über
@@ -11118,7 +11120,9 @@ function auftrag_ins_fremdlager(int $auftrag_id): array {
 // Ausnahmen (Team hält zurück): bericht_zurueckgehalten=1 bzw. CoA-Dokument auf nicht sichtbar – beides bleibt so (das CoA
 // wird je Charge nur EINMAL erzeugt). Liegt ein echtes, am Fertigprodukt gemessenes CoA vor, entsteht keine Übersicht.
 // Aufruf: Dashboard-Quarantäne (module/lager/wareneingang.php) und Lager-App über ?p=api_qm_freigabe. Wirft nie.
-function fertigware_qm_freigabe_nach(int $charge_id, string $wer = ''): array {
+// Soll-Kette 5: $mitBericht = Produktionsbericht mit freigeben (bei Produktion nur, wenn die ganze Menge produziert ist),
+// $anlass für Vermerk/Kundenverlauf („QM-Freigabe“ bzw. „Produktionsabschluss“).
+function fertigware_qm_freigabe_nach(int $charge_id, string $wer = '', bool $mitBericht = true, string $anlass = 'QM-Freigabe'): array {
     $out = ['bericht' => false, 'coa' => 0, 'fehler' => ''];
     try {
         $c = one("SELECT c.id, c.charge_nr, c.pa_id, c.auftrag_id, c.status, i.kategorie FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
@@ -11126,10 +11130,10 @@ function fertigware_qm_freigabe_nach(int $charge_id, string $wer = ''): array {
         if ($wer === '' && function_exists('current_user')) { $u = current_user(); $wer = trim((string)($u['name'] ?? '')); }
         q("UPDATE charge SET qm_freigabe_am=COALESCE(qm_freigabe_am, UTC_TIMESTAMP()), qm_freigabe_von=COALESCE(qm_freigabe_von, ?) WHERE id=?", [$wer !== '' ? $wer : null, $charge_id]);
         $pa = one("SELECT id, nummer, auftrag_id, kunde_id, bericht_freigegeben_am, COALESCE(bericht_zurueckgehalten,0) AS zh FROM produktionsauftrag WHERE id=?", [(int)$c['pa_id']]);
-        if ($pa && empty($pa['bericht_freigegeben_am']) && (int)$pa['zh'] === 0) {
-            q("UPDATE produktionsauftrag SET bericht_freigegeben_am=UTC_TIMESTAMP(), bericht_freigegeben_von=? WHERE id=?", [mb_substr(($wer !== '' ? $wer : 'QM') . ' (automatisch bei QM-Freigabe)', 0, 190), (int)$pa['id']]);
+        if ($mitBericht && $pa && empty($pa['bericht_freigegeben_am']) && (int)$pa['zh'] === 0) {
+            q("UPDATE produktionsauftrag SET bericht_freigegeben_am=UTC_TIMESTAMP(), bericht_freigegeben_von=? WHERE id=?", [mb_substr(($wer !== '' ? $wer : ($anlass === 'QM-Freigabe' ? 'QM' : 'Produktion')) . ' (automatisch bei ' . $anlass . ')', 0, 190), (int)$pa['id']]);
             $out['bericht'] = true;
-            if ((int)$pa['kunde_id'] > 0) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'system', 'Produktionsbericht ' . $pa['nummer'] . ' bei der QM-Freigabe automatisch für Sie freigegeben.', '', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
+            if ((int)$pa['kunde_id'] > 0) log_aktivitaet('kunde', (int)$pa['kunde_id'], 'system', 'Produktionsbericht ' . $pa['nummer'] . ' bei ' . ($anlass === 'QM-Freigabe' ? 'der QM-Freigabe' : 'Produktionsabschluss') . ' automatisch für Sie freigegeben.', '', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
         }
         $aid = (int)($c['auftrag_id'] ?: ($pa['auftrag_id'] ?? 0));
         require_once __DIR__ . '/coa_uebersicht.php';

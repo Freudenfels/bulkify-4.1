@@ -66,3 +66,5 @@ Optional `zeilen => fn(array $rows): array` ergänzt Spalten, die sich nicht in 
 - **charge_ohne_kapselgroesse**: Kapsel-Bulk und Leerkapseln ohne Kapselgröße. Anwählbar, wenn ableitbar; Beheben trägt nach. Der Rest ist wirklich unklar (nur diese Kisten prüft das Lager).
 - **bulk_artikel_lose**: lose Bulk-Artikel ohne Rezeptur mit Vorschlag (Auftrag der Chargen, sonst Rezepturname). Beheben führt zusammen (`item_zusammenfuehren`), nur bei eindeutigem Ziel und gleicher Einheit.
 - Schritt „Produktions-Freigabe“: siehe `pa_schritt_produktionsfreigabe`.
+
+**fertigware_quarantaene** (Soll-Kette 5, 04.11.2026): eigene Fertigware, die noch nach alter Regel in Quarantäne steht. Beheben gibt frei (inkl. Bericht/CoA wie bisher).
