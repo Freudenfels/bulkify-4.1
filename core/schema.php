@@ -7930,7 +7930,16 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
     foreach ($roh as $r) $kg += (float)$r['benoetigt'] * (($r['einheit'] ?? '') === 'g' ? 0.001 : 1.0);
     // Leerkapseln gehören bei Premix + Einzelrohstoffen zu den Kosten (bei fertigen Kapseln stecken sie im Preis).
     $kapEk = $form === 'kapsel' && function_exists('produkt_kapsel_ek') ? (float) produkt_kapsel_ek((int)$a['produkt_id']) : 0.0;
-    $kapZeile = $form === 'kapsel' ? ['item_id' => function_exists('produkt_leerkapsel_id') ? (int) produkt_leerkapsel_id((int)$a['produkt_id']) : 0, 'name' => 'Leerkapseln', 'menge' => $einh, 'einheit' => 'Stk', 'preis' => $kapEk > 0 ? $kapEk : null, 'gesamt' => $kapEk > 0 ? $kapEk * $einh : null] : null;
+    $kapId = $form === 'kapsel' ? (int) produkt_leerkapsel_id((int)$a['produkt_id']) : 0;
+    $kapHinweis = ''; $kapLink = '';
+    if ($form === 'kapsel' && !$kapId) {   // keine eindeutige Leerkapsel: sagen warum + wohin (nie raten)
+        $kgr = rezeptur_kapselgroesse($rid);
+        $kn = count(produkt_leerkapsel_kandidaten((int)$a['produkt_id']));
+        if (!$kgr) { $kapHinweis = 'Kapselgröße fehlt an der Rezeptur'; $kapLink = '?p=rezeptur_detail&id=' . $rid; }
+        elseif ($kn > 1) { $kapHinweis = $kn . ' Leerkapseln ' . (string)$kgr['name'] . ' – am Produkt eine wählen'; $kapLink = '?p=produkt&id=' . (int)$a['produkt_id']; }
+        else { $kapHinweis = 'keine Leerkapsel ' . (string)$kgr['name'] . ' angelegt'; $kapLink = '?p=rohstoffe&kat=leerkapsel'; }
+    }
+    $kapZeile = $form === 'kapsel' ? ['item_id' => $kapId, 'link' => $kapLink, 'hinweis' => $kapHinweis, 'name' => 'Leerkapseln', 'menge' => $einh, 'einheit' => 'Stk', 'preis' => $kapEk > 0 ? $kapEk : null, 'gesamt' => $kapEk > 0 ? $kapEk * $einh : null] : null;
     $angebote = function (array $preise, float $menge) use ($lief) {
         $l = [];
         foreach ($preise as $lid => $p) if ($p > 0) $l[] = ['lieferant_id' => (int)$lid, 'lieferant' => $lief((int)$lid), 'preis' => $p, 'gesamt' => $p * $menge];

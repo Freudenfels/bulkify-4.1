@@ -1234,7 +1234,9 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
     $bwM = fn($x, $e) => in_array($e, ['Stk'], true) ? $bwN(round((float)$x)) . ' Stk' : rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',') . ' ' . $e;
     $bwE = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
     // Rohstoff anklicken -> Rohstoffseite, Reiter Einkauf (dort „Preis anfragen“, Lieferantenpreise).
-    $bwLink = fn(array $r) => !empty($r['item_id']) ? '<a href="?p=rohstoff&id=' . (int)$r['item_id'] . '&tab=ek" title="Rohstoff öffnen (Preise, Preis anfragen)">' . h((string)$r['name']) . '</a>' : h((string)$r['name']);
+    // Leerkapsel ohne eindeutigen Artikel: Link dorthin, wo sie festgelegt wird (Produkt/Rezeptur/Leerkapsel-Liste) + Grund.
+    $bwLink = fn(array $r) => !empty($r['item_id']) ? '<a href="?p=rohstoff&id=' . (int)$r['item_id'] . '&tab=ek" title="Rohstoff öffnen (Preise, Preis anfragen)">' . h((string)$r['name']) . '</a>'
+        : (!empty($r['link']) ? '<a href="' . h((string)$r['link']) . '">' . h((string)$r['name']) . '</a>' . (!empty($r['hinweis']) ? ' <span class="muted" style="font-size:12px">(' . h((string)$r['hinweis']) . ')</span>' : '') : h((string)$r['name']));
     $bwPreis = fn($x) => (float)$x < 1 ? number_format((float)$x, 4, ',', '.') . ' €' : number_format((float)$x, 2, ',', '.') . ' €';
     // günstigster Weg mit vollständigem Preis (Rohstoffe nur ohne Lücke)
     $bwKost = [];
