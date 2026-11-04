@@ -26,3 +26,5 @@ Klartext angezeigt. Liegen in `lg_meta` (DB, nicht im Repo) – fürs scharfe De
 (Label erstellen auf der Sendungsseite). Sobald die echten Zugänge eingetragen sind, laufen die Labels scharf.
 
 Alle Werte über `lg_meta_lesen/_schreiben`. Druckweg: SumatraPDF, siehe `bruecke/bruecke.ps1`.
+
+Drucker – **Kartonetiketten (Produktion)** (`drucker_karton`, Soll-Kette 6): hier den WLAN-Produktionsdrucker wählen.

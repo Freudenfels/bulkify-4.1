@@ -118,3 +118,5 @@ Soll-Kette 2d (04.11.2026): `erp_rezeptur_kapselgroesse()` (gleiche Regel wie `r
 Soll-Kette 2b (04.11.2026): `erp_hinweis_neuer_artikel()` – jede im Wareneingang neu angelegte Position wird eine Benachrichtigung im Dashboard (Link auf die Charge), damit das Team Dubletten zusammenführt bzw. die Bestellung zuordnet.
 
 Soll-Kette 3 (04.11.2026): `erp_bezug_sel()` / `erp_bezug_text()` – je Charge Kapselgröße, Auftrag mit Kunde (an der Charge oder über die Bestellposition) und aktive Reservierungen. Genutzt von `erp_bestand()` und `erp_charge_voll()`. `erp_erwartete_lieferungen()` liefert je Position `fuer_auftrag`.
+
+Soll-Kette 6 (04.11.2026): `erp_karton_etikett_daten($pa)` – Produkt, Auftrag, Kunde und die Kartonwerte des PA.

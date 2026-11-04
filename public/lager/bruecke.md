@@ -11,3 +11,5 @@ Rückmeldung eines Druckjobs kommt per `POST` mit `druck_id`, `ok`, `antwort`. D
 ist in `bruecke/bruecke.ps1`.
 
 Jeder Aufruf gilt als Lebenszeichen der Brücke. Geschützt ist das Ganze durch den Schlüssel in `lg_meta.bruecke_token`.
+
+Druckjob-Typ **karton** (Soll-Kette 6) → `lg_produktion_karton_pdf()` auf `drucker_karton` (sonst Standard-Etikettendrucker).

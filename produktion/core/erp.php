@@ -1276,6 +1276,30 @@ function erp_teilmenge_produzieren(int $pa_id, float $m, string $akteur): array 
     erp_teilmenge_anweisung_verrechnen($pa_id, $m, 'komplett');   // Soll-Kette 4b
     return ['ok'=>true, 'msg'=>'Teilmenge eingebucht (Charge ' . $nr . ').', 'charge_nr'=>$nr, 'fehlt'=>[]];
 }
+// ===== Soll-Kette 6: Kartonetiketten (Verpackungsschritt) =====
+// Vorschlag für den Druck: Pkg je Karton (zuletzt verwendet), Packungen (offener Rest bzw. Auftragsmenge), Charge (zuletzt
+// eingebuchte Fertigcharge, sonst die nächste), MHD (am PA festgelegt, sonst Standard).
+function erp_karton_vorschlag(int $pa_id): array {
+    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]) ?: [];
+    $letzte = one("SELECT c.charge_nr, c.mhd FROM charge c JOIN item i ON i.id=c.item_id WHERE c.pa_id=? AND i.kategorie='verkaufsfertig' ORDER BY c.id DESC LIMIT 1", [$pa_id]);
+    $rest = (int) floor(erp_produktion_rest($pa_id));
+    return [
+        'stueck' => (int)($pa['karton_stueck'] ?? 0),
+        'menge'  => $rest > 0 ? $rest : (int)($pa['menge'] ?? 0),
+        'charge' => (string)($letzte['charge_nr'] ?? '') !== '' ? (string)$letzte['charge_nr'] : erp_charge_naechste_nr($pa_id),
+        'mhd'    => !empty($letzte['mhd']) ? (string)$letzte['mhd'] : (!empty($pa['mhd']) ? (string)$pa['mhd'] : erp_mhd_standard()),
+    ];
+}
+// Druckdaten am PA speichern und den Druck über die Lager-Brücke anstoßen (Drucker „Kartonetiketten“ in den Lager-Einstellungen).
+function erp_karton_drucken(int $pa_id, int $stueck, int $menge, string $charge, string $mhd): array {
+    if (!erp_spalte_da('produktionsauftrag', 'karton_stueck')) return ['ok' => false, 'meldung' => 'Bitte einmal das Dashboard öffnen (Datenbank-Spalte fehlt noch).'];
+    if ($stueck <= 0 || $menge <= 0) return ['ok' => false, 'meldung' => 'Bitte Pkg je Karton und Packungen angeben.'];
+    $mhd = strtotime($mhd) ? date('Y-m-d', strtotime($mhd)) : null;
+    q("UPDATE produktionsauftrag SET karton_stueck=?, karton_menge=?, karton_charge=?, karton_mhd=? WHERE id=?", [$stueck, $menge, mb_substr(trim($charge), 0, 40), $mhd, $pa_id]);
+    $r = pr_lager_blink_call('p=api_druck&typ=karton&id=' . $pa_id);
+    $n = (int) ceil($menge / $stueck);
+    return ['ok' => !empty($r['ok']), 'meldung' => !empty($r['ok']) ? $n . ' Kartonetikett(en): ' . (string)$r['meldung'] : (string)$r['meldung'], 'anzahl' => $n];
+}
 // Soll-Kette 4b: offene Anweisungen „Teilmenge produzieren“ (Aufgaben ref_typ 'teilmenge') – für die Werk-Liste bzw. einen PA.
 function erp_teilmenge_anweisungen(int $pa_id = 0): array {
     if (!tabelle_da('aufgabe') || !erp_spalte_da('aufgabe', 'menge')) return [];

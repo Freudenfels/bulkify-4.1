@@ -8,3 +8,5 @@ Analog zu `led/api_blink.php`, aber für **Druckaufträge**. Lässt **andere Pro
 - **Antwort:** `{ok, job, bruecke_wach, meldung}`. `bruecke_wach` = Brücke-Lebenszeichen < 15 s.
 
 Aufruf aus der Produktion über `pr_lager_druck_probe($probe_id)` in `produktion/core/erp.php` (nutzt dieselbe Loopback-Kette wie `pr_lager_blink`). Die Werk-App ruft das beim „Probe gezogen" auf und markiert die Probe danach als `etikett_gedruckt`.
+
+Typ **karton** (Soll-Kette 6, 04.11.2026): id = Produktionsauftrag, Format gross.

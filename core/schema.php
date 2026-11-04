@@ -809,6 +809,11 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'zukauf_art', "VARCHAR(10) NOT NULL DEFAULT 'bulk'");
     ensure_column('produktionsauftrag', 'beschaffungsweg', "VARCHAR(10) NULL");
     ensure_column('produktionsauftrag', 'menge_vor_etikett', "INT NULL");
+    // Soll-Kette 6: Kartonetiketten aus dem Verpackungsschritt (Pkg je Karton, Packungen, Charge, MHD des letzten Drucks)
+    ensure_column('produktionsauftrag', 'karton_stueck', "INT NULL");
+    ensure_column('produktionsauftrag', 'karton_menge', "INT NULL");
+    ensure_column('produktionsauftrag', 'karton_charge', "VARCHAR(40) NULL");
+    ensure_column('produktionsauftrag', 'karton_mhd', "DATE NULL");
     ensure_column('aufgabe', 'menge', "INT NULL");          // Soll-Kette 4b: Anweisung „Teilmenge produzieren“ (offene Pkg)
     ensure_column('aufgabe', 'umfang', "VARCHAR(12) NULL");  // komplett | vor_etikett   // Soll-Kette 4: bis vor dem Etikettieren produziert (kumuliert, Pkg)   // Soll-Kette 1: kapsel|premix|rohstoffe (am Auftrag festgelegt)        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
     // Eigen/Fremd wird im Backend FESTGELEGT, bevor der Auftrag in die Produktion geht. NULL = noch offen

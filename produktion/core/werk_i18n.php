@@ -226,6 +226,11 @@ function werk_texte(string $lang): array {
         'instr_h' => 'Anweisungen vom Büro',
         'instr_one' => 'Anweisung:',
         'prio_high' => 'Priorität hoch',
+        'carton_h' => 'Kartonetiketten',
+        'carton_hint' => 'Wie viele Packungen gehen in einen Karton? Das System rechnet die Kartons aus und druckt alle Etiketten auf einmal (100 × 150 mm).',
+        'carton_per' => 'Pkg je Karton',
+        'carton_print' => 'Kartonetiketten drucken',
+        'cartons' => 'Kartons',
     ];
     $en = [
         'pin_enter' => 'Enter PIN',
@@ -352,6 +357,11 @@ function werk_texte(string $lang): array {
         'instr_h' => 'Instructions from the office',
         'instr_one' => 'Instruction:',
         'prio_high' => 'high priority',
+        'carton_h' => 'Carton labels',
+        'carton_hint' => 'How many packs go into one carton? The system works out the cartons and prints all labels at once (100 × 150 mm).',
+        'carton_per' => 'Packs per carton',
+        'carton_print' => 'Print carton labels',
+        'cartons' => 'cartons',
     ];
     $uk = [
         'pin_enter' => 'Введіть PIN',
@@ -478,6 +488,11 @@ function werk_texte(string $lang): array {
         'instr_h' => 'Вказівки з офісу',
         'instr_one' => 'Вказівка:',
         'prio_high' => 'високий пріоритет',
+        'carton_h' => 'Етикетки на коробки',
+        'carton_hint' => 'Скільки упаковок входить в одну коробку? Система порахує коробки й надрукує всі етикетки одразу (100 × 150 мм).',
+        'carton_per' => 'Уп. в коробці',
+        'carton_print' => 'Друкувати етикетки',
+        'cartons' => 'коробок',
     ];
     $map = ['de' => $de, 'en' => $en, 'uk' => $uk];
     return array_merge($de, $map[$lang] ?? []);   // fehlende Schlüssel -> Deutsch

@@ -329,6 +329,49 @@ function lg_probe_etikett_pdf(int $probe_id): ?string {
     return $pdf->output();
 }
 
+// === Kartonetiketten der Produktion (Soll-Kette 6) ===========================================
+// 100 x 150 mm hoch, je Karton eine Seite: Produkt, Charge, MHD, Stückzahl im Karton, „Karton 5 von 40“, Auftrag/Kunde, Barcode.
+// Barcode (Code 128) = Charge-Kartonnummer, z. B. „2701.A-K05“. Der letzte Karton trägt den Rest.
+function lg_produktion_karton_pdf(int $pa_id): ?string {
+    if (!function_exists('erp_karton_etikett_daten')) return null;
+    $d = erp_karton_etikett_daten($pa_id);
+    if (!$d) return null;
+    $je = (int)$d['karton_stueck']; $menge = (int)$d['karton_menge'];
+    $n = (int) ceil($menge / $je);
+    $mm = fn(float $v): float => $v / 25.4 * 72;
+    $pdf = new MiniPDF();
+    $pdf->w = $mm(100); $pdf->h = $mm(150);
+    $W = $pdf->w; $dark = [20, 20, 20]; $muted = [120, 120, 120]; $line = [205, 205, 205];
+    $charge = (string)($d['karton_charge'] ?? '');
+    $mhd = !empty($d['karton_mhd']) ? date('d.m.Y', strtotime((string)$d['karton_mhd'])) : '–';
+    for ($i = 1; $i <= $n; $i++) {
+        if ($i > 1) $pdf->addPage();
+        $imKarton = $i < $n ? $je : $menge - ($n - 1) * $je;
+        $lx = $mm(6); $tw = $W - $mm(12);
+        $pdf->rectStroke($mm(2), $mm(2), $W - $mm(4), $pdf->h - $mm(4), 0.6, $line);
+        $pdf->text($lx, $mm(10), 'KARTON', 10, true, $muted);
+        $pdf->text($lx, $mm(24), 'Karton ' . $i . ' von ' . $n, 26, true, $dark);
+        $yy = $mm(36);
+        foreach (array_slice($pdf->wrap((string)($d['produkt'] ?: '–'), $tw, 15, true), 0, 3) as $ln) { $pdf->text($lx, $yy, $ln, 15, true, $dark); $yy += $mm(6.6); }
+        $yy += $mm(3);
+        $feld = function (string $l, string $v, float $size = 15) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
+            $pdf->text($lx, $yy, $l, 8, false, $muted);
+            $off = $size * 0.85 + 2;                          // Grundlinie des Werts unter der Beschriftung, mit der Schriftgröße
+            $pdf->text($lx, $yy + $off, $pdf->fit($v !== '' ? $v : '–', $tw, $size, true), $size, true, $dark);
+            $yy += $off + $mm(6.5);
+        };
+        $feld('Stückzahl im Karton', number_format($imKarton, 0, ',', '.') . ' Pkg', 20);
+        $feld('Charge', $charge);
+        $feld('MHD', $mhd);
+        $feld('Auftrag', trim((string)($d['auftrag_nr'] ?? '') . ' · ' . (string)$d['nummer'], ' ·'));
+        $feld('Kunde', (string)($d['kunde'] ?? ''), 12);
+        $code = ($charge !== '' ? $charge : (string)$d['nummer']) . '-K' . str_pad((string)$i, 2, '0', STR_PAD_LEFT);
+        lg_barcode128($pdf, $lx - $mm(1), $pdf->h - $mm(30), $tw + $mm(2), $mm(16), $code, $dark);
+        $pdf->text($lx, $pdf->h - $mm(9), $code, 11, true, $dark);
+    }
+    return $pdf->output();
+}
+
 // === Eimer-/Mischgebinde-Etikett (ein Etikett je Eimer beim Mischen) =========================
 // Klein (100x70 quer): QR (= Gebinde-/Chargennummer zum Scannen) rechts, Textblock links.
 function lg_mischgebinde_etikett_pdf(int $sub_id): ?string {

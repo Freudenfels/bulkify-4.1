@@ -168,6 +168,16 @@ function erp_pk_wo(string $alias = 'c'): string {
 // Bestand auflisten. $kat = '' fuer alle, sonst ein Schluessel aus erp_kategorien().
 // $mit_leer = auch leere/ausgebuchte Chargen zeigen.
 // $sort: neu (Standard, neuste zuerst) | alt | name | mhd | menge
+// Soll-Kette 6: Daten für die Kartonetiketten eines Produktionsauftrags (Werte des letzten Drucks am PA).
+function erp_karton_etikett_daten(int $pa_id): ?array {
+    if (!tabelle_da('produktionsauftrag') || !erp_spalte_da('produktionsauftrag', 'karton_stueck')) return null;
+    $d = one("SELECT pa.nummer, pa.karton_stueck, pa.karton_menge, pa.karton_charge, pa.karton_mhd, a.nummer AS auftrag_nr, k.firma AS kunde,
+                     COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt
+              FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN kunden k ON k.id=COALESCE(a.kunde_id, pa.kunde_id)
+              LEFT JOIN produkt p ON p.id=pa.produkt_id WHERE pa.id=?", [$pa_id]);
+    if (!$d || (int)$d['karton_stueck'] <= 0 || (int)$d['karton_menge'] <= 0) return null;
+    return $d;
+}
 // Soll-Kette 3 (04.11.2026): Auftragsbezug je Charge – damit das Lager dasselbe sieht wie die Produktion.
 // fuer_auftrag = Auftrag der Charge (sonst der Auftrag der Bestellposition, aus der sie kam) mit Kunde;
 // reserviert_fuer = aktive Reservierungen auf diese Charge bzw. ihre Bestellposition; kapselgroesse = Name (Soll-Kette 2d).

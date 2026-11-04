@@ -78,6 +78,7 @@ $druckerLieferschein = lg_meta_lesen('drucker_lieferschein', '');
 $druckerLabel       = lg_meta_lesen('drucker_versandlabel', '');
 $druckerProbe       = lg_meta_lesen('drucker_probe', '');
 $druckerGebinde     = lg_meta_lesen('drucker_gebinde', '');
+$druckerKarton      = lg_meta_lesen('drucker_karton', '');            // Soll-Kette 6: Produktionsdrucker (WLAN) für Kartonetiketten
 foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' ORDER BY id LIMIT 10") as $j) {
     if (q("UPDATE lg_druckjob SET status='abgeholt' WHERE id=? AND status='offen'", [(int)$j['id']])->rowCount() === 0) continue;
     $typ = (string)($j['typ'] ?? 'etikett');
@@ -104,6 +105,10 @@ foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' 
         $drucker = $druckerGebinde ?: $druckerEtikett;        // Eimer-/Gebinde-Etikett auf den (festgelegten) Gebinde-Drucker
         $pdf = function_exists('lg_mischgebinde_etikett_pdf') ? lg_mischgebinde_etikett_pdf((int)$j['ids']) : null;
         $fehlt = 'Gebinde nicht gefunden';
+    } elseif ($typ === 'karton') {
+        $drucker = $druckerKarton ?: $druckerEtikett;         // Kartonetiketten der Produktion (100 x 150) auf den Produktionsdrucker
+        $pdf = function_exists('lg_produktion_karton_pdf') ? lg_produktion_karton_pdf((int)$j['ids']) : null;
+        $fehlt = 'Kartondaten nicht gefunden';
     } else {
         $pdf = lg_etikett_pdf(explode(',', (string)$j['ids']), (string)$j['format']);
     }

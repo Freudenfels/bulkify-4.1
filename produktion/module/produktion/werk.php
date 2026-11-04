@@ -26,6 +26,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_fehler'] = $T['pin_wrong']; weiter('?p=werk');
     }
     if ($aktion === 'werk_logout') { unset($_SESSION['werk_uid']); weiter('?p=werk'); }
+    // Soll-Kette 6: Kartonetiketten drucken (Verpackungsschritt) – Kartonanzahl rechnet das System.
+    if ($werkUid && $aktion === 'werk_karton') {
+        $paId = (int)($_POST['pa_id'] ?? 0);
+        $zahl = fn($k) => (int) preg_replace('/\D+/', '', (string)($_POST[$k] ?? ''));
+        $r = erp_karton_drucken($paId, $zahl('karton_stueck'), $zahl('karton_menge'), (string)($_POST['karton_charge'] ?? ''), (string)($_POST['karton_mhd'] ?? ''));
+        $_SESSION['werk_flash'] = (string)$r['meldung']; $_SESSION['werk_flash_ok'] = !empty($r['ok']);
+        weiter('?p=werk&id=' . $paId);
+    }
     // Soll-Kette 4: Teilmenge am Tablet melden – komplett (mit Etikett, bucht Fertigware) oder bis vor dem Etikettieren.
     if ($werkUid && $aktion === 'werk_teilmenge') {
         $paId = (int)($_POST['pa_id'] ?? 0);
@@ -651,6 +659,30 @@ header('Content-Type: text/html; charset=utf-8');
       <?php endif; ?>
     </div>
   </div>
+
+  <?php // Soll-Kette 6: Kartonetiketten als letzter Teil des Verpackens (bzw. beim Umkarton, wenn es ihn gibt).
+    $kStat = in_array('Umkarton', array_map(fn($s) => (string)$s['station'], $schritte), true) ? 'Umkarton' : 'Verpacken';
+    if ($cur && (string)$cur['station'] === $kStat): $kv = erp_karton_vorschlag($id); ?>
+  <div class="panel">
+    <div class="step-sub"><?= h($T['carton_h'] ?? 'Kartonetiketten') ?></div>
+    <div class="muted" style="font-size:16px;margin:4px 0 10px"><?= h($T['carton_hint'] ?? 'Wie viele Packungen gehen in einen Karton? Das System rechnet die Kartons aus und druckt alle Etiketten auf einmal (100 × 150 mm).') ?></div>
+    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:0">
+      <input type="hidden" name="aktion" value="werk_karton"><input type="hidden" name="pa_id" value="<?= (int)$id ?>">
+      <?php $kIn = 'font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)'; ?>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:14px" class="muted"><?= h($T['carton_per'] ?? 'Pkg je Karton') ?><input type="text" inputmode="numeric" name="karton_stueck" value="<?= $kv['stueck'] > 0 ? (int)$kv['stueck'] : '' ?>" required style="<?= $kIn ?>;width:130px" oninput="kartonRechnen()"></label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:14px" class="muted"><?= h($T['packages']) ?><input type="text" inputmode="numeric" name="karton_menge" value="<?= (int)$kv['menge'] ?>" required style="<?= $kIn ?>;width:130px" oninput="kartonRechnen()"></label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:14px" class="muted"><?= h($T['th_charge'] ?? 'Charge') ?><input type="text" name="karton_charge" value="<?= h($kv['charge']) ?>" style="<?= $kIn ?>;width:150px"></label>
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:14px" class="muted">MHD<input type="date" name="karton_mhd" value="<?= h($kv['mhd']) ?>" style="<?= $kIn ?>"></label>
+      <button class="btn btn-lime" type="submit" style="min-height:52px"><?= h($T['carton_print'] ?? 'Kartonetiketten drucken') ?></button>
+      <div id="kartonAnz" style="font-size:18px;padding-bottom:12px"></div>
+    </form>
+    <script>
+    function kartonRechnen(){ var f=document.querySelector('input[name=karton_stueck]').form, s=parseInt((f.karton_stueck.value||'').replace(/\D/g,''),10)||0, m=parseInt((f.karton_menge.value||'').replace(/\D/g,''),10)||0, o=document.getElementById('kartonAnz');
+      if(!s||!m){ o.textContent=''; return; } var n=Math.ceil(m/s), r=m-(n-1)*s; o.textContent='= '+n+' <?= h($T['cartons'] ?? 'Kartons') ?>'+(r!==s?' ('+(n-1)+' × '+s+', 1 × '+r+')':''); }
+    kartonRechnen();
+    </script>
+  </div>
+  <?php endif; ?>
 
   <?php if ($mischenDone): // Teil 4 (Schritt 5): Restmischung ins Lager 1 einbuchen – nach dem Mischen verfügbar. ?>
   <div class="panel">
