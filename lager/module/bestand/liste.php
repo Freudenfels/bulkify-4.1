@@ -96,7 +96,7 @@ if ($nur_kisten):
       $ort = $bf['kiste'] ? 'Kiste ' . (string)$bf['kiste']['kiste_name'] : ($bf['leiste'] ? (string)$bf['leiste']['code'] : '');
     ?>
       <tr onclick="location.href='?p=charge&id=<?= (int)$z['id'] ?>'" style="cursor:pointer">
-        <td data-label=""><a href="?p=charge&id=<?= (int)$z['id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)$z['item_name']) ?></a><?= $z['artikelnummer'] ? ' <span class="muted">' . h((string)$z['artikelnummer']) . '</span>' : '' ?></td>
+        <td data-label=""><a href="?p=charge&id=<?= (int)$z['id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)$z['item_name']) ?></a><?= $z['artikelnummer'] ? ' <span class="muted">' . h((string)$z['artikelnummer']) . '</span>' : '' ?><?php $bz = erp_bezug_text($z); if ($bz !== ''): ?><div class="muted" style="font-size:12px;margin-top:2px"><?= h($bz) ?></div><?php endif; ?></td>
         <?= $kat === '' ? '<td data-label="Kategorie" class="muted">' . h(erp_kategorie_label($z)) . '</td>' : '' ?>
         <td data-label="Charge" class="lg-code"><?= h((string)$z['charge_nr']) ?></td>
         <td data-label="Eingang" class="muted"><?= !empty($z['wareneingang']) ? h(date('d.m.Y', strtotime((string)$z['wareneingang']))) : '–' ?></td>

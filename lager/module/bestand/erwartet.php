@@ -42,6 +42,7 @@ foreach ($lieferungen as $l) {
             'menge'         => (float)($p['menge'] ?? 0),
             'einheit'       => (string)($p['einheit'] ?? ''),
             'kapselgroesse' => (string)($p['kapselgroesse'] ?? ''),
+            'fuer_auftrag'  => (string)($p['fuer_auftrag'] ?? ''),
             'kategorie'     => $katKey,
             'tabkey'        => $tabKey,
             'hat_pos'       => !empty($p),
@@ -84,7 +85,8 @@ if ($hatRest) $reiter['rest'] = 'Sonstiges';
   ?>
     <tr data-kat="<?= h($z['tabkey']) ?>" data-such="<?= h($such) ?>">
       <td data-label="Artikel"><?= $z['name'] !== '' ? h($z['name']) : '<span class="muted">Artikel beim Einbuchen wählen</span>' ?><?php
-          if ($z['kapselgroesse'] !== ''): ?> <span class="badge" style="margin-left:4px"><?= h($z['kapselgroesse']) ?></span><?php endif; ?></td>
+          if ($z['kapselgroesse'] !== ''): ?> <span class="badge" style="margin-left:4px"><?= h($z['kapselgroesse']) ?></span><?php endif;
+          if (($z['fuer_auftrag'] ?? '') !== ''): ?><div class="muted" style="font-size:12px;margin-top:2px">für <?= h($z['fuer_auftrag']) ?></div><?php endif; ?></td>
       <td data-label="Kategorie" class="muted"><?= h($katLabel) ?></td>
       <td data-label="Lieferant">
         <?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span class="muted">Ohne Lieferant</span>' ?>

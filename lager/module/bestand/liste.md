@@ -13,3 +13,5 @@ Der Bestand kommt über `erp_bestand()` aus dem geteilten Dashboard-Bestand (`ch
 **Kisten-Ansicht:** Umschalter **„Nur Kisten"** (`?p=bestand&nur_kisten=1`) zeigt statt der Chargenliste
 die **Kisten** (`kiste_alle()`) als ausklappbare `<details>`-Blöcke mit Inhalt (`kiste_inhalt()`:
 Produkt · Charge · MHD · Menge · Fach) und je Kiste einen **„Kiste finden"**-Knopf (`data-klingeln`).
+
+Unter dem Artikel eine Zeile „Größe · für AB-… · Kunde · reserviert: AB-…“ (Soll-Kette 3, 04.11.2026) – das Lager sieht, wofür die Ware ist.

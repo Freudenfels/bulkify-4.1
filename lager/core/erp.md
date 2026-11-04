@@ -116,3 +116,5 @@ Soll-Kette 2c (04.11.2026): `erp_rezeptur_stamm()` – Bulk-Artikel hängen an d
 Soll-Kette 2d (04.11.2026): `erp_rezeptur_kapselgroesse()` (gleiche Regel wie `rezeptur_kapselgroesse()`), `erp_bulk_kapselgroesse()`, `erp_charge_kapselgroesse_ermitteln()`/`_setzen()`, `erp_spalte_da()`. Einbuchen setzt die Größe, `erp_charge_auftrag_setzen()` rechnet sie mit dem Auftrag neu, Umbuchen einer Teilmenge übernimmt sie. `erp_charge_voll()` liefert `kapselgroesse`.
 
 Soll-Kette 2b (04.11.2026): `erp_hinweis_neuer_artikel()` – jede im Wareneingang neu angelegte Position wird eine Benachrichtigung im Dashboard (Link auf die Charge), damit das Team Dubletten zusammenführt bzw. die Bestellung zuordnet.
+
+Soll-Kette 3 (04.11.2026): `erp_bezug_sel()` / `erp_bezug_text()` – je Charge Kapselgröße, Auftrag mit Kunde (an der Charge oder über die Bestellposition) und aktive Reservierungen. Genutzt von `erp_bestand()` und `erp_charge_voll()`. `erp_erwartete_lieferungen()` liefert je Position `fuer_auftrag`.

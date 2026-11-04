@@ -55,3 +55,5 @@ In der Tabelle „Etikettenrollen“ ist die Nummer je Rolle ein Eingabefeld. �
 Leere Rollen sind gesperrt. Rollen, die nicht 8-stellig sind, tragen den Hinweis „nicht 8-stellig“. Enter springt zur nächsten Rolle (Handscanner).
 
 Kachel **Kapselgröße** (Soll-Kette 2d, 04.11.2026), wenn an der Charge gespeichert.
+
+Kachel **Für Auftrag** (Auftrag + Kunde, darunter Reservierungen), Soll-Kette 3 (04.11.2026).

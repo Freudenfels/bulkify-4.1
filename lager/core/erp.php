@@ -168,6 +168,31 @@ function erp_pk_wo(string $alias = 'c'): string {
 // Bestand auflisten. $kat = '' fuer alle, sonst ein Schluessel aus erp_kategorien().
 // $mit_leer = auch leere/ausgebuchte Chargen zeigen.
 // $sort: neu (Standard, neuste zuerst) | alt | name | mhd | menge
+// Soll-Kette 3 (04.11.2026): Auftragsbezug je Charge – damit das Lager dasselbe sieht wie die Produktion.
+// fuer_auftrag = Auftrag der Charge (sonst der Auftrag der Bestellposition, aus der sie kam) mit Kunde;
+// reserviert_fuer = aktive Reservierungen auf diese Charge bzw. ihre Bestellposition; kapselgroesse = Name (Soll-Kette 2d).
+function erp_bezug_sel(string $a = 'c'): string {
+    $s = erp_spalte_da('charge', 'kapselgroesse_id') && tabelle_da('kapselgroesse')
+        ? ", (SELECT kg.name FROM kapselgroesse kg WHERE kg.id=$a.kapselgroesse_id) AS kapselgroesse" : ", NULL AS kapselgroesse";
+    $bpAuf = tabelle_da('bestellung_position') && erp_spalte_da('charge', 'bestellung_position_id')
+        ? "(SELECT bpx.auftrag_id FROM bestellung_position bpx WHERE bpx.id=$a.bestellung_position_id)" : "NULL";
+    $s .= tabelle_da('auftrag')
+        ? ", (SELECT CONCAT(au.nummer, COALESCE(CONCAT(' · ', k.firma), '')) FROM auftrag au LEFT JOIN kunden k ON k.id=au.kunde_id
+              WHERE au.id = COALESCE($a.auftrag_id, $bpAuf)) AS fuer_auftrag" : ", NULL AS fuer_auftrag";
+    $s .= tabelle_da('reservierung') && tabelle_da('auftrag')
+        ? ", (SELECT GROUP_CONCAT(DISTINCT au.nummer ORDER BY au.nummer SEPARATOR ', ') FROM reservierung r JOIN auftrag au ON au.id=r.auftrag_id
+              WHERE r.status='aktiv' AND (r.charge_id=$a.id" . (erp_spalte_da('charge', 'bestellung_position_id') ? " OR (r.bestellung_position_id IS NOT NULL AND r.bestellung_position_id=$a.bestellung_position_id)" : "") . ")) AS reserviert_fuer"
+        : ", NULL AS reserviert_fuer";
+    return $s;
+}
+// Eine Zeile Text dazu (für Listen): „Größe 0 · für AB-2707 · Kunde · reserviert: AB-2710“.
+function erp_bezug_text(array $c): string {
+    $t = [];
+    if (!empty($c['kapselgroesse'])) $t[] = (string)$c['kapselgroesse'];
+    if (!empty($c['fuer_auftrag']))  $t[] = 'für ' . (string)$c['fuer_auftrag'];
+    if (!empty($c['reserviert_fuer'])) $t[] = 'reserviert: ' . (string)$c['reserviert_fuer'];
+    return implode(' · ', $t);
+}
 function erp_bestand(string $kat = '', string $q = '', bool $mit_leer = false, int $limit = 500, string $sort = 'neu'): array {
     if (!tabelle_da('charge') || !tabelle_da('item')) return [];
     $lief = tabelle_da('lieferanten');
@@ -188,7 +213,7 @@ function erp_bestand(string $kat = '', string $q = '', bool $mit_leer = false, i
     };
     $sql = "SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.menge, c.einheit, c.mhd, c.status, c.wareneingang,
                    i.id AS item_id, i.name AS item_name, i.artikelnummer, i.kategorie, i.form"
-         . erp_standort_sel('c')
+         . erp_standort_sel('c') . erp_bezug_sel('c')
          . ($lief ? ", l.firma AS lieferant" : ", NULL AS lieferant") . "
             FROM charge c JOIN item i ON i.id=c.item_id"
          . ($lief ? " LEFT JOIN lieferanten l ON l.id=c.lieferant_id" : "") . "
@@ -500,7 +525,7 @@ function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charg
 function erp_charge_voll(int $id): ?array {
     if (!tabelle_da('charge')) return null;
     $lief = tabelle_da('lieferanten');
-    $kgSel = erp_spalte_da('charge', 'kapselgroesse_id') && tabelle_da('kapselgroesse') ? ", (SELECT kg.name FROM kapselgroesse kg WHERE kg.id=c.kapselgroesse_id) AS kapselgroesse" : ", NULL AS kapselgroesse";
+    $kgSel = erp_bezug_sel('c');   // Kapselgröße + Auftragsbezug (Soll-Kette 2d/3)
     $sql = "SELECT c.*, i.name AS item_name, i.artikelnummer, i.kategorie, i.form, i.verpackung_rolle, i.notiz AS item_notiz" . $kgSel
          . ($lief ? ", l.firma AS lieferant, l.lieferantennummer AS lieferant_nr, l.id AS lieferant_id2" : "") . "
             FROM charge c JOIN item i ON i.id=c.item_id"
@@ -1396,7 +1421,8 @@ function erp_erwartete_lieferungen(): array {
     foreach ($rows as &$r) {
         $pos = tabelle_da('bestellung_position')
             ? all("SELECT bp.item_id, bp.auftrag_id, " . erp_bp_rest_sql() . " AS menge, bp.einheit,
-                          COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie, i.form
+                          COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie, i.form,
+                          (SELECT CONCAT(au.nummer, COALESCE(CONCAT(' · ', k.firma), '')) FROM auftrag au LEFT JOIN kunden k ON k.id=au.kunde_id WHERE au.id=bp.auftrag_id) AS fuer_auftrag
                    FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                    WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$r['id']])
             : [];

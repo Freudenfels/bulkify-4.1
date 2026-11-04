@@ -235,6 +235,10 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
     </form>
   </div>
 
+  <?php if (!empty($c['fuer_auftrag']) || !empty($c['reserviert_fuer'])): ?>
+  <div class="bx-card"><div class="k">Für Auftrag</div><div class="v" style="font-size:var(--fs-lg)"><?= !empty($c['fuer_auftrag']) ? h((string)$c['fuer_auftrag']) : '<span class="muted">–</span>' ?></div>
+    <?php if (!empty($c['reserviert_fuer'])): ?><div class="muted" style="font-size:12px;margin-top:4px">reserviert: <?= h((string)$c['reserviert_fuer']) ?></div><?php endif; ?></div>
+  <?php endif; ?>
   <?php if (!empty($c['kapselgroesse'])): ?>
   <div class="bx-card"><div class="k">Kapselgröße</div><div class="v" style="font-size:var(--fs-lg)"><?= h((string)$c['kapselgroesse']) ?></div></div>
   <?php endif; ?>
