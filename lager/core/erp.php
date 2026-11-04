@@ -872,6 +872,18 @@ function erp_item_basis(int $id): ?array {
 // Kategorie, Einheit. Keine Artikelnummer (die Nummernkreise des Dashboards sind hier nicht geladen) –
 // das Team ergaenzt Details spaeter im Dashboard. Doppelte (gleicher Name + Kategorie) werden
 // wiederverwendet. Gibt die item-id oder null.
+// Soll-Kette 2b (04.11.2026): jede im Wareneingang neu angelegte Position als Hinweis ans Team (Benachrichtigung im
+// Dashboard) – damit geprüft wird, ob es den Artikel schon gibt (zusammenführen) oder ob die Ware zu einer Bestellung gehört.
+function erp_hinweis_neuer_artikel(int $item_id, string $name, string $warenart, int $charge_id, string $menge): void {
+    if (!tabelle_da('benachrichtigung') || $item_id <= 0) return;
+    $u = function_exists('lg_benutzer') ? lg_benutzer() : null;
+    $betreff = 'Neuer Artikel im Wareneingang: ' . $name;
+    $text = 'Im Lager neu angelegt (' . $warenart . ($menge !== '' ? ', ' . $menge : '') . (!empty($u['name']) ? ', von ' . $u['name'] : '')
+          . '). Bitte prüfen: Gibt es den Artikel schon (dann zusammenführen) oder gehört die Ware zu einer Bestellung?';
+    $link = $charge_id > 0 ? '?p=chargen&id=' . $charge_id : '?p=rohstoff&id=' . $item_id;
+    try { q("INSERT INTO benachrichtigung (betreff,text,link,art,erstellt) VALUES (?,?,?,?,?)", [$betreff, $text, $link, 'artikel', gmdate('Y-m-d H:i:s')]); }
+    catch (\Throwable $e) { try { q("INSERT INTO benachrichtigung (betreff,text,link,erstellt) VALUES (?,?,?,?)", [$betreff, $text, $link, gmdate('Y-m-d H:i:s')]); } catch (\Throwable $e2) {} }
+}
 function erp_item_anlegen(string $name, string $kategorie, string $einheit, string $rolle = '', string $art = ''): ?int {
     if (!tabelle_da('item')) return null;
     $name = trim($name);

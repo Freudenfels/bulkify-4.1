@@ -110,3 +110,5 @@ Soll-Kette 2a (04.11.2026): Haken **„Freigegeben“** je Position ist jetzt be
 Soll-Kette 2c (04.11.2026): Bulkware nur auf den Rezeptur-Bulk-Artikel. Ein gewählter loser Bulk-Artikel (ohne Rezeptur) wird über den Auftrag der Position auf den Rezeptur-Artikel umgelenkt, ohne Auftrag abgelehnt („bitte Rezeptur wählen“).
 
 Soll-Kette 2d (04.11.2026): Bulkware bekommt die Kapselgröße automatisch. Nur wenn sie nicht ableitbar ist (Kapsel-Rezeptur in mehreren Größen, kein Auftrag), erscheint bei der Position das Pflichtfeld „Kapselgröße“; die Wahl geht an die Charge.
+
+Soll-Kette 2b (04.11.2026): Standard = vorhandener Artikel (auch per Name gefunden). Ein unbekannter Name zeigt „Nicht in der Artikelliste“ und den Knopf **„Neuer Artikel“**; ohne Knopf wird nicht gebucht. Neuer Rohstoff braucht die **Beschaffenheit** (Pulver, Granulat …). Bulk geht nur über die Rezeptur, Etiketten über ihren eigenen Weg. Jede Neuanlage meldet sich beim Team.

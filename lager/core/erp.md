@@ -114,3 +114,5 @@ Leerkapseln (04.11.2026): `erp_item_warenart_setzen($id, 'rohstoff')` lässt die
 Soll-Kette 2c (04.11.2026): `erp_rezeptur_stamm()` – Bulk-Artikel hängen an der Stammrezeptur (G5). `erp_rezeptur_bulkitem()`, `erp_rezeptur_zu_position()`, Rezepturliste und Rezeptur-Scan suchen jetzt dort. Vorher fand die Lager-App bei einer Rezeptur-Variante keinen Bulk-Artikel.
 
 Soll-Kette 2d (04.11.2026): `erp_rezeptur_kapselgroesse()` (gleiche Regel wie `rezeptur_kapselgroesse()`), `erp_bulk_kapselgroesse()`, `erp_charge_kapselgroesse_ermitteln()`/`_setzen()`, `erp_spalte_da()`. Einbuchen setzt die Größe, `erp_charge_auftrag_setzen()` rechnet sie mit dem Auftrag neu, Umbuchen einer Teilmenge übernimmt sie. `erp_charge_voll()` liefert `kapselgroesse`.
+
+Soll-Kette 2b (04.11.2026): `erp_hinweis_neuer_artikel()` – jede im Wareneingang neu angelegte Position wird eine Benachrichtigung im Dashboard (Link auf die Charge), damit das Team Dubletten zusammenführt bzw. die Bestellung zuordnet.

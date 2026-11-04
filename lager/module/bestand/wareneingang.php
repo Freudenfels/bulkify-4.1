@@ -213,9 +213,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             $fehler[] = 'Zeile ' . ($i + 1) . ': Für Bulk/Fertigware bitte die Rezeptur wählen – die Ware wird dem Rezeptur-Artikel zugeordnet (kein loser Artikel).';
             continue;
         }
-        // Artikel bestimmen (bestehend oder neu anlegen).
+        // Artikel bestimmen. Soll-Kette 2b (04.11.2026): Standard = vorhandener Artikel (auch per Name gefunden);
+        // ein komplett neuer Artikel nur über den Knopf „Neuer Artikel“ (p_neu=1), Rohstoff dann mit Beschaffenheit.
+        $neuAngelegt = false;
         if (!$item_id && $name !== '') {
-            $item_id = (int) erp_item_anlegen($name, $def['kategorie'], $einheit);
+            $vorhanden = (int) scalar("SELECT id FROM item WHERE name=? ORDER BY (kategorie=?) DESC, id LIMIT 1", [$name, $def['kategorie']]);
+            if ($vorhanden) $item_id = $vorhanden;
+            else {
+                if ((string)($_POST['p_neu'][$i] ?? '0') !== '1') { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Diesen Artikel gibt es nicht – bitte aus der Liste wählen oder über „Neuer Artikel“ anlegen.'; continue; }
+                $formNeu = (string)($_POST['p_form'][$i] ?? '');
+                $formen = ['pulver', 'granulat', 'extrakt', 'fluessig', 'oel', 'paste', 'kristallin'];
+                if ($warenart === 'rohstoff' && !in_array($formNeu, $formen, true)) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Beschaffenheit des neuen Rohstoffs fehlt (Pulver, Granulat …).'; continue; }
+                $item_id = (int) erp_item_anlegen($name, $def['kategorie'], $einheit);
+                if ($item_id && $warenart === 'rohstoff') q("UPDATE item SET form=? WHERE id=?", [$formNeu, $item_id]);
+                $neuAngelegt = $item_id > 0;
+            }
         }
         if (!$item_id) { $fehler[] = 'Zeile ' . ($i + 1) . ': kein Artikel.'; continue; }
 
@@ -277,6 +289,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             if ($lr) leiste_finden((int)$lr['id'], 'gruen', 3, false);
         }
         $gebucht[] = (int)$cid;
+        if ($neuAngelegt && function_exists('erp_hinweis_neuer_artikel'))
+            erp_hinweis_neuer_artikel((int)$item_id, $name, (string)($def['label'] ?? $warenart), (int)$cid, rtrim(rtrim(number_format($menge, 3, ',', '.'), '0'), ',') . ' ' . $einheit);
     }
 
     // Kam der Wareneingang aus einer gewählten Lieferung? Dann die Bestellung als „angekommen" markieren
@@ -710,8 +724,9 @@ if ($gebucht):
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
       '<input type="hidden" name="p_key[]" value="'+rowKey+'">'+
       '<div class="we-row">'+
-        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><input type="hidden" name="p_auftrag_id[]" value="'+(p.auftrag_id||0)+'"><div class="we-aehnlich"></div></div>'+
+        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><input type="hidden" name="p_auftrag_id[]" value="'+(p.auftrag_id||0)+'"><div class="we-aehnlich"></div><div class="we-neu"></div><input type="hidden" name="p_neu[]" class="we-neu-h" value="0"></div>'+
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
+        '<div class="bx-field f-form" style="display:none"><label>Beschaffenheit *</label><select name="p_form[]" class="we-form"><option value="">– wählen –</option><option value="pulver">Pulver</option><option value="granulat">Granulat</option><option value="extrakt">Extrakt</option><option value="fluessig">Flüssig</option><option value="oel">Öl</option><option value="paste">Paste</option><option value="kristallin">Kristallin</option></select></div>'+
         '<div class="bx-field f-kgr" style="display:none"><label>Kapselgröße *</label><select name="p_kapselgroesse[]" class="we-kgr"><option value="">– wählen –</option>'+KGR.map(function(k){return '<option value="'+k.id+'">'+esc(k.n)+'</option>';}).join('')+'</select></div>'+
         '<div class="bx-field f-rez" style="display:none"><label>Rezeptur <span class="muted">(Bulk)</span></label><input type="text" class="we-rez" name="p_rezeptur_name[]" list="weRezList" autocomplete="off" value="" placeholder="Rezeptur wählen"><input type="hidden" name="p_rezeptur[]" class="we-rez-id" value="0"><div class="we-rez-info muted"></div></div>'+
         '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
@@ -787,7 +802,7 @@ if ($gebucht):
       var m=ITEMS.filter(function(it){return it.n.toLowerCase()===name.value.trim().toLowerCase();})[0];
       if(m){ hid.value=m.id; if(einh) einh.value=einhCanon(m.e)||'Stk'; var a=itemArt(m); if(MATRIX[a]){art2.value=a;} pflicht(card); etikettToggle(); }
       else { hid.value=0; if(art2.value==='rohstoff' && MATRIX.leerkapsel && istLeerkapselName(name.value)){ art2.value='leerkapsel'; if(einh) einh.value='Stk'; pflicht(card); } }
-      kgrSync(m);
+      kgrSync(m); neuSync(card);
       zeigeAehnlich(card);
     });
     // Rezeptur-Picker (nur bei Warenart "Fertigware / Bulk"): fertige Kapseln aufs Bulk-Item der Rezeptur buchen.
@@ -834,12 +849,14 @@ if ($gebucht):
       // Leerkapseln zählt man in Stück, nicht in kg -> Einheit vorschlagen (nur wenn leer/Gewicht).
       if(art2.value==='leerkapsel' && einh){ einh.value='Stk'; }   // Leerkapseln zählt man in Stück
       kgrSync(ITEMS.filter(function(it){return String(it.id)===String(hid.value);})[0]);
+      neuSync(card);
       toggleRez();
       pflicht(card);
       etikettToggle();
     });
     toggleRez();
     kgrSync(ITEMS.filter(function(it){return String(it.id)===String(hid.value);})[0]);
+    neuSync(card);
 
     // --- Etikettenrollen: nur Gesamtmenge + Anzahl Rollen. Menge gleichmäßig verteilt, Aufkleber optional ---
     var rollenBox=card.querySelector('.we-rollen'), rollenZahl=card.querySelector('.we-rollenzahl'),
@@ -917,6 +934,24 @@ if ($gebucht):
       .filter(function(x){ return x.s>=min && x.it.n.toLowerCase()!==nm.trim().toLowerCase(); })
       .sort(function(a,b){return b.s-a.s;}).slice(0,3).map(function(x){return x.it;});
   }
+  // Soll-Kette 2b: unbekannter Name -> Hinweis + Knopf „Neuer Artikel“ (bewusste Neuanlage, Hinweis ans Team).
+  // Bulk (Rezeptur) und Etiketten haben eigene Wege und brauchen das nicht.
+  function neuSync(card){
+    var nm=card.querySelector('.we-name'), hid=card.querySelector('input[name="p_item[]"]'), art2=card.querySelector('.we-art'),
+        box=card.querySelector('.we-neu'), nh=card.querySelector('.we-neu-h'), ff=card.querySelector('.f-form'), fs=card.querySelector('.we-form');
+    if(!box || !nh) return;
+    var name=(nm.value||'').trim().toLowerCase();
+    var bekannt=(hid.value && hid.value!=='0') || ITEMS.some(function(it){ return it.n.toLowerCase()===name; });
+    var noetig = name!=='' && !bekannt && art2.value!=='fertig' && art2.value!=='etikett';
+    if(!noetig){ nh.value='0'; box.innerHTML=''; if(ff){ ff.style.display='none'; fs.required=false; } return; }
+    var neu = nh.value==='1';
+    box.innerHTML = neu
+      ? '<span class="muted">Wird als neuer Artikel angelegt, das Team bekommt einen Hinweis.</span> <button type="button" class="btn btn-ghost btn-sm">zurück</button>'
+      : '<span style="color:var(--warn)">Nicht in der Artikelliste.</span> <button type="button" class="btn btn-ghost btn-sm">Neuer Artikel</button>';
+    box.querySelector('button').addEventListener('click', function(){ nh.value = neu ? '0' : '1'; neuSync(card); });
+    var formNoetig = neu && art2.value==='rohstoff';
+    if(ff){ ff.style.display = formNoetig ? '' : 'none'; fs.required = formNoetig; }
+  }
   function zeigeAehnlich(card){
     var box=card.querySelector('.we-aehnlich'), nm=card.querySelector('.we-name'),
         hid=card.querySelector('input[name="p_item[]"]'), einh=card.querySelector('[name="p_einheit[]"]'),
@@ -932,7 +967,7 @@ if ($gebucht):
       nm.value=b.getAttribute('data-n'); hid.value=b.getAttribute('data-id');
       if(einh) einh.value=einhCanon(b.getAttribute('data-e'))||'Stk';
       var a=b.getAttribute('data-k'); if(art2 && MATRIX[a]){art2.value=a; pflicht(card);}
-      box.innerHTML='';
+      box.innerHTML=''; neuSync(card);
     }); });
   }
   // Kiste gewählt -> Blinker je Position optional (die Kiste blinkt beim Finden).

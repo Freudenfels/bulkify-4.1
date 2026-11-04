@@ -15,9 +15,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     if (!$item_id) {
         $neuName = trim((string)($_POST['art_text'] ?? ''));
         if ($neuName !== '') {
+            $vorher = (int) scalar("SELECT COUNT(*) FROM item WHERE name=?", [$neuName]);
             $item_id = (int) erp_item_anlegen($neuName,
                 (string)($_POST['neu_kategorie'] ?? 'rohstoff'),
                 (string)($_POST['neu_einheit'] ?? ''));
+            $neuArtikel = $item_id > 0 && $vorher === 0;   // Soll-Kette 2b: Hinweis ans Team nach dem Buchen
         }
     }
     if (!$item_id) { flash('Bitte einen Artikel wählen – oder einen Namen für einen neuen Artikel eingeben.', 'warn'); weiter('?p=eingang'); }
@@ -31,6 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $beId = (int)($_POST['bestellung_id'] ?? 0);
     if ($cid && $beId > 0) erp_bestellung_lieferung_erfassen($beId, [(int)$cid]);   // Teillieferung bleibt offen (Nacht 1c)
     if (!$cid) { flash('Bitte Artikel und eine Menge größer 0 angeben.', 'warn'); weiter('?p=eingang'); }
+    if (!empty($neuArtikel) && function_exists('erp_hinweis_neuer_artikel'))
+        erp_hinweis_neuer_artikel($item_id, (string)($_POST['art_text'] ?? ''), (string)($_POST['neu_kategorie'] ?? 'rohstoff'), (int)$cid, (string)($_POST['menge'] ?? ''));
     lg_pakete_set((int)$cid, $pakete);
     // Teil 4: je Karton/Sack ein Gebinde-Datensatz (Gewicht/Restmenge/Ort) – eigener QR je Gebinde aufs Etikett.
     erp_charge_gebinde_anlegen((int)$cid, $pakete);
