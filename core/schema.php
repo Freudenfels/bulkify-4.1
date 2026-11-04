@@ -7930,7 +7930,7 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
     foreach ($roh as $r) $kg += (float)$r['benoetigt'] * (($r['einheit'] ?? '') === 'g' ? 0.001 : 1.0);
     // Leerkapseln gehören bei Premix + Einzelrohstoffen zu den Kosten (bei fertigen Kapseln stecken sie im Preis).
     $kapEk = $form === 'kapsel' && function_exists('produkt_kapsel_ek') ? (float) produkt_kapsel_ek((int)$a['produkt_id']) : 0.0;
-    $kapZeile = $form === 'kapsel' ? ['name' => 'Leerkapseln', 'menge' => $einh, 'einheit' => 'Stk', 'preis' => $kapEk > 0 ? $kapEk : null, 'gesamt' => $kapEk > 0 ? $kapEk * $einh : null] : null;
+    $kapZeile = $form === 'kapsel' ? ['item_id' => function_exists('produkt_leerkapsel_id') ? (int) produkt_leerkapsel_id((int)$a['produkt_id']) : 0, 'name' => 'Leerkapseln', 'menge' => $einh, 'einheit' => 'Stk', 'preis' => $kapEk > 0 ? $kapEk : null, 'gesamt' => $kapEk > 0 ? $kapEk * $einh : null] : null;
     $angebote = function (array $preise, float $menge) use ($lief) {
         $l = [];
         foreach ($preise as $lid => $p) if ($p > 0) $l[] = ['lieferant_id' => (int)$lid, 'lieferant' => $lief((int)$lid), 'preis' => $p, 'gesamt' => $p * $menge];

@@ -1233,6 +1233,8 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
     $bwN = fn($x, $d = 0) => number_format((float)$x, $d, ',', '.');
     $bwM = fn($x, $e) => in_array($e, ['Stk'], true) ? $bwN(round((float)$x)) . ' Stk' : rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',') . ' ' . $e;
     $bwE = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+    // Rohstoff anklicken -> Rohstoffseite, Reiter Einkauf (dort „Preis anfragen“, Lieferantenpreise).
+    $bwLink = fn(array $r) => !empty($r['item_id']) ? '<a href="?p=rohstoff&id=' . (int)$r['item_id'] . '&tab=ek" title="Rohstoff öffnen (Preise, Preis anfragen)">' . h((string)$r['name']) . '</a>' : h((string)$r['name']);
     $bwPreis = fn($x) => (float)$x < 1 ? number_format((float)$x, 4, ',', '.') . ' €' : number_format((float)$x, 2, ',', '.') . ' €';
     // günstigster Weg mit vollständigem Preis (Rohstoffe nur ohne Lücke)
     $bwKost = [];
@@ -1259,7 +1261,7 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
       <?php if ($k === 'rohstoffe'): ?>
         <table class="bx-table" style="font-size:13px"><tbody>
         <?php foreach ($w['positionen'] as $ps): ?>
-          <tr><td style="white-space:normal"><?= h($ps['name']) ?></td><td class="bx-num"><?= h($bwM($ps['menge'], $ps['einheit'])) ?></td>
+          <tr><td style="white-space:normal"><?= $bwLink($ps) ?></td><td class="bx-num"><?= h($bwM($ps['menge'], $ps['einheit'])) ?></td>
               <td class="bx-num"><?= $ps['gesamt'] !== null ? h($bwE($ps['gesamt'])) : '<span class="muted">kein Preis</span>' ?></td></tr>
         <?php endforeach; ?>
         </tbody></table>
@@ -1281,7 +1283,7 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
           </tbody></table>
         <?php endif; ?>
         <?php if (!empty($w['zusatz'])): $zs = $w['zusatz']; ?>
-          <div class="muted" style="font-size:12px;margin-top:6px">dazu <?= h($zs['name']) ?> <?= h($bwM($zs['menge'], $zs['einheit'])) ?>: <?= $zs['gesamt'] !== null ? h($bwE($zs['gesamt'])) : 'kein Preis' ?></div>
+          <div class="muted" style="font-size:12px;margin-top:6px">dazu <?= $bwLink($zs) ?> <?= h($bwM($zs['menge'], $zs['einheit'])) ?>: <?= $zs['gesamt'] !== null ? h($bwE($zs['gesamt'])) : 'kein Preis' ?></div>
         <?php endif; ?>
       <?php endif; ?>
       <div class="bx-row" style="gap:8px;margin-top:12px;flex-wrap:wrap">
