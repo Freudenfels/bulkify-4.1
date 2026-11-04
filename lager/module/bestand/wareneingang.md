@@ -104,3 +104,5 @@ Nebenbei behoben: Die Start-Kacheln blieben nach der Wahl eines Wegs sichtbar (`
 - Warenart „Leerkapseln“: Pflichtfeld **Kapselgröße** je Position (`p_kapselgroesse[]`), vorbelegt aus dem Artikel bzw. dem Namen. Wird am Artikel gespeichert (`item.kapselgroesse_id`), fehlt sie, bricht die Zeile mit „Kapselgröße fehlt“ ab.
 - Neuer Artikelname, der nach Leerkapseln aussieht (z. B. „Leerkapseln HPMC Gr. 0“), stellt die Warenart von Rohstoff auf Leerkapseln und die Einheit auf Stk.
 - Haken „Freigegeben“ folgt dem Schalter Quarantäne (`WEQ`, Standard aus = frei); vorher zeigte er fest „Quarantäne“.
+
+Soll-Kette 2a (04.11.2026): Haken **„Freigegeben“** je Position ist jetzt bedienbar und standardmäßig gesetzt. Abgehakt = Problem → Quarantäne (`p_frei[]=0`). Die Vorbelegung ändert sich nur beim Wechsel der Warenart.

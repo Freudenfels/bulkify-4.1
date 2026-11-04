@@ -140,7 +140,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $paketNrn = array_values(array_filter(array_map('trim',
             preg_split('/[\r\n]+/', (string)($_POST['p_paketnummern'][$i] ?? ''))), fn($x) => $x !== ''));
         if ($paketNrn) $pakete = max($pakete, count($paketNrn));   // so viele Kartons wie Nummern
-        $statusP  = 'auto';   // einheitliche Regel (Rohstoffe/Bulk -> Quarantäne, Verpackung/Etikett frei) – kein Haken je Position mehr (St-12)
+        // Soll-Kette 2a (04.11.2026): Haken „Freigegeben“ je Position ist Standard; abgehakt = Problem -> Quarantäne.
+        $statusP  = (string)($_POST['p_frei'][$i] ?? '1') === '0' ? 'quarantaene' : 'auto';
         $rezeptur_id = (int)($_POST['p_rezeptur'][$i] ?? 0);   // nur bei Warenart 'fertig' relevant
         if ($name === '' && $menge <= 0 && $rezeptur_id <= 0) continue;   // leere Zeile
 
@@ -702,7 +703,7 @@ if ($gebucht):
           '<input type="hidden" name="p_paketnummern[]" class="we-pak-h">'+
           '<div class="we-pakscan"></div>'+
         '</div>'+
-        '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked disabled title="Status nach Regel (Einstellungen → Produktion)"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
+        '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Haken raus bei Problem (Beschädigung, Abweichung) – dann Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
         // Etikettenrollen: nur Gesamtmenge + Anzahl Rollen. Menge wird gleichmäßig verteilt; Inventaraufkleber optional.
@@ -960,8 +961,10 @@ if ($gebucht):
     tr.querySelector('.lbl-charge').textContent = reg.charge ? 'Charge-Nr. *' : 'Charge-Nr.';
     // Status ist Regel, keine Wahl: Rohstoffe/Bulk -> Quarantäne (Freigabe nach Prüfung), Verpackung/Etikett -> frei.
     var fb=tr.querySelector('.we-frei'), fbh=tr.querySelector('.we-frei-h');
-    if(fb){ fb.checked=!reg.q; fb.disabled=true; fb.title=reg.q?'Geht in Quarantäne – nach der Prüfung unter „Ware in Quarantäne“ freigeben':'Sofort freigegeben'; }
-    if(fbh) fbh.value=reg.q?'0':'1';
+    // Vorbelegung nur beim Wechsel der Warenart; danach gilt die Wahl des Mitarbeiters (Haken raus = Problem/Quarantäne).
+    if(fb && fb.dataset.art!==art){ fb.dataset.art=art; fb.checked=!reg.q; }
+    if(fb && !fb.dataset.hooked){ fb.dataset.hooked='1'; fb.addEventListener('change',function(){ if(fbh) fbh.value=fb.checked?'1':'0'; }); }
+    if(fbh && fb) fbh.value=fb.checked?'1':'0';
   }
   document.getElementById('weAdd').addEventListener('click',function(){addRow();});
   rows.addEventListener('input',function(e){ var tr=e.target.closest('.we-pos'); if(tr)pflicht(tr); });

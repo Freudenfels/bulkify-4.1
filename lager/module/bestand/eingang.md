@@ -26,3 +26,5 @@ Nach dem Buchen legt `erp_charge_gebinde_anlegen($cid, $pakete)` je Karton/Sack 
 **Menge deutsch-sicher (S-05):** Die Menge wird mit `erp_menge_parse()` gelesen (wie im Wareneingang `?p=we`), nicht mehr mit `str_replace(',', '.')`. Der Link aus „Erwartete Lieferungen" übergibt die Menge mit Tausenderpunkt („60.000"); vorher wurde daraus 60 statt 60.000 gebucht. Weiterhin gültig: „12,5", „250", „60.000,5".
 
 **Quarantäne + Bestellbezug (St-12/S-06):** Die Schnell-Maske folgt derselben Regel (Rohstoff/Bulk -> Quarantäne). Mit `?bestellung=<id>` (verstecktes Feld `bestellung_id`) schließt das Einbuchen die zugehörige Bestellung.
+
+Soll-Kette 2a (04.11.2026): Schnellmaske bucht frei; Haken **„Problem“** bucht in Quarantäne (`erp_wareneingang_buchen(..., 'quarantaene')`).

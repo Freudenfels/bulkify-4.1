@@ -51,3 +51,5 @@ Wählt man ein Etikett (Typ „Verpackung / Etikett“; Kundenetiketten heißen 
 Hat ein Kundenetikett kein freigegebenes Design, steht dort „Kein freigegebenes Etikett-Design hinterlegt“. Das Buchen selbst ist unverändert.
 
 Freigeben aus der Quarantäne läuft über `charge_quarantaene_freigeben()` (04.11.2026). Die Quarantäne-Liste steht jetzt auch unter Lager → Freigaben.
+
+Soll-Kette 2a (04.11.2026): Haken **„Problem (Beschädigung, Abweichung) – in Quarantäne buchen“** im Formular, gilt für Wareneingang und Zukauf. Ohne Haken ist die Ware frei.

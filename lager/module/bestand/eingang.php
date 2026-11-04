@@ -24,8 +24,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
 
     $lief   = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
     $pakete = max(1, (int)($_POST['pakete'] ?? 1));
+    // Soll-Kette 2a: frei; Quarantäne nur, wenn bewusst „Problem“ angehakt (Beschädigung, Abweichung).
     $cid = erp_wareneingang_buchen($item_id, $menge, trim((string)($_POST['charge_nr'] ?? '')),
-        trim((string)($_POST['mhd'] ?? '')) ?: null, $lief, trim((string)($_POST['notiz'] ?? '')));
+        trim((string)($_POST['mhd'] ?? '')) ?: null, $lief, trim((string)($_POST['notiz'] ?? '')), !empty($_POST['problem']) ? 'quarantaene' : 'auto');
     // Bestellbezug wie im Wareneingang (?p=we): kommt die Ware zu einer Bestellung (bestellung_id), wird sie geschlossen.
     $beId = (int)($_POST['bestellung_id'] ?? 0);
     if ($cid && $beId > 0) erp_bestellung_lieferung_erfassen($beId, [(int)$cid]);   // Teillieferung bleibt offen (Nacht 1c)
@@ -128,7 +129,8 @@ flash_zeigen();
       </div>
     </div>
 
-    <div class="muted" style="margin:10px 0 12px">Rohstoffe, Bulk und fertige Produkte gehen zunächst in <strong>Quarantäne</strong> (auf der Charge-Seite freigeben). Verpackung/Verbrauch sind sofort frei.</div>
+    <div class="muted" style="margin:10px 0 12px">Eingebuchte Ware ist sofort <strong>frei</strong>. Nur bei einem Problem in Quarantäne buchen.</div>
+    <label class="bx-row" style="gap:8px;align-items:center;margin:0 0 10px"><input type="checkbox" name="problem" value="1"> <span>Problem (Beschädigung, Abweichung) – in Quarantäne buchen</span></label>
     <button class="btn btn-primary" type="submit">Buchen &amp; einlagern</button>
   </div>
 </form>

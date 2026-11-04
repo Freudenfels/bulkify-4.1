@@ -4301,10 +4301,12 @@ function item_verwendung(int $item_id): array {
 }
 
 // Wareneingang buchen -> neue Charge. Rohstoffe landen in Quarantäne, Rest direkt frei.
-function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd, ?int $lieferant_id, string $notiz = '', ?int $auftrag_id = null, ?int $bestellung_position_id = null): ?int {
+// Soll-Kette 2a (Nico/Dustin 04.11.2026): Ware ist beim Einbuchen frei. Quarantäne nur bei $problem (bewusst gewählt:
+// Beschädigung, Abweichung) oder wenn der Schalter wareneingang_quarantaene an ist.
+function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd, ?int $lieferant_id, string $notiz = '', ?int $auftrag_id = null, ?int $bestellung_position_id = null, bool $problem = false): ?int {
     $it = one("SELECT kategorie, einheit FROM item WHERE id=?", [$item_id]);
     if (!$it || $menge <= 0) return null;
-    $status = item_braucht_quarantaene($it['kategorie']) && wareneingang_mit_quarantaene() ? 'quarantaene' : 'frei';
+    $status = $problem || (item_braucht_quarantaene($it['kategorie']) && wareneingang_mit_quarantaene()) ? 'quarantaene' : 'frei';
     // Abgleich: Wurde die Charge vorab aus einer CoA angelegt (gleiche Nummer, noch keine Ware:
     // wareneingang IS NULL und menge 0)? Dann diese Charge einbuchen statt eine Dublette anzulegen -
     // die Analysewerte aus der CoA bleiben so an der Charge haengen.

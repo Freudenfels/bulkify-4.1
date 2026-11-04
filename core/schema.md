@@ -430,3 +430,6 @@ Ablauf: bestellen → Ware kommt an = eingebucht, sofort frei → im System als 
 ## Leerkapseln erkennen (04.11.2026)
 - `kapselgroesse_aus_name($name)`: „Gr. 0“, „Größe 00“, „Grösse 1“, „Size 2“, „#000“ → `kapselgroesse.id` (Stammdaten „Größe X“), sonst 0.
 - `name_ist_leerkapsel($name)`: Leerkapsel/Kapselhülle, Kapsel mit HPMC/Gelatine/Pullulan oder Kapsel/Capsule mit Größenangabe. Genutzt von Rohstoff-Seite und Datenprüfung.
+
+## Soll-Kette 2a: Wareneingang frei (04.11.2026)
+`wareneingang_buchen(..., bool $problem = false)`: Quarantäne nur bei `$problem` (bewusst gewählt: Beschädigung, Abweichung) oder wenn der Schalter `wareneingang_quarantaene` an ist.

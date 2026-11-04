@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);   // „60.000" = 60000 (wie ?p=we im Lager)
         $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
         $aid = ($_POST['auftrag_id'] ?? '') !== '' ? (int)$_POST['auftrag_id'] : null;
-        $cid = wareneingang_buchen($item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid);
+        $cid = wareneingang_buchen($item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid, null, !empty($_POST['problem']));
         // Bestellbezug wie im Lager-Wareneingang: gehört die Ware zu einer Bestellung, wird diese geschlossen (kein „unterwegs" + eingebucht).
         // Teillieferung (Nacht 1c): nur die gelieferte Menge quittieren; geschlossen wird erst, wenn alle Positionen da sind.
         if ($cid && (int)($_POST['bestellung_id'] ?? 0) > 0) bestellung_lieferung_erfassen((int)$_POST['bestellung_id'], [(int)$cid]);
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$au || (!$zkFertig && $rez <= 0)) { header('Location: ?p=wareneingang&zkfehler=1'); exit; }
         $item_id = $zkFertig ? produkt_lageritem((int)$au['produkt_id']) : rezeptur_bulkitem($rez);
         if (!$item_id) { header('Location: ?p=wareneingang&zkfehler=1'); exit; }
-        $cid = wareneingang_buchen((int)$item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid);
+        $cid = wareneingang_buchen((int)$item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid, null, !empty($_POST['problem']));
         if ($cid) {
             $codes = array_values(array_unique(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($_POST['tracking'] ?? ''))))));
             q("UPDATE charge SET tracking=? WHERE id=?", [$codes ? implode("\n", $codes) : null, $cid]);
@@ -225,7 +225,8 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <div class="muted" id="weTrackCount" style="font-size:12px;margin-top:4px"></div>
     </div>
     <div class="bx-field"><label>Notiz</label><input type="text" name="notiz"></div>
-    <div class="muted" style="margin-bottom:8px">Rohstoffe und Fertigware gehen zunächst in <strong>Quarantäne</strong> und müssen unten freigegeben werden. Verpackungen sind sofort frei.</div>
+    <div class="muted" style="margin-bottom:8px">Eingebuchte Ware ist sofort <strong>frei</strong> (das CoA wird vor dem Versand beim Lieferanten geprüft). Nur bei einem Problem in Quarantäne buchen.</div>
+    <label class="bx-row" style="gap:8px;align-items:center;margin:0 0 10px"><input type="checkbox" name="problem" value="1"> <span>Problem (Beschädigung, Abweichung) – in Quarantäne buchen</span></label>
     <button class="btn btn-primary" type="submit">Wareneingang buchen</button>
   </div>
 </form>
