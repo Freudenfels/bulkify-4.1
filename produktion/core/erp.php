@@ -858,7 +858,7 @@ function erp_auftrag_bulk_reserviert(int $auftrag_id): float {
     if (!$a) return 0.0;
     $rid = (int)($a['rezeptur_id'] ?? 0);
     if (!$rid && !empty($a['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
-    $item = $rid ? (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [$rid]) : 0;
+    $item = $rid ? (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [erp_rezeptur_stamm($rid)]) : 0;
     if (!$item) return 0.0;
     return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE auftrag_id=? AND item_id=? AND status='aktiv'
                            AND (bestellung_position_id IS NOT NULL OR charge_id IS NOT NULL)", [$auftrag_id, $item]);
@@ -1041,7 +1041,7 @@ function erp_zukauf_fertig_chargen(int $pa_id, string $status = 'frei'): array {
 // (Kunde koppelt die Bulkware an die Rezeptur, nicht zwingend an den einzelnen Auftrag). $status: frei|quarantaene.
 function erp_fertigware_chargen(int $pa_id, string $status = 'frei'): array {
     $auf = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    $rid = erp_pa_rezeptur_id($pa_id);
+    $rid = erp_rezeptur_stamm(erp_pa_rezeptur_id($pa_id));   // Bulk-Artikel hängt an der Stammrezeptur (G5)
     if (!$auf && !$rid) return [];
     return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.item_id, i.name
                 FROM charge c JOIN item i ON i.id=c.item_id
@@ -1286,8 +1286,16 @@ function erp_produkt_lageritem(int $produkt_id): ?int {
       [erp_naechste_nummer('VF'), $name, 'verkaufsfertig', 'Stk', 'Stk', $produkt_id]);
     return insert_id();
 }
+// Stammrezeptur (G5): ALLE Varianten einer Rezeptur teilen EINEN Bulk-Artikel – wie rezeptur_stamm_id() im Dashboard.
+// Ohne das fand die App bei einer Variante keinen bzw. legte einen zweiten Bulk-Artikel an (Soll-Kette 2c, 04.11.2026).
+function erp_rezeptur_stamm(int $rezeptur_id): int {
+    if ($rezeptur_id <= 0) return 0;
+    try { $s = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$rezeptur_id]); } catch (Throwable $e) { $s = 0; }
+    return ($s > 0 && $s !== $rezeptur_id) ? $s : $rezeptur_id;
+}
 function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
     if ($rezeptur_id <= 0) return null;
+    $rezeptur_id = erp_rezeptur_stamm($rezeptur_id);   // Anlage und Suche an der Stammrezeptur, nie ein zweiter Bulk-Artikel je Variante
     $id = scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [$rezeptur_id]);
     if ($id) return (int)$id;
     $rz = one("SELECT name, darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]);

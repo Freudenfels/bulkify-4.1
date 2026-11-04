@@ -1133,7 +1133,7 @@ function erp_rezeptur_zu_position(int $item_id, int $auftrag_id, string $name): 
     }
     if ($rid <= 0) return $leer;
     $rz = one("SELECT name FROM rezeptur WHERE id=?", [$rid]);
-    $bi = one("SELECT id, name FROM item WHERE rezeptur_id=? AND kategorie='fertig' ORDER BY id LIMIT 1", [$rid]);
+    $bi = one("SELECT id, name FROM item WHERE rezeptur_id=? AND kategorie='fertig' ORDER BY id LIMIT 1", [erp_rezeptur_stamm($rid)]);
     return [
         'rezeptur_id'    => $rid,
         'rezeptur_name'  => (string)($rz['name'] ?? ''),
@@ -1170,7 +1170,7 @@ function erp_rezeptur_liste(): array {
                            kg.name AS kapselgroesse,
                            bi.id AS bulk_item_id, bi.einheit AS bulk_einheit
                       FROM rezeptur r
-                      LEFT JOIN item bi ON bi.rezeptur_id = r.id AND bi.kategorie='fertig'
+                      LEFT JOIN item bi ON bi.rezeptur_id = COALESCE(NULLIF(r.stamm_rezeptur_id,0), r.id) AND bi.kategorie='fertig'
                       LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
                      WHERE r.status <> 'entwurf'
                      ORDER BY r.name, r.id");
@@ -1200,7 +1200,7 @@ function erp_rezeptur_per_nummer(string $scan): ?array {
     }
     if (!$r) return null;
     $rid = (int)$r['id'];
-    $bi  = tabelle_da('item') ? one("SELECT id, name, einheit FROM item WHERE rezeptur_id=? AND kategorie='fertig' ORDER BY id LIMIT 1", [$rid]) : null;
+    $bi  = tabelle_da('item') ? one("SELECT id, name, einheit FROM item WHERE rezeptur_id=? AND kategorie='fertig' ORDER BY id LIMIT 1", [erp_rezeptur_stamm($rid)]) : null;
     return [
         'name'          => (string)$r['name'],
         'menge'         => 0.0,
@@ -1216,10 +1216,17 @@ function erp_rezeptur_per_nummer(string $scan): ?array {
 
 // Kanonisches Bulk-Item einer Rezeptur auflösen (read-only). Null, wenn es noch keines gibt
 // (dann im Dashboard anlegen lassen – siehe ANTWORT-DASHBOARD-REZEPTUR-BULKITEM.md, Variante A).
+// Stammrezeptur (G5): ALLE Varianten einer Rezeptur teilen EINEN Bulk-Artikel – wie rezeptur_stamm_id() im Dashboard.
+// Ohne das fand die App bei einer Variante keinen bzw. legte einen zweiten Bulk-Artikel an (Soll-Kette 2c, 04.11.2026).
+function erp_rezeptur_stamm(int $rezeptur_id): int {
+    if ($rezeptur_id <= 0) return 0;
+    try { $s = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$rezeptur_id]); } catch (Throwable $e) { $s = 0; }
+    return ($s > 0 && $s !== $rezeptur_id) ? $s : $rezeptur_id;
+}
 function erp_rezeptur_bulkitem(int $rezeptur_id): ?int {
     if ($rezeptur_id <= 0 || !tabelle_da('item')) return null;
     try {
-        $id = scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [$rezeptur_id]);
+        $id = scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' LIMIT 1", [erp_rezeptur_stamm($rezeptur_id)]);
         return $id ? (int)$id : null;
     } catch (Throwable $e) { return null; }
 }

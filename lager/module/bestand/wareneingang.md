@@ -106,3 +106,5 @@ Nebenbei behoben: Die Start-Kacheln blieben nach der Wahl eines Wegs sichtbar (`
 - Haken „Freigegeben“ folgt dem Schalter Quarantäne (`WEQ`, Standard aus = frei); vorher zeigte er fest „Quarantäne“.
 
 Soll-Kette 2a (04.11.2026): Haken **„Freigegeben“** je Position ist jetzt bedienbar und standardmäßig gesetzt. Abgehakt = Problem → Quarantäne (`p_frei[]=0`). Die Vorbelegung ändert sich nur beim Wechsel der Warenart.
+
+Soll-Kette 2c (04.11.2026): Bulkware nur auf den Rezeptur-Bulk-Artikel. Ein gewählter loser Bulk-Artikel (ohne Rezeptur) wird über den Auftrag der Position auf den Rezeptur-Artikel umgelenkt, ohne Auftrag abgelehnt („bitte Rezeptur wählen“).

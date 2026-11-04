@@ -93,3 +93,5 @@ Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schl
 `erp_etikett_item_id()` 0 (keine Etikett-Entnahme/-Anzeige) und `erp_etikett_sperre()` sperrt nicht. Spiegel von `auftrag_vollbedruckt()`.
 
 `erp_produktionsauftraege()` (03.11.2026): Ohne `'alle'` werden Produktionsaufträge stornierter Aufträge ausgeblendet (NOT EXISTS auf `auftrag.status='storniert'`, eigene Kopie der Regel `pa_aktiv_sql()`, weil die Sub-App core/schema.php nicht lädt).
+
+Soll-Kette 2c (04.11.2026): `erp_rezeptur_stamm()`; `erp_rezeptur_bulkitem()` sucht und legt nur an der Stammrezeptur an (vorher je Variante ein zweiter Bulk-Artikel), `erp_fertigware_chargen()` und die Bulk-Reservierung ebenso.

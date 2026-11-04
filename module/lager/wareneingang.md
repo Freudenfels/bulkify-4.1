@@ -53,3 +53,5 @@ Hat ein Kundenetikett kein freigegebenes Design, steht dort „Kein freigegebene
 Freigeben aus der Quarantäne läuft über `charge_quarantaene_freigeben()` (04.11.2026). Die Quarantäne-Liste steht jetzt auch unter Lager → Freigaben.
 
 Soll-Kette 2a (04.11.2026): Haken **„Problem (Beschädigung, Abweichung) – in Quarantäne buchen“** im Formular, gilt für Wareneingang und Zukauf. Ohne Haken ist die Ware frei.
+
+Soll-Kette 2c (04.11.2026): Buchen auf einen losen Bulk-Artikel (kategorie fertig ohne Rezeptur) nur mit Auftrag – dann auf dessen Rezeptur-Bulk-Artikel; sonst Meldung `bulkfehler`.

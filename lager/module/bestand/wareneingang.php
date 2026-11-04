@@ -197,6 +197,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         // Bulk/Fertigware MUSS einer Rezeptur zugeordnet werden (sonst entsteht ein loser Ad-hoc-Artikel,
         // der am Rezeptur-/Produkt-Bulk-Artikel nicht als Bestand erfasst wird). Ausnahme: die Position kommt
         // schon mit einem bestehenden Artikel (aus einer Bestellung/„aus Liste") -> $item_id ist dann gesetzt.
+        // Soll-Kette 2c (04.11.2026): Bulkware NUR auf den Bulk-Artikel einer Rezeptur. Ein gewählter loser Bulk-Artikel
+        // (ohne Rezeptur, z. B. „… – Bulk #0“) wird über den Auftrag der Position auf die Rezeptur umgelenkt, sonst abgelehnt.
+        if ($warenart === 'fertig' && $rezeptur_id <= 0 && $item_id) {
+            $chk = one("SELECT rezeptur_id FROM item WHERE id=?", [$item_id]);
+            if ($chk && empty($chk['rezeptur_id'])) {
+                $paufR = (int)($_POST['p_auftrag_id'][$i] ?? 0);
+                $rzA = $paufR > 0 ? (int) scalar("SELECT COALESCE(a.rezeptur_id, p.rezeptur_id) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$paufR]) : 0;
+                $biA = $rzA > 0 ? erp_rezeptur_bulkitem($rzA) : null;
+                if (!$biA) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Bulkware nur auf den Bulk-Artikel einer Rezeptur – bitte die Rezeptur wählen (dieser Artikel hat keine).'; continue; }
+                $item_id = (int)$biA;
+            }
+        }
         if ($warenart === 'fertig' && $rezeptur_id <= 0 && !$item_id) {
             $fehler[] = 'Zeile ' . ($i + 1) . ': Für Bulk/Fertigware bitte die Rezeptur wählen – die Ware wird dem Rezeptur-Artikel zugeordnet (kein loser Artikel).';
             continue;

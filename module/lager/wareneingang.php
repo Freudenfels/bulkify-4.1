@@ -11,6 +11,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);   // „60.000" = 60000 (wie ?p=we im Lager)
         $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
         $aid = ($_POST['auftrag_id'] ?? '') !== '' ? (int)$_POST['auftrag_id'] : null;
+        // Soll-Kette 2c: Bulkware (kategorie fertig) nur auf den Rezeptur-Bulk-Artikel – ein loser Artikel ohne Rezeptur wird
+        // über den Auftrag umgelenkt, sonst nicht gebucht.
+        $wi = one("SELECT kategorie, rezeptur_id FROM item WHERE id=?", [$item_id]);
+        if ($wi && $wi['kategorie'] === 'fertig' && empty($wi['rezeptur_id'])) {
+            $rzA = $aid ? (int) scalar("SELECT COALESCE(a.rezeptur_id, p.rezeptur_id) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$aid]) : 0;
+            $biA = $rzA ? rezeptur_bulkitem($rzA) : null;
+            if (!$biA) { header('Location: ?p=wareneingang&bulkfehler=1'); exit; }
+            $item_id = (int)$biA;
+        }
         $cid = wareneingang_buchen($item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid, null, !empty($_POST['problem']));
         // Bestellbezug wie im Lager-Wareneingang: gehört die Ware zu einer Bestellung, wird diese geschlossen (kein „unterwegs" + eingebucht).
         // Teillieferung (Nacht 1c): nur die gelieferte Menge quittieren; geschlossen wird erst, wenn alle Positionen da sind.
@@ -138,6 +147,7 @@ bx_head('Wareneingang', 'Charge buchen', bx_btn('Zum Bestand', '?p=lager', 'ghos
 if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Wareneingang gebucht.</div>';
 if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Charge freigegeben.</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Menge oder Artikel fehlt.</div>';
+if (isset($_GET['bulkfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Nicht gebucht: Bulkware nur auf den Bulk-Artikel einer Rezeptur. Bitte den Auftrag angeben oder über „Zukauf zu Auftrag“ buchen.</div>';
 if (isset($_GET['zkok']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zukauf-Fertigware gebucht und dem Auftrag zugeordnet. Nach dem Freigeben (unten) erkennt der Produktionsauftrag den Zukauf automatisch.</div>';
 if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Zukauf nicht gebucht – Auftrag ohne Rezeptur/Produkt oder Menge fehlt.</div>';
 ?>
