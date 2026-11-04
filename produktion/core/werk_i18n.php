@@ -223,6 +223,9 @@ function werk_texte(string $lang): array {
         'tm_prelabel_btn' => 'bis vor dem Etikettieren',
         'tm_full_btn' => 'komplett fertig',
         'tm_note' => 'Gemeldet wird, was wirklich gemacht wurde. Der Rest bleibt im Auftrag offen, bis das Material da ist.',
+        'instr_h' => 'Anweisungen vom Büro',
+        'instr_one' => 'Anweisung:',
+        'prio_high' => 'Priorität hoch',
     ];
     $en = [
         'pin_enter' => 'Enter PIN',
@@ -346,6 +349,9 @@ function werk_texte(string $lang): array {
         'tm_prelabel_btn' => 'up to labelling',
         'tm_full_btn' => 'fully finished',
         'tm_note' => 'Report what was really done. The rest stays open on the order until the material arrives.',
+        'instr_h' => 'Instructions from the office',
+        'instr_one' => 'Instruction:',
+        'prio_high' => 'high priority',
     ];
     $uk = [
         'pin_enter' => 'Введіть PIN',
@@ -469,6 +475,9 @@ function werk_texte(string $lang): array {
         'tm_prelabel_btn' => 'до етикетування',
         'tm_full_btn' => 'повністю готово',
         'tm_note' => 'Відмічайте те, що справді зроблено. Решта лишається відкритою в замовленні, доки не надійде матеріал.',
+        'instr_h' => 'Вказівки з офісу',
+        'instr_one' => 'Вказівка:',
+        'prio_high' => 'високий пріоритет',
     ];
     $map = ['de' => $de, 'en' => $en, 'uk' => $uk];
     return array_merge($de, $map[$lang] ?? []);   // fehlende Schlüssel -> Deutsch

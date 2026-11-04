@@ -62,3 +62,5 @@ Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schl
 ## Soll-Kette 4a (04.11.2026)
 - Kachel-Liste zeigt jeden Auftrag, sobald **irgendein** Schritt machbar ist (vorher nur, wenn das Material für die ganze Menge da war), Badge „teilweise machbar“ und Hinweis, wie weit es geht.
 - Schritt-Ansicht: Box **Teilmenge produzieren** mit machbaren Packungen je Stufe (Herstellung / bis vor dem Etikettieren / komplett) und Knöpfen „bis vor dem Etikettieren“ bzw. „komplett fertig“ (Aktion `werk_teilmenge`). Der Rest bleibt offen im Auftrag.
+
+Soll-Kette 4b (04.11.2026): oben in der Liste **Anweisungen vom Büro** (Menge, Umfang, Auftrag, „Priorität hoch“); Aufträge mit Anweisung erscheinen immer. Am Auftrag Banner „Anweisung: …“, Menge in der Teilmengen-Box vorbelegt (höchstens das Machbare).

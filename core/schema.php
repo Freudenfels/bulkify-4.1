@@ -808,7 +808,9 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'produktionsart', "VARCHAR(10) NOT NULL DEFAULT 'fremd'");   // eigen|fremd (Make-or-Buy); Standard = fremd (90% der Kapseln extern gefüllt)
     ensure_column('produktionsauftrag', 'zukauf_art', "VARCHAR(10) NOT NULL DEFAULT 'bulk'");
     ensure_column('produktionsauftrag', 'beschaffungsweg', "VARCHAR(10) NULL");
-    ensure_column('produktionsauftrag', 'menge_vor_etikett', "INT NULL");   // Soll-Kette 4: bis vor dem Etikettieren produziert (kumuliert, Pkg)   // Soll-Kette 1: kapsel|premix|rohstoffe (am Auftrag festgelegt)        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
+    ensure_column('produktionsauftrag', 'menge_vor_etikett', "INT NULL");
+    ensure_column('aufgabe', 'menge', "INT NULL");          // Soll-Kette 4b: Anweisung „Teilmenge produzieren“ (offene Pkg)
+    ensure_column('aufgabe', 'umfang', "VARCHAR(12) NULL");  // komplett | vor_etikett   // Soll-Kette 4: bis vor dem Etikettieren produziert (kumuliert, Pkg)   // Soll-Kette 1: kapsel|premix|rohstoffe (am Auftrag festgelegt)        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
     // Eigen/Fremd wird im Backend FESTGELEGT, bevor der Auftrag in die Produktion geht. NULL = noch offen
     // -> erscheint NICHT im Produktions-Arbeitsplatz. Entscheidung trifft Admin/Backend, nicht die Produktion.
     ensure_column('produktionsauftrag', 'art_festgelegt_am', "DATETIME NULL");
@@ -7800,6 +7802,40 @@ function auftrag_bulk_reserviert_stueck(int $auftrag_id): float {
 // Freie Lager-Chargen für die Zuweisung: zuerst die zur Rezeptur passende Bulkware (exakter Bulk-Artikel),
 // dann ALLE anderen freien Fertigware-(Bulk-)Chargen im Lager – der Admin kann bewusst eine andere wählen
 // (z. B. wenn die Ware unter einem anderen Artikel/einer anderen Rezeptur gebucht ist). Je noch keinem Auftrag.
+// ===== Soll-Kette 4b: Anweisung „Teilmenge produzieren“ vom Auftrag ans Werk (04.11.2026) =====
+// Eine Aufgabe (ref_typ 'teilmenge', ref_id = PA) mit Menge (Pkg), Umfang (komplett | vor_etikett = „Schritt vorziehen“) und
+// Priorität. Erscheint in der Werk-App als konkrete Aufgabe. Gemeldete Teilmengen werden verrechnet (teilmenge_anweisung_verrechnen).
+function teilmenge_umfaenge(): array { return ['komplett' => 'komplett fertig (mit Etikett)', 'vor_etikett' => 'bis vor dem Etikettieren (Schritt vorziehen)']; }
+function pa_teilmenge_anweisen(int $pa_id, int $menge, string $umfang, int $prio): array {
+    $pa = one("SELECT id, nummer, status, menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok' => false, 'fehler' => 'Kein Produktionsauftrag.'];
+    if ((string)$pa['status'] === 'vorbereitung') return ['ok' => false, 'fehler' => 'Erst den Beschaffungsweg festlegen.'];
+    if (!isset(teilmenge_umfaenge()[$umfang])) return ['ok' => false, 'fehler' => 'Unbekannter Umfang.'];
+    $rest = (int) floor(produktion_rest($pa_id));
+    if ($menge <= 0 || $menge > $rest) return ['ok' => false, 'fehler' => 'Menge zwischen 1 und ' . number_format($rest, 0, ',', '.') . ' Pkg angeben.'];
+    $prio = max(1, min(3, $prio));
+    $cu = function_exists('current_user') ? current_user() : null;
+    q("INSERT INTO aufgabe (titel,beschreibung,prio,status,erstellt_von,ref_typ,ref_id,menge,umfang,angelegt) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      ['Teilmenge produzieren: ' . number_format($menge, 0, ',', '.') . ' Pkg ' . ($umfang === 'vor_etikett' ? 'bis vor dem Etikettieren' : 'komplett') . ' – ' . $pa['nummer'],
+       'Anweisung vom Auftrag (Soll-Kette 4).', $prio, 'offen', $cu['id'] ?? null, 'teilmenge', $pa_id, $menge, $umfang, gmdate('Y-m-d H:i:s')]);
+    $id = (int) insert_id();
+    q("UPDATE produktionsauftrag SET prio=LEAST(COALESCE(prio,2), ?) WHERE id=?", [$prio, $pa_id]);   // Auftrag rückt in der Werk-Liste nach oben
+    return ['ok' => true, 'id' => $id];
+}
+function pa_teilmenge_anweisungen(int $pa_id): array {
+    return all("SELECT id, menge, umfang, prio, angelegt FROM aufgabe WHERE ref_typ='teilmenge' AND ref_id=? AND status='offen' ORDER BY prio, id", [$pa_id]);
+}
+// Gemeldete Teilmenge gegen offene Anweisungen rechnen: gleicher Umfang; „komplett“ deckt auch „bis vor dem Etikett“ mit ab.
+function teilmenge_anweisung_verrechnen(int $pa_id, float $m, string $umfang): void {
+    if (!column_exists('aufgabe', 'menge')) return;
+    $passt = $umfang === 'komplett' ? ['komplett', 'vor_etikett'] : ['vor_etikett'];
+    foreach (all("SELECT id, menge, umfang FROM aufgabe WHERE ref_typ='teilmenge' AND ref_id=? AND status='offen' ORDER BY prio, id", [$pa_id]) as $a) {
+        if ($m <= 0 || !in_array((string)$a['umfang'], $passt, true)) continue;
+        $rest = (float)$a['menge'] - $m;
+        if ($rest <= 0.0001) { q("UPDATE aufgabe SET status='erledigt', menge=0, erledigt_am=? WHERE id=?", [gmdate('Y-m-d H:i:s'), (int)$a['id']]); $m = -$rest; }
+        else { q("UPDATE aufgabe SET menge=? WHERE id=?", [(int) round($rest), (int)$a['id']]); $m = 0; }
+    }
+}
 // ===== Soll-Kette Teil 1: Beschaffungsweg am Auftrag (Nico/Dustin 04.11.2026) =====
 // Drei Wege, entschieden erst am Auftrag: 'kapsel' = fertige Kapseln/Tabletten zukaufen (Fremd, Bulk-Zukauf),
 // 'premix' = fertige Mischung zukaufen und selbst verkapseln (Eigen, statt Einzelrohstoffen EIN Premix-Artikel),
@@ -10918,6 +10954,7 @@ function produktion_teilmenge_produzieren(int $pa_id, float $menge, ?string $mhd
     if (!$r['ok']) return $r + ['fehlt'=>[]];
     if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
     reservierung_abgleichen($pa_id);
+    teilmenge_anweisung_verrechnen($pa_id, $menge, 'komplett');   // Soll-Kette 4b
     return $r + ['fehlt'=>[]];
 }
 

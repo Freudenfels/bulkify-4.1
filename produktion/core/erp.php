@@ -1251,7 +1251,27 @@ function erp_teilmenge_produzieren(int $pa_id, float $m, string $akteur): array 
         erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team',
             'Teilmenge ' . number_format($m, 0, ',', '.') . ' Stk produziert (Charge ' . $nr . ', Produktion ' . $pa['nummer'] . ').',
             'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
+    erp_teilmenge_anweisung_verrechnen($pa_id, $m, 'komplett');   // Soll-Kette 4b
     return ['ok'=>true, 'msg'=>'Teilmenge eingebucht (Charge ' . $nr . ').', 'charge_nr'=>$nr, 'fehlt'=>[]];
+}
+// Soll-Kette 4b: offene Anweisungen „Teilmenge produzieren“ (Aufgaben ref_typ 'teilmenge') – für die Werk-Liste bzw. einen PA.
+function erp_teilmenge_anweisungen(int $pa_id = 0): array {
+    if (!tabelle_da('aufgabe') || !erp_spalte_da('aufgabe', 'menge')) return [];
+    $sql = "SELECT a.id, a.ref_id AS pa_id, a.menge, a.umfang, a.prio, pa.nummer, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
+            FROM aufgabe a JOIN produktionsauftrag pa ON pa.id=a.ref_id LEFT JOIN produkt p ON p.id=pa.produkt_id
+            WHERE a.ref_typ='teilmenge' AND a.status='offen' AND COALESCE(a.menge,0) > 0" . ($pa_id > 0 ? " AND a.ref_id=" . (int)$pa_id : "") . "
+            ORDER BY a.prio, a.id";
+    return all($sql);
+}
+// Gemeldete Teilmenge verrechnen (Spiegel von teilmenge_anweisung_verrechnen()): „komplett“ deckt auch „bis vor dem Etikett“.
+function erp_teilmenge_anweisung_verrechnen(int $pa_id, float $m, string $umfang, int $uid = 0): void {
+    $passt = $umfang === 'komplett' ? ['komplett', 'vor_etikett'] : ['vor_etikett'];
+    foreach (erp_teilmenge_anweisungen($pa_id) as $a) {
+        if ($m <= 0 || !in_array((string)$a['umfang'], $passt, true)) continue;
+        $rest = (float)$a['menge'] - $m;
+        if ($rest <= 0.0001) { q("UPDATE aufgabe SET status='erledigt', menge=0, erledigt_am=?, erledigt_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $uid ?: null, (int)$a['id']]); $m = -$rest; }
+        else { q("UPDATE aufgabe SET menge=? WHERE id=?", [(int) round($rest), (int)$a['id']]); $m = 0; }
+    }
 }
 // ===== Soll-Kette 4: Schritt-Logik statt Auftrags-Freigabe (Nico/Dustin 04.11.2026) =====
 // Packungen, die schon BIS VOR DEM ETIKETTIEREN produziert sind (abgefüllt, warten auf Etiketten), kumuliert am PA.
@@ -1325,6 +1345,7 @@ function erp_teilmenge_vor_etikett(int $pa_id, float $m, string $akteur): array 
     erp_reservierung_abgleichen($pa_id);
     if (!empty($st['kunde_id']))
         erp_log_aktivitaet('kunde', (int)$st['kunde_id'], 'team', number_format($m, 0, ',', '.') . ' Pkg bis vor dem Etikettieren produziert (Produktion ' . $st['nummer'] . ', ' . $akteur . ').', 'auftrag', 'auftrag', (int)($st['auftrag_id'] ?? 0));
+    erp_teilmenge_anweisung_verrechnen($pa_id, $m, 'vor_etikett');
     return ['ok' => true, 'msg' => number_format($m, 0, ',', '.') . ' Pkg bis vor dem Etikettieren gebucht.', 'fehlt' => []];
 }
 // Teilproduktion-Rechner (Werk-/Prod-App): wie viele Packungen sind JETZT komplett machbar (alle Stationen inkl. Etikett) und wie viele

@@ -469,6 +469,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 }
 // Punkt 1: „Reservieren" und „Lagerware zuweisen" in EINEM Schritt. Eine Quelle-Auswahl, eine Mengeneingabe.
 // Quelle "bestellung:<bp_id>" -> reservieren (auch unterwegs), "charge:<id>" -> konkrete Charge fest zuweisen.
+// Soll-Kette 4b: Anweisung „Teilmenge produzieren“ ans Werk / zurückziehen (nur Admin).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['teilmenge_anweisen', 'teilmenge_zurueck'], true)) {
+    $tmZ = '?p=auftrag&id=' . $id . '&tab=produktion';
+    if (!has_role('admin')) { header('Location: ' . $tmZ . '&tmfehler=' . urlencode('Nur Admins.')); exit; }
+    $paT = auftrag_aktiver_pa($id);
+    if (($_POST['aktion'] ?? '') === 'teilmenge_zurueck') {
+        if ($paT) q("UPDATE aufgabe SET status='erledigt', erledigt_am=? WHERE id=? AND ref_typ='teilmenge' AND ref_id=? AND status='offen'", [gmdate('Y-m-d H:i:s'), (int)($_POST['aufgabe_id'] ?? 0), (int)$paT['id']]);
+        header('Location: ' . $tmZ); exit;
+    }
+    $r = $paT ? pa_teilmenge_anweisen((int)$paT['id'], (int) preg_replace('/\D+/', '', (string)($_POST['tm_menge'] ?? '')), (string)($_POST['tm_umfang'] ?? ''), (int)($_POST['tm_prio'] ?? 2))
+              : ['ok' => false, 'fehler' => 'Kein Produktionsauftrag.'];
+    if (!empty($r['ok'])) log_aktivitaet('auftrag', $id, 'team', 'Teilmenge ans Werk angewiesen: ' . (string)($_POST['tm_menge'] ?? '') . ' Pkg (' . (teilmenge_umfaenge()[(string)($_POST['tm_umfang'] ?? '')] ?? '') . ').', 'notiz');
+    header('Location: ' . $tmZ . (!empty($r['ok']) ? '&tmok=1' : '&tmfehler=' . urlencode((string)$r['fehler']))); exit;
+}
 // Soll-Kette Teil 1: Beschaffungsweg festlegen / an die Bedarfsliste senden / direkt bestellen (nur Admin).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['beschaffungsweg_setzen', 'beschaffung_bedarf', 'beschaffung_bestellen'], true)) {
     $bwZ = '?p=auftrag&id=' . $id . '&tab=beschaffung';
@@ -1426,6 +1440,33 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
   <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„frei" = im Lager verfügbar (Bulkware: zugeordnet + freier Lagerbestand; zuordnen unten bei „Bulkware binden“) · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
 </div>
 <?php endif; endif; ?>
+<?php // Soll-Kette 4b: Anweisung „Teilmenge produzieren“ ans Werk (auch „Schritt vorziehen“: bis vor dem Etikettieren).
+if ($pa && in_array((string)($pa['status'] ?? ''), ['offen', 'laufend'], true) && has_role('admin')):
+    $tmA = pa_teilmenge_anweisungen((int)$pa['id']); $tmR = (int) floor(produktion_rest((int)$pa['id']));
+    ?>
+<div class="bx-panel" data-panel="produktion">
+  <h2 style="margin:0 0 4px;font-size:16px">Teilmenge produzieren</h2>
+  <div class="muted" style="font-size:12px;margin-bottom:10px">Anweisung ans Werk: erscheint in der Werk-App als Aufgabe mit Priorität. Noch offen: <?= number_format($tmR, 0, ',', '.') ?> Pkg. Was jetzt machbar ist, zeigt die Werk-App am Auftrag.</div>
+  <?php if (isset($_GET['tmok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:8px;display:inline-block">Anweisung ans Werk geschickt.</div><?php endif; ?>
+  <?php if (isset($_GET['tmfehler'])): ?><div style="color:#8f231b;margin-bottom:8px"><?= h((string)$_GET['tmfehler']) ?></div><?php endif; ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="teilmenge_anweisen">
+    <div class="bx-field" style="margin:0;width:140px"><label>Packungen</label><input type="text" inputmode="numeric" name="tm_menge" required placeholder="z. B. 100"></div>
+    <div class="bx-field" style="margin:0;min-width:280px"><label>Umfang</label><select name="tm_umfang"><?php foreach (teilmenge_umfaenge() as $k => $l): ?><option value="<?= h($k) ?>"><?= h($l) ?></option><?php endforeach; ?></select></div>
+    <div class="bx-field" style="margin:0;width:140px"><label>Priorität</label><select name="tm_prio"><option value="1">Hoch</option><option value="2" selected>Normal</option><option value="3">Niedrig</option></select></div>
+    <button class="btn btn-primary btn-sm" type="submit">An das Werk schicken</button>
+  </form>
+  <?php if ($tmA): ?>
+  <table class="bx-table" style="margin-top:12px"><thead><tr><th>Anweisung</th><th class="bx-num">Noch offen</th><th>Priorität</th><th>Seit</th><th></th></tr></thead><tbody>
+    <?php foreach ($tmA as $ta): ?>
+      <tr><td><?= h(teilmenge_umfaenge()[(string)$ta['umfang']] ?? (string)$ta['umfang']) ?></td><td class="bx-num"><?= number_format((int)$ta['menge'], 0, ',', '.') ?> Pkg</td>
+        <td><?= ['1' => 'Hoch', '2' => 'Normal', '3' => 'Niedrig'][(string)$ta['prio']] ?? '' ?></td><td class="muted"><?= h(fmt_zeit((string)$ta['angelegt'], 'd.m.Y H:i')) ?></td>
+        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Anweisung zurückziehen?')"><input type="hidden" name="aktion" value="teilmenge_zurueck"><input type="hidden" name="aufgabe_id" value="<?= (int)$ta['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Zurückziehen</button></form></td></tr>
+    <?php endforeach; ?>
+  </tbody></table>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 <div class="bx-panel" data-panel="produktion">
   <h2>Produktion</h2>
   <?php $istHW = produkt_ist_handelsware((int)($a['produkt_id'] ?? 0)); if ($istHW): ?>

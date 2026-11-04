@@ -451,3 +451,6 @@ Soll-Kette 2e (04.11.2026): `produktionsschritte_fuer()` ohne Schritt „Produkt
 - Premix: `rezeptur_premixitem()` (Rohstoff, Form premix, an der Stammrezeptur, kg). `produktion_materialbedarf()` ersetzt bei Weg premix die Zutaten durch den Premix-Artikel (Parameter `$ohnePremix` für die Kostenrechnung).
 
 Soll-Kette 4a (04.11.2026): Spalte `produktionsauftrag.menge_vor_etikett`. `produktion_schritt_erledigen()`: Etikett-Freigabe sperrt nur noch das Etikettieren; Vorbereitung meldet „kein Beschaffungsweg festgelegt“.
+
+## Soll-Kette 4b: Anweisung „Teilmenge produzieren“ (04.11.2026)
+`aufgabe.menge` / `aufgabe.umfang` (komplett | vor_etikett). `pa_teilmenge_anweisen()` legt die Aufgabe (ref_typ teilmenge) an und hebt die PA-Priorität; `pa_teilmenge_anweisungen()`; `teilmenge_anweisung_verrechnen()` zieht gemeldete Mengen ab („komplett“ deckt auch „bis vor dem Etikett“) – auch aus `produktion_teilmenge_produzieren()`.

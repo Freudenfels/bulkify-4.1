@@ -104,3 +104,5 @@ Soll-Kette 1 (04.11.2026): `erp_materialbedarf()` nimmt bei Weg „premix“ den
 - `erp_stufen_machbar($pa)`: je Stufe machbare Packungen (Trockenlauf der Stationsentnahmen, Binärsuche mit Abkürzungen): `herstellung` (Rohstoffe/Premix, Leerkapseln), `vor_etikett` (+ Dosen/Deckel), `komplett` (+ Etikett, nur mit Etikett-Freigabe), `vorproduziert`, knappstes Material je Stufe. `erp_machbar_hinweis()` macht daraus den Hinweis („keine Etiketten – nur bis vor dem Etikettieren: 100 Pkg“, „nur 100 von 500 Pkg komplett machbar“, „… = 9.000 Stk“).
 - `erp_teilmenge_vor_etikett()`: Teilmenge bis vor dem Etikettieren, bucht Material aller Stationen außer Etikettieren (Restbuchung) und merkt `produktionsauftrag.menge_vor_etikett`. Die Fertigware entsteht erst mit `erp_teilmenge_produzieren()`.
 - Etikett-Freigabe sperrt nur noch den Schritt **Etikettieren** (vorher alle Schritte).
+
+Soll-Kette 4b (04.11.2026): `erp_teilmenge_anweisungen()` (offene Anweisungen vom Büro), `erp_teilmenge_anweisung_verrechnen()` – aufgerufen von `erp_teilmenge_produzieren()` und `erp_teilmenge_vor_etikett()`.

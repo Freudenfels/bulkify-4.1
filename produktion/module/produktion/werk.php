@@ -291,6 +291,8 @@ header('Content-Type: text/html; charset=utf-8');
 <?php elseif ($id <= 0): // ===================== KACHEL-LISTE ===================== ?>
   <?php
     $jobs = [];
+    $anwL = erp_teilmenge_anweisungen();   // Soll-Kette 4b: Anweisungen vom Büro
+    $anwPa = []; foreach ($anwL as $aw) $anwPa[(int)$aw['pa_id']] = true;
     foreach (erp_produktionsauftraege('') as $pa) {
         $f = (int)$pa['schritte_fertig'];
         $ber = erp_pa_bereitschaft((int)$pa['id'], (string)$pa['status'], $f);
@@ -298,7 +300,7 @@ header('Content-Type: text/html; charset=utf-8');
         $mbL = in_array((string)$pa['status'], ['offen', 'laufend'], true) ? erp_stufen_machbar((int)$pa['id']) : null;
         $pa['_hinweis'] = $mbL ? erp_machbar_hinweis($mbL, $T) : '';
         $machbar = $mbL && ($mbL['herstellung'] > 0 || $mbL['vor_etikett'] > 0 || $mbL['komplett'] > 0 || $mbL['vorproduziert'] > 0);
-        if ((string)$pa['status'] === 'laufend' || ($ber['status'] ?? '') === 'bereit' || $machbar) { $pa['_lauf'] = (string)$pa['status'] === 'laufend'; $pa['_teil'] = ($ber['status'] ?? '') !== 'bereit' && !$pa['_lauf']; $jobs[] = $pa; }
+        if ((string)$pa['status'] === 'laufend' || ($ber['status'] ?? '') === 'bereit' || $machbar || isset($anwPa[(int)$pa['id']])) { $pa['_lauf'] = (string)$pa['status'] === 'laufend'; $pa['_teil'] = ($ber['status'] ?? '') !== 'bereit' && !$pa['_lauf']; $jobs[] = $pa; }
     }
     usort($jobs, function ($a, $b) {   // laufend zuerst, dann nach geplantem Termin
         if (($a['_lauf'] ?? false) !== ($b['_lauf'] ?? false)) return ($a['_lauf'] ?? false) ? -1 : 1;
@@ -315,6 +317,17 @@ header('Content-Type: text/html; charset=utf-8');
     </div>
   </div>
   <?php if ($flash): ?><div class="flash <?= $flashOk ? 'ok' : 'err' ?>"><?= h($flash) ?></div><?php endif; ?>
+  <?php if ($anwL): ?>
+  <div class="panel" style="border-color:var(--lime)">
+    <div class="step-sub"><?= h($T['instr_h'] ?? 'Anweisungen vom Büro') ?></div>
+    <?php foreach ($anwL as $aw): ?>
+      <a href="?p=werk&id=<?= (int)$aw['pa_id'] ?>" style="display:block;color:inherit;text-decoration:none;padding:10px 0;border-bottom:1px solid var(--line);font-size:18px">
+        <strong><?= menge_txt($aw['menge']) ?> <?= h($T['packages']) ?></strong> <?= h($aw['umfang'] === 'vor_etikett' ? ($T['tm_prelabel_btn'] ?? 'bis vor dem Etikettieren') : ($T['tm_full_btn'] ?? 'komplett fertig')) ?>
+        · <?= h((string)$aw['nummer']) ?> · <?= h((string)($aw['produkt'] ?? '')) ?><?= (int)$aw['prio'] === 1 ? ' <span class="badge b-lauf">' . h($T['prio_high'] ?? 'Priorität hoch') . '</span>' : '' ?>
+      </a>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
   <h1 style="font-size:24px;margin:0 0 14px"><?= h($T['what_produce']) ?></h1>
   <?php if (!$jobs): ?>
     <div class="panel muted"><?= h($T['no_jobs']) ?></div>
@@ -383,9 +396,12 @@ header('Content-Type: text/html; charset=utf-8');
 
   <?php // Soll-Kette 4: Teilmenge am Tablet – was jetzt je Stufe machbar ist, Rest bleibt offen im Auftrag.
     $mbW = (!$alleFertig && in_array((string)$pa['status'], ['offen', 'laufend'], true)) ? erp_stufen_machbar($id) : null;
-    if ($mbW && $mbW['rest'] > 0): $nW = fn($x) => menge_txt($x); ?>
-  <div class="panel">
+    if ($mbW && $mbW['rest'] > 0): $nW = fn($x) => menge_txt($x); $anwW = erp_teilmenge_anweisungen($id); $aw1 = $anwW[0] ?? null; ?>
+  <div class="panel"<?= $aw1 ? ' style="border-color:var(--lime)"' : '' ?>>
     <div class="step-sub"><?= h($T['tm_h'] ?? 'Teilmenge produzieren') ?></div>
+    <?php foreach ($anwW as $aw): ?>
+      <div style="font-size:19px;margin:6px 0;color:var(--lime)"><?= h($T['instr_one'] ?? 'Anweisung:') ?> <strong><?= menge_txt($aw['menge']) ?> <?= h($T['packages']) ?></strong> <?= h($aw['umfang'] === 'vor_etikett' ? ($T['tm_prelabel_btn'] ?? 'bis vor dem Etikettieren') : ($T['tm_full_btn'] ?? 'komplett fertig')) ?><?= (int)$aw['prio'] === 1 ? ' · ' . h($T['prio_high'] ?? 'Priorität hoch') : '' ?></div>
+    <?php endforeach; ?>
     <div style="font-size:17px;margin:6px 0 10px;line-height:1.6">
       <?= h($T['tm_production'] ?? 'Herstellung') ?>: <strong><?= $nW($mbW['herstellung']) ?></strong> ·
       <?= h($T['doable_before_label']) ?>: <strong><?= $nW($mbW['vor_etikett']) ?></strong> ·
@@ -395,7 +411,7 @@ header('Content-Type: text/html; charset=utf-8');
     </div>
     <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0">
       <input type="hidden" name="aktion" value="werk_teilmenge"><input type="hidden" name="pa_id" value="<?= (int)$id ?>">
-      <input type="text" inputmode="numeric" name="menge" placeholder="<?= h($T['packages']) ?>" style="font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px">
+      <input type="text" inputmode="numeric" name="menge" value="<?= $aw1 ? (int)min((float)$aw1['menge'], (float)($aw1['umfang'] === 'vor_etikett' ? $mbW['vor_etikett'] : $mbW['komplett'])) ?: '' : '' ?>" placeholder="<?= h($T['packages']) ?>" style="font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px">
       <button class="btn btn-ghost" type="submit" name="umfang" value="vor_etikett" style="min-height:52px" <?= $mbW['vor_etikett'] > 0 ? '' : 'disabled' ?>><?= h($T['tm_prelabel_btn'] ?? 'bis vor dem Etikettieren') ?></button>
       <button class="btn btn-lime" type="submit" name="umfang" value="komplett" style="min-height:52px" <?= $mbW['komplett'] > 0 ? '' : 'disabled' ?>><?= h($T['tm_full_btn'] ?? 'komplett fertig') ?></button>
     </form>
