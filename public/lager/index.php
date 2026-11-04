@@ -26,6 +26,7 @@ $routen = [
     'ausgang'        => 'bestand/ausgang.php',
     // Warenausgang / Versand (Sendungen planen, Lieferschein, spaeter DHL/Cargoboard)
     'versand'        => 'versand/liste.php',
+    'versand_bereit' => 'versand/bereit.php',          // Soll-Kette 7: versandbereite Aufträge -> Versandart, Sendung, Lager 2
     'versand_detail' => 'versand/detail.php',
     'lieferschein_neu' => 'versand/erstellen.php',   // einfacher Lieferschein-Generator (Katalog + Kartons)
     'lieferschein'   => 'versand/lieferschein.php',

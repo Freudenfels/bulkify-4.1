@@ -76,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('Sendung storniert.');
         weiter('?p=versand_detail&id=' . $id);
     }
+    if ($aktion === 'label' && (string)$v['typ'] === 'abholung') { flash('Selbstabholung braucht kein Versand-Label.', 'warn'); weiter('?p=versand_detail&id=' . $id); }   // Soll-Kette 7
     if ($aktion === 'label') {
         require_once __DIR__ . '/../../core/versand.php';
         $r = versand_label_erstellen($id);
@@ -90,8 +91,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         weiter('?p=versand_detail&id=' . $id);
     }
     if ($aktion === 'versenden') {
-        // Bestand je Position abbuchen (nur eigener Bestand, nur noch nicht abgebucht).
-        $fehler = [];
+        // Soll-Kette 7: Positionen aus Aufträgen bucht das DASHBOARD (Fertigware des Auftrags FEFO, Lieferschein-Beleg, Status, Rechnung)
+        // – je Auftrag einmal mit der Summe. Klappt das nicht, bleibt die Sendung geplant.
+        $fehler = []; $jeAuftrag = []; $lsNr = [];
+        foreach (lg_versand_pos_liste($id) as $p) if ((int)$p['abgebucht'] !== 1 && !empty($p['auftrag_id'])) $jeAuftrag[(int)$p['auftrag_id']][] = $p;
+        foreach ($jeAuftrag as $aid => $ps) {
+            $sum = (int) round(array_sum(array_map(fn($p) => (float)$p['menge'], $ps)));
+            $r = erp_dashboard_versand('versenden', (int)$aid, $sum);
+            if (empty($r['ok'])) { flash('Nicht versendet: ' . (string)($r['msg'] ?? 'Dashboard-Buchung fehlgeschlagen.'), 'warn'); weiter('?p=versand_detail&id=' . $id); }
+            if (!empty($r['ls_nummer'])) $lsNr[] = (string)$r['ls_nummer'];
+            foreach ($ps as $p) { lg_bewegung_log((int)$p['charge_id'], 'aus', (float)$p['menge'], (string)$p['einheit'], (string)$p['bezeichnung'], 'Versand ' . (string)$v['nummer']); lg_versand_pos_abgebucht((int)$p['id']); }
+        }
+        if ($lsNr) q("UPDATE lg_versand SET notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", [' · Lieferschein-Belege ' . implode(', ', $lsNr), $id]);
+        // Übrige Positionen (ohne Auftrag): Bestand je Position abbuchen (nur eigener Bestand, nur noch nicht abgebucht).
         foreach (lg_versand_pos_liste($id) as $p) {
             if ((int)$p['abgebucht'] === 1 || !$p['charge_id'] || (float)$p['menge'] <= 0) continue;
             $r = erp_charge_entnehmen((int)$p['charge_id'], (float)$p['menge']);
@@ -167,6 +179,7 @@ flash_zeigen();
         <select name="typ">
           <option value="paket" <?= (string)$v['typ'] === 'paket' ? 'selected' : '' ?>>Paket (DHL)</option>
           <option value="palette" <?= (string)$v['typ'] === 'palette' ? 'selected' : '' ?>>Palette / Fracht (Cargoboard)</option>
+          <option value="abholung" <?= (string)$v['typ'] === 'abholung' ? 'selected' : '' ?>>Selbstabholung (kein Versand-Label)</option>
         </select>
       </div>
       <div class="bx-field vs-paket" style="margin:0;min-width:200px"><label>DHL-Größe</label>
@@ -293,6 +306,7 @@ flash_zeigen();
   </div>
 
   <div style="font-weight:600;margin-bottom:6px">Versand-Label</div>
+  <?php if ((string)$v['typ'] === 'abholung'): ?><div class="muted" style="margin-bottom:6px">Selbstabholung – kein Versand-Label nötig. Lieferschein mitgeben, dann „Als versendet markieren“.</div><?php endif; ?>
   <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap">
     <?php if ($geplant): ?>
     <form method="post" style="margin:0" onsubmit="return confirm('Jetzt beim Carrier ein Versand-Label erzeugen? (<?= (string)$v['typ'] === 'palette' ? 'Cargoboard' : 'DHL' ?>)')">

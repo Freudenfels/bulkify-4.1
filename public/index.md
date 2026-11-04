@@ -18,3 +18,5 @@ Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route,
 `?p=api_qm_freigabe` (POST charge_id, token, wer): Loopback der Lager-App nach einer QM-Freigabe -> `fertigware_qm_freigabe_nach()`.
 
 `api_qm_freigabe` (04.11.2026): zusätzlich `bericht` (1/0) und `anlass` (`produktion` = Produktionsabschluss) – die Werk-App meldet frisch produzierte Fertigware.
+
+`api_versand` (Soll-Kette 7, 04.11.2026): Loopback für die Lager-App (Token wie Einlagern). `aktion=versenden` (auftrag_id, menge) → `auftrag_versenden_menge()` (Fertigware FEFO, Lieferschein-Beleg, Status, Rechnung, Kundenmail), Antwort mit `ls_nummer`; `aktion=fremdlager` → `auftrag_ins_fremdlager()`.

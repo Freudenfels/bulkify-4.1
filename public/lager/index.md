@@ -6,3 +6,5 @@ Front-Controller unter `/lager/`. Er lässt nur Routen aus der Whitelist zu:
 - `sender` und `bruecke_skript`, nur für Admins
 - `login` und `logout`
 - `autologin`, nur lokal und mit dem `login_token` aus dem Dashboard
+
+Route `versand_bereit` → `versand/bereit.php` (Soll-Kette 7).

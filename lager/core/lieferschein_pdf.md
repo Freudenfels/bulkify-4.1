@@ -17,3 +17,5 @@ Genutzt von [../module/versand/lieferschein.md](../module/versand/lieferschein.m
 Der Lieferschein zeigt jetzt zusätzlich **Gewicht** (gesamt + kg/Paket), **Warenwert (vers.)** aus
 `lg_versand.versicherung_cent` und in der Positionsspalte **Kartons × Menge/Karton** (statt Charge, wenn über den
 Generator erfasst).
+
+Versandart „Selbstabholung“ im Kopf (Soll-Kette 7, 04.11.2026).

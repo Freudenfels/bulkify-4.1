@@ -256,6 +256,7 @@ function lg_schema(): void {
     lg_spalte('lg_versand', 'versicherung_cent', 'INT NULL');
     // Position: Kartons × Menge je Karton (Menge gesamt = kartons × menge_karton), Stückwert für die Versicherung (Cent).
     lg_spalte('lg_versand_pos', 'kartons', 'INT NULL');
+    lg_spalte('lg_versand_pos', 'auftrag_id', 'INT NULL');   // Soll-Kette 7: Position aus einem Auftrag – die Buchung macht das Dashboard
     lg_spalte('lg_versand_pos', 'menge_karton', 'DECIMAL(14,3) NULL');
     lg_spalte('lg_versand_pos', 'produkt_id', 'INT NULL');
     lg_spalte('lg_versand_pos', 'einzelwert_cent', 'INT NULL');
@@ -405,7 +406,7 @@ function lg_versand_anlegen(array $d): int {
        $d['empf_firma'] ?? '', $d['empf_name'] ?? '', $d['empf_strasse'] ?? '', $d['empf_hausnummer'] ?? '',
        $d['empf_plz'] ?? '', $d['empf_ort'] ?? '', strtoupper(trim((string)($d['empf_land'] ?? 'DE'))) ?: 'DE',
        $d['empf_email'] ?? '', $d['empf_telefon'] ?? '', $d['adress_quelle'] ?? 'frei',
-       in_array(($d['typ'] ?? 'paket'), ['paket', 'palette'], true) ? ($d['typ'] ?? 'paket') : 'paket',
+       in_array(($d['typ'] ?? 'paket'), ['paket', 'palette', 'abholung'], true) ? ($d['typ'] ?? 'paket') : 'paket',
        $d['notiz'] ?? '',
        (($d['gewicht_kg'] ?? '') !== '' ? (float)$d['gewicht_kg'] : null),
        max(1, (int)($d['pakete'] ?? 1)),
@@ -461,7 +462,7 @@ function lg_versand_kopf_speichern(int $id, array $d): void {
       [($d['kunde_id'] ?? null) ?: null, $d['empf_firma'] ?? '', $d['empf_name'] ?? '', $d['empf_strasse'] ?? '',
        $d['empf_hausnummer'] ?? '', $d['empf_plz'] ?? '', $d['empf_ort'] ?? '',
        strtoupper(trim((string)($d['empf_land'] ?? 'DE'))) ?: 'DE', $d['empf_email'] ?? '', $d['empf_telefon'] ?? '',
-       $d['adress_quelle'] ?? 'frei', in_array(($d['typ'] ?? 'paket'), ['paket', 'palette'], true) ? ($d['typ'] ?? 'paket') : 'paket',
+       $d['adress_quelle'] ?? 'frei', in_array(($d['typ'] ?? 'paket'), ['paket', 'palette', 'abholung'], true) ? ($d['typ'] ?? 'paket') : 'paket',
        $d['notiz'] ?? '',
        (($d['gewicht_kg'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$d['gewicht_kg']) : null),
        max(1, (int)($d['pakete'] ?? 1)), $mass($d['masse_l'] ?? ''), $mass($d['masse_b'] ?? ''), $mass($d['masse_h'] ?? ''),

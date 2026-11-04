@@ -65,7 +65,7 @@ function lg_lieferschein_pdf(int $versand_id): ?string {
     $meta = [
         ['Lieferschein-Nr.', (string)($v['nummer'] ?? '')],
         ['Datum', date('d.m.Y')],
-        ['Versandart', ((string)$v['typ'] === 'palette' ? 'Palette / Fracht' : 'Paket')],
+        ['Versandart', ['palette' => 'Palette / Fracht', 'abholung' => 'Selbstabholung'][(string)$v['typ']] ?? 'Paket'],
         ['Pakete', (string)(int)($v['pakete'] ?? 1)],
     ];
     $pakete = max(1, (int)($v['pakete'] ?? 1));

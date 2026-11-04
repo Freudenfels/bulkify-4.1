@@ -55,6 +55,26 @@ if (($_GET['p'] ?? '') === 'api_qm_freigabe') {
     exit;
 }
 
+// Soll-Kette 7: Loopback-API „Versand“ für die Lager-App – das Lager legt Sendungen an, die Buchung macht das Dashboard
+// (Fertigware des Auftrags FEFO ausbuchen, Lieferschein-Beleg, Status, Rechnung bei Lieferung, Kundenmail) bzw. bucht ins Lager 2 um.
+if (($_GET['p'] ?? '') === 'api_versand') {
+    header('Content-Type: application/json; charset=utf-8');
+    $soll  = trim((string) meta_get('einlager_api_token', ''));
+    $token = (string)($_POST['token'] ?? '');
+    if ($soll === '' || !hash_equals($soll, $token)) { http_response_code(401); echo json_encode(['ok'=>false, 'msg'=>'Token ungültig.']); exit; }
+    $aid = (int)($_POST['auftrag_id'] ?? 0);
+    $akt = (string)($_POST['aktion'] ?? '');
+    if ($aid <= 0) { echo json_encode(['ok'=>false, 'msg'=>'auftrag_id fehlt.']); exit; }
+    if ($akt === 'versenden') {
+        $m = (int)($_POST['menge'] ?? 0);
+        $r = auftrag_versenden_menge($aid, $m > 0 ? $m : null);
+        $r['ls_nummer'] = !empty($r['ls_id']) ? (string) scalar("SELECT nummer FROM beleg WHERE id=?", [(int)$r['ls_id']]) : '';
+    } elseif ($akt === 'fremdlager') {
+        $r = auftrag_ins_fremdlager($aid);
+    } else $r = ['ok'=>false, 'msg'=>'Unbekannte Aktion.'];
+    echo json_encode($r, JSON_UNESCAPED_UNICODE); exit;
+}
+
 // Router: Whitelist Seite -> Modul-Datei. Kein direkter Dateizugriff moeglich.
 $routes = [
     'login'       => 'auth/login.php',

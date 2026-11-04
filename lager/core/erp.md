@@ -120,3 +120,5 @@ Soll-Kette 2b (04.11.2026): `erp_hinweis_neuer_artikel()` – jede im Wareneinga
 Soll-Kette 3 (04.11.2026): `erp_bezug_sel()` / `erp_bezug_text()` – je Charge Kapselgröße, Auftrag mit Kunde (an der Charge oder über die Bestellposition) und aktive Reservierungen. Genutzt von `erp_bestand()` und `erp_charge_voll()`. `erp_erwartete_lieferungen()` liefert je Position `fuer_auftrag`.
 
 Soll-Kette 6 (04.11.2026): `erp_karton_etikett_daten($pa)` – Produkt, Auftrag, Kunde und die Kartonwerte des PA.
+
+Soll-Kette 7 (04.11.2026): `erp_versandarten()`, `erp_versandbereite_auftraege()` (Status erledigt, nicht alles versendet, freie Fertigware), `erp_auftrag_versandart_setzen()`, `erp_auftrag_fertig_chargen()`, `erp_dashboard_versand()` (Loopback `?p=api_versand`).

@@ -811,6 +811,7 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'menge_vor_etikett', "INT NULL");
     // Soll-Kette 6: Kartonetiketten aus dem Verpackungsschritt (Pkg je Karton, Packungen, Charge, MHD des letzten Drucks)
     ensure_column('produktionsauftrag', 'karton_stueck', "INT NULL");
+    ensure_column('auftrag', 'versandart', "VARCHAR(12) NULL");   // Soll-Kette 7: paket | palette | abholung | lager2 (legt das Lager fest, wenn versandbereit)
     ensure_column('produktionsauftrag', 'karton_menge', "INT NULL");
     ensure_column('produktionsauftrag', 'karton_charge', "VARCHAR(40) NULL");
     ensure_column('produktionsauftrag', 'karton_mhd', "DATE NULL");

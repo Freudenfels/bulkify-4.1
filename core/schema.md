@@ -459,3 +459,5 @@ Soll-Kette 4a (04.11.2026): Spalte `produktionsauftrag.menge_vor_etikett`. `prod
 `produktion_teilmenge_einbuchen()` bucht eigene Fertigware **frei** (kein QM-Gate mehr) und ruft `fertigware_qm_freigabe_nach($cid, '', $mitBericht, 'Produktionsabschluss')`: CoA-Stempel/Informationsdokument je Charge sofort, Produktionsbericht erst, wenn die ganze Menge produziert ist. `fertigware_qm_freigabe_nach()` hat dafür `$mitBericht` und `$anlass`.
 
 Soll-Kette 6 (04.11.2026): Spalten `produktionsauftrag.karton_stueck`, `karton_menge`, `karton_charge`, `karton_mhd` (Werte des letzten Kartonetiketten-Drucks).
+
+Soll-Kette 7 (04.11.2026): Spalte `auftrag.versandart` (paket | palette | abholung | lager2) – legt das Lager fest, wenn der Auftrag versandbereit ist.
