@@ -58,3 +58,5 @@ Optional `zeilen => fn(array $rows): array` ergänzt Spalten, die sich nicht in 
 **bulk_eingegangen_ohne_charge** (04.11.2026): Bestellungen mit Bulk-Freitext für einen Auftrag, die eingegangen/geliefert sind, ohne Bulk-Charge am Auftrag. Nur Anzeige; einbuchen in der Lager-App oder Charge am Auftrag binden.
 
 **rohstoff_leerkapsel_form** (04.11.2026): Rohstoffe, die nach Leerkapseln aussehen (Name/Kapselgröße), ohne Form Kapselhülle. Beheben setzt Form + Kapselgröße aus dem Namen (aenderung_log).
+
+**pa_schritt_produktionsfreigabe** (04.11.2026): offene Schritte „Produktions-Freigabe“ aktiver Produktionsaufträge. Beheben hakt sie als „entfällt (Soll-Kette 2e)“ ab (nichts gelöscht, nichts gebucht), aenderung_log.

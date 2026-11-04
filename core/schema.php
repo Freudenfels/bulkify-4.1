@@ -7436,7 +7436,7 @@ function produktionsschritte_fuer(string $form, bool $zukauf = false, bool $bulk
     // kein Rohstoff-Bereitstellen/Mischen/Verkapseln – nur bereitstellen, Ausbaustufen, prüfen.
     if ($zukauf) {
         return array_merge(['Fertigware bereitstellen'], $ausbau,
-                ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']);
+                ['Qualitätsprüfung', 'Versand-Freigabe']);   // Soll-Kette 2e: keine eigene Produktions-Freigabe mehr
     }
     $herstellung = match ($form) {
         'kapsel'   => 'Verkapselung',
@@ -7454,7 +7454,7 @@ function produktionsschritte_fuer(string $form, bool $zukauf = false, bool $bulk
         return ['Rohstoffe bereitstellen', 'Mischen', $herstellung, 'Qualitätsprüfung', 'Einlagern (Bulk)'];
     }
     return array_merge(['Rohstoffe bereitstellen', 'Mischen', $herstellung], $ausbau,
-            ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']);
+            ['Qualitätsprüfung', 'Versand-Freigabe']);   // Soll-Kette 2e: keine eigene Produktions-Freigabe mehr
 }
 
 // Ausbaustufen-Wege für einen Produktionsauftrag auflösen. Priorität je Stufe:

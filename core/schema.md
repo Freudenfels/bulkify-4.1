@@ -438,3 +438,5 @@ Ablauf: bestellen → Ware kommt an = eingebucht, sofort frei → im System als 
 - Spalte `charge.kapselgroesse_id`. Abgeleitet, nicht im Lager gemessen: Leerkapsel → Artikel; Bulkware → Rezeptur des Auftrags, sonst die eine Größe aller Rezepturen am Bulk-Artikel (Stamm + Varianten). Nicht eindeutig → leer (Wareneingang fragt, Datenprüfung listet).
 - `rezeptur_kapselgroesse_id()`, `auftrag_kapselgroesse_id()`, `charge_kapselgroesse_ermitteln()`, `charge_kapselgroesse_setzen()`, `kapselgroesse_name()`. `wareneingang_buchen()` setzt die Größe.
 - `auftrag_lagerware_quellen()` liefert je Charge `kapselgroesse` + `passt`, passende zuerst (Rohdaten: `auftrag_lagerware_quellen_roh()`). `charge_auftrag_zuweisen()` warnt bei anderer Größe; die abgespaltene Teilmenge erbt die Größe.
+
+Soll-Kette 2e (04.11.2026): `produktionsschritte_fuer()` ohne Schritt „Produktions-Freigabe“ (Zukauf und Eigen). Startbar = Material da, gesteuert über den Auftrag. Alte offene Schritte: Datenprüfung `pa_schritt_produktionsfreigabe`.

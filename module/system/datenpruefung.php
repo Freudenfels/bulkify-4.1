@@ -375,6 +375,25 @@ $CHECKS = [
                     ORDER BY b.id DESC",
         'ohne_fix'  => 'Nur Anzeige: Einbuchen braucht Charge, MHD und Menge der echten Lieferung – bitte in der Lager-App buchen oder am Auftrag eine Charge binden.',
     ],
+    'pa_schritt_produktionsfreigabe' => [
+        'titel' => 'Produktion: offener Schritt „Produktions-Freigabe“ (entfällt)',
+        'info'  => 'Seit der Soll-Kette (Nico/Dustin 04.11.2026) gibt es keine eigene Produktions-Freigabe mehr: Material da = startbar, gesteuert über den Auftrag. Neue Produktionsaufträge bekommen den Schritt nicht mehr. Bestehende haben ihn noch offen und würden daran hängen bleiben. Beheben hakt den Schritt als „entfällt“ ab (nichts wird gelöscht, nichts gebucht).',
+        'sql'   => "SELECT s.id AS _id, CONCAT('?p=produktionsauftrag&id=', pa.id) AS _link, pa.nummer, pa.status, a.nummer AS auftrag,
+                           (SELECT s2.station FROM produktion_schritt s2 WHERE s2.pa_id=pa.id AND s2.erledigt=0 ORDER BY s2.sort, s2.id LIMIT 1) AS aktueller_schritt
+                    FROM produktion_schritt s
+                    JOIN produktionsauftrag pa ON pa.id = s.pa_id
+                    LEFT JOIN auftrag a ON a.id = pa.auftrag_id
+                    WHERE s.station = 'Produktions-Freigabe' AND s.erledigt = 0 AND pa.status NOT IN ('erledigt','storniert')
+                    ORDER BY pa.id DESC",
+        'korrektur' => "UPDATE produktion_schritt SET erledigt=1, erledigt_at=UTC_TIMESTAMP(), erledigt_von='entfällt (Soll-Kette 2e)' WHERE id = <ID> AND station='Produktions-Freigabe' AND erledigt=0;",
+        'fix'   => ['tabelle' => 'produktion_schritt', 'typ' => 'produktion_schritt',
+                    'aktion' => function (array $r) {
+                        $n = q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=UTC_TIMESTAMP(), erledigt_von='entfällt (Soll-Kette 2e)'
+                                WHERE id=? AND station='Produktions-Freigabe' AND erledigt=0", [(int)$r['_id']])->rowCount();
+                        if ($n) aenderung_protokollieren('produktion_schritt', (int)$r['_id'], ['erledigt' => 0], ['erledigt' => 1], 'datenpruefung');
+                        return $n;
+                    }],
+    ],
     'rohstoff_leerkapsel_form' => [
         'titel' => 'Rohstoff: sieht nach Leerkapseln aus, ist aber nicht so eingestuft',
         'info'  => 'Name (Leerkapsel, Kapselhülle, Kapsel mit HPMC/Gelatine/Pullulan oder mit Größe „Gr. 0“) oder eine gespeicherte Kapselgröße zeigen Leerkapseln, die Form ist aber nicht „Kapselhülle“. Dann blendet die Rohstoff-Seite Kapselgröße und Material aus, und das System ordnet die Kapsel keinem Produkt zu. Häufige Ursache: in der Lager-App mit Warenart „Rohstoff“ eingebucht (bis 04.11.2026 löschte das die Form). Beheben setzt die Form auf Kapselhülle und die Kapselgröße aus dem Namen, wenn noch keine gespeichert ist.',

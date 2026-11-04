@@ -271,7 +271,7 @@ function erp_weg_stationen(int $pa_id, array $f): array {
     if (!$fertig && !empty($f['beipack']))      $steps[] = 'Beipackzettel beilegen';
     if (!$fertig && !empty($f['karton']))       $steps[] = 'Umkarton';
     if ($basis !== 'zukauf')        $steps[] = 'Rückstellmuster ziehen';
-    return array_merge($steps, ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']);
+    return array_merge($steps, ['Qualitätsprüfung', 'Versand-Freigabe']);   // Soll-Kette 2e (04.11.2026): Schritt „Produktions-Freigabe“ entfällt
 }
 // Weg anwenden: Schritte neu erzeugen (nur solange KEIN Schritt erledigt ist). Rückgabe ['ok','msg'].
 function erp_weg_anwenden(int $pa_id, array $f): array {
