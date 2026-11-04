@@ -887,6 +887,16 @@ function erp_materialbedarf(int $pa_id): array {
     }
     $zutaten = all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
                     FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]);
+    // Soll-Kette 1: Weg „Premix“ -> EIN Premix-Artikel (kg) statt der Zutaten (Spiegel von produktion_materialbedarf()).
+    static $hatWeg = null;
+    if ($hatWeg === null) $hatWeg = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='produktionsauftrag' AND COLUMN_NAME='beschaffungsweg'") > 0;
+    if ($hatWeg && (string) scalar("SELECT COALESCE(beschaffungsweg,'') FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'premix') {
+        $pmx = (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='rohstoff' AND form='premix' LIMIT 1", [erp_rezeptur_stamm($rid)]);
+        if ($pmx) {
+            $sumMgP = 0.0; foreach ($zutaten as $zz) $sumMgP += (float)$zz['menge_mg'];
+            $zutaten = [['item_id' => $pmx, 'menge_mg' => $sumMgP, 'name' => (string) scalar("SELECT name FROM item WHERE id=?", [$pmx]), 'einheit' => 'kg']];
+        }
+    }
     $summeMg = 0.0; if ($fuellGesamtG > 0) foreach ($zutaten as $zz) $summeMg += (float)$zz['menge_mg'];
     $out = [];
     foreach ($zutaten as $z) {

@@ -97,3 +97,5 @@ Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schl
 Soll-Kette 2c (04.11.2026): `erp_rezeptur_stamm()`; `erp_rezeptur_bulkitem()` sucht und legt nur an der Stammrezeptur an (vorher je Variante ein zweiter Bulk-Artikel), `erp_fertigware_chargen()` und die Bulk-Reservierung ebenso.
 
 Soll-Kette 2e (04.11.2026): Schrittfolge der Werk-App ohne „Produktions-Freigabe“ (Spiegel von `produktionsschritte_fuer()`).
+
+Soll-Kette 1 (04.11.2026): `erp_materialbedarf()` nimmt bei Weg „premix“ den Premix-Artikel (kg) statt der Zutaten – „Rohstoffe bereitstellen“ bucht dann den Premix FEFO ab.

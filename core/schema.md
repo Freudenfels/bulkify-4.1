@@ -442,3 +442,10 @@ Ablauf: bestellen → Ware kommt an = eingebucht, sofort frei → im System als 
 Soll-Kette 2e (04.11.2026): `produktionsschritte_fuer()` ohne Schritt „Produktions-Freigabe“ (Zukauf und Eigen). Startbar = Material da, gesteuert über den Auftrag. Alte offene Schritte: Datenprüfung `pa_schritt_produktionsfreigabe`.
 
 `item_zusammenfuehren($quelle, $ziel)` (04.11.2026): Chargen + Reservierungen aufs Ziel, Quelle deaktiviert (nicht gelöscht), gleiche Einheit Pflicht. Genutzt von Rohstoff-Seite und Datenprüfung `bulk_artikel_lose`.
+
+## Soll-Kette 1: Beschaffungsweg (04.11.2026)
+- `produktionsauftrag.beschaffungsweg`: kapsel | premix | rohstoffe, festgelegt am Auftrag. `beschaffungswege()`, `pa_beschaffungsweg()` (alt: aus Eigen/Fremd abgeleitet), `auftrag_aktiver_pa()`.
+- `auftrag_beschaffungswege($aid)`: Mengen und Kosten je Weg für diesen Auftrag. Fertige Kapseln: Fremdfertigungs-Angebote je Stk (`rezeptur_lief_angebot`, Einheit nicht kg) + Zukaufpreise am Produkt. Premix: Angebote je kg (`rezeptur_lief_angebot` mit Einheit kg oder `lieferant_preis` am Premix-Artikel). Einzelrohstoffe: Rezeptur × Menge mit Staffelpreis. Bei Premix und Rohstoffen kommen die Leerkapseln dazu. Kein Preis → nur die Menge.
+- `auftrag_beschaffungsweg_setzen()`: Eigen/Fremd + Schritte; PA in Vorbereitung wird dabei freigegeben (Teil 4). Nur ohne erledigten Schritt.
+- `auftrag_beschaffung_bestellen()`: Bestellung als Entwurf beim gewählten Lieferanten (Kapsel: Freitext-Bulk-Position; Premix: Premix-Artikel in kg), Position am Auftrag, Bedarf gemeldet.
+- Premix: `rezeptur_premixitem()` (Rohstoff, Form premix, an der Stammrezeptur, kg). `produktion_materialbedarf()` ersetzt bei Weg premix die Zutaten durch den Premix-Artikel (Parameter `$ohnePremix` für die Kostenrechnung).

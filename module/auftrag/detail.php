@@ -469,6 +469,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 }
 // Punkt 1: „Reservieren" und „Lagerware zuweisen" in EINEM Schritt. Eine Quelle-Auswahl, eine Mengeneingabe.
 // Quelle "bestellung:<bp_id>" -> reservieren (auch unterwegs), "charge:<id>" -> konkrete Charge fest zuweisen.
+// Soll-Kette Teil 1: Beschaffungsweg festlegen / an die Bedarfsliste senden / direkt bestellen (nur Admin).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['beschaffungsweg_setzen', 'beschaffung_bedarf', 'beschaffung_bestellen'], true)) {
+    $bwZ = '?p=auftrag&id=' . $id . '&tab=beschaffung';
+    if (!has_role('admin')) { header('Location: ' . $bwZ . '&bwfehler=' . urlencode('Nur Admins.')); exit; }
+    $akt = (string)$_POST['aktion'];
+    if ($akt === 'beschaffungsweg_setzen') {
+        $r = auftrag_beschaffungsweg_setzen($id, (string)($_POST['weg'] ?? ''), (string)(current_user()['name'] ?? ''));
+        header('Location: ' . $bwZ . (!empty($r['ok']) ? '&bwok=' . urlencode('Weg festgelegt.') : '&bwfehler=' . urlencode((string)$r['fehler']))); exit;
+    }
+    if ($akt === 'beschaffung_bedarf') {
+        $paB = auftrag_aktiver_pa($id);
+        if ($paB) { q("UPDATE produktionsauftrag SET bedarf_gemeldet=COALESCE(bedarf_gemeldet, ?) WHERE id=?", [gmdate('Y-m-d H:i:s'), (int)$paB['id']]); bedarf_bump();
+                    log_aktivitaet('auftrag', $id, 'team', 'Bedarf an die Bedarfsliste gemeldet (' . (beschaffungswege()[pa_beschaffungsweg($paB)] ?? '') . ').', 'notiz'); }
+        header('Location: ' . $bwZ . '&bwok=' . urlencode('An die Bedarfsliste gemeldet.')); exit;
+    }
+    $bid = auftrag_beschaffung_bestellen($id, (string)($_POST['weg'] ?? ''), (int)($_POST['lieferant_id'] ?? 0));
+    header('Location: ' . ($bid ? '?p=bestellung&id=' . $bid : $bwZ . '&bwfehler=' . urlencode('Bestellung nicht möglich (Weg nicht festgelegt oder kein Angebot).'))); exit;
+}
 // „Ware da, aber nicht zugeordnet“ (Nico 04.11.2026): Rohstoff-Charge als Bulk übernehmen bzw. freie Bulk-Charge binden.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bulk_diag') {
     $zur = (string)($_POST['zurueck'] ?? '');
@@ -811,6 +829,7 @@ if ($paVorbereitung && has_role('admin') && (string)$a['status'] !== 'storniert'
   <a href="#" class="on" data-tab="details">Details</a>
   <a href="#" data-tab="rezeptur">Rezeptur</a>
   <a href="#" data-tab="material">Material</a>
+  <a href="#" data-tab="beschaffung">Beschaffungsweg</a>
   <a href="#" data-tab="produktion">Produktion</a>
   <a href="#" data-tab="lager">Lager</a>
   <a href="#" data-tab="preise">Preise &amp; Rechnung</a>
@@ -1215,6 +1234,81 @@ if (auftrag_braucht_etikett($id)):
   <?php endif; ?>
 </div>
 
+<?php // Soll-Kette Teil 1: Reiter „Beschaffungsweg“ – drei Wege nebeneinander, Kosten für DIESEN Auftrag.
+if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt']; $bwAdmin = has_role('admin');
+    $bwN = fn($x, $d = 0) => number_format((float)$x, $d, ',', '.');
+    $bwM = fn($x, $e) => in_array($e, ['Stk'], true) ? $bwN(round((float)$x)) . ' Stk' : rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',') . ' ' . $e;
+    $bwE = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+    $bwPreis = fn($x) => (float)$x < 1 ? number_format((float)$x, 4, ',', '.') . ' €' : number_format((float)$x, 2, ',', '.') . ' €';
+    // günstigster Weg mit vollständigem Preis (Rohstoffe nur ohne Lücke)
+    $bwKost = [];
+    foreach ($bw['wege'] as $k => $w) {
+        if ($k === 'rohstoffe') { if (!$w['luecke'] && $w['gesamt'] > 0) $bwKost[$k] = $w['gesamt']; }
+        elseif (!empty($w['angebote'])) $bwKost[$k] = $w['angebote'][0]['gesamt'] + (($w['zusatz']['gesamt'] ?? 0) ?: 0);
+    }
+    $bwBest = $bwKost ? array_search(min($bwKost), $bwKost, true) : ''; ?>
+<div class="bx-panel" data-panel="beschaffung">
+  <h2 style="margin:0 0 4px;font-size:16px">Beschaffungsweg</h2>
+  <div class="muted" style="font-size:12px;margin-bottom:12px">Wie kommt das Material für diesen Auftrag ins Haus? Kosten aus den vorhandenen Lieferantenpreisen für <?= h($bwN((int)$pa['menge'])) ?> Pkg; wo kein Preis vorliegt, steht nur die benötigte Menge.</div>
+  <?php if (isset($_GET['bwok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-bottom:10px"><?= h((string)$_GET['bwok']) ?></div><?php endif; ?>
+  <?php if (isset($_GET['bwfehler'])): ?><div style="color:#8f231b;margin-bottom:10px"><?= h((string)$_GET['bwfehler']) ?></div><?php endif; ?>
+  <?php if (!$bw['rezeptur_id']): ?><div class="muted">Zum Produkt gibt es keine Rezeptur – kein Beschaffungsweg nötig.</div>
+  <?php else: ?>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
+  <?php foreach ($bw['wege'] as $k => $w): $ist = $bwWahl === $k; ?>
+    <div style="border:1px solid <?= $ist ? 'var(--gruen,#1D9E75)' : 'var(--line)' ?>;border-radius:10px;padding:14px 16px;<?= $ist ? 'box-shadow:0 0 0 1px var(--gruen,#1D9E75) inset;' : '' ?>">
+      <div class="bx-row" style="justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="font-weight:600"><?= h($w['label']) ?></div>
+        <div><?= $ist ? bx_badge('festgelegt', 'ok') : '' ?> <?= $bwBest === $k ? bx_badge('günstigster', 'info') : '' ?></div>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:8px">Bedarf für diesen Auftrag: <span style="color:var(--text)"><?= h($bwM($w['menge'], $w['einheit'])) ?></span></div>
+      <?php if ($k === 'rohstoffe'): ?>
+        <table class="bx-table" style="font-size:13px"><tbody>
+        <?php foreach ($w['positionen'] as $ps): ?>
+          <tr><td style="white-space:normal"><?= h($ps['name']) ?></td><td class="bx-num"><?= h($bwM($ps['menge'], $ps['einheit'])) ?></td>
+              <td class="bx-num"><?= $ps['gesamt'] !== null ? h($bwE($ps['gesamt'])) : '<span class="muted">kein Preis</span>' ?></td></tr>
+        <?php endforeach; ?>
+        </tbody></table>
+        <div style="margin-top:8px"><?= $w['gesamt'] > 0 ? 'Summe ' . h($bwE($w['gesamt'])) : '' ?><?= $w['luecke'] ? ' <span class="muted" style="font-size:12px">(nicht vollständig: Preise fehlen)</span>' : '' ?></div>
+        <div class="muted" style="font-size:12px;margin-top:4px">Beschaffung über die Bedarfsliste (meist mehrere Lieferanten).</div>
+      <?php else: ?>
+        <?php if (!$w['angebote']): ?>
+          <div class="muted">Kein Lieferantenpreis. <a href="?p=rezeptur_detail&id=<?= (int)$bw['rezeptur_id'] ?>">Angebot anfragen</a></div>
+        <?php else: ?>
+          <table class="bx-table" style="font-size:13px"><tbody>
+          <?php foreach ($w['angebote'] as $ag): ?>
+            <tr><td style="white-space:normal"><?= h($ag['lieferant']) ?></td><td class="bx-num"><?= h($bwPreis($ag['preis'])) ?>/<?= h($w['einheit']) ?></td><td class="bx-num"><?= h($bwE($ag['gesamt'])) ?></td>
+              <td style="text-align:right"><?php if ($ist && $bwAdmin): ?>
+                <form method="post" style="margin:0" onsubmit="return confirm('Bestellung bei <?= h(addslashes($ag['lieferant'])) ?> als Entwurf anlegen (<?= h($bwM($w['menge'], $w['einheit'])) ?>)?')">
+                  <input type="hidden" name="aktion" value="beschaffung_bestellen"><input type="hidden" name="weg" value="<?= h($k) ?>"><input type="hidden" name="lieferant_id" value="<?= (int)$ag['lieferant_id'] ?>">
+                  <button class="btn btn-primary btn-sm" type="submit">Bestellen</button></form>
+              <?php endif; ?></td></tr>
+          <?php endforeach; ?>
+          </tbody></table>
+        <?php endif; ?>
+        <?php if (!empty($w['zusatz'])): $zs = $w['zusatz']; ?>
+          <div class="muted" style="font-size:12px;margin-top:6px">dazu <?= h($zs['name']) ?> <?= h($bwM($zs['menge'], $zs['einheit'])) ?>: <?= $zs['gesamt'] !== null ? h($bwE($zs['gesamt'])) : 'kein Preis' ?></div>
+        <?php endif; ?>
+      <?php endif; ?>
+      <div class="bx-row" style="gap:8px;margin-top:12px;flex-wrap:wrap">
+        <?php if ($bwAdmin && !$ist && $bw['schritte_erledigt'] === 0): ?>
+          <form method="post" style="margin:0"><input type="hidden" name="aktion" value="beschaffungsweg_setzen"><input type="hidden" name="weg" value="<?= h($k) ?>">
+            <button class="btn <?= $bwWahl === '' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" type="submit">Diesen Weg festlegen</button></form>
+        <?php endif; ?>
+        <?php if ($ist && $bwAdmin): ?>
+          <?php if (empty($bw['pa']['bedarf_gemeldet'])): ?>
+            <form method="post" style="margin:0"><input type="hidden" name="aktion" value="beschaffung_bedarf">
+              <button class="btn btn-ghost btn-sm" type="submit">An Bedarfsliste senden</button></form>
+          <?php else: ?><span class="muted" style="font-size:12px">an die Bedarfsliste gemeldet am <?= h(fmt_zeit((string)$bw['pa']['bedarf_gemeldet'], 'd.m.Y')) ?> · <a href="?p=einkaufsliste">zur Bedarfsliste</a></span><?php endif; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+  <?php endforeach; ?>
+  </div>
+  <?php if ($bw['schritte_erledigt'] > 0): ?><div class="muted" style="font-size:12px;margin-top:10px">Die Produktion hat begonnen – der Weg lässt sich nicht mehr ändern.</div><?php endif; ?>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 <?php // H1 (Teil 3): Material-Übersicht – je Position benötigt / frei / unterwegs mit Deckungs-Ampel.
 // Nutzt den vorhandenen auftrag_bedarf() + item_unterwegs(); nur Übersicht, keine Buchung.
 if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
@@ -1909,6 +2003,7 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   var start = 'details';
   try { var s = sessionStorage.getItem(KEY); if (s) start = s; } catch(e){}
   <?php if (isset($_GET['analyse'])): ?>start = 'dokumente';<?php endif; ?>
+  <?php if (isset($_GET['tab'])): ?>start = <?= json_encode((string)$_GET['tab'], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;<?php endif; ?>
   // Direktlink mit Anker (z. B. #bulkreserve aus der Produktionsseite): passenden Reiter öffnen + hinscrollen.
   var hash = (location.hash || '').replace('#','');
   if (hash === 'bulkreserve') start = 'material';

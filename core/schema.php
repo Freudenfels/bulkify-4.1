@@ -806,7 +806,8 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'prio', "TINYINT NOT NULL DEFAULT 2");   // 1=Hoch, 2=Normal, 3=Niedrig
     ensure_column('produktionsauftrag', 'geplant_am', "DATE NULL");               // Baustein 2: geplantes Produktionsdatum
     ensure_column('produktionsauftrag', 'produktionsart', "VARCHAR(10) NOT NULL DEFAULT 'fremd'");   // eigen|fremd (Make-or-Buy); Standard = fremd (90% der Kapseln extern gefüllt)
-    ensure_column('produktionsauftrag', 'zukauf_art', "VARCHAR(10) NOT NULL DEFAULT 'bulk'");        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
+    ensure_column('produktionsauftrag', 'zukauf_art', "VARCHAR(10) NOT NULL DEFAULT 'bulk'");
+    ensure_column('produktionsauftrag', 'beschaffungsweg', "VARCHAR(10) NULL");   // Soll-Kette 1: kapsel|premix|rohstoffe (am Auftrag festgelegt)        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
     // Eigen/Fremd wird im Backend FESTGELEGT, bevor der Auftrag in die Produktion geht. NULL = noch offen
     // -> erscheint NICHT im Produktions-Arbeitsplatz. Entscheidung trifft Admin/Backend, nicht die Produktion.
     ensure_column('produktionsauftrag', 'art_festgelegt_am', "DATETIME NULL");
@@ -7798,6 +7799,154 @@ function auftrag_bulk_reserviert_stueck(int $auftrag_id): float {
 // Freie Lager-Chargen für die Zuweisung: zuerst die zur Rezeptur passende Bulkware (exakter Bulk-Artikel),
 // dann ALLE anderen freien Fertigware-(Bulk-)Chargen im Lager – der Admin kann bewusst eine andere wählen
 // (z. B. wenn die Ware unter einem anderen Artikel/einer anderen Rezeptur gebucht ist). Je noch keinem Auftrag.
+// ===== Soll-Kette Teil 1: Beschaffungsweg am Auftrag (Nico/Dustin 04.11.2026) =====
+// Drei Wege, entschieden erst am Auftrag: 'kapsel' = fertige Kapseln/Tabletten zukaufen (Fremd, Bulk-Zukauf),
+// 'premix' = fertige Mischung zukaufen und selbst verkapseln (Eigen, statt Einzelrohstoffen EIN Premix-Artikel),
+// 'rohstoffe' = Einzelrohstoffe (Eigenproduktion). Gespeichert in produktionsauftrag.beschaffungsweg.
+function beschaffungswege(): array {
+    return ['kapsel' => 'Zukauf fertige Kapsel/Tablette', 'premix' => 'Premix (fertige Mischung)', 'rohstoffe' => 'Einzelrohstoffe (Eigenproduktion)'];
+}
+// Premix-Artikel einer Rezeptur: Rohstoff mit Form 'premix' an der Stammrezeptur (wie der Bulk-Artikel), Einheit kg.
+function rezeptur_premixitem(int $rezeptur_id, bool $anlegen = true): int {
+    $rid = rezeptur_stamm_id($rezeptur_id);
+    if ($rid <= 0) return 0;
+    $id = (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='rohstoff' AND form='premix' LIMIT 1", [$rid]);
+    if ($id || !$anlegen) return $id;
+    $name = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rid]);
+    if ($name === '') return 0;
+    q("INSERT INTO item (artikelnummer,name,kategorie,form,einheit,preis_bezug,rezeptur_id) VALUES (?,?,?,?,?,?,?)",
+      [naechste_nummer('PMX'), $name . ' – Premix', 'rohstoff', 'premix', 'kg', 'kg', $rid]);
+    return (int) insert_id();
+}
+// Aktiver Produktionsauftrag eines Auftrags (neuester, nicht storniert).
+function auftrag_aktiver_pa(int $auftrag_id): ?array {
+    return one("SELECT pa.* FROM produktionsauftrag pa WHERE pa.auftrag_id=? AND " . pa_aktiv_sql() . " ORDER BY pa.id DESC LIMIT 1", [$auftrag_id]) ?: null;
+}
+// Gewählter Weg eines PA: gespeichert, sonst aus Eigen/Fremd abgeleitet (nur wenn schon festgelegt).
+function pa_beschaffungsweg(array $pa): string {
+    $w = (string)($pa['beschaffungsweg'] ?? '');
+    if (isset(beschaffungswege()[$w])) return $w;
+    if (empty($pa['art_festgelegt_am'])) return '';
+    return ($pa['produktionsart'] ?? '') === 'fremd' ? 'kapsel' : 'rohstoffe';
+}
+// Staffelpreis je Lieferant aus Zeilen [lieferant_id, ab, preis]: größte passende Staffel, sonst die kleinste.
+function staffel_je_lieferant(array $zeilen, float $menge): array {
+    usort($zeilen, fn($a, $b) => $a[1] <=> $b[1]);
+    $out = [];
+    foreach ($zeilen as [$lid, $ab, $preis]) {
+        if ($ab <= $menge + 1e-9 || !isset($out[$lid])) $out[$lid] = (float)$preis;
+    }
+    return $out;
+}
+// Alles für den Reiter: Mengen und Kosten je Weg für DIESEN Auftrag. Kein Preis -> nur die Menge (nie einen Preis erfinden).
+function auftrag_beschaffungswege(int $auftrag_id): array {
+    $pa = auftrag_aktiver_pa($auftrag_id);
+    $a  = one("SELECT a.id, a.produkt_id, COALESCE(a.rezeptur_id, p.rezeptur_id) AS rezeptur_id FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    $rid = (int)($a['rezeptur_id'] ?? 0);
+    $out = ['pa' => $pa, 'rezeptur_id' => $rid, 'gewaehlt' => $pa ? pa_beschaffungsweg($pa) : '', 'wege' => [], 'schritte_erledigt' => 0];
+    if (!$pa || $rid <= 0) return $out;
+    $out['schritte_erledigt'] = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [(int)$pa['id']]);
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+    $schuett = function_exists('form_groessen_einheit') && form_groessen_einheit($form) !== '';
+    $einh = (float)$pa['menge'] * (float) produktion_stueck_je_packung($pa);   // Stück (Kapseln) bzw. g/ml bei Schüttgut
+    $lief = fn(int $id) => (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$id]);
+    // Rohstoffbedarf (immer die Einzelrohstoffe, auch wenn Premix gewählt ist) -> Mischungsgewicht in kg.
+    $roh = produktion_materialbedarf((int)$pa['id'], true);
+    $kg = 0.0;
+    foreach ($roh as $r) $kg += (float)$r['benoetigt'] * (($r['einheit'] ?? '') === 'g' ? 0.001 : 1.0);
+    // Leerkapseln gehören bei Premix + Einzelrohstoffen zu den Kosten (bei fertigen Kapseln stecken sie im Preis).
+    $kapEk = $form === 'kapsel' && function_exists('produkt_kapsel_ek') ? (float) produkt_kapsel_ek((int)$a['produkt_id']) : 0.0;
+    $kapZeile = $form === 'kapsel' ? ['name' => 'Leerkapseln', 'menge' => $einh, 'einheit' => 'Stk', 'preis' => $kapEk > 0 ? $kapEk : null, 'gesamt' => $kapEk > 0 ? $kapEk * $einh : null] : null;
+    $angebote = function (array $preise, float $menge) use ($lief) {
+        $l = [];
+        foreach ($preise as $lid => $p) if ($p > 0) $l[] = ['lieferant_id' => (int)$lid, 'lieferant' => $lief((int)$lid), 'preis' => $p, 'gesamt' => $p * $menge];
+        usort($l, fn($x, $y) => $x['gesamt'] <=> $y['gesamt']);
+        return $l;
+    };
+    $angRows = all("SELECT lieferant_id, menge, preis, LOWER(COALESCE(einheit,'')) AS einheit FROM rezeptur_lief_angebot
+                    WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis > 0", [$rid, rezeptur_stamm_id($rid)]);
+    // (a) fertige Kapseln/Tabletten: Fremdfertigungs-Angebote je Stück + Zukaufpreise je Einheit am Produkt.
+    $mengeA = $schuett ? $einh / 1000 : $einh;     // Schüttgut: fertige Mischung in kg
+    $za = [];
+    foreach ($angRows as $r) if ($schuett ? in_array($r['einheit'], ['kg'], true) : !in_array($r['einheit'], ['kg', 'g', 'l'], true)) $za[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
+    $pa_ = staffel_je_lieferant($za, $mengeA);
+    if (!$schuett) foreach (produkt_lieferant_preise((int)$a['produkt_id'], $einh) as $lid => $p) if (!isset($pa_[$lid]) || $p < $pa_[$lid]) $pa_[$lid] = (float)$p;
+    $out['wege']['kapsel'] = ['menge' => $mengeA, 'einheit' => $schuett ? 'kg' : 'Stk', 'angebote' => $angebote($pa_, $mengeA),
+                              'label' => $schuett ? 'Zukauf fertige Mischung' : 'Zukauf fertige Kapsel/Tablette'];
+    // (b) Premix: Angebote je kg (Rezeptur-Angebot in kg oder Lieferantenpreis am Premix-Artikel). Bei Schüttgut = Weg (a).
+    if (!$schuett) {
+        $pm = rezeptur_premixitem($rid, false);
+        $zb = [];
+        foreach ($angRows as $r) if ($r['einheit'] === 'kg') $zb[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
+        if ($pm) foreach (all("SELECT lieferant_id, menge_ab, preis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]) as $r)
+            $zb[] = [(int)$r['lieferant_id'], (float)$r['menge_ab'], (float)$r['preis']];
+        $out['wege']['premix'] = ['menge' => $kg, 'einheit' => 'kg', 'angebote' => $angebote(staffel_je_lieferant($zb, $kg), $kg), 'zusatz' => $kapZeile, 'item_id' => $pm, 'label' => 'Premix (fertige Mischung)'];
+    }
+    // (c) Einzelrohstoffe: Rezeptur × Menge, Staffelpreis zur Menge (sonst EK am Rohstoff), ohne Preis nur die Menge.
+    $pos = []; $summe = 0.0; $luecke = false;
+    foreach ($roh as $r) {
+        $it = one("SELECT ek_preis, preis_bezug FROM item WHERE id=?", [(int)$r['item_id']]);
+        $m = (float)$r['benoetigt']; $e = (string)$r['einheit'];
+        $mBezug = ($it['preis_bezug'] ?? $e) === $e ? $m : ($e === 'g' && ($it['preis_bezug'] ?? '') === 'kg' ? $m / 1000 : ($e === 'kg' && ($it['preis_bezug'] ?? '') === 'g' ? $m * 1000 : $m));
+        $p = rohstoff_ek_bei_menge((int)$r['item_id'], $mBezug);
+        if ($p === null && (float)($it['ek_preis'] ?? 0) > 0) $p = (float)$it['ek_preis'];
+        $g = $p !== null ? $p * $mBezug : null;
+        if ($g === null) $luecke = true; else $summe += $g;
+        $pos[] = ['item_id' => (int)$r['item_id'], 'name' => (string)$r['name'], 'menge' => $m, 'einheit' => $e, 'preis' => $p, 'gesamt' => $g];
+    }
+    if ($kapZeile) { $pos[] = $kapZeile; if ($kapZeile['gesamt'] === null) $luecke = true; else $summe += $kapZeile['gesamt']; }
+    $out['wege']['rohstoffe'] = ['menge' => $kg, 'einheit' => 'kg', 'positionen' => $pos, 'gesamt' => $summe, 'luecke' => $luecke, 'label' => 'Einzelrohstoffe (Eigenproduktion)'];
+    return $out;
+}
+// Weg festlegen: Eigen/Fremd + Schritte. Steht der PA noch in Vorbereitung, ist das zugleich die Freigabe (Teil 4: es gibt
+// keine eigene Auftrags-Freigabe mehr). Nur solange kein Produktionsschritt erledigt ist.
+function auftrag_beschaffungsweg_setzen(int $auftrag_id, string $weg, string $wer = ''): array {
+    if (!isset(beschaffungswege()[$weg])) return ['ok' => false, 'fehler' => 'Unbekannter Weg.'];
+    $pa = auftrag_aktiver_pa($auftrag_id);
+    if (!$pa) return ['ok' => false, 'fehler' => 'Kein Produktionsauftrag zu diesem Auftrag.'];
+    $paId = (int)$pa['id'];
+    if ((int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [$paId]) > 0)
+        return ['ok' => false, 'fehler' => 'Die Produktion hat schon begonnen – der Weg lässt sich nicht mehr ändern.'];
+    $art = $weg === 'kapsel' ? 'fremd' : 'eigen';
+    $alt = pa_beschaffungsweg($pa);
+    q("UPDATE produktionsauftrag SET beschaffungsweg=?, zukauf_art=IF(?='kapsel','bulk',zukauf_art) WHERE id=?", [$weg, $weg, $paId]);
+    if ($weg === 'premix' && ($rid = (int) scalar("SELECT COALESCE(a.rezeptur_id, p.rezeptur_id) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id])) > 0)
+        rezeptur_premixitem($rid);   // Premix-Artikel bereitstellen (Einkauf, Wareneingang, Werk buchen darauf)
+    if (($pa['status'] ?? '') === 'vorbereitung') {
+        $r = produktionsauftrag_freigeben($paId, $art, null, $wer);
+        if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Festlegen fehlgeschlagen.')];
+    } else {
+        q("UPDATE produktionsauftrag SET produktionsart=?, art_festgelegt_am=COALESCE(art_festgelegt_am, NOW()) WHERE id=?", [$art, $paId]);
+        produktion_schritte_regenerieren($paId, $art === 'fremd');
+    }
+    bedarf_bump();
+    $kid = (int)($pa['kunde_id'] ?? 0);
+    log_aktivitaet('auftrag', $auftrag_id, 'team', 'Beschaffungsweg festgelegt: ' . beschaffungswege()[$weg] . ($alt !== '' && $alt !== $weg ? ' (vorher ' . beschaffungswege()[$alt] . ')' : '') . '.', 'notiz');
+    aenderung_protokollieren('produktionsauftrag', $paId, ['beschaffungsweg' => $alt ?: null], ['beschaffungsweg' => $weg], 'auftrag');
+    return ['ok' => true, 'fehler' => null];
+}
+// Direkt bestellen (fertige Kapseln / Premix): Bestellung als ENTWURF beim gewählten Lieferanten, Position am Auftrag.
+// Verschickt wird sie erst auf der Bestellseite. Rückgabe bestellung-id oder 0.
+function auftrag_beschaffung_bestellen(int $auftrag_id, string $weg, int $lieferant_id): int {
+    $d = auftrag_beschaffungswege($auftrag_id);
+    $w = $d['wege'][$weg] ?? null;
+    if (!$w || !in_array($weg, ['kapsel', 'premix'], true) || $d['gewaehlt'] !== $weg || !$d['pa']) return 0;
+    $ang = null; foreach ($w['angebote'] as $x) if ($x['lieferant_id'] === $lieferant_id) $ang = $x;
+    if (!$ang) return 0;
+    $nr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id]);
+    $bez = (string) scalar("SELECT COALESCE(NULLIF(produkt_bezeichnung,''), '') FROM auftrag WHERE id=?", [$auftrag_id]);
+    q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz) VALUES (?,?,?,?)",
+      [naechste_nummer('BE'), $lieferant_id, 'offen', ($weg === 'kapsel' ? 'Bulk-Zukauf (Fremdproduktion)' : 'Premix') . ' · ' . $nr]);
+    $bid = (int) insert_id();
+    $itemId = $weg === 'premix' ? rezeptur_premixitem((int)$d['rezeptur_id']) : 0;
+    q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,0)",
+      [$bid, $itemId ?: null, ($weg === 'kapsel' ? 'Bulk: ' : 'Premix: ') . $bez . ' (' . $nr . ')', round((float)$w['menge'], 3), $ang['preis'], $w['einheit'], $auftrag_id]);
+    q("UPDATE produktionsauftrag SET bedarf_gemeldet=COALESCE(bedarf_gemeldet, ?) WHERE id=?", [gmdate('Y-m-d H:i:s'), (int)$d['pa']['id']]);
+    $bnr = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$bid]);
+    log_aktivitaet('auftrag', $auftrag_id, 'team', beschaffungswege()[$weg] . ': Bestellung ' . $bnr . ' bei ' . $ang['lieferant'] . ' als Entwurf angelegt.', 'bestellung', 'bestellung', $bid);
+    bedarf_bump();
+    return $bid;
+}
 // Soll-Kette 2d: je Charge kapselgroesse + 'passt' (true/false/null = unbekannt) gegen die Kapselgröße des Auftrags;
 // passende zuerst. Nur passende Chargen sollen gewählt werden, andere sind markiert.
 function auftrag_lagerware_quellen(int $auftrag_id): array {
@@ -10536,7 +10685,7 @@ function produktion_godmode_stufe_setzen(int $pa_id, int $schritt_id): array {
 }
 
 // Materialbedarf eines Produktionsauftrags: je Rohstoff benötigte vs. verfügbare Menge.
-function produktion_materialbedarf(int $pa_id): array {
+function produktion_materialbedarf(int $pa_id, bool $ohnePremix = false): array {
     $pa = pa_row_cached($pa_id);
     if (!$pa) return [];
     $fuellGesamtG = 0.0;   // >0 => Schüttgut (Pulver/Granulat): Bedarf nach FÜLLGEWICHT statt Portionszahl
@@ -10583,6 +10732,11 @@ function produktion_materialbedarf(int $pa_id): array {
     } else {
         $zutaten = all("SELECT z.item_id, z.menge_mg, i.name, i.einheit
                   FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]);
+    }
+    // Soll-Kette 1: Weg „Premix“ -> statt der Einzelrohstoffe EIN Premix-Artikel (kg) mit der Summe der Rezeptur-mg.
+    if (!$ohnePremix && ($pa['beschaffungsweg'] ?? '') === 'premix' && ($pmx = rezeptur_premixitem($rid)) > 0) {
+        $sumMgP = 0.0; foreach ($zutaten as $zz) $sumMgP += (float)$zz['menge_mg'];
+        $zutaten = [['item_id' => $pmx, 'menge_mg' => $sumMgP, 'name' => (string) scalar("SELECT name FROM item WHERE id=?", [$pmx]), 'einheit' => 'kg']];
     }
     // Für die Gewichtsrechnung: Summe der Rezeptur-mg je Einheit = 100 % der Mischung (Massenbasis).
     $summeMg = 0.0; if ($fuellGesamtG > 0) foreach ($zutaten as $zz) $summeMg += (float)$zz['menge_mg'];

@@ -246,3 +246,6 @@ Material-Übersicht (04.11.2026): darunter der Block **„Ware da, aber nicht zu
 Material-Übersicht, Bulkware (04.11.2026): „frei“ = zugeordnet + freier Lagerbestand, darunter klein „davon zugeordnet X“ bzw. „noch nicht zugeordnet“. Zuordnen bleibt im Reiter Material unter „Bulkware binden“.
 
 Bulkware binden (04.11.2026): Auswahl zeigt die Kapselgröße je Charge, passende zuerst, andere mit „ANDERE GRÖSSE“; zugewiesene Chargen mit Größe. Zuweisen einer anderen Größe gibt eine Warnung.
+
+## Reiter „Beschaffungsweg“ (Soll-Kette 1, 04.11.2026)
+Drei Karten nebeneinander: Zukauf fertige Kapsel/Tablette (bei Pulver: fertige Mischung), Premix, Einzelrohstoffe. Je Karte Bedarf und Kosten für diesen Auftrag, „günstigster“ markiert. „Diesen Weg festlegen“ (Admin, nur vor dem ersten Produktionsschritt). Danach „An Bedarfsliste senden“; bei Kapsel und Premix je Lieferant „Bestellen“ (Bestellung als Entwurf, öffnet die Bestellung). Aktionen `beschaffungsweg_setzen`, `beschaffung_bedarf`, `beschaffung_bestellen`. Reiter per `?tab=` direkt öffnen.
