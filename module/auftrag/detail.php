@@ -815,28 +815,8 @@ if (($a['status'] ?? '') !== 'storniert'):
   </div>
 </div>
 <?php endif; ?>
-<?php // Freigabe GANZ OBEN (Nico 03.11.2026: „klarer Button oben in der Übersicht, nicht versteckt in einem Reiter“).
-// Gleicher Handler wie bisher (aktion=pa_freigeben -> produktionsauftrag_freigeben). Nur Admin, nicht bei Storno.
-if ($paVorbereitung && has_role('admin') && (string)$a['status'] !== 'storniert'): ?>
-<div class="bx-panel" style="border:2px solid var(--gruen,#1D9E75);padding:14px 16px;margin:0 0 16px">
-  <div style="font-size:15px;margin-bottom:4px"><strong>Beschaffungsweg für <?= h((string)$pa['nummer']) ?> festlegen</strong></div>
-  <div class="muted" style="font-size:12px;margin-bottom:10px">Mit dem Beschaffungsweg geht der Auftrag in Produktion und Einkauf – eine eigene Freigabe gibt es nicht mehr. Alle drei Wege mit Kosten: <a href="#" <?= "onclick=\"var t=document.querySelector(String.fromCharCode(35)+'auftabs [data-tab=beschaffung]');if(t)t.click();return false;\"" ?>>Reiter Beschaffungsweg</a>. Hier schnell: Herstellen oder Einkaufen, optional mit Mehrmenge.</div>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="pa_freigeben">
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Herstellung
-      <select name="produktionsart" style="max-width:190px">
-        <option value="fremd" <?= $istFremd ? 'selected' : '' ?>>Einkaufen (Zukauf)</option>
-        <option value="eigen" <?= $istFremd ? '' : 'selected' ?>>Herstellen</option>
-      </select>
-    </label>
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Produktionsmenge (<?= $bulkEinh ?>)<?= $bulkLes($freigabeBedarf) ?>
-      <input type="text" inputmode="<?= $bulkInM ?>" name="menge_produktion" value="<?= $bulkInput($freigabeBedarf) ?>" <?= $bulkTaus ?> style="min-width:150px">
-    </label>
-    <button class="btn btn-primary" type="submit">Festlegen</button>
-  </form>
-  <div class="muted" style="font-size:12px;margin-top:6px">Mehrmenge über den Bedarf wird als Bulk gebucht. Glas, Etikett und Kapselgröße: Reiter Material.</div>
-</div>
-<?php elseif (isset($_GET['freigabeok'])): ?>
+<?php // Schnell-Banner „Beschaffungsweg festlegen“ (Herstellen/Einkaufen) entfernt (Nico 04.11.2026) – der Weg wird im Reiter Beschaffungsweg gewählt.
+if (isset($_GET['freigabeok'])): ?>
 <div class="bx-panel badge-ok" style="padding:10px 14px;margin:0 0 16px">Beschaffungsweg festgelegt – der Auftrag ist in Produktion und Einkauf.</div>
 <?php endif; ?>
 <div class="settabs" id="auftabs" style="margin-bottom:16px">
@@ -1111,7 +1091,7 @@ if (auftrag_braucht_etikett($id)):
   }
   $nsTon = 'info'; $nsLager = false;
   if (!$pa)                                    { $nsText = 'Beschaffung wählen: Herstellen (aus Rohstoffen) oder Einkaufen (fertige Bulkware) – unten.'; }
-  elseif ($paVorbereitung)                     { $nsText = 'Beschaffungsweg noch offen – oben festlegen oder im Reiter Beschaffungsweg.'; $nsTon = 'warn'; }
+  elseif ($paVorbereitung)                     { $nsText = 'Beschaffungsweg noch offen – im Reiter Beschaffungsweg festlegen.'; $nsTon = 'warn'; }
   elseif ($berSt === 'wartet' && $fehlDetail && !array_filter($fehlDetail, fn($fd) => $fd['quar'] + 1e-6 < $fd['fehlt']))
                                                { $nsText = 'Produktion wartet auf die QM-Freigabe – das Material liegt in Quarantäne:'; $nsTon = 'warn'; }
   elseif ($berSt === 'wartet')                 { $nsText = 'Produktion noch nicht möglich – es fehlt Material:'; $nsTon = 'err'; }
@@ -1538,7 +1518,7 @@ if ($pa && in_array((string)($pa['status'] ?? ''), ['offen', 'laufend'], true) &
     </div></div>
     <?php if ($paVorbereitung): ?>
     <div style="grid-column:1/-1"><div class="k muted">Beschaffungsweg</div>
-      <div>Noch nicht festgelegt – oben über den Reitern bzw. im Reiter Beschaffungsweg.</div>
+      <div>Noch nicht festgelegt – im Reiter Beschaffungsweg.</div>
     </div>
     <?php endif; ?>
     <?php // „Einlagern" (In Lager 1 buchen) steht jetzt im Reiter „Lager". ?>
