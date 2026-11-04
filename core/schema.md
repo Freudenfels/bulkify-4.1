@@ -410,3 +410,8 @@ Aufgerufen in `auftrag_aus_import()` und `kontingent_abruf()` (dort fehlte der H
 ## Bulk-Zukauf: Quarantäne und „liefern“ (04.11.2026, AB 542)
 - `auftrag_fertigware_cached()` liefert zusätzlich `quar` (Bulk-Chargen am Auftrag in Quarantäne). `auftrag_bedarf()` gibt Fertigware-Zeilen ohne item_id damit `quarantaene` mit (bei Packungen umgerechnet); `zu_bestellen` rechnet sie ab.
 - `bestellung_freitext_positionen($id)`: Anzahl Positionen ohne Lagerartikel. `bestellung_wareneingang()` (Knopf „liefern“) tut bei solchen Bestellungen nichts mehr. Früher übersprang es die Bulk-Freitext-Position und schloss die Bestellung trotzdem als geliefert, dann stand sie auf „angekommen“ ohne Charge am Auftrag.
+
+## Wareneingang ohne Quarantäne (04.11.2026)
+- `wareneingang_mit_quarantaene()`: Schalter `app_meta wareneingang_quarantaene` (Standard 0). Aus = `wareneingang_buchen()` bucht alles sofort frei, an = Rohstoffe/Bulk/Fertigware in Quarantäne wie bisher.
+- `charge_quarantaene_freigeben($id)`: eine Charge aus der Quarantäne freigeben, inklusive `fertigware_qm_freigabe_nach()`. Genutzt von Wareneingang (Dashboard) und Lager → Freigaben. `bedarf_bump()` und `material_komplett_pruefen()` macht der Aufrufer.
+- Eigene Fertigware aus der Produktion kommt weiter immer in Quarantäne (Produktionsbericht und CoA hängen an der QM-Freigabe).

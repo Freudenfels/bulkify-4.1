@@ -88,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     // MHD-Warnung (Tage vor Ablauf) + Schwund-Grenze (kg) für die Benachrichtigungen/Wiege-Prüfung.
     meta_set('mhd_warn_tage', (string)max(1, (int)($_POST['mhd_warn_tage'] ?? 30)));
     meta_set('schwund_grenze_kg', (string)max(0, (float)str_replace(',', '.', (string)($_POST['schwund_grenze_kg'] ?? '1'))));
+    meta_set('wareneingang_quarantaene', isset($_POST['wareneingang_quarantaene']) ? '1' : '0');   // Wareneingang: Standard sofort frei (Nico 04.11.2026)
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
 }
 // --- Etikett-Haftungstext (Bestätigung bei der Kunden-Freigabe) speichern ---
@@ -516,6 +517,10 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <div class="bx-field" style="max-width:300px"><label>MHD-Standard (Monate ab Produktion)</label><input type="number" min="1" name="mhd_monate_standard" value="<?= h($m('mhd_monate_standard','18')) ?>"></div>
     <div class="bx-field" style="max-width:300px"><label>MHD-Warnung (Tage vor Ablauf) <?= bx_hint('Eine Charge im Lager, die in so vielen Tagen abläuft, erzeugt einmalig eine Benachrichtigung.') ?></label><input type="number" min="1" name="mhd_warn_tage" value="<?= h($m('mhd_warn_tage','30')) ?>"></div>
     <div class="bx-field" style="max-width:300px"><label>Schwund-Grenze beim Wiegen (kg) <?= bx_hint('Weicht das gewogene Rückgabegewicht um mehr als diesen Wert nach unten ab, geht ein Hinweis an die Admin-Benachrichtigung (und E-Mail). Darunter nur stiller Schwund-Eintrag.') ?></label><input type="text" name="schwund_grenze_kg" value="<?= h($m('schwund_grenze_kg','1')) ?>" inputmode="decimal"></div>
+    <label class="bx-row" style="gap:10px;align-items:center;margin:var(--sp-3) 0 0">
+      <input type="checkbox" name="wareneingang_quarantaene" value="1" <?= meta_get('wareneingang_quarantaene','0')==='1'?'checked':'' ?>>
+      <span><strong>Wareneingang in Quarantäne</strong>: Rohstoffe und Bulkware erst nach der Freigabe nutzbar <?= bx_hint('Aus (Standard): alles, was im Wareneingang (Dashboard und Lager-App) gebucht wird, ist sofort frei. An: Rohstoffe, Bulk und Fertigware vom Lieferanten gehen in Quarantäne und werden unter Lager → Freigaben freigegeben. Eigene Fertigware aus der Produktion wartet immer auf die QM-Freigabe (daran hängen Produktionsbericht und CoA für den Kunden).') ?></span>
+    </label>
     <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
 </div>

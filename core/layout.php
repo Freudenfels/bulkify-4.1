@@ -209,7 +209,9 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                           OR EXISTS (SELECT 1 FROM item_wirkstoff w WHERE w.item_id=i.id)
                           OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
                           OR (i.spec_pdf IS NOT NULL AND i.spec_pdf<>'') )) )")
-              + (int) scalar("SELECT COUNT(*) FROM charge c WHERE COALESCE(c.coa_freigegeben,0)=0 AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)");
+              + (int) scalar("SELECT COUNT(*) FROM charge c WHERE COALESCE(c.coa_freigegeben,0)=0 AND EXISTS (SELECT 1 FROM charge_analyse a WHERE a.charge_id=c.id)")
+              // Ware in Quarantäne (Nico 04.11.2026: gehört zu den Freigaben, nicht versteckt im Wareneingang)
+              + (int) scalar("SELECT COUNT(*) FROM charge c WHERE c.status='quarantaene' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0");
             // Offene Lieferanten-Uploads (Mein Katalog: Katalog/CoA/Spec/manuell), die auf unsere Prüfung warten.
             $anfCount['katalog_freigaben'] = (int) scalar("SELECT COUNT(*) FROM lieferant_katalog WHERE status='neu'");
             // Noch nicht freigegebene Produktionsaufträge (Vorbereitung), ohne stornierte Aufträge – wie die Liste.
@@ -244,7 +246,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 'bedarf'        => "$n Aufträge mit offenem Einkaufsbedarf (noch nicht gemeldet)",
                 'einkaufsliste' => "$n Positionen zu bestellen",
                 'auftraege'     => "$n Aufträge noch nicht fertig",
-                'freigaben'     => "$n offene Freigaben (Spezifikationen/CoA)",
+                'freigaben'     => "$n offene Freigaben (Quarantäne/Spezifikationen/CoA)",
                 'katalog_freigaben' => "$n Lieferanten-Uploads zu prüfen",
                 'produktionsfreigabe' => "$n Produktionsaufträge noch nicht freigegeben",
                 'lief_anfragen' => "$n neue Lieferantenpreise (abgegeben, noch nicht bearbeitet)",

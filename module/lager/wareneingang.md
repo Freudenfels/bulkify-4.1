@@ -49,3 +49,5 @@ Wählt man ein Etikett (Typ „Verpackung / Etikett“; Kundenetiketten heißen 
 - rechts groß die Maße sowie Material, Version und Kunde. Fehlende Werte kommen von der Maß-Vorlage.
 
 Hat ein Kundenetikett kein freigegebenes Design, steht dort „Kein freigegebenes Etikett-Design hinterlegt“. Das Buchen selbst ist unverändert.
+
+Freigeben aus der Quarantäne läuft über `charge_quarantaene_freigeben()` (04.11.2026). Die Quarantäne-Liste steht jetzt auch unter Lager → Freigaben.

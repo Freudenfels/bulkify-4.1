@@ -4078,6 +4078,20 @@ function rohstoff_lief_kennung(?string $artikelnummer, ?string $kuerzel): string
 function item_braucht_quarantaene(string $kategorie): bool {
     return in_array($kategorie, ['rohstoff','fertig','verkaufsfertig'], true);
 }
+// Wareneingang mit Quarantäne? Schalter app_meta wareneingang_quarantaene (Standard 0 = alles, was kommt, ist sofort frei –
+// Nico 04.11.2026). Gilt für Dashboard und Lager-App (erp_we_quarantaene). Eigene Fertigware aus der Produktion bleibt im
+// QM-Gate, weil Produktionsbericht und CoA für den Kunden an dieser Freigabe hängen.
+function wareneingang_mit_quarantaene(): bool {
+    return (string) meta_get('wareneingang_quarantaene', '0') === '1';
+}
+// Eine Charge aus der Quarantäne freigeben – EINE Stelle für Wareneingang und Freigaben. true, wenn sie in Quarantäne war.
+// Bedarf neu rechnen und „Material komplett“ prüfen macht der Aufrufer (einmal, auch bei Sammel-Freigabe).
+function charge_quarantaene_freigeben(int $charge_id): bool {
+    if ((string) scalar("SELECT status FROM charge WHERE id=?", [$charge_id]) !== 'quarantaene') return false;
+    q("UPDATE charge SET status='frei' WHERE id=? AND status='quarantaene'", [$charge_id]);
+    fertigware_qm_freigabe_nach($charge_id);   // eigene Fertigware: Produktionsbericht + CoA für den Kunden (Nico 03.11.)
+    return true;
+}
 
 // --- Betriebsmittel: Kategorien mit einfachem Bestand (keine Chargen/MHD) ---
 function betriebsmittel_kategorien(): array {
@@ -4279,7 +4293,7 @@ function item_verwendung(int $item_id): array {
 function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?string $mhd, ?int $lieferant_id, string $notiz = '', ?int $auftrag_id = null, ?int $bestellung_position_id = null): ?int {
     $it = one("SELECT kategorie, einheit FROM item WHERE id=?", [$item_id]);
     if (!$it || $menge <= 0) return null;
-    $status = item_braucht_quarantaene($it['kategorie']) ? 'quarantaene' : 'frei';
+    $status = item_braucht_quarantaene($it['kategorie']) && wareneingang_mit_quarantaene() ? 'quarantaene' : 'frei';
     // Abgleich: Wurde die Charge vorab aus einer CoA angelegt (gleiche Nummer, noch keine Ware:
     // wareneingang IS NULL und menge 0)? Dann diese Charge einbuchen statt eine Dublette anzulegen -
     // die Analysewerte aus der CoA bleiben so an der Charge haengen.

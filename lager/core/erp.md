@@ -106,3 +106,5 @@ Die Aufkleber in den Etikettenrollen sind 8-stellig.
 - DB: `charge_gebinde.inventar_nr` wird von VARCHAR(7) auf VARCHAR(8) verbreitert (core/schema.php, einmal nach dem Deploy).
 
 `erp_rollen_inventar_korrigieren($charge_id, [gebinde_id => Nummer])` (03.11.2026): Nachbessern falscher Rollennummern (Aufkleber 11111111 aufsteigend, im System gekürzt/auto). Prüft 8 Ziffern und Doppelnummern, schreibt `aenderung_log` (Dashboard-Tabelle, nur hier in der Naht) und `lg_bewegung`.
+
+`erp_we_quarantaene()` (04.11.2026): liest `app_meta wareneingang_quarantaene` (Standard aus). `erp_wareneingang_buchen()` mit Status 'auto' bucht dann alles frei, `erp_warenart_regeln()` meldet `quarantaene=false` (Haken „Freigegeben“ in der Lager-App steht auf frei).

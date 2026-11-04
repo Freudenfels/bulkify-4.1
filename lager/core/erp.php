@@ -1342,8 +1342,9 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
     // Status: 'auto' (Standard) = EINE Regel für alle Wareneingangswege wie im Dashboard (item_braucht_quarantaene):
     // Rohstoffe, Bulk/Fertigware und verkaufsfertige Ware gehen in QUARANTÄNE und werden nach der Prüfung freigegeben,
     // Verpackung/Etikett/Verbrauch sind sofort frei (St-12). Ein ausdrücklicher Status ('frei'/'quarantaene'/'gesperrt') gilt weiter.
+    // Seit 04.11.2026 (Nico): Quarantäne nur, wenn in den Einstellungen eingeschaltet – sonst ist alles sofort frei.
     if (!in_array($status, ['frei', 'quarantaene', 'gesperrt'], true))
-        $status = in_array((string)$it['kategorie'], ['rohstoff', 'fertig', 'verkaufsfertig'], true) ? 'quarantaene' : 'frei';
+        $status = erp_we_quarantaene() && in_array((string)$it['kategorie'], ['rohstoff', 'fertig', 'verkaufsfertig'], true) ? 'quarantaene' : 'frei';
     $charge_nr = trim($charge_nr);
     $lief = (tabelle_da('lieferanten') && $lieferant_id) ? $lieferant_id : null;
 
@@ -1812,12 +1813,18 @@ function erp_item_suchen(string $name, int $limit = 6): array {
 // Rueckgabe: ['mhd_pflicht'=>bool, 'charge_pflicht'=>bool, 'quarantaene'=>bool].
 // (Die vom Nutzer gewuenschte Matrix. Ein Schalter je Artikel als Ausnahme kommt spaeter.)
 // 'inventar_pflicht' => true: statt eines Blinkers wird je Rolle ein Inventaraufkleber gescannt (nur Etiketten).
+// Schalter app_meta wareneingang_quarantaene (Dashboard: Einstellungen). Standard aus = Wareneingang sofort frei (Nico 04.11.2026).
+function erp_we_quarantaene(): bool {
+    static $an = null;
+    if ($an === null) $an = tabelle_da('app_meta') && (string) scalar("SELECT v FROM app_meta WHERE k='wareneingang_quarantaene'") === '1';
+    return $an;
+}
 function erp_warenart_regeln(string $kategorie, string $form = '', string $rolle = ''): array {
     // Etikett (verpackung + Rolle 'etikett'): kein MHD/keine Charge, sofort frei – aber Inventaraufkleber Pflicht.
     if ($kategorie === 'verpackung' && $rolle === 'etikett')
         return ['mhd_pflicht' => false, 'charge_pflicht' => false, 'quarantaene' => false, 'inventar_pflicht' => true];
     if ($form === 'kapselhuelle')
-        return ['mhd_pflicht' => true, 'charge_pflicht' => true, 'quarantaene' => true, 'inventar_pflicht' => false];
+        return ['mhd_pflicht' => true, 'charge_pflicht' => true, 'quarantaene' => erp_we_quarantaene(), 'inventar_pflicht' => false];
     $r = match ($kategorie) {
         'rohstoff'              => ['mhd_pflicht' => true,  'charge_pflicht' => true,  'quarantaene' => true],
         'fertig', 'verkaufsfertig' => ['mhd_pflicht' => true,  'charge_pflicht' => true,  'quarantaene' => true],
@@ -1827,6 +1834,7 @@ function erp_warenart_regeln(string $kategorie, string $form = '', string $rolle
         default                => ['mhd_pflicht' => false, 'charge_pflicht' => false, 'quarantaene' => false],
     };
     $r['inventar_pflicht'] = false;
+    $r['quarantaene'] = $r['quarantaene'] && erp_we_quarantaene();
     return $r;
 }
 

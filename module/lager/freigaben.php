@@ -12,6 +12,18 @@ $SPEC_HAT_DATEN = "( EXISTS (SELECT 1 FROM item_kennwert k WHERE k.item_id=i.id)
                    OR EXISTS (SELECT 1 FROM item_grenzwert g WHERE g.item_id=i.id)
                    OR (i.spec_pdf IS NOT NULL AND i.spec_pdf<>'') )";
 
+// Ware in Quarantäne freigeben (Nico 04.11.2026): einzeln oder alle – gleiche Logik wie im Wareneingang (charge_quarantaene_freigeben).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['q_frei','q_alle_frei'], true)) {
+    if (!darf_qm_freigeben()) { header('Location: ?p=freigaben&nurqm=1'); exit; }
+    $ids = ($_POST['aktion'] === 'q_frei')
+        ? [(int)($_POST['charge_id'] ?? 0)]
+        : array_map('intval', array_column(all("SELECT id FROM charge WHERE status='quarantaene' AND fremd_kunde_id IS NULL AND menge_verfuegbar>0"), 'id'));
+    $n = 0;
+    foreach ($ids as $cid) if ($cid > 0 && charge_quarantaene_freigeben($cid)) $n++;
+    if ($n) { bedarf_bump(); nach_antwort(fn() => material_komplett_pruefen(true)); }
+    header('Location: ?p=freigaben&qn=' . $n); exit;
+}
+
 // Sammel-Freigabe: alle aktuell offenen Spezifikationen bzw. alle offenen CoAs in einem Rutsch freigeben.
 // Spec-Freigabe schreibt je Rohstoff den Snapshot (spec_snapshot_setzen) – der Kunde sieht ab dann diesen Stand.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['spec_alle_frei','coa_alle_frei'], true)) {
@@ -54,16 +66,66 @@ $coaOffen = all("SELECT c.id AS charge_id, c.charge_nr, c.mhd, c.wareneingang, i
 
 $nfDatum = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '–';
 
+// Ware in Quarantäne (Lager 1): Herkunft = Lieferant ODER Produktionsauftrag (eigene Fertigware).
+$quarOffen = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.mhd, COALESCE(c.wareneingang, DATE(c.angelegt)) AS eingang,
+        i.id AS item_id, i.name, i.kategorie, l.firma AS lieferant, pa.nummer AS pa_nummer, a.nummer AS auftrag_nr, c.auftrag_id
+    FROM charge c JOIN item i ON i.id=c.item_id
+    LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+    LEFT JOIN produktionsauftrag pa ON pa.id=c.pa_id
+    LEFT JOIN auftrag a ON a.id=c.auftrag_id
+    WHERE c.status='quarantaene' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0
+    ORDER BY COALESCE(c.wareneingang, DATE(c.angelegt)) ASC, i.name");
+$darfQ = darf_qm_freigeben();
+
 render_header('freigaben', 'Freigaben');
-bx_head('Offene Freigaben', 'Kundendokumente, die noch geprüft und freigegeben werden müssen');
+bx_head('Offene Freigaben', 'Ware in Quarantäne und Kundendokumente, die noch freigegeben werden müssen');
 if (isset($_GET['specn'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['specn'] . ' Spezifikation(en) freigegeben.</div>';
 if (isset($_GET['coan']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['coan'] . ' Analysenzertifikat(e) freigegeben.</div>';
+if (isset($_GET['qn']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['qn'] . ' Charge(n) aus der Quarantäne freigegeben – zählt sofort als verfügbar.</div>';
+if (isset($_GET['nurqm'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Freigeben aus der Quarantäne darf nur QM oder Admin.</div>';
 ?>
 <p class="muted" style="margin-top:0;max-width:820px">Beim <strong>Erst-Upload</strong> werden Spezifikation und CoA automatisch freigegeben. Hier stehen nur noch die Fälle, die eine <strong>Freigabe-Entscheidung</strong> brauchen: <strong>geänderte</strong> Specs (der Kunde sieht noch die alte Version, bis ihr die Änderung freigebt) und etwaige Alt-Rückstände, die noch nie freigegeben wurden. CoAs ohne Analysewerte bleiben unten stehen, bis sie geprüft sind.</p>
 
 <div class="bx-cards" style="margin-bottom:16px">
+  <div class="bx-card"><div class="k">Ware in Quarantäne</div><div class="v"><?= count($quarOffen) ?></div></div>
   <div class="bx-card"><div class="k">Spezifikationen offen</div><div class="v"><?= count($specOffen) ?></div></div>
   <div class="bx-card"><div class="k">Analysenzertifikate offen</div><div class="v"><?= count($coaOffen) ?></div></div>
+</div>
+
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <h2 style="margin:0">Ware in Quarantäne</h2>
+    <?php if ($quarOffen && $darfQ): ?>
+    <form method="post" style="margin:0" onsubmit="return confirm('Alle <?= count($quarOffen) ?> Chargen aus der Quarantäne freigeben? Bei eigener Fertigware wird damit auch der Produktionsbericht für den Kunden freigegeben.');">
+      <input type="hidden" name="aktion" value="q_alle_frei">
+      <button class="btn btn-primary btn-sm" type="submit">Alle freigeben (<?= count($quarOffen) ?>)</button>
+    </form>
+    <?php endif; ?>
+  </div>
+  <?php if (!$quarOffen): ?>
+    <div class="muted">Nichts in Quarantäne.</div>
+  <?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Artikel</th><th>Warenart</th><th>Charge</th><th class="bx-num">Menge</th><th>MHD</th><th>Eingang</th><th>Herkunft</th><th>Auftrag</th><th></th></tr></thead>
+    <tbody>
+      <?php foreach ($quarOffen as $c): ?>
+        <tr>
+          <td><?= h($c['name']) ?></td>
+          <td class="muted"><?= h(kategorie_label((string)$c['kategorie'])) ?></td>
+          <td><?= h($c['charge_nr'] ?: ('#' . (int)$c['id'])) ?></td>
+          <td class="bx-num"><?= number_format((float)$c['menge_verfuegbar'], ((float)$c['menge_verfuegbar'] == floor((float)$c['menge_verfuegbar'])) ? 0 : 3, ',', '.') ?> <?= h($c['einheit'] ?: 'Stk') ?></td>
+          <td><?= $nfDatum($c['mhd']) ?></td>
+          <td><?= $nfDatum($c['eingang']) ?></td>
+          <td><?= $c['pa_nummer'] ? 'Produktion ' . h($c['pa_nummer']) : h($c['lieferant'] ?: '–') ?></td>
+          <td><?= $c['auftrag_nr'] ? '<a href="?p=auftrag&id=' . (int)$c['auftrag_id'] . '">' . h($c['auftrag_nr']) . '</a>' : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?php if ($darfQ): ?>
+            <form method="post" style="margin:0;display:inline"><input type="hidden" name="aktion" value="q_frei"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">freigeben</button></form>
+          <?php else: ?><span class="muted">nur QM</span><?php endif; ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
 </div>
 
 <div class="bx-panel">

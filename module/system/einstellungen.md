@@ -43,3 +43,5 @@ Textfeld `mail_signatur_vorlage` (app_meta) im E-Mail-Block: zentrale HTML-Signa
 **Ansprechpartner im Kundenportal (Reiter Firma):** Standard-Benutzer (`app_meta portal_ansprechpartner_id`) für alle Kunden ohne eigenen Betreuer; Name/Telefon/E-Mail kommen aus dem Benutzer.
 
 **Informationsdokument zum Produkt (03.11.2026):** Schalter im Reiter Preise & Margen (Abschnitt Portal) für `app_meta coa_uebersicht_auto` (Standard aus). Nico schaltet ein, sobald die neuen Produktionsaufträge sauber erfasst sind; wirkt nur für künftige QM-Freigaben (je Charge einmal).
+
+Reiter Produktion (04.11.2026): Schalter **Wareneingang in Quarantäne** (`wareneingang_quarantaene`, Standard aus = alles, was im Wareneingang gebucht wird, ist sofort frei). Gespeichert mit `charge_std_save`.

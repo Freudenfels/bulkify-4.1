@@ -8,3 +8,6 @@ Route: `?p=freigaben` (Rollen production, einkauf, labor; Admin sowieso). Menü:
 - **Analysenzertifikate (CoA) zur Freigabe** – Chargen mit Analysewerten (`charge_analyse`), deren CoA **noch nicht** freigegeben ist (`charge.coa_freigegeben=0`). Zeigt Rohstoff, Charge, MHD, Wareneingang (bzw. „CoA vorab"). Link „CoA ansehen" (`?p=coa_bulkify`) + „Zur Freigabe" auf `?p=rohstoff&id=…&tab=lager`.
 
 Oben zwei Zähler. Einzeln freigegeben wird auf der Detailseite (Dokument + Diff vorher sichtbar). Je Abschnitt ein **„Alle freigeben (N)"**-Knopf: `aktion=spec_alle_frei` ruft je betroffenem Rohstoff **`spec_snapshot_setzen()`** auf (friert den aktuellen Stand als neue freigegebene Version ein, Flag weg); `coa_alle_frei` setzt `coa_freigegeben=1` + Datum/Von. Sammel-Protokolleintrag, Anzahl zurück. Siehe `module/lager/rohstoff_detail.md` (Kundenfreigabe Spec/CoA mit Diff) und `core/spec_ki.md`.
+
+## Ware in Quarantäne (04.11.2026)
+Oberster Block: alle Chargen in Quarantäne (Lager 1, mit Bestand) mit Artikel, Warenart, Charge, Menge, MHD, Eingang, Herkunft (Lieferant oder Produktion PR-…) und Auftrag. Knopf **freigeben** je Zeile und **Alle freigeben** (Rückfrage), nur QM/Admin (`darf_qm_freigeben`). Logik wie im Wareneingang (`charge_quarantaene_freigeben`). Bei eigener Fertigware gibt die Freigabe auch den Produktionsbericht für den Kunden frei.
