@@ -68,3 +68,5 @@ Optional `zeilen => fn(array $rows): array` ergänzt Spalten, die sich nicht in 
 - Schritt „Produktions-Freigabe“: siehe `pa_schritt_produktionsfreigabe`.
 
 **fertigware_quarantaene** (Soll-Kette 5, 04.11.2026): eigene Fertigware, die noch nach alter Regel in Quarantäne steht. Beheben gibt frei (inkl. Bericht/CoA wie bisher).
+
+Gewicht & Bestand pro Gebinde (04.11.2026): `gebinde_gleich_verteilt` listet Gebinde mit gleichmäßig verteiltem Gewicht (gewogen=0, ohne Etikettenrollen, mehr als ein Gebinde) – Öffnen führt auf die Lager-Scan-Seite zum Nachwiegen, Beheben bestätigt nur das angezeigte Gewicht. `gebinde_summe_abweichung` listet Chargen, deren Bestand nicht zur Summe der Gebinde passt; Beheben gleicht die Gebinde an (`charge_gebinde_abgleich`). Beides im Änderungslog.

@@ -639,6 +639,44 @@ UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftra
                         return aenderung_protokollieren('item', $iid, $vor, $nach, 'datenpruefung') > 0 ? 1 : 0;
                     }],
     ],
+    // Gewicht & Bestand pro Gebinde (04.11.2026): Altbestand mit gleichmäßig verteiltem Gewicht je Karton.
+    'gebinde_gleich_verteilt' => [
+        'titel' => 'Lager: Gebinde mit gleichmäßig verteiltem Gewicht (nachwiegen)',
+        'info'  => 'Bis 04.11.2026 hat das System die Menge einer Charge gleichmäßig auf die Kartons verteilt. Diese Gebinde tragen also kein echtes Gewicht. Beim nächsten Anfassen den Karton scannen und im Lager unter „Nachwiegen“ das Ist-Gewicht eintragen (Öffnen führt auf das Gebinde) – das korrigiert Gebinde und Charge und steht im Änderungslog. Beheben hier bestätigt nur, dass das angezeigte Gewicht stimmt (ohne Änderung der Menge). Etikettenrollen sind ausgenommen.',
+        'sql'   => "SELECT g.id AS _id, CONCAT('/lager/?p=gebinde&bg=', g.id) AS _link, i.name AS artikel, c.charge_nr,
+                           CONCAT(g.nummer, ' / ', g.anzahl_gesamt) AS gebinde, g.menge AS verteilt, g.menge_verfuegbar AS aktuell, g.einheit,
+                           CONCAT('?p=chargen&id=', c.id) AS _link_charge_nr
+                    FROM charge_gebinde g JOIN charge c ON c.id = g.charge_id JOIN item i ON i.id = c.item_id
+                    WHERE COALESCE(g.gewogen, 0) = 0 AND g.inventar_nr IS NULL AND g.status <> 'leer' AND g.anzahl_gesamt > 1
+                    ORDER BY i.name, c.id, g.nummer",
+        'korrektur' => "-- Nachwiegen im Lager (?p=gebinde&bg=<ID>): UPDATE charge_gebinde SET menge_verfuegbar=<gewogen>, gewogen=1 …; Charge um die Differenz. Beheben hier: UPDATE charge_gebinde SET gewogen=1 WHERE id=<ID>;",
+        'fix'   => ['tabelle' => 'charge_gebinde', 'typ' => 'charge_gebinde',
+                    'aktion' => function (array $r) {
+                        q("UPDATE charge_gebinde SET gewogen=1, gewogen_am=? WHERE id=? AND COALESCE(gewogen,0)=0", [gmdate('Y-m-d H:i:s'), (int)$r['_id']]);
+                        aenderung_protokollieren('charge_gebinde', (int)$r['_id'], ['gewogen' => 0], ['gewogen' => 1], 'datenpruefung');
+                        return 1;
+                    }],
+    ],
+    'gebinde_summe_abweichung' => [
+        'titel' => 'Lager: Chargenbestand passt nicht zur Summe der Gebinde',
+        'info'  => 'Die Charge ist die Summe ihrer Gebinde. Wurde der Bestand früher nur an der Charge geändert (Entnahme, Korrektur), stehen die Gebinde noch auf altem Stand. Beheben zieht die Gebinde an die Charge an: weniger Bestand zuerst von den Gebinden in der Produktion und den angebrochenen, mehr Bestand aufs erste davon. Danach betroffene Kartons beim nächsten Anfassen nachwiegen.',
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=chargen&id=', c.id) AS _link, i.name AS artikel, c.charge_nr, c.menge_verfuegbar AS charge, x.summe AS gebinde_summe,
+                           ROUND(x.summe - c.menge_verfuegbar, 3) AS differenz, c.einheit, x.n AS gebinde
+                    FROM charge c JOIN item i ON i.id = c.item_id
+                    JOIN (SELECT charge_id, SUM(menge_verfuegbar) AS summe, COUNT(*) AS n FROM charge_gebinde GROUP BY charge_id) x ON x.charge_id = c.id
+                    WHERE ABS(x.summe - c.menge_verfuegbar) > 0.0005
+                    ORDER BY i.name, c.id",
+        'korrektur' => "-- je Zeile: charge_gebinde_abgleich(<ID>) – Gebinde-Restmengen an charge.menge_verfuegbar angleichen.",
+        'fix'   => ['tabelle' => 'charge', 'typ' => 'charge',
+                    'aktion' => function (array $r) {
+                        $vor = all("SELECT id, menge_verfuegbar, status FROM charge_gebinde WHERE charge_id=? ORDER BY id", [(int)$r['_id']]);
+                        charge_gebinde_abgleich((int)$r['_id']);
+                        $nach = all("SELECT id, menge_verfuegbar, status FROM charge_gebinde WHERE charge_id=? ORDER BY id", [(int)$r['_id']]);
+                        $n = 0;
+                        foreach ($vor as $k => $v) $n += aenderung_protokollieren('charge_gebinde', (int)$v['id'], $v, $nach[$k] ?? $v, 'datenpruefung') > 0 ? 1 : 0;
+                        return $n > 0 ? 1 : 0;
+                    }],
+    ],
 ];
 
 // Artikelnummer für ein Kundenetikett: dieselbe Logik wie kundenetikett_version_anlegen() (Aufräumen 17) –
