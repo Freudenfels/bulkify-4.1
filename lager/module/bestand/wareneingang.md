@@ -99,3 +99,8 @@ Nebenbei behoben: Die Start-Kacheln blieben nach der Wahl eines Wegs sichtbar (`
 **Nachtrag 03.11.2026 (Nico):**
 - Das Dropdown zeigt den **Kundennamen** („P-3218 · Spermidin Kapsel · Kunde GmbH“), je Produkt + Kunde ein Eintrag, und man kann auch nach dem Kunden suchen. Ist ein Eintrag mit Kunde gewählt, erscheint nur dessen Etikett. Etiketten ohne Produkt stehen als eigene Einträge drin (AJAX `etikett_produkt` mit `item_id`).
 - **„Anderes Etikett anlegen“**: Kunde (Textsuche), Produkt (Textsuche), beides optional; dazu Bezeichnung, Breite/Höhe (mm) und Material. AJAX `aktion=etikett_anlegen` → `erp_etikett_anlegen()`, danach geht es direkt zur Sichtprüfung und Menge. Für Produkt + Kunde mit vorhandenem Etikett wird das vorhandene genommen. Die Felder haben keine name-Attribute (sie liegen im Buchungsformular `weForm`), gesendet wird per fetch. Das Design lädt das Büro am Produkt hoch.
+
+## Leerkapseln (04.11.2026)
+- Warenart „Leerkapseln“: Pflichtfeld **Kapselgröße** je Position (`p_kapselgroesse[]`), vorbelegt aus dem Artikel bzw. dem Namen. Wird am Artikel gespeichert (`item.kapselgroesse_id`), fehlt sie, bricht die Zeile mit „Kapselgröße fehlt“ ab.
+- Neuer Artikelname, der nach Leerkapseln aussieht (z. B. „Leerkapseln HPMC Gr. 0“), stellt die Warenart von Rohstoff auf Leerkapseln und die Einheit auf Stk.
+- Haken „Freigegeben“ folgt dem Schalter Quarantäne (`WEQ`, Standard aus = frei); vorher zeigte er fest „Quarantäne“.

@@ -576,9 +576,20 @@ function erp_items_eingang(): array {
     $hatGesperrt = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='gesperrt'");
     $w = $hatGesperrt ? ' AND gesperrt=0' : '';
-    return all("SELECT id, name, kategorie, einheit, form, verpackung_rolle FROM item
+    $hatKg = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='kapselgroesse_id'");
+    return all("SELECT id, name, kategorie, einheit, form, verpackung_rolle" . ($hatKg ? ", kapselgroesse_id" : ", NULL AS kapselgroesse_id") . " FROM item
                 WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')$w
                 ORDER BY name");
+}
+// Kapselgrößen-Stammdaten (id, name) für den Wareneingang (Leerkapseln) – klein nach groß.
+function erp_kapselgroessen(): array {
+    return tabelle_da('kapselgroesse') ? all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") : [];
+}
+// Kapselgröße aus dem Artikelnamen (Spiegel von kapselgroesse_aus_name() im Dashboard): „Gr. 0“, „Größe 00“, „#1“ -> id, sonst 0.
+function erp_kapselgroesse_aus_name(string $name): int {
+    if (!tabelle_da('kapselgroesse') || !preg_match('/(?:gr(?:ö|oe|o)?(?:ß|ss)?e?\.?|size|#)\s*(000|00|0|1|2|3|4|5)(?!\d)/iu', $name, $m)) return 0;
+    return (int) scalar("SELECT id FROM kapselgroesse WHERE name=? LIMIT 1", ['Größe ' . $m[1]]);
 }
 
 // --- Etiketten einbuchen: Produkt -> Kundenetiketten (Design + Masse zum Abgleich) --------------
@@ -1661,6 +1672,10 @@ function erp_item_warenart_setzen(int $item_id, string $warenart): bool {
     }
     if ($def['form'] !== '') {
         q("UPDATE item SET kategorie=?, form=? WHERE id=?", [$def['kategorie'], $def['form'], $item_id]);
+    } elseif ($warenart === 'rohstoff') {
+        // Leerkapseln sind auch Rohstoffe: „Rohstoff“ gewählt darf die Form Kapselhülle NICHT löschen – sonst verschwinden
+        // Kapselgröße/Material auf der Rohstoff-Seite (Nico 04.11.2026). Nur die Kategorie setzen.
+        q("UPDATE item SET kategorie=? WHERE id=?", [$def['kategorie'], $item_id]);
     } else {
         // Wechsel weg von Leerkapseln: nur die kapselhuelle-Form leeren, andere Formen (pulver …) behalten.
         q("UPDATE item SET kategorie=?, form=IF(form='kapselhuelle','',form) WHERE id=?", [$def['kategorie'], $item_id]);

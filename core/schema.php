@@ -4075,6 +4075,17 @@ function rohstoff_lief_kennung(?string $artikelnummer, ?string $kuerzel): string
 }
 
 // Braucht diese Kategorie eine Quarantäne beim Wareneingang?
+// Leerkapseln am Namen erkennen (Nico 04.11.2026: Kapselgröße und Typ „Kapsel“ fehlten am Rohstoff).
+// kapselgroesse_aus_name(): „Gr. 0“, „Größe 00“, „Grösse 1“, „Size 2“, „#000“ -> kapselgroesse.id (Stammdaten „Größe X“), sonst 0.
+function kapselgroesse_aus_name(string $name): int {
+    if (!preg_match('/(?:gr(?:ö|oe|o)?(?:ß|ss)?e?\.?|size|#)\s*(000|00|0|1|2|3|4|5)(?!\d)/iu', $name, $m)) return 0;
+    return (int) scalar("SELECT id FROM kapselgroesse WHERE name=? LIMIT 1", ['Größe ' . $m[1]]);
+}
+// Sieht ein Name nach LEEREN Kapseln aus? Leerkapsel/Kapselhülle, Kapsel mit Hüllenmaterial oder Kapsel mit Größenangabe.
+function name_ist_leerkapsel(string $name): bool {
+    return (bool) preg_match('/leerkapsel|kapselh(?:ü|ue)lle|empty\s*caps|(?:hpmc|gelatine|pullulan)[^,;]*kapsel|kapsel[^,;]*(?:hpmc|gelatine|pullulan)/iu', $name)
+        || (preg_match('/kapsel|capsul/iu', $name) && kapselgroesse_aus_name($name) > 0);
+}
 function item_braucht_quarantaene(string $kategorie): bool {
     return in_array($kategorie, ['rohstoff','fertig','verkaufsfertig'], true);
 }

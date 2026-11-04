@@ -155,3 +155,8 @@ Außerdem neu (Grundlage): Tabelle `charge_gebinde` + `charge_gebinde_liste()` (
 
 ## Ins Fremdlager umbuchen (S-16)
 Die Kundenauswahl zeigt nur Fulfillment-Kunden (`kunden.nutzt_fulfillment=1`); serverseitig prüft `fremdlager_umbuchen()` das ebenfalls. Die neue Charge steht auf Standort Lager 2.
+
+## Leerkapseln (04.11.2026)
+- Hinweis mit Knopf **„Als Leerkapsel einstufen“** (`aktion=als_leerkapsel`), wenn ein Rohstoff nach Leerkapseln aussieht (Name oder gespeicherte Kapselgröße), die Form aber nicht Kapselhülle ist. Setzt Form Kapselhülle und die Kapselgröße aus dem Namen, protokolliert.
+- Hinweis „Leerkapsel ohne Kapselgröße“. Kacheln: Warenart „Leerkapsel“ und **Kapselgröße**.
+- Form-Auswahl zeigt „– nicht festgelegt –“, wenn keine Form gesetzt ist (vorher stand fälschlich „Pulver“ da).

@@ -375,6 +375,27 @@ $CHECKS = [
                     ORDER BY b.id DESC",
         'ohne_fix'  => 'Nur Anzeige: Einbuchen braucht Charge, MHD und Menge der echten Lieferung – bitte in der Lager-App buchen oder am Auftrag eine Charge binden.',
     ],
+    'rohstoff_leerkapsel_form' => [
+        'titel' => 'Rohstoff: sieht nach Leerkapseln aus, ist aber nicht so eingestuft',
+        'info'  => 'Name (Leerkapsel, Kapselhülle, Kapsel mit HPMC/Gelatine/Pullulan oder mit Größe „Gr. 0“) oder eine gespeicherte Kapselgröße zeigen Leerkapseln, die Form ist aber nicht „Kapselhülle“. Dann blendet die Rohstoff-Seite Kapselgröße und Material aus, und das System ordnet die Kapsel keinem Produkt zu. Häufige Ursache: in der Lager-App mit Warenart „Rohstoff“ eingebucht (bis 04.11.2026 löschte das die Form). Beheben setzt die Form auf Kapselhülle und die Kapselgröße aus dem Namen, wenn noch keine gespeichert ist.',
+        'sql'   => "SELECT i.id AS _id, CONCAT('?p=rohstoff&id=', i.id) AS _link, i.artikelnummer, i.name, NULLIF(i.form,'') AS form, kg.name AS kapselgroesse, i.einheit
+                    FROM item i LEFT JOIN kapselgroesse kg ON kg.id = i.kapselgroesse_id
+                    WHERE i.kategorie = 'rohstoff' AND COALESCE(i.form,'') <> 'kapselhuelle' AND COALESCE(i.gesperrt,0) = 0
+                      AND (i.kapselgroesse_id IS NOT NULL OR i.name LIKE '%leerkapsel%' OR i.name LIKE '%kapselhülle%' OR i.name LIKE '%kapselhuelle%'
+                           OR (i.name LIKE '%kapsel%' AND (i.name LIKE '%hpmc%' OR i.name LIKE '%gelatine%' OR i.name LIKE '%pullulan%'
+                               OR i.name REGEXP '(gr|größe|grösse|groesse|size|#)[. ]*(000|00|0|1|2|3|4|5)([^0-9]|$)')))
+                    ORDER BY i.name",
+        'korrektur' => "UPDATE item SET form='kapselhuelle', kapselgroesse_id=COALESCE(kapselgroesse_id, <Größe aus Name>) WHERE id = <ID>;",
+        'fix'   => ['tabelle' => 'item', 'typ' => 'item',
+                    'aktion' => function (array $r) {
+                        $alt = one("SELECT form, kapselgroesse_id, name FROM item WHERE id=?", [(int)$r['_id']]);
+                        if (!$alt) return 0;
+                        $kg = (int)($alt['kapselgroesse_id'] ?? 0) ?: kapselgroesse_aus_name((string)$alt['name']);
+                        q("UPDATE item SET form='kapselhuelle', kapselgroesse_id=? WHERE id=?", [$kg ?: null, (int)$r['_id']]);
+                        aenderung_protokollieren('item', (int)$r['_id'], ['form' => $alt['form'], 'kapselgroesse_id' => $alt['kapselgroesse_id']], ['form' => 'kapselhuelle', 'kapselgroesse_id' => $kg ?: null], 'datenpruefung');
+                        return 1;
+                    }],
+    ],
     'auftrag_name_behaelter' => [
         'titel' => 'Auftrag: Name nennt einen anderen Behälter als der Auftrag',
         'info'  => 'Der Auftrag speichert den Produktnamen zur Auftragszeit (Kopf, AB-PDF). Wurde der Behälter danach geändert, steht oben z. B. „100 ml Glas“, der Auftrag läuft aber im 150 ml Glas. Maßgeblich ist der Behälter am Auftrag, sonst der am Produkt. Beheben tauscht nur den Behälter-Teil im Auftrags-Namen. Bedruckte Kundenbehälter sind ausgenommen.',

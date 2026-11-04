@@ -13,6 +13,17 @@ $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
 $fehler = '';
+// Als Leerkapsel einstufen (Nico 04.11.2026): Form Kapselhülle setzen, Kapselgröße aus dem Namen, falls noch keine da ist.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'als_leerkapsel' && !$neu) {
+    $alt = one("SELECT form, kapselgroesse_id, name FROM item WHERE id=? AND kategorie='rohstoff'", [(int)$id]);
+    if ($alt) {
+        $kg = (int)($alt['kapselgroesse_id'] ?? 0) ?: kapselgroesse_aus_name((string)$alt['name']);
+        q("UPDATE item SET form='kapselhuelle', kapselgroesse_id=? WHERE id=?", [$kg ?: null, (int)$id]);
+        aenderung_protokollieren('item', (int)$id, ['form' => $alt['form'], 'kapselgroesse_id' => $alt['kapselgroesse_id']], ['form' => 'kapselhuelle', 'kapselgroesse_id' => $kg ?: null], 'rohstoff');
+        bedarf_bump();
+    }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&leerkapsel=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis_add' && !$neu) {
     $lid = (int)($_POST['lp_lieferant'] ?? 0);
     $preis = (float)str_replace(',', '.', $_POST['lp_preis'] ?? '0');
@@ -633,12 +644,26 @@ if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f23
 if (isset($_GET['flok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Ins Fremdlager umgebucht – die Menge zählt jetzt zum Kundenbestand, nicht mehr zu unserem.</div>';
 if (isset($_GET['merged'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zusammengeführt – Chargen und Reservierungen des Doppel-Artikels sind jetzt hier. Der Doppel-Artikel wurde deaktiviert.</div>';
 if (isset($_GET['flfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['flfehler']) . '</div>';
+if (isset($_GET['leerkapsel'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Als Leerkapsel eingestuft. Kapselgröße, Material, Farbe und Leergewicht stehen unten in den Stammdaten.</div>';
+// Leerkapsel-Check: sieht nach Kapselhüllen aus (Name oder gespeicherte Kapselgröße), Form ist aber nicht Kapselhülle -> Felder sind ausgeblendet.
+if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff' && ($it['form'] ?? '') !== 'kapselhuelle'
+    && ((int)($it['kapselgroesse_id'] ?? 0) > 0 || name_ist_leerkapsel((string)$it['name']))) {
+    $kgVor = (int)($it['kapselgroesse_id'] ?? 0) ?: kapselgroesse_aus_name((string)$it['name']);
+    echo '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px"><div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+       . '<div>Dieser Rohstoff sieht nach <strong>Leerkapseln</strong> aus, ist aber nicht als Leerkapsel eingestuft. Deshalb fehlen Kapselgröße, Material und Leergewicht.'
+       . ($kgVor ? ' Erkannte Größe: <strong>' . h((string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [$kgVor])) . '</strong>.' : '') . '</div>'
+       . '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="als_leerkapsel"><button class="btn btn-primary btn-sm" type="submit">Als Leerkapsel einstufen</button></form></div></div>';
+}
+if (!$neu && ($it['form'] ?? '') === 'kapselhuelle' && empty($it['kapselgroesse_id']))
+    echo '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px">Leerkapsel ohne <strong>Kapselgröße</strong> – bitte unten in den Stammdaten wählen. Ohne Größe ordnet das System die Kapsel keinem Produkt zu.</div>';
 
 if (!$neu) {
     $pr = number_format((float)$it['ek_preis'], (float)$it['ek_preis'] < 1 ? 4 : 2, ',', '.');
     echo '<div class="bx-cards">';
     echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . ($gesperrt ? bx_badge('gesperrt','err') : bx_badge('aktiv','ok')) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Warenart</div><div class="v">' . h(item_warenart_label($it)) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Warenart</div><div class="v">' . h(($it['form'] ?? '') === 'kapselhuelle' ? 'Leerkapsel' : item_warenart_label($it)) . '</div></div>';
+    if (($it['form'] ?? '') === 'kapselhuelle')
+        echo '<div class="bx-card"><div class="k">Kapselgröße</div><div class="v">' . (!empty($it['kapselgroesse_id']) ? h((string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$it['kapselgroesse_id']])) : '<span style="color:var(--warn)">fehlt</span>') . '</div></div>';
     if (!empty($it['fremdprodukt']) && (int)($it['fremd_besitzer_id'] ?? 0) > 0)
         echo '<div class="bx-card"><div class="k">Besitzer (Fremdprodukt)</div><div class="v">' . h((string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$it['fremd_besitzer_id']])) . '</div></div>';
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h((string)($it['preis_bezug'] ?: ($it['einheit'] ?: 'Stk'))) . '</div></div>';
@@ -823,6 +848,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       </div>
       <div class="bx-field"><label>Form <?= bx_hint('physikalische Form – steuert später die Rohstoffauswahl je Rezeptur (flüssiges Rezept → flüssige Rohstoffe zuerst). „Kapselhülle" = leere Kapseln vom Lieferanten.') ?></label>
         <select name="form" id="f_form">
+          <?php if (($it['form'] ?? '') === ''): ?><option value="" selected>– nicht festgelegt –</option><?php endif; ?>
           <?php foreach ($FORM as $key=>$lbl): ?>
             <option value="<?= $key ?>" <?= ($it['form']??'')===$key?'selected':'' ?>><?= $lbl ?></option>
           <?php endforeach; ?>

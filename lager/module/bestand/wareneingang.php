@@ -210,6 +210,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         if (isset($defs[$warenart]) && function_exists('erp_item_warenart_setzen')) erp_item_warenart_setzen($item_id, $warenart);
         $basis = erp_item_basis($item_id);
         $regeln = erp_warenart_regeln($def['kategorie'], $def['form'] ?: (string)($basis['form'] ?? ''));
+        // Leerkapseln: Kapselgröße ist Pflicht und gehört an den Artikel (Nico 04.11.2026) – gewählt, sonst aus dem Namen.
+        if ($warenart === 'leerkapsel') {
+            $kgr = (int)($_POST['p_kapselgroesse'][$i] ?? 0) ?: erp_kapselgroesse_aus_name($name);
+            if ($kgr <= 0) $kgr = (int) scalar("SELECT COALESCE(kapselgroesse_id,0) FROM item WHERE id=?", [$item_id]);
+            if ($kgr <= 0) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Kapselgröße fehlt.'; continue; }
+            q("UPDATE item SET kapselgroesse_id=? WHERE id=?", [$kgr, $item_id]);
+        }
         if ($menge <= 0)                           { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Menge fehlt.'; continue; }
         if ($kisteId <= 0 && $blinker === null)    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Blinker oder Kiste wählen.'; continue; }
         if ($regeln['mhd_pflicht'] && $mhd === '')    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): MHD ist Pflicht.'; continue; }
@@ -603,7 +610,11 @@ if ($gebucht):
 
 <script>
 (function(){
-  var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??''),'r'=>(string)($it['verpackung_rolle']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??''),'r'=>(string)($it['verpackung_rolle']??''),'g'=>(int)($it['kapselgroesse_id']??0)], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var KGR = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name']], function_exists('erp_kapselgroessen') ? erp_kapselgroessen() : []), JSON_UNESCAPED_UNICODE) ?>;
+  // Leerkapseln am Namen erkennen + Größe lesen (gleiche Regeln wie kapselgroesse_aus_name()/name_ist_leerkapsel() im Dashboard).
+  function kgrAusName(s){ var m=String(s||'').match(/(?:gr(?:ö|oe|o)?(?:ß|ss)?e?\.?|size|#)\s*(000|00|0|1|2|3|4|5)(?!\d)/i); if(!m) return 0; var k=KGR.filter(function(x){return x.n==='Größe '+m[1];})[0]; return k?k.id:0; }
+  function istLeerkapselName(s){ s=String(s||''); return /leerkapsel|kapselh(?:ü|ue)lle|empty\s*caps|(?:hpmc|gelatine|pullulan)[^,;]*kapsel|kapsel[^,;]*(?:hpmc|gelatine|pullulan)/i.test(s) || (/kapsel|capsul/i.test(s) && kgrAusName(s)>0); }
   var KISTEN = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name'],'b'=>(string)($k['barcode']??''),'bl'=>(string)($k['blinker']??'')], $kisten), JSON_UNESCAPED_UNICODE) ?>;
   var REZ = <?= json_encode(array_map(fn($r)=>[
         'id'=>(int)$r['id'],
@@ -611,7 +622,8 @@ if ($gebucht):
         'bi'=>(int)($r['bulk_item_id']??0),
         'e'=>(string)($r['bulk_einheit']??'')
       ], $rezepturen), JSON_UNESCAPED_UNICODE) ?>;
-  var MATRIX = {rohstoff:{mhd:1,charge:1,q:1},leerkapsel:{mhd:1,charge:1,q:1},fertig:{mhd:1,charge:1,q:1},verkaufsfertig:{mhd:1,charge:1,q:1},etikett:{mhd:0,charge:0,inventar:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
+  var WEQ = <?= (function_exists('erp_we_quarantaene') && erp_we_quarantaene()) ? 1 : 0 ?>;   // Quarantäne nur, wenn in den Einstellungen an (Standard aus, 04.11.2026)
+  var MATRIX = {rohstoff:{mhd:1,charge:1,q:WEQ},leerkapsel:{mhd:1,charge:1,q:WEQ},fertig:{mhd:1,charge:1,q:WEQ},verkaufsfertig:{mhd:1,charge:1,q:WEQ},etikett:{mhd:0,charge:0,inventar:1},verpackung:{mhd:0,charge:0},verbrauch:{mhd:0,charge:0}};
   var ARTEN = [['rohstoff','Rohstoff'],['leerkapsel','Leerkapseln'],['fertig','Bulk / lose (Kapseln/Tabletten)'],['verkaufsfertig','Fertiges Produkt (verpackt)'],['etikett','Etikett (Rolle)'],['verpackung','Verpackung'],['verbrauch','Verbrauch']];
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   var KEYC=0;   // fortlaufender Zeilenschlüssel (für die 2D-Rollen-Felder je Etikett-Position)
@@ -678,6 +690,7 @@ if ($gebucht):
       '<div class="we-row">'+
         '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><input type="hidden" name="p_auftrag_id[]" value="'+(p.auftrag_id||0)+'"><div class="we-aehnlich"></div></div>'+
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
+        '<div class="bx-field f-kgr" style="display:none"><label>Kapselgröße *</label><select name="p_kapselgroesse[]" class="we-kgr"><option value="">– wählen –</option>'+KGR.map(function(k){return '<option value="'+k.id+'">'+esc(k.n)+'</option>';}).join('')+'</select></div>'+
         '<div class="bx-field f-rez" style="display:none"><label>Rezeptur <span class="muted">(Bulk)</span></label><input type="text" class="we-rez" name="p_rezeptur_name[]" list="weRezList" autocomplete="off" value="" placeholder="Rezeptur wählen"><input type="hidden" name="p_rezeptur[]" class="we-rez-id" value="0"><div class="we-rez-info muted"></div></div>'+
         '<div class="bx-field f-menge"><label>Menge</label><input type="text" name="p_menge[]" inputmode="decimal" value="'+(p.menge&&p.menge>0?p.menge:'')+'" placeholder="0"></div>'+
         '<div class="bx-field f-einheit"><label>Einheit</label>'+einhSelectHtml(p.einheit||'')+'</div>'+
@@ -689,7 +702,7 @@ if ($gebucht):
           '<input type="hidden" name="p_paketnummern[]" class="we-pak-h">'+
           '<div class="we-pakscan"></div>'+
         '</div>'+
-        '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked disabled title="Rohstoffe und Bulk gehen in Quarantäne, Verpackung und Etikett sind sofort frei"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
+        '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked disabled title="Status nach Regel (Einstellungen → Produktion)"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
         '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
         // Etikettenrollen: nur Gesamtmenge + Anzahl Rollen. Menge wird gleichmäßig verteilt; Inventaraufkleber optional.
@@ -751,7 +764,8 @@ if ($gebucht):
       name.title=name.value;   // voller Text als Tooltip beim Drüberfahren
       var m=ITEMS.filter(function(it){return it.n.toLowerCase()===name.value.trim().toLowerCase();})[0];
       if(m){ hid.value=m.id; if(einh) einh.value=einhCanon(m.e)||'Stk'; var a=itemArt(m); if(MATRIX[a]){art2.value=a;} pflicht(card); etikettToggle(); }
-      else { hid.value=0; }
+      else { hid.value=0; if(art2.value==='rohstoff' && MATRIX.leerkapsel && istLeerkapselName(name.value)){ art2.value='leerkapsel'; if(einh) einh.value='Stk'; pflicht(card); } }
+      kgrSync(m);
       zeigeAehnlich(card);
     });
     // Rezeptur-Picker (nur bei Warenart "Fertigware / Bulk"): fertige Kapseln aufs Bulk-Item der Rezeptur buchen.
@@ -776,14 +790,30 @@ if ($gebucht):
       } else { rezId.value='0'; if(rezInfo){rezInfo.textContent='';} }
     }
     if(rez){ rez.addEventListener('input',pickRez); rez.addEventListener('change',pickRez); }
+    // Kapselgröße (nur Leerkapseln, Pflicht): aus dem Artikel, sonst aus dem Namen vorbelegen; eine Wahl des Nutzers bleibt.
+    var kgrWrap=card.querySelector('.f-kgr'), kgrSel=card.querySelector('.we-kgr');
+    function kgrSync(m){
+      var an = art2.value==='leerkapsel';
+      if(kgrWrap) kgrWrap.style.display = an ? '' : 'none';
+      if(!kgrSel) return;
+      kgrSel.required = an;
+      if(!an){ kgrSel.value=''; return; }
+      if(kgrSel.value==='' || kgrSel.dataset.auto==='1'){
+        var g=(m&&m.g)||kgrAusName(name.value);
+        if(g){ kgrSel.value=String(g); kgrSel.dataset.auto='1'; }
+      }
+    }
+    if(kgrSel) kgrSel.addEventListener('change',function(){ kgrSel.dataset.auto='0'; });
     art2.addEventListener('change',function(){
       // Leerkapseln zählt man in Stück, nicht in kg -> Einheit vorschlagen (nur wenn leer/Gewicht).
       if(art2.value==='leerkapsel' && einh){ einh.value='Stk'; }   // Leerkapseln zählt man in Stück
+      kgrSync(ITEMS.filter(function(it){return String(it.id)===String(hid.value);})[0]);
       toggleRez();
       pflicht(card);
       etikettToggle();
     });
     toggleRez();
+    kgrSync(ITEMS.filter(function(it){return String(it.id)===String(hid.value);})[0]);
 
     // --- Etikettenrollen: nur Gesamtmenge + Anzahl Rollen. Menge gleichmäßig verteilt, Aufkleber optional ---
     var rollenBox=card.querySelector('.we-rollen'), rollenZahl=card.querySelector('.we-rollenzahl'),

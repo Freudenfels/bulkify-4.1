@@ -108,3 +108,5 @@ Die Aufkleber in den Etikettenrollen sind 8-stellig.
 `erp_rollen_inventar_korrigieren($charge_id, [gebinde_id => Nummer])` (03.11.2026): Nachbessern falscher Rollennummern (Aufkleber 11111111 aufsteigend, im System gekürzt/auto). Prüft 8 Ziffern und Doppelnummern, schreibt `aenderung_log` (Dashboard-Tabelle, nur hier in der Naht) und `lg_bewegung`.
 
 `erp_we_quarantaene()` (04.11.2026): liest `app_meta wareneingang_quarantaene` (Standard aus). `erp_wareneingang_buchen()` mit Status 'auto' bucht dann alles frei, `erp_warenart_regeln()` meldet `quarantaene=false` (Haken „Freigegeben“ in der Lager-App steht auf frei).
+
+Leerkapseln (04.11.2026): `erp_item_warenart_setzen($id, 'rohstoff')` lässt die Form Kapselhülle stehen (vorher gelöscht → Kapselgröße/Material verschwanden auf der Rohstoff-Seite). `erp_items_eingang()` liefert `kapselgroesse_id`, neu `erp_kapselgroessen()` und `erp_kapselgroesse_aus_name()` (Spiegel von `kapselgroesse_aus_name()`).

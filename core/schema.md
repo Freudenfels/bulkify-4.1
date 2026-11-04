@@ -426,3 +426,7 @@ Ablauf: bestellen → Ware kommt an = eingebucht, sofort frei → im System als 
 - `auftrag_bulk_lager_frei($aid)`: freie, keinem Auftrag zugeordnete Chargen des Rezeptur-Bulk-Artikels minus Reservierungen anderer Aufträge (gecacht `bl:`).
 - `auftrag_bedarf()` Bulk-Zukauf: verfügbar = zugeordnete Bulk-Chargen + `auftrag_bulk_lager_frei()`; Zeile trägt `zugeordnet`. Vorher zählte nur Zugeordnetes, freie Bulkware im Lager stand als „Fehlbestand“. Gilt damit auch für Produktionsfreigabe, Produktionsliste und Bereitschaft. Die Werk-App nahm schon vorher den Bestand des Rezeptur-Bulk-Artikels.
 - `bedarf_bulk()` (Einkauf): Bestand für lose Bulkware = zugeordnete Bulk-Chargen der Aufträge + freie Chargen des Bulk-Artikels minus Reservierungen anderer Aufträge. Vorher zählte nur verkaufsfertige Ware, der Einkauf schlug vorhandene Bulkware zum Bestellen vor.
+
+## Leerkapseln erkennen (04.11.2026)
+- `kapselgroesse_aus_name($name)`: „Gr. 0“, „Größe 00“, „Grösse 1“, „Size 2“, „#000“ → `kapselgroesse.id` (Stammdaten „Größe X“), sonst 0.
+- `name_ist_leerkapsel($name)`: Leerkapsel/Kapselhülle, Kapsel mit HPMC/Gelatine/Pullulan oder Kapsel/Capsule mit Größenangabe. Genutzt von Rohstoff-Seite und Datenprüfung.
