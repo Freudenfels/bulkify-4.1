@@ -25,6 +25,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'loesc
     weiter('?p=gebinde&charge=' . $cid);
 }
 
+// --- Gewicht & Bestand pro Gebinde (04.11.2026): Entnahme und Rückgabe/Nachwiegen GENAU dieses Kartons ----------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['geb_entnehmen', 'geb_rueckgabe'], true)) {
+    $gid = (int)($_POST['gebinde_id'] ?? 0);
+    if (($_POST['aktion'] ?? '') === 'geb_entnehmen') {
+        $r = erp_gebinde_entnehmen($gid, erp_menge_parse((string)($_POST['menge'] ?? '0')), trim((string)($_POST['grund'] ?? '')));
+    } elseif (trim((string)($_POST['ist'] ?? '')) === '') {
+        $r = ['ok' => false, 'meldung' => 'Bitte das gewogene Ist-Gewicht eintragen.'];
+    } elseif (empty($_POST['verschlossen'])) {
+        $r = ['ok' => false, 'meldung' => 'Bitte bestätigen, dass das Gebinde ordentlich verschlossen ist.'];
+    } else {
+        $r = erp_gebinde_rueckgabe($gid, erp_menge_parse((string)$_POST['ist']), ((string)($_POST['anlass'] ?? '')) === 'nachwiegen' ? 'Nachwiegen' : 'Rückgabe');
+    }
+    flash((string)$r['meldung'], !empty($r['ok']) ? 'ok' : 'warn');
+    weiter('?p=gebinde&bg=' . $gid);
+}
+
 // --- Etikettenrolle einem Auftrag zuordnen / wieder freigeben (Rückverfolgung) ----------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rolle_zuordnen') {
     $gid = (int)($_POST['gebinde_id'] ?? 0);
@@ -112,14 +128,28 @@ if ($bg > 0) {
     else:
         $ortLbl  = ['lager1'=>'Lager 1', 'produktion'=>'Produktion', 'lager2'=>'Lager 2'][(string)$g['standort']] ?? (string)$g['standort'];
         $statLbl = ['voll'=>'voll', 'angebrochen'=>'angebrochen', 'leer'=>'leer'][(string)$g['status']] ?? (string)$g['status'];
-        $mengeTxt = rtrim(rtrim(number_format((float)$g['menge_verfuegbar'], 3, ',', '.'), '0'), ',') . ' ' . (string)($g['einheit'] ?? '');
+        $fmtG = fn($v) => rtrim(rtrim(number_format((float)$v, 3, ',', '.'), '0'), ',');
+        $einhG = (string)($g['einheit'] ?? '');
+        $mengeTxt = $fmtG($g['menge_verfuegbar']) . ' ' . $einhG;
         $liefTxt  = (string)($c['lieferant'] ?? '') . (($c['lieferant_nr'] ?? '') ? ' · ' . (string)$c['lieferant_nr'] : '');
+        // Lagerort: Kiste bzw. Blinker der Charge, dazu der Ort des Gebindes (Lager 1 / Produktion).
+        $platz = '';
+        if (function_exists('blinker_fuer_charge')) {
+            $bf = blinker_fuer_charge((int)$g['charge_id']);
+            if (!empty($bf['kiste'])) $platz = 'Kiste ' . (string)($bf['kiste']['kiste_name'] ?? '');
+            elseif (!empty($bf['leiste'])) $platz = 'Blinker ' . (string)($bf['leiste']['code'] ?? '');
+        }
+        $istRolle = !empty($g['inventar_nr']);
+        $gewogen  = !empty($g['gewogen']);
+        $istGew   = (bool) preg_match('/^(kg|g|mg|l|ml)$/i', trim($einhG));
     ?>
     <div class="bx-panel" style="margin-bottom:var(--sp-5)">
       <h2 style="margin-top:0">Gebinde <?= (int)$g['nummer'] ?> / <?= (int)$g['anzahl_gesamt'] ?></h2>
       <table class="bx-table"><tbody>
-        <tr><td class="muted" style="width:200px">Restmenge</td><td style="font-weight:600"><?= h($mengeTxt) ?></td></tr>
-        <tr><td class="muted">Ort</td><td><?= h($ortLbl) ?></td></tr>
+        <tr><td class="muted" style="width:200px"><?= $istGew ? 'Aktuelles Gewicht' : 'Aktuelle Menge' ?></td><td style="font-weight:600;font-size:20px"><?= h($mengeTxt) ?>
+          <span class="muted" style="font-weight:400;font-size:13px"><?= $gewogen ? '· gewogen' . (!empty($g['gewogen_am']) ? ' am ' . h(fmt_zeit((string)$g['gewogen_am'])) : '') : '· gleichmäßig verteilt (nachwiegen)' ?></span></td></tr>
+        <tr><td class="muted">Ursprünglich</td><td><?= h($fmtG($g['menge']) . ' ' . $einhG) ?></td></tr>
+        <tr><td class="muted">Ort</td><td><?= h($ortLbl) ?><?= $platz !== '' ? ' · ' . h($platz) : '' ?></td></tr>
         <tr><td class="muted">Status</td><td><?= h($statLbl) ?></td></tr>
         <?php if ($c): ?>
         <tr><td class="muted">Produkt / Material</td><td><a class="lg-namelink" href="?p=charge&id=<?= (int)$g['charge_id'] ?>"><?= h((string)($c['item_name'] ?? '')) ?></a></td></tr>
@@ -132,9 +162,35 @@ if ($bg > 0) {
       <?php if ($c): ?>
       <div class="bx-row" style="gap:var(--sp-2);margin-top:var(--sp-3)">
         <a class="btn btn-primary" href="?p=charge&id=<?= (int)$g['charge_id'] ?>">Zur Charge</a>
+        <a class="btn btn-ghost" href="?p=etikett&ids=<?= (int)$g['charge_id'] ?>">Etiketten der Charge</a>
       </div>
       <?php endif; ?>
     </div>
+    <?php if ($c && !$istRolle): ?>
+    <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--sp-4);margin-bottom:var(--sp-5)">
+      <form method="post" class="bx-panel" style="margin:0">
+        <input type="hidden" name="aktion" value="geb_entnehmen"><input type="hidden" name="gebinde_id" value="<?= (int)$g['id'] ?>">
+        <h3 style="margin-top:0">Entnehmen</h3>
+        <p class="muted" style="margin-top:0">Bucht genau dieses Gebinde ab (und die Charge um dieselbe Menge).</p>
+        <div class="bx-row" style="gap:var(--sp-2);align-items:flex-end;flex-wrap:wrap">
+          <div class="bx-field" style="margin:0;flex:0 1 160px"><label>Menge (<?= h($einhG) ?>)</label><input type="text" name="menge" inputmode="decimal" placeholder="0" required></div>
+          <div class="bx-field" style="margin:0;flex:1 1 160px"><label>Zweck <span class="muted">(optional)</span></label><input type="text" name="grund" placeholder="z. B. Auftrag, Mischen"></div>
+          <button class="btn btn-primary" type="submit">Entnehmen</button>
+        </div>
+      </form>
+      <form method="post" class="bx-panel" style="margin:0">
+        <input type="hidden" name="aktion" value="geb_rueckgabe"><input type="hidden" name="gebinde_id" value="<?= (int)$g['id'] ?>">
+        <h3 style="margin-top:0"><?= (string)$g['standort'] === 'produktion' ? 'Rückgabe aus der Produktion' : 'Nachwiegen' ?></h3>
+        <p class="muted" style="margin-top:0">Gebinde wiegen und das Ist-Gewicht eintragen. Das Gebinde steht danach auf diesem Wert, die Differenz wird als Verbrauch bzw. Schwund gebucht.</p>
+        <input type="hidden" name="anlass" value="<?= (string)$g['standort'] === 'produktion' ? 'rueckgabe' : 'nachwiegen' ?>">
+        <div class="bx-row" style="gap:var(--sp-2);align-items:flex-end;flex-wrap:wrap">
+          <div class="bx-field" style="margin:0;flex:0 1 160px"><label>Ist-Gewicht (<?= h($einhG) ?>)</label><input type="text" name="ist" inputmode="decimal" placeholder="0" required></div>
+          <label style="display:flex;gap:8px;align-items:center;flex:1 1 200px;padding-bottom:10px"><input type="checkbox" name="verschlossen" value="1" required style="width:20px;height:20px"> Gebinde ist ordentlich verschlossen</label>
+          <button class="btn btn-primary" type="submit">Speichern</button>
+        </div>
+      </form>
+    </div>
+    <?php endif; ?>
     <?php
     endif;
     fuss();

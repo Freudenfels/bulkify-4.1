@@ -87,7 +87,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cid = (int)$cid; if ($cid <= 0) continue;
             $g[$cid] = (float) str_replace(',', '.', (string)$val);
         }
-        $n = erp_rohstoff_rueckgabe_speichern($paId, $g, $werkName ?: 'Mitarbeiter');
+        // Gewicht & Bestand pro Gebinde: je gescanntem Karton/Sack das neu gewogene Ist-Gewicht (+ Bestätigung „verschlossen“).
+        $gb = [];
+        foreach ((array)($_POST['rest_g'] ?? []) as $gid => $val) {
+            if (trim((string)$val) === '') continue;
+            $v = trim((string)$val);
+            $gb[(int)$gid] = (float) (strpos($v, ',') !== false ? str_replace(',', '.', str_replace('.', '', $v)) : $v);   // 1.234,5 / 25,5 / 25.5
+        }
+        if ($gb && empty($_POST['verschlossen'])) {
+            $_SESSION['werk_flash'] = $T['return_closed_req']; $_SESSION['werk_flash_ok'] = false;
+            weiter('?p=werk&id=' . $paId);
+        }
+        $n = erp_rohstoff_rueckgabe_speichern($paId, $g, $werkName ?: 'Mitarbeiter', $gb);
         $_SESSION['werk_flash'] = $T['fl_return_saved'] . ($n > 0 ? ' (' . $n . ')' : '') . '.';
         $_SESSION['werk_flash_ok'] = true;
         weiter('?p=werk&id=' . $paId);
@@ -461,15 +472,23 @@ header('Content-Type: text/html; charset=utf-8');
         <table class="mat">
           <thead><tr><th><?= h($T['th_rawmaterial']) ?></th><th><?= h($T['th_charge']) ?></th><th class="num"><?= h($T['th_returned']) ?></th></tr></thead>
           <tbody>
-            <?php foreach ($rueckListe as $r): $einh = (string)$r['einheit']; ?>
+            <?php $mitGeb = false; foreach ($rueckListe as $r): $einh = (string)$r['einheit']; $gebR = erp_rueckgabe_gebinde((int)$r['charge_id']); if ($gebR) $mitGeb = true;
+              $inpSt = 'font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:120px;text-align:right'; ?>
             <tr>
               <td><?= h((string)$r['item_name']) ?></td>
               <td class="muted"><?= h((string)($r['charge_nr'] ?: '–')) ?><?php if (!empty($r['charge_id'])): ?><div style="margin-top:6px"><?= $blinkBtn($r['charge_id']) ?></div><?php endif; ?></td>
-              <td class="num"><input type="text" inputmode="decimal" name="rest[<?= (int)$r['charge_id'] ?>]" placeholder="0" style="font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:120px;text-align:right"> <?= h($einh) ?></td>
+              <td class="num"><?php if ($gebR): // je gescanntem Karton/Sack das Ist-Gewicht (blind, ohne Sollwert) ?>
+                <?php foreach ($gebR as $gr): ?>
+                <div style="margin-bottom:6px;white-space:nowrap"><span class="muted" style="font-size:15px;margin-right:8px"><?= h(sprintf($T['return_box'], (int)$gr['nummer'], (int)$gr['anzahl_gesamt'])) ?></span><input type="text" inputmode="decimal" name="rest_g[<?= (int)$gr['id'] ?>]" placeholder="0" style="<?= $inpSt ?>"> <?= h($einh) ?></div>
+                <?php endforeach; ?>
+              <?php else: ?><input type="text" inputmode="decimal" name="rest[<?= (int)$r['charge_id'] ?>]" placeholder="0" style="<?= $inpSt ?>"> <?= h($einh) ?><?php endif; ?></td>
             </tr>
             <?php endforeach; ?>
           </tbody>
         </table>
+        <?php if ($mitGeb): ?>
+        <label style="display:flex;gap:12px;align-items:center;margin-top:16px;font-size:17px"><input type="checkbox" name="verschlossen" value="1" style="width:26px;height:26px"> <?= h($T['return_closed']) ?></label>
+        <?php endif; ?>
         <div style="margin-top:20px"><button class="btn btn-lime btn-lg" type="submit"><?= h($T['return_save']) ?></button></div>
       </form>
     </div>

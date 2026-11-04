@@ -1300,6 +1300,10 @@ function init_schema(): void {
     ensure_column('charge_gebinde', 'pa_id', "INT NULL");                       // zugehöriger Produktionsauftrag
     ensure_column('charge_gebinde', 'verbraucht_am', "DATETIME NULL");          // wann in die Produktion gegeben
     ensure_index('charge_gebinde', 'idx_inventar', 'inventar_nr');
+    // Gewicht & Bestand pro Gebinde (04.11.2026): 1 = echtes Gewicht/echte Menge dieses Gebindes erfasst (Wareneingang je Karton,
+    // Rückgabe/Nachwiegen per Scan). 0 = gleichmäßig verteilt (Altbestand) – erscheint in der Datenprüfung zum Nachwiegen.
+    ensure_column('charge_gebinde', 'gewogen', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('charge_gebinde', 'gewogen_am', "DATETIME NULL");
     // Teil 4: Schwund-Protokoll (Differenz rechnerisch vs. gewogen beim Rückgabe-Wiegen). Für Steuer/Inventur.
     $pdo->exec("CREATE TABLE IF NOT EXISTS schwund (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -4222,6 +4226,31 @@ function charge_gebinde_liste(int $charge_id): array {
         'einheit' => (string)($c['einheit'] ?? ''), 'standort' => (string)($c['standort'] ?? 'lager1'),
         'status' => ((float)$c['menge_verfuegbar'] <= 1e-9 ? 'leer' : 'voll'), 'virtuell' => 1,
     ]];
+}
+// Gewicht & Bestand pro Gebinde (04.11.2026): Charge = Summe ihrer Gebinde. Wird der Chargenbestand an anderer Stelle
+// geändert (Entnahme, Korrektur, Rückgabe je Charge), werden die Gebinde nachgezogen: weniger Bestand -> zuerst die in
+// der Produktion gescannten, dann angebrochene, dann volle Gebinde; mehr Bestand -> aufs erste dieser Reihenfolge.
+// Ohne Gebinde-Datensätze passiert nichts (Alt-Chargen gelten als ein Gebinde).
+function charge_gebinde_abgleich(int $charge_id): void {
+    if ($charge_id <= 0 || !table_exists('charge_gebinde')) return;
+    $geb = all("SELECT id, menge, menge_verfuegbar FROM charge_gebinde WHERE charge_id=?
+                ORDER BY (standort='produktion') DESC, (status='angebrochen') DESC, (status='leer') ASC, nummer, id", [$charge_id]);
+    if (!$geb) return;
+    $soll = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [$charge_id]);
+    $diff = round(array_sum(array_map(fn($g) => (float)$g['menge_verfuegbar'], $geb)) - $soll, 3);
+    if (abs($diff) <= 0.0005) return;
+    if ($diff < 0) {
+        $g = $geb[0]; $neu = round((float)$g['menge_verfuegbar'] - $diff, 3);
+        q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu >= (float)$g['menge'] - 0.0005 ? 'voll' : 'angebrochen', $g['id']]);
+        return;
+    }
+    foreach ($geb as $g) {
+        if ($diff <= 0.0005) break;
+        $v = (float)$g['menge_verfuegbar']; if ($v <= 0.0005) continue;
+        $nimm = min($diff, $v); $neu = round($v - $nimm, 3);
+        q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0005 ? 'leer' : 'angebrochen', $g['id']]);
+        $diff = round($diff - $nimm, 3);
+    }
 }
 // Teil 4: Schwund beim (blinden) Rückgabe-Wiegen erfassen. Der gewogene Wert IST der neue Bestand (setzt der
 // Aufrufer). Hier wird NUR die Differenz protokolliert und – nach Plausibilität – Nico still benachrichtigt:
@@ -10979,14 +11008,14 @@ function produktion_rohstoffe_entnehmen(int $pa_id, ?float $bis = null, bool $tr
     return produktion_posten_entnehmen($pa_id, $posten, $trocken, false);
 }
 
-// Etikettenrollen (charge_gebinde mit Inventarnummer) einer Charge um die entnommene Menge verringern, damit der
-// Rollenbestand zum Chargenbestand passt (sonst bleiben alle Rollen „voll", obwohl Etiketten verbraucht sind).
-// Reihenfolge: dem PA/Auftrag zugeordnete Rollen, dann angebrochene, dann volle (Nummer/id). Ohne Rollen: nichts.
+// Gebinde einer Charge (Etikettenrollen UND Kartons/Säcke) um die entnommene Menge verringern, damit der Bestand je
+// Gebinde zum Chargenbestand passt (Charge = Summe der Gebinde). Reihenfolge: in die Produktion gescannte Gebinde, dem
+// PA/Auftrag zugeordnete Rollen, dann angebrochene, dann volle (Nummer/id). Ohne Gebinde: nichts.
 function produktion_rollen_abbuchen(int $charge_id, float $menge, int $pa_id, int $auftrag_id): void {
     if ($menge <= 0.0001 || !table_exists('charge_gebinde') || !column_exists('charge_gebinde', 'inventar_nr')) return;
     $rest = $menge;
-    foreach (all("SELECT id, menge_verfuegbar FROM charge_gebinde WHERE charge_id=? AND inventar_nr IS NOT NULL AND status<>'leer' AND menge_verfuegbar>0
-                  ORDER BY (pa_id=?) DESC, (auftrag_id=?) DESC, (status='angebrochen') DESC, nummer, id", [$charge_id, $pa_id, $auftrag_id]) as $g) {
+    foreach (all("SELECT id, menge_verfuegbar FROM charge_gebinde WHERE charge_id=? AND status<>'leer' AND menge_verfuegbar>0
+                  ORDER BY (standort='produktion') DESC, (pa_id=?) DESC, (auftrag_id=?) DESC, (status='angebrochen') DESC, nummer, id", [$charge_id, $pa_id, $auftrag_id]) as $g) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$g['menge_verfuegbar']);
         $neu  = (float)$g['menge_verfuegbar'] - $nimm;

@@ -57,8 +57,9 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
             foreach ($gebinde as $gi => $g) {
                 if (!$erste) $pdf->addPage();
                 $erste = false;
+                // Gewicht & Bestand pro Gebinde: je Karton sein echtes (Rest-)Gewicht bzw. seine Menge.
                 $c['menge_anzeige'] = (float)($g['menge_verfuegbar'] ?? ($g['menge'] ?? 0));
-                $c['menge_label']   = 'Menge/Karton';
+                $c['menge_label']   = preg_match('/^(kg|g|mg|l|ml)$/i', trim((string)($g['einheit'] ?: ($c['einheit'] ?? '')))) ? 'Gewicht/Karton' : 'Menge/Karton';
                 $c['inventar_nr']   = (string)($g['inventar_nr'] ?? '');   // Etikettenrolle: 8-stellige Nummer (Altdaten 7) auf den Aufkleber (S-20)
                 if (!empty($g['einheit'])) $c['einheit'] = $g['einheit'];
                 $gurl = $scheme . '://' . $host . '/lager/?p=gebinde&bg=' . (int)$g['id'];

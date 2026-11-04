@@ -461,3 +461,5 @@ Soll-Kette 4a (04.11.2026): Spalte `produktionsauftrag.menge_vor_etikett`. `prod
 Soll-Kette 6 (04.11.2026): Spalten `produktionsauftrag.karton_stueck`, `karton_menge`, `karton_charge`, `karton_mhd` (Werte des letzten Kartonetiketten-Drucks).
 
 Soll-Kette 7 (04.11.2026): Spalte `auftrag.versandart` (paket | palette | abholung | lager2) – legt das Lager fest, wenn der Auftrag versandbereit ist.
+
+Gewicht & Bestand pro Gebinde (04.11.2026): `charge_gebinde.gewogen` (1 = echtes Gewicht erfasst, 0 = gleichmäßig verteilt/Altbestand) und `gewogen_am`. `produktion_rollen_abbuchen()` bucht jetzt alle Gebinde (nicht nur Etikettenrollen) mit ab – in die Produktion gescannte zuerst. Neu `charge_gebinde_abgleich($charge_id)`: zieht die Gebinde an `charge.menge_verfuegbar` an (weniger: Produktion, angebrochen, dann voll; mehr: aufs erste davon) – Grundsatz Charge = Summe der Gebinde.

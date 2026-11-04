@@ -56,22 +56,70 @@ function erp_rohstoff_rueckgabe_offen(int $pa_id): array {
                 GROUP BY v.charge_id, v.item_id, i.name, c.charge_nr, c.menge_verfuegbar, c.einheit, i.einheit
                 ORDER BY i.name", [$pa_id]);
 }
+// Kartons/Säcke (keine Etikettenrollen) einer Charge, die in die Produktion gescannt wurden – für die Rückgabe je Gebinde.
+function erp_rueckgabe_gebinde(int $charge_id): array {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde')) return [];
+    $rolle = erp_spalte_da('charge_gebinde', 'inventar_nr') ? " AND inventar_nr IS NULL" : "";
+    return all("SELECT id, nummer, anzahl_gesamt, menge, menge_verfuegbar, einheit FROM charge_gebinde
+                WHERE charge_id=? AND standort='produktion'$rolle ORDER BY nummer, id", [$charge_id]);
+}
+// Gewicht & Bestand pro Gebinde (04.11.2026): Charge = Summe ihrer Gebinde. Wird der Chargenbestand an anderer Stelle
+// geändert (Entnahme, Korrektur, Rückgabe je Charge), werden die Gebinde nachgezogen: weniger Bestand -> zuerst die in
+// der Produktion gescannten, dann angebrochene, dann volle Gebinde; mehr Bestand -> aufs erste dieser Reihenfolge.
+// Ohne Gebinde-Datensätze passiert nichts (Alt-Chargen gelten als ein Gebinde).
+function erp_gebinde_abgleich(int $charge_id): void {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde')) return;
+    $geb = all("SELECT id, menge, menge_verfuegbar FROM charge_gebinde WHERE charge_id=?
+                ORDER BY (standort='produktion') DESC, (status='angebrochen') DESC, (status='leer') ASC, nummer, id", [$charge_id]);
+    if (!$geb) return;
+    $soll = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [$charge_id]);
+    $diff = round(array_sum(array_map(fn($g) => (float)$g['menge_verfuegbar'], $geb)) - $soll, 3);
+    if (abs($diff) <= 0.0005) return;
+    if ($diff < 0) {
+        $g = $geb[0]; $neu = round((float)$g['menge_verfuegbar'] - $diff, 3);
+        q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu >= (float)$g['menge'] - 0.0005 ? 'voll' : 'angebrochen', $g['id']]);
+        return;
+    }
+    foreach ($geb as $g) {
+        if ($diff <= 0.0005) break;
+        $v = (float)$g['menge_verfuegbar']; if ($v <= 0.0005) continue;
+        $nimm = min($diff, $v); $neu = round($v - $nimm, 3);
+        q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0005 ? 'leer' : 'angebrochen', $g['id']]);
+        $diff = round($diff - $nimm, 3);
+    }
+}
 function erp_rohstoff_rueckgabe_erledigt(int $pa_id): bool {
     $d = function_exists('pr_daten') ? pr_daten($pa_id) : [];
     return !empty($d['rohstoff_rueckgabe_done']['wert']);
 }
 // Rückgabe speichern: je Charge das zurückgelegte Gewicht als neuen Bestand setzen (menge_verfuegbar).
 // $gewichte = [charge_id => rest]. Setzt ein „erledigt"-Flag, damit nicht erneut gefragt wird.
-function erp_rohstoff_rueckgabe_speichern(int $pa_id, array $gewichte, string $von = ''): int {
+// Gewicht & Bestand pro Gebinde: $gebinde = [gebinde_id => gewogen] für Kartons/Säcke, die in die Produktion gescannt
+// wurden. Dann steht jedes dieser Gebinde auf seinem gewogenen Wert (zurück ins Lager, gewogen=1) und die Charge auf
+// der Summe ihrer Gebinde. Ohne Gebinde-Werte wie bisher je Charge; die Gebinde werden dann nachgezogen.
+function erp_rohstoff_rueckgabe_speichern(int $pa_id, array $gewichte, string $von = '', array $gebinde = []): int {
     $n = 0;
+    $gw = erp_spalte_da('charge_gebinde', 'gewogen');
     foreach (erp_rohstoff_rueckgabe_offen($pa_id) as $r) {
-        $cid = (int)$r['charge_id']; if (!array_key_exists($cid, $gewichte)) continue;
-        $rest = max(0.0, (float)$gewichte[$cid]);
+        $cid = (int)$r['charge_id'];
+        $gebC = array_filter(erp_rueckgabe_gebinde($cid), fn($g) => array_key_exists((int)$g['id'], $gebinde));
+        if (!$gebC && !array_key_exists($cid, $gewichte)) continue;
         // Teil 4 (Schritt 3): blind. Der gewogene Wert IST der neue Bestand. Der rechnerisch erwartete Rest ist der
         // aktuell gebuchte Bestand (nach FEFO-Abbuchung) – die Differenz wird still als Schwund protokolliert,
         // der Mitarbeiter sieht nichts davon.
         $rechnerisch = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [$cid]);
-        q("UPDATE charge SET menge_verfuegbar=? WHERE id=?", [$rest, $cid]);
+        if ($gebC) {
+            foreach ($gebC as $g) {
+                $v = round(max(0.0, (float)$gebinde[(int)$g['id']]), 3);
+                q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=?, standort='lager1'" . ($gw ? ", gewogen=1, gewogen_am=?" : "") . " WHERE id=?",
+                  array_merge([$v, $v <= 0.0005 ? 'leer' : ($v >= (float)$g['menge'] - 0.0005 ? 'voll' : 'angebrochen')], $gw ? [gmdate('Y-m-d H:i:s')] : [], [(int)$g['id']]));
+            }
+            $rest = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge_gebinde WHERE charge_id=?", [$cid]);
+        } else {
+            $rest = max(0.0, (float)$gewichte[$cid]);
+        }
+        q("UPDATE charge SET menge_verfuegbar=?" . ($rest <= 0.0005 ? ", status='leer'" : "") . " WHERE id=?", [$rest, $cid]);
+        if (!$gebC) erp_gebinde_abgleich($cid);
         erp_schwund_erfassen((int)$r['item_id'], $cid, $pa_id, $rechnerisch, $rest, (string)$r['einheit'], $von);
         $n++;
     }
@@ -933,13 +981,14 @@ function erp_fefo_abbuchen(int $pa_id, int $item_id, float $menge, string $einhe
         $rest -= $nimm;
     }
 }
-// Etikettenrollen (charge_gebinde mit Inventarnummer) einer Charge um die entnommene Menge verringern – Spiegel von
-// produktion_rollen_abbuchen() im Dashboard (Sub-App darf dessen schema.php nicht laden). Ohne Rollen: nichts.
+// Gebinde einer Charge (Etikettenrollen UND Kartons/Säcke) um die entnommene Menge verringern – Spiegel von
+// produktion_rollen_abbuchen() im Dashboard (Sub-App darf dessen schema.php nicht laden). Gescannte Gebinde in der
+// Produktion zuerst. Ohne Gebinde: nichts.
 function erp_rollen_abbuchen(int $charge_id, float $menge, int $pa_id, int $auftrag_id): void {
     if ($menge <= 0.0001 || !tabelle_da('charge_gebinde') || !erp_spalte_da('charge_gebinde', 'inventar_nr')) return;
     $rest = $menge;
-    foreach (all("SELECT id, menge_verfuegbar FROM charge_gebinde WHERE charge_id=? AND inventar_nr IS NOT NULL AND status<>'leer' AND menge_verfuegbar>0
-                  ORDER BY (pa_id=?) DESC, (auftrag_id=?) DESC, (status='angebrochen') DESC, nummer, id", [$charge_id, $pa_id, $auftrag_id]) as $g) {
+    foreach (all("SELECT id, menge_verfuegbar FROM charge_gebinde WHERE charge_id=? AND status<>'leer' AND menge_verfuegbar>0
+                  ORDER BY (standort='produktion') DESC, (pa_id=?) DESC, (auftrag_id=?) DESC, (status='angebrochen') DESC, nummer, id", [$charge_id, $pa_id, $auftrag_id]) as $g) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$g['menge_verfuegbar']);
         $neu  = (float)$g['menge_verfuegbar'] - $nimm;

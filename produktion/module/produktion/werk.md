@@ -66,3 +66,5 @@ Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schl
 Soll-Kette 4b (04.11.2026): oben in der Liste **Anweisungen vom Büro** (Menge, Umfang, Auftrag, „Priorität hoch“); Aufträge mit Anweisung erscheinen immer. Am Auftrag Banner „Anweisung: …“, Menge in der Teilmengen-Box vorbelegt (höchstens das Machbare).
 
 Soll-Kette 6 (04.11.2026): Im Schritt **Verpacken** (bzw. **Umkarton**, wenn vorhanden) Block **Kartonetiketten**: Pkg je Karton + Packungen (Charge/MHD vorbelegt), Anzeige „= 5 Kartons (4 × 24, 1 × 4)“, Knopf druckt alle Etiketten auf einmal (Aktion `werk_karton`).
+
+Rückgabe nach dem Mischen (04.11.2026): Hat eine Charge in die Produktion gescannte Kartons/Säcke, erscheint je Gebinde ein Feld „Karton X / N“ (`rest_g[<gebinde_id>]`, blind ohne Sollwert) statt des Feldes je Charge, dazu der Pflicht-Haken „gewogen und ordentlich verschlossen“ (`verschlossen`). Ohne Haken wird nicht gespeichert.

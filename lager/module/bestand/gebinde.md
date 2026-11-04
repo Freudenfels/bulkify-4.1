@@ -31,3 +31,5 @@ Auftrag**. Die Rolle ist ein `charge_gebinde`-Datensatz mit `inventar_nr` (siehe
 `rolle_zuordnen` → `erp_rolle_auftrag_zuordnen()` (ordnet die Rolle dem Auftrag der Charge zu, Standort→Produktion),
 `rolle_freigeben` → `erp_rolle_freigeben()` (Zuordnung lösen, zurück nach Lager 1). Die 8-stellige Nummer wird aus
 Suche (`?p=suche`/`?p=finden`) und Scan-Endpunkt (`public/lager/scan.php`) hierher geleitet.
+
+Scan eines Bestands-Gebindes `?bg=` (04.11.2026): zeigt aktuelles Gewicht (gewogen/gleichmäßig verteilt), ursprüngliche Menge, Ort mit Kiste/Blinker, Artikel, Charge, MHD. Darunter (nicht bei Etikettenrollen) „Entnehmen“ (`geb_entnehmen`: nur dieses Gebinde) und „Rückgabe aus der Produktion“ bzw. „Nachwiegen“ (`geb_rueckgabe`: Ist-Gewicht + Pflicht-Haken „ordentlich verschlossen“; Differenz als Verbrauch/Schwund, Änderungslog).

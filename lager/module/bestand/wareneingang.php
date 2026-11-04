@@ -247,6 +247,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         if ($regeln['mhd_pflicht'] && $mhd === '')    { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): MHD ist Pflicht.'; continue; }
         if ($regeln['charge_pflicht'] && $charge === '') { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Charge-Nr. ist Pflicht.'; continue; }
 
+        // Gewicht & Bestand pro Gebinde (04.11.2026): je Karton/Sack die echte Menge (Vorschlag gleichmäßig, Abweichler
+        // geändert). Die Summe muss zur Gesamtmenge passen – sonst wird die Position NICHT gebucht.
+        $gebM = $pakete > 1 ? array_values(array_map(fn($v) => erp_menge_parse((string)$v), (array)($_POST['p_geb'][$key] ?? []))) : [$menge];
+        $fmtM = fn(float $v): string => rtrim(rtrim(number_format($v, 3, ',', '.'), '0'), ',');
+        if (count($gebM) !== $pakete) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Menge je Karton fehlt (' . count($gebM) . ' von ' . $pakete . ' Kartons) – nicht gebucht.'; continue; }
+        if (min($gebM) <= 0) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Jeder Karton braucht eine Menge größer 0 – nicht gebucht.'; continue; }
+        if (abs(array_sum($gebM) - $menge) > 0.0005) {
+            $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Summe der Kartons ' . $fmtM(array_sum($gebM)) . ' ' . h($einheit) . ' passt nicht zur Gesamtmenge ' . $fmtM($menge) . ' ' . h($einheit)
+                      . ' (Differenz ' . $fmtM(abs(array_sum($gebM) - $menge)) . ') – nicht gebucht.';
+            continue;
+        }
+
         $notiz = 'Wareneingang' . ($ziel === 'l2' ? ' (Kundenware)' : '');
         $zusatz = [];
         if ($artnr !== '')    $zusatz[] = 'Art.-Nr. ' . $artnr;
@@ -273,8 +285,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             erp_charge_kapselgroesse_setzen((int)$cid, $kgManuell);
 
         lg_pakete_set((int)$cid, $pakete);
-        $aufteilenPos = (string)($_POST['p_aufteilen'][$i] ?? '0') === '1';
-        lg_aufteilen_set((int)$cid, $aufteilenPos && $pakete > 1);
+        // Je Karton ein Gebinde mit seiner echten Menge (in der Einheit der Charge – g-Eingaben wurden ggf. in kg umgerechnet).
+        // Das Etikett druckt dann je Karton sein Gewicht, der QR führt auf genau dieses Gebinde.
+        $cMenge = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [(int)$cid]);
+        $fak = $menge > 0 ? $cMenge / $menge : 1.0;
+        $gebC = array_map(fn($v) => round($v * $fak, 3), $gebM);
+        $gebC[count($gebC) - 1] = round($cMenge - array_sum(array_slice($gebC, 0, -1)), 3);
+        if (erp_charge_gebinde_mit_mengen((int)$cid, $gebC) === 0 && $pakete > 1)
+            $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): gebucht, aber die Kartons konnten nicht einzeln angelegt werden (Charge hatte schon Gebinde).';
+        lg_aufteilen_set((int)$cid, false);   // Aufteilen ersetzt durch Menge je Karton
         // Paketnummern je Position bevorzugt (eine je Karton), sonst das formweite Paketlabel.
         lg_tracking_set((int)$cid, $paketNrn ? implode("\n", $paketNrn) : (string)($_POST['tracking'] ?? ''));
         $c = erp_charge((int)$cid);
@@ -571,7 +590,7 @@ if ($gebucht):
         <button type="button" class="btn btn-ghost btn-sm" id="weAdd">+ Zeile</button>
       </div>
       <div id="weRows" style="margin-top:var(--sp-3)"></div>
-      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Leerkapseln/Bulk/Fertige Produkte → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist Pflicht – außer bei <strong>Etikett (Rolle)</strong>: dort nur Gesamtmenge + Anzahl Rollen angeben; die Menge wird gleichmäßig auf die Rollen verteilt (Rest auf die letzte), Inventaraufkleber je Rolle sind optional (leer = automatisch vergeben). „Aufteilen" je Position: verteilt die Menge gleichmäßig auf die Kartons (z. B. 50 kg / 2 = 25 kg je Karton).</div>
+      <div class="muted" style="margin-top:var(--sp-2)">Pflicht je Warenart: Rohstoff/Leerkapseln/Bulk/Fertige Produkte → MHD + Charge; Verpackung/Verbrauch → frei. Blinker ist Pflicht – außer bei <strong>Etikett (Rolle)</strong>: dort nur Gesamtmenge + Anzahl Rollen angeben; die Menge wird gleichmäßig auf die Rollen verteilt (Rest auf die letzte), Inventaraufkleber je Rolle sind optional (leer = automatisch vergeben). Mehrere Pakete: je Karton eine Zeile mit der Menge, gleichmäßig vorbelegt – nur abweichende Kartons ändern; die Summe muss zur Gesamtmenge passen, sonst wird nicht gebucht. Jeder Karton bekommt sein Etikett mit seinem Gewicht.</div>
       <div style="margin-top:var(--sp-4)"><button type="submit" class="btn btn-primary" id="weBuchen">Alle buchen &amp; Blinker anhängen</button></div>
     </div>
   </div>
@@ -604,10 +623,17 @@ if ($gebucht):
   .we-pos .f-paketnrn{flex:1 1 100%}
   .we-pos .we-pakscan{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
   .we-pos .we-pak{flex:0 1 170px;min-width:140px}
-  .we-pos .f-split{flex:0 1 80px}
   .we-pos .f-frei{flex:0 1 100px}
-  .we-pos .f-split input[type=checkbox],
   .we-pos .f-frei input[type=checkbox]{width:22px;height:22px;margin-top:6px}
+  .we-pos .f-geb{flex:1 1 100%}
+  .we-pos .we-geb-liste{display:flex;flex-wrap:wrap;gap:6px 10px;margin-bottom:6px}
+  .we-pos .we-geb-zeile{display:flex;align-items:center;gap:6px;flex:0 1 170px;font-weight:400}
+  .we-pos .we-geb-zeile .muted{white-space:nowrap;font-size:12px;min-width:56px}
+  .we-pos .we-geb{width:100%;min-width:70px;text-align:right}
+  .we-pos .we-geb-sum{font-size:13px}
+  .we-pos .we-geb-ok{color:var(--ok,#1D9E75)}
+  .we-pos .we-geb-bad{color:var(--danger,#c0392b);font-weight:600}
+  .we-pos[data-gebfehler] .f-geb{outline:2px solid var(--danger,#c0392b);outline-offset:4px;border-radius:8px}
   .we-aehnlich{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .we-aehnlich:empty{display:none}
   .we-ae-t{font-size:12px;color:var(--muted)}
@@ -681,6 +707,17 @@ if ($gebucht):
 
   // --- Positionen-Tabelle ---
   var rows=document.getElementById('weRows');
+  // Gewicht & Bestand pro Gebinde: passt bei einer Position die Summe der Kartons nicht zur Gesamtmenge, wird nicht gebucht.
+  (function(){ var f=document.getElementById('weForm'); if(!f) return;
+    // An window (Capture) hängen: läuft vor dem Busy-Spinner (document, Capture) – sonst bliebe der Knopf gesperrt.
+    window.addEventListener('submit', function(e){
+      if(e.target!==f) return;
+      var bad=[].filter.call(document.querySelectorAll('.we-pos[data-gebfehler]'), function(c){ var b=c.querySelector('.f-geb'); return b && b.style.display!=='none'; });
+      if(!bad.length) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      bad[0].scrollIntoView({behavior:'smooth', block:'center'});
+      alert('Die Menge je Karton passt bei ' + bad.length + ' Position(en) nicht zur Gesamtmenge. Bitte korrigieren – erst dann wird gebucht.');
+    }, true); })();
   function artOptions(sel){ return ARTEN.map(function(a){return '<option value="'+a[0]+'"'+(a[0]===sel?' selected':'')+'>'+a[1]+'</option>';}).join(''); }
   function katLabel(it){
     if(it.f==='kapselhuelle') return 'Leerkapseln';
@@ -739,8 +776,11 @@ if ($gebucht):
           '<input type="hidden" name="p_paketnummern[]" class="we-pak-h">'+
           '<div class="we-pakscan"></div>'+
         '</div>'+
+        // Gewicht & Bestand pro Gebinde: eine Zeile je Karton, gleichmäßig vorbelegt; Summe muss zur Gesamtmenge passen.
+        '<div class="bx-field f-geb" style="display:none"><label>Menge je Karton <span class="muted">(gleichmäßig vorbelegt – nur abweichende Kartons ändern)</span></label>'+
+          '<div class="we-geb-liste"></div><div class="we-geb-sum"></div>'+
+        '</div>'+
         '<div class="bx-field f-frei"><label>Freigegeben</label><input type="checkbox" class="we-frei" checked title="Haken raus bei Problem (Beschädigung, Abweichung) – dann Quarantäne"><input type="hidden" name="p_frei[]" class="we-frei-h" value="1"></div>'+
-        '<div class="bx-field f-split"><label>Aufteilen</label><input type="checkbox" class="we-split" title="Menge gleichmäßig auf die Kartons verteilen"><input type="hidden" name="p_aufteilen[]" class="we-split-h" value="0"></div>'+
         '<div class="bx-field f-blinker"><label>Blinker *</label><input type="text" name="p_blinker[]" class="we-blinker" value="" placeholder="Code scannen" required></div>'+
         // Etikettenrollen: nur Gesamtmenge + Anzahl Rollen. Menge wird gleichmäßig verteilt; Inventaraufkleber optional.
         '<div class="we-rollen" style="display:none;flex:1 1 100%">'+
@@ -790,7 +830,51 @@ if ($gebucht):
         pakWrap.appendChild(i); wirePak(i);
       }
       pakSync();
+      gebRender(n);
       if(fokusIdx!=null){ var f=pakWrap.querySelectorAll('.we-pak')[fokusIdx]; if(f) f.focus(); }
+    }
+    // --- Menge je Karton: Vorschlag = Gesamtmenge gleichmäßig (Stk ganzzahlig, sonst 3 Stellen; Rest auf den letzten). ---
+    var gebBox=card.querySelector('.f-geb'), gebListe=card.querySelector('.we-geb-liste'), gebSumEl=card.querySelector('.we-geb-sum');
+    function gebZahl(v){ v=String(v==null?'':v).trim(); if(v.indexOf(',')>=0) v=v.replace(/\./g,'').replace(',','.'); else if(/^\d{1,3}(\.\d{3})+$/.test(v)) v=v.replace(/\./g,''); return parseFloat(v)||0; }
+    function gebTxt(n){ var r=Math.round(n*1000)/1000, t=Math.abs(r).toFixed(3).replace(/0+$/,'').replace(/\.$/,''); var g=t.split('.'); g[0]=g[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.'); return (r<0?'-':'')+g.join(','); }
+    function gebEinh(){ var e=card.querySelector('[name="p_einheit[]"]'); return e?e.value:''; }
+    function gebStk(){ return /st(ü|u)?ck|^stk|tabl|kaps/i.test(gebEinh()); }
+    function gebVorschlag(){
+      if(!gebListe) return;
+      var ins=gebListe.querySelectorAll('.we-geb'), n=ins.length; if(!n) return;
+      var ges=gebZahl(card.querySelector('input[name="p_menge[]"]').value);
+      var basis=gebStk()?Math.floor(ges/n):Math.floor(ges/n*1000)/1000;
+      [].forEach.call(ins,function(inp,k){ inp.value = ges>0 ? gebTxt(k<n-1?basis:ges-basis*(n-1)) : ''; });
+      gebSumme();
+    }
+    function gebSumme(){
+      if(!gebSumEl) return;
+      var ins=gebListe.querySelectorAll('.we-geb'), n=ins.length;
+      if(n<2){ gebSumEl.textContent=''; card.removeAttribute('data-gebfehler'); return; }
+      var ges=gebZahl(card.querySelector('input[name="p_menge[]"]').value), sum=0, leer=0;
+      [].forEach.call(ins,function(inp){ var v=gebZahl(inp.value); if(v<=0) leer++; sum+=v; });
+      var diff=Math.round((sum-ges)*1000)/1000, e=gebEinh();
+      var ok=Math.abs(diff)<=0.0005 && leer===0 && ges>0;
+      gebSumEl.className='we-geb-sum '+(ok?'we-geb-ok':'we-geb-bad');
+      gebSumEl.textContent = 'Summe '+gebTxt(sum)+' '+e+(ok ? ' – passt zur Gesamtmenge.' :
+        (leer ? ' – '+leer+' Karton(s) ohne Menge. So nicht buchbar.' : ' – Differenz '+gebTxt(Math.abs(diff))+' '+e+' zur Gesamtmenge '+gebTxt(ges)+' '+e+'. So nicht buchbar.'));
+      if(ok) card.removeAttribute('data-gebfehler'); else card.setAttribute('data-gebfehler','1');
+    }
+    function gebRender(n){
+      if(!gebListe) return;
+      n=Math.max(1,n|0);
+      var etk=(card.querySelector('.we-art')||{}).value==='etikett';
+      if(gebBox) gebBox.style.display=(n>1 && !etk)?'':'none';
+      if(n<2 || etk){ gebListe.innerHTML=''; gebSumme(); return; }
+      if(gebListe.querySelectorAll('.we-geb').length===n){ gebSumme(); return; }
+      gebListe.innerHTML='';
+      for(var k=0;k<n;k++){
+        var w=document.createElement('label'); w.className='we-geb-zeile';
+        w.innerHTML='<span class="muted">Karton '+(k+1)+'</span><input type="text" inputmode="decimal" class="we-geb" name="p_geb['+rowKey+'][]" autocomplete="off">';
+        gebListe.appendChild(w);
+        w.querySelector('input').addEventListener('input', gebSumme);
+      }
+      gebVorschlag();
     }
     if(pkt) pkt.addEventListener('input', function(){ renderPakFields(parseInt(pkt.value,10)||1); });
     renderPakFields(parseInt(pkt&&pkt.value,10)||1);
@@ -863,7 +947,7 @@ if ($gebucht):
         rollenListe=card.querySelector('.we-rollen-liste'), rollenInfo=card.querySelector('.we-rollen-info'),
         mengeF=card.querySelector('input[name="p_menge[]"]'), blinkerF=card.querySelector('.we-blinker'),
         feldBlinker=card.querySelector('.f-blinker'), feldPak=card.querySelector('.f-pakete'),
-        feldPaknr=card.querySelector('.f-paketnrn'), feldSplit=card.querySelector('.f-split'),
+        feldPaknr=card.querySelector('.f-paketnrn'),
         feldCharge=card.querySelector('.f-charge'), feldMhd=card.querySelector('.f-mhd');
     function mengeWert(v){ return parseFloat(String(v==null?'':v).replace(/\./g,'').replace(',','.'))||0; }
     function gesamtMenge(){ return mengeWert(mengeF&&mengeF.value); }
@@ -892,12 +976,14 @@ if ($gebucht):
       if(fokusIdx!=null){ var f=nrs[fokusIdx]; if(f) f.focus(); }
     }
     if(rollenZahl) rollenZahl.addEventListener('input',function(){ renderRollen(parseInt(rollenZahl.value,10)||1); });
-    if(mengeF) mengeF.addEventListener('input',function(){ if(art2.value==='etikett') rollenInfoSync(); });
+    if(mengeF) mengeF.addEventListener('input',function(){ if(art2.value==='etikett') rollenInfoSync(); else gebVorschlag(); });
+    var einhG=card.querySelector('[name="p_einheit[]"]'); if(einhG) einhG.addEventListener('change', gebVorschlag);
     function etikettToggle(){
       var an=art2.value==='etikett';
       if(rollenBox) rollenBox.style.display=an?'':'none';
       if(feldBlinker) feldBlinker.style.display=an?'none':'';
-      [feldPak,feldPaknr,feldSplit,feldCharge,feldMhd].forEach(function(el){ if(el) el.style.display=an?'none':''; });
+      [feldPak,feldPaknr,feldCharge,feldMhd].forEach(function(el){ if(el) el.style.display=an?'none':''; });
+      gebRender(parseInt(pkt&&pkt.value,10)||1);
       if(blinkerF) blinkerF.required = an?false:blinkerF.required;
       if(an){ if(blinkerF) blinkerF.required=false; renderRollen(parseInt(rollenZahl&&rollenZahl.value,10)||1); }
       else { blinkerPflicht(); }
@@ -909,9 +995,6 @@ if ($gebucht):
       pflicht(card);
     }
     card.querySelector('.we-del').addEventListener('click',function(){card.remove(); if(!rows.children.length)addRow();});
-    // Aufteilen-Haken je Position -> in das versteckte Feld schreiben (Index bleibt so ausgerichtet).
-    var cb=card.querySelector('.we-split'), cbh=card.querySelector('.we-split-h');
-    if(cb&&cbh) cb.addEventListener('change',function(){ cbh.value=cb.checked?'1':'0'; });
     // Freigegeben-Haken je Position -> verstecktes Feld (angehakt = frei, sonst Quarantäne).
     var fb=card.querySelector('.we-frei'), fbh=card.querySelector('.we-frei-h');
     if(fb&&fbh) fb.addEventListener('change',function(){ fbh.value=fb.checked?'1':'0'; });

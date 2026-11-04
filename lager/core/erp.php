@@ -317,6 +317,7 @@ function erp_charge_umbuchen(int $charge_id, ?int $kunde_id, ?float $menge = nul
     if (!empty($c['kapselgroesse_id'])) q("UPDATE charge SET kapselgroesse_id=? WHERE id=?", [(int)$c['kapselgroesse_id'], $neu]);   // Teilmenge erbt die Kapselgröße
     q("UPDATE charge SET menge=GREATEST(menge-?,0), menge_verfuegbar=GREATEST(menge_verfuegbar-?,0) WHERE id=?",
       [$moved, $moved, $charge_id]);
+    erp_gebinde_abgleich($charge_id);
     return ['ok' => true, 'meldung' => $fmt($moved) . ' ' . (string)$c['einheit'] . ' in den ' . $zielname
                          . ' umgebucht, ' . $fmt($verf - $moved) . ' bleiben.', 'neu_id' => $neu];
 }
@@ -469,6 +470,7 @@ function erp_charge_menge_setzen(int $charge_id, float $neu, string $grund = '')
     if ($neu <= 1e-9) $status = 'leer';
     elseif ($status === 'leer') $status = 'frei';   // wieder Bestand -> aus "leer" zurueck auf frei
     q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $status, $charge_id]);
+    erp_gebinde_abgleich($charge_id);
     $fmt = rtrim(rtrim(number_format($neu, 3, ',', '.'), '0'), ',');
     return ['ok' => true, 'meldung' => 'Bestand auf ' . $fmt . ' ' . (string)$c['einheit'] . ' gesetzt.',
             'delta' => $neu - $alt, 'einheit' => (string)$c['einheit']];
@@ -1544,17 +1546,102 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
 // --- Gebinde je Charge (Teil 4) -------------------------------------------------------------
 // charge_gebinde ist eine GETEILTE Dashboard-Tabelle (Bestand je Karton/Sack: Gewicht, Restmenge, Ort).
 // Hier nur Raw-SQL über die Naht – das Dashboard legt die Tabelle an (init_schema). Fehlt sie, no-op.
-// Je Gebinde ein Datensatz mit eigener Lauf-Nr (X von N); die Menge wird gleichmäßig geteilt, der LETZTE
-// bekommt den Rest (Summe = Gesamtmenge). Blindes Wiegen bei der Rückgabe korrigiert echte Werte später.
+// Je Gebinde ein Datensatz mit eigener Lauf-Nr (X von N). Seit 04.11.2026 (Gewicht & Bestand pro Gebinde) trägt der
+// Wareneingang das ECHTE Gewicht je Karton ein (erp_charge_gebinde_mit_mengen, gewogen=1); die Charge ist die Summe der
+// Gebinde. erp_charge_gebinde_anlegen() teilt nur noch für die alte Schnellmaske gleichmäßig (gewogen=0 -> Datenprüfung).
 function erp_charge_gebinde_liste(int $charge_id): array {
     if ($charge_id <= 0 || !tabelle_da('charge_gebinde')) return [];
     return all("SELECT * FROM charge_gebinde WHERE charge_id=? ORDER BY nummer, id", [$charge_id]);
 }
 function erp_charge_gebinde(int $id): ?array {
     if ($id <= 0 || !tabelle_da('charge_gebinde')) return null;
-    return one("SELECT g.*, c.charge_nr, c.mhd, c.lieferant_id, c.wareneingang, i.name AS item_name, i.artikelnummer
+    return one("SELECT g.*, c.charge_nr, c.mhd, c.lieferant_id, c.wareneingang, c.status AS charge_status, c.menge_verfuegbar AS charge_verfuegbar,
+                       c.fremd_kunde_id, i.name AS item_name, i.artikelnummer
                 FROM charge_gebinde g JOIN charge c ON c.id=g.charge_id JOIN item i ON i.id=c.item_id
                 WHERE g.id=?", [$id]);
+}
+// Wareneingang: je Karton/Sack/Fass die eingegebene Menge als eigenes Gebinde (gewogen=1). Die Summe muss zum
+// Chargenbestand passen (prüft der Aufrufer vor dem Buchen; hier nochmals als Schutz). Rückgabe: Anzahl angelegt.
+function erp_charge_gebinde_mit_mengen(int $charge_id, array $mengen): int {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde') || !$mengen) return 0;
+    if ((int) scalar("SELECT COUNT(*) FROM charge_gebinde WHERE charge_id=?", [$charge_id]) > 0) return 0;
+    $c = one("SELECT menge_verfuegbar, einheit, standort FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return 0;
+    $mengen = array_values(array_map(fn($m) => round((float)$m, 3), $mengen));
+    if (abs(array_sum($mengen) - (float)$c['menge_verfuegbar']) > 0.0005) return 0;
+    $gw = erp_gebinde_spalte_da('gewogen'); $n = count($mengen); $jetzt = jetzt_utc();
+    foreach ($mengen as $k => $m)
+        q("INSERT INTO charge_gebinde (charge_id,nummer,anzahl_gesamt,menge,menge_verfuegbar,einheit,standort,status," . ($gw ? "gewogen,gewogen_am," : "") . "angelegt)
+           VALUES (?,?,?,?,?,?,?,?," . ($gw ? "1,?," : "") . "?)",
+          array_merge([$charge_id, $k + 1, $n, $m, $m, (string)($c['einheit'] ?? ''), (string)($c['standort'] ?? 'lager1') ?: 'lager1', $m > 0 ? 'voll' : 'leer'], $gw ? [$jetzt] : [], [$jetzt]));
+    return $n;
+}
+// Gewicht & Bestand pro Gebinde (04.11.2026): Charge = Summe ihrer Gebinde. Wird der Chargenbestand an anderer Stelle
+// geändert (Entnahme, Korrektur, Rückgabe je Charge), werden die Gebinde nachgezogen: weniger Bestand -> zuerst die in
+// der Produktion gescannten, dann angebrochene, dann volle Gebinde; mehr Bestand -> aufs erste dieser Reihenfolge.
+// Ohne Gebinde-Datensätze passiert nichts (Alt-Chargen gelten als ein Gebinde).
+function erp_gebinde_abgleich(int $charge_id): void {
+    if ($charge_id <= 0 || !tabelle_da('charge_gebinde')) return;
+    $geb = all("SELECT id, menge, menge_verfuegbar FROM charge_gebinde WHERE charge_id=?
+                ORDER BY (standort='produktion') DESC, (status='angebrochen') DESC, (status='leer') ASC, nummer, id", [$charge_id]);
+    if (!$geb) return;
+    $soll = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [$charge_id]);
+    $diff = round(array_sum(array_map(fn($g) => (float)$g['menge_verfuegbar'], $geb)) - $soll, 3);
+    if (abs($diff) <= 0.0005) return;
+    if ($diff < 0) {
+        $g = $geb[0]; $neu = round((float)$g['menge_verfuegbar'] - $diff, 3);
+        q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu >= (float)$g['menge'] - 0.0005 ? 'voll' : 'angebrochen', $g['id']]);
+        return;
+    }
+    foreach ($geb as $g) {
+        if ($diff <= 0.0005) break;
+        $v = (float)$g['menge_verfuegbar']; if ($v <= 0.0005) continue;
+        $nimm = min($diff, $v); $neu = round($v - $nimm, 3);
+        q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0005 ? 'leer' : 'angebrochen', $g['id']]);
+        $diff = round($diff - $nimm, 3);
+    }
+}
+// Entnahme per Scan: GENAU dieses Gebinde um $menge verringern (die Charge um dieselbe Menge). Rückgabe ['ok','meldung','rest'].
+function erp_gebinde_entnehmen(int $gebinde_id, float $menge, string $grund = ''): array {
+    $g = erp_charge_gebinde($gebinde_id);
+    if (!$g) return ['ok' => false, 'meldung' => 'Gebinde nicht gefunden.'];
+    if ($menge <= 0) return ['ok' => false, 'meldung' => 'Bitte eine Menge größer 0 angeben.'];
+    $verf = (float)$g['menge_verfuegbar'];
+    $fmt = fn(float $v): string => rtrim(rtrim(number_format($v, 3, ',', '.'), '0'), ',');
+    if ($menge > $verf + 0.0005) return ['ok' => false, 'meldung' => 'In diesem Gebinde sind nur ' . $fmt($verf) . ' ' . (string)$g['einheit'] . '.'];
+    $r = erp_charge_entnehmen((int)$g['charge_id'], $menge, false);
+    if (empty($r['ok'])) return $r;
+    $neu = round(max(0.0, $verf - $menge), 3);
+    q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0005 ? 'leer' : 'angebrochen', $gebinde_id]);
+    if (function_exists('lg_bewegung_log')) lg_bewegung_log((int)$g['charge_id'], 'aus', $menge, (string)$g['einheit'], (string)$g['item_name'],
+        'Entnahme Gebinde ' . (int)$g['nummer'] . '/' . (int)$g['anzahl_gesamt'] . ($grund !== '' ? ' · ' . $grund : ''));
+    return ['ok' => true, 'meldung' => $fmt($menge) . ' ' . (string)$g['einheit'] . ' aus Gebinde ' . (int)$g['nummer'] . '/' . (int)$g['anzahl_gesamt'] . ' entnommen, Rest ' . $fmt($neu) . ' ' . (string)$g['einheit'] . '.', 'rest' => $neu];
+}
+// Rückgabe aus der Produktion bzw. Nachwiegen: das Gebinde steht danach auf dem gewogenen Ist-Gewicht (gewogen=1, zurück
+// in Lager 1), die Charge um die Differenz niedriger (Verbrauch/Schwund) bzw. höher. Änderungslog + Bewegung.
+function erp_gebinde_rueckgabe(int $gebinde_id, float $ist, string $anlass = 'Rückgabe'): array {
+    $g = erp_charge_gebinde($gebinde_id);
+    if (!$g) return ['ok' => false, 'meldung' => 'Gebinde nicht gefunden.'];
+    if ($ist < 0) return ['ok' => false, 'meldung' => 'Gewicht darf nicht negativ sein.'];
+    $ist = round($ist, 3); $alt = round((float)$g['menge_verfuegbar'], 3); $diff = round($alt - $ist, 3);
+    $cid = (int)$g['charge_id'];
+    $fmt = fn(float $v): string => rtrim(rtrim(number_format($v, 3, ',', '.'), '0'), ',');
+    $gw = erp_gebinde_spalte_da('gewogen');
+    q("UPDATE charge_gebinde SET menge_verfuegbar=?, status=?, standort='lager1'" . ($gw ? ", gewogen=1, gewogen_am=?" : "") . " WHERE id=?",
+      array_merge([$ist, $ist <= 0.0005 ? 'leer' : ($ist >= (float)$g['menge'] - 0.0005 ? 'voll' : 'angebrochen')], $gw ? [jetzt_utc()] : [], [$gebinde_id]));
+    $cNeu = round(max(0.0, (float)$g['charge_verfuegbar'] - $diff), 3);
+    $st = (string)$g['charge_status'];
+    q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$cNeu, $cNeu <= 0.0005 ? 'leer' : ($st === 'leer' ? 'frei' : $st), $cid]);
+    erp_bedarf_bump();
+    $u = function_exists('lg_uid') && lg_uid() ? erp_benutzer(lg_uid()) : null;
+    if (tabelle_da('aenderung_log'))
+        q("INSERT INTO aenderung_log (objekt_typ,objekt_id,feld,alt,neu,benutzer_id,benutzer,route,erstellt) VALUES (?,?,?,?,?,?,?,?,?)",
+          ['charge_gebinde', $gebinde_id, 'menge_verfuegbar', (string)$alt, (string)$ist, $u ? (int)$u['id'] : null, $u ? (string)$u['name'] : null, 'lager_gebinde', gmdate('Y-m-d H:i:s')]);
+    $txt = $anlass . ' Gebinde ' . (int)$g['nummer'] . '/' . (int)$g['anzahl_gesamt'] . ': gewogen ' . $fmt($ist) . ', vorher ' . $fmt($alt) . ' ' . (string)$g['einheit'];
+    if (function_exists('lg_bewegung_log') && abs($diff) > 0.0005)
+        lg_bewegung_log($cid, $diff > 0 ? 'aus' : 'korrektur', abs($diff), (string)$g['einheit'], (string)$g['item_name'], $txt . ($diff > 0 ? ' (Verbrauch/Schwund)' : ' (mehr als gebucht)'));
+    return ['ok' => true, 'meldung' => 'Gebinde ' . (int)$g['nummer'] . '/' . (int)$g['anzahl_gesamt'] . ' steht auf ' . $fmt($ist) . ' ' . (string)$g['einheit']
+            . (abs($diff) > 0.0005 ? ' – ' . $fmt(abs($diff)) . ' ' . (string)$g['einheit'] . ($diff > 0 ? ' als Verbrauch/Schwund gebucht.' : ' mehr als gebucht.') : '.'), 'diff' => $diff];
 }
 // N Gebinde für eine Charge anlegen (idempotent: nur wenn noch keine existieren). Rückgabe: Anzahl angelegt.
 function erp_charge_gebinde_anlegen(int $charge_id, int $anzahl): int {
@@ -1887,7 +1974,7 @@ function erp_quarantaene_chargen(int $item_id = 0): array {
 
 // Warenausgang: Menge von einer Charge abbuchen. Leer -> Status 'leer'. Fremdlager-Chargen sind tabu.
 // Rueckgabe: ['ok'=>bool, 'meldung'=>?, 'leer'=>bool, 'rest'=>float, 'item_name'=>?, 'einheit'=>?].
-function erp_charge_entnehmen(int $charge_id, float $menge): array {
+function erp_charge_entnehmen(int $charge_id, float $menge, bool $gebindeAbgleich = true): array {
     if (!tabelle_da('charge')) return ['ok' => false, 'meldung' => 'Keine Chargen vorhanden.'];
     $c = one("SELECT c.*, i.name AS item_name, i.kategorie FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
@@ -1902,6 +1989,7 @@ function erp_charge_entnehmen(int $charge_id, float $menge): array {
     $leer = $rest <= 1e-9;
     q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?",
       [$leer ? 0 : $rest, $leer ? 'leer' : (string)$c['status'], $charge_id]);
+    if ($gebindeAbgleich) erp_gebinde_abgleich($charge_id);   // Gebinde folgen der Charge (ohne Scan: angebrochene zuerst)
     erp_bedarf_bump();
     return ['ok' => true, 'meldung' => '', 'leer' => $leer, 'rest' => $leer ? 0.0 : $rest,
             'item_name' => (string)$c['item_name'], 'einheit' => (string)$c['einheit']];
