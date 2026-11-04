@@ -249,3 +249,6 @@ Bulkware binden (04.11.2026): Auswahl zeigt die Kapselgröße je Charge, passend
 
 ## Reiter „Beschaffungsweg“ (Soll-Kette 1, 04.11.2026)
 Drei Karten nebeneinander: Zukauf fertige Kapsel/Tablette (bei Pulver: fertige Mischung), Premix, Einzelrohstoffe. Je Karte Bedarf und Kosten für diesen Auftrag, „günstigster“ markiert. „Diesen Weg festlegen“ (Admin, nur vor dem ersten Produktionsschritt). Danach „An Bedarfsliste senden“; bei Kapsel und Premix je Lieferant „Bestellen“ (Bestellung als Entwurf, öffnet die Bestellung). Aktionen `beschaffungsweg_setzen`, `beschaffung_bedarf`, `beschaffung_bestellen`. Reiter per `?tab=` direkt öffnen.
+
+## Reiter Material: Bereitschaft (Soll-Kette 3, 04.11.2026)
+Block **Bereitschaft** (vorher eigene Seite „Vor-Produktion“): je Punkt grüner/roter Punkt (Glas gewählt, Etikett freigegeben, Material da, Gläser/Kartons/Etiketten vorrätig) aus `pa_vorbereitung_checks()`, dazu Kapselgröße / Tablettenform / Füllmenge (an der Rezeptur, Formular geht an `produktion_vorbereitung` mit Rücksprung `zurueck`). Material-Übersicht: Deckung „da“ (grün) bzw. „fehlt“ (rot).

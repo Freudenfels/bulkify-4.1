@@ -1306,6 +1306,54 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
   <?php endforeach; ?>
   </div>
   <?php if ($bw['schritte_erledigt'] > 0): ?><div class="muted" style="font-size:12px;margin-top:10px">Die Produktion hat begonnen – der Weg lässt sich nicht mehr ändern.</div><?php endif; ?>
+  <?php if (($bw['pa']['status'] ?? '') === 'vorbereitung' && $bwAdmin): ?><div style="margin-top:10px;font-size:12px"><a href="?p=produktion_vorbereitung&id=<?= (int)$bw['pa']['id'] ?>&voll=1">Auf Quellen aufteilen (Lager / Fremd / Eigen)</a> <span class="muted">– Mischung aus Bestand, Zukauf und Eigenproduktion</span></div><?php endif; ?>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+<?php // Soll-Kette 3: Bereitschaft je Material (grün = da, rot = fehlt) + Kapselgröße/Form/Füllmenge – vorher eigene Seite „Vor-Produktion“.
+if ($pa): $vc = pa_vorbereitung_checks((int)$pa['id']);
+    $vRez  = $rezEffId ? one("SELECT id, darreichungsform, kapselgroesse_id, einheit_fuellmenge, tabletten_form FROM rezeptur WHERE id=?", [$rezEffId]) : null;
+    $vDarr = (string)($vRez['darreichungsform'] ?? '');
+    $vAttr = $vRez ? form_attribut($vDarr, (int)($vRez['kapselgroesse_id'] ?? 0) > 0) : '';
+    $vZur  = '?p=auftrag&id=' . (int)$a['id'] . '&tab=material';
+    $vPunkt = fn(bool $ok) => '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' . ($ok ? '#1D9E75' : '#d64545') . ';margin-right:8px;vertical-align:0"></span>'; ?>
+<div class="bx-panel" data-panel="material">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h2 style="margin:0;font-size:16px">Bereitschaft</h2>
+    <?= $vc['bereit'] ? bx_badge('alles da', 'ok') : bx_badge('noch offen', 'warn') ?>
+  </div>
+  <?php if (isset($_GET['saved'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:8px;display:inline-block">Gespeichert.</div><?php endif; ?>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <?php foreach ($vc['checks'] as $ck): ?>
+      <div class="bx-row" style="justify-content:space-between;gap:10px;font-size:13px">
+        <span><?= $vPunkt((bool)$ck['ok']) ?><?= h($ck['label']) ?></span>
+        <span class="muted"><?= h($ck['wert']) ?></span>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php if (has_role('admin') && $vRez && in_array($vAttr, ['kapsel', 'tablette', 'gewicht'], true)): ?>
+  <form method="post" action="?p=produktion_vorbereitung" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+    <input type="hidden" name="pa_id" value="<?= (int)$pa['id'] ?>"><input type="hidden" name="zurueck" value="<?= h($vZur) ?>">
+    <?php if ($vAttr === 'kapsel'): $vSet = (int)($vRez['kapselgroesse_id'] ?? 0); $vAuto = $vSet <= 0 ? rezeptur_kapselgroesse((int)$vRez['id']) : null; ?>
+      <input type="hidden" name="aktion" value="kapsel_setzen">
+      <div class="bx-field" style="margin:0;min-width:240px"><label>Kapselgröße</label>
+        <select name="kapselgroesse_id"><option value="">– automatisch<?= $vAuto ? ' (' . h((string)$vAuto['name']) . ')' : '' ?> –</option>
+          <?php foreach (all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") as $kg): ?><option value="<?= (int)$kg['id'] ?>" <?= $vSet === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option><?php endforeach; ?>
+        </select></div>
+    <?php elseif ($vAttr === 'tablette'): ?>
+      <input type="hidden" name="aktion" value="tablettenform_setzen">
+      <div class="bx-field" style="margin:0;min-width:240px"><label>Tablettenform</label>
+        <select name="tabletten_form"><option value="">– wählen –</option>
+          <?php foreach (tabletten_formen() as $tk => $tl): ?><option value="<?= h($tk) ?>" <?= (string)($vRez['tabletten_form'] ?? '') === $tk ? 'selected' : '' ?>><?= h($tl) ?></option><?php endforeach; ?>
+        </select></div>
+    <?php else: [$vGl, $vGe] = form_gewicht_feld($vDarr); $vGv = (float)($vRez['einheit_fuellmenge'] ?? 0); ?>
+      <input type="hidden" name="aktion" value="gewicht_setzen">
+      <div class="bx-field" style="margin:0;min-width:240px"><label><?= h($vGl) ?> (<?= h($vGe) ?>)</label>
+        <input type="text" inputmode="decimal" name="einheit_fuellmenge" value="<?= $vGv > 0 ? h(rtrim(rtrim(number_format($vGv, 3, ',', ''), '0'), ',')) : '' ?>" placeholder="z. B. 2,5"></div>
+    <?php endif; ?>
+    <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+    <span class="muted" style="font-size:12px">gilt für die Rezeptur</span>
+  </form>
   <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -1354,9 +1402,9 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         <td class="bx-num"><?= $mng($frei, $einh) ?><?php if (isset($r['zugeordnet']) && $frei - (float)$r['zugeordnet'] > 1e-6): ?><br><span class="muted" style="font-size:11px"><?= (float)$r['zugeordnet'] > 1e-6 ? 'davon zugeordnet ' . $mng((float)$r['zugeordnet'], $einh) : 'noch nicht zugeordnet' ?></span><?php endif; ?></td>
         <td class="bx-num"><?= $quar > 1e-9 ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '">' . $mng($quar, $einh) . '</a>' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
-        <td><?= $deckt ? bx_badge('gedeckt','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>'
+        <td><?= $deckt ? bx_badge('da','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>'
                  : ($nichtEingebucht ? '<span title="Die Bestellung ist als eingegangen markiert, im Lager ist aber keine Bulk-Charge für diesen Auftrag gebucht. Bitte in der Lager-App unter Wareneingang einbuchen oder unten bei „Bulkware binden“ eine vorhandene Charge zuweisen.">' . bx_badge('nicht eingebucht','err') . '</span>'
-                 : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('Fehlbestand','warn')))) ?></td>
+                 : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('fehlt','err')))) ?></td>
         <td style="white-space:normal;min-width:240px;font-size:12px">
           <?php if (!$bestellungen): ?><span class="muted">nicht bestellt</span>
           <?php else: foreach (array_slice($bestellungen, 0, 4) as $bs): ?>

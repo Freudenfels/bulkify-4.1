@@ -20,7 +20,10 @@ function vp_ids(int $pa_id): array {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     $paId   = (int)($_POST['pa_id'] ?? 0);
-    $back   = '?p=produktion_vorbereitung' . ($paId ? '&id=' . $paId : '');
+    $back   = '?p=produktion_vorbereitung' . ($paId ? '&id=' . $paId . '&voll=1' : '');
+    // Soll-Kette 3: Formulare aus dem Reiter Material des Auftrags springen dorthin zurück.
+    $zur = (string)($_POST['zurueck'] ?? '');
+    if (preg_match('/^\?p=auftrag&id=\d+(&tab=[a-z]+)?$/', $zur)) $back = $zur;
 
     if ($aktion === 'alle_vorbereitung') { $n = vorbereitung_alle_holen(); header('Location: ?p=produktion_vorbereitung&geholt=' . $n); exit; }
 
@@ -102,6 +105,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $id = (int)($_GET['id'] ?? 0);
+// Soll-Kette 3 (04.11.2026): Die Einzelseite je Produktionsauftrag ist jetzt der Reiter „Material“ am Auftrag (Altlinks leiten um).
+// Nur „Auf Quellen aufteilen“ (Lager/Fremd/Eigen) bleibt hier als erweiterte Ansicht (&voll=1); Bulk-PAs ohne Auftrag ebenso.
+if ($id && !isset($_GET['voll'])) {
+    $aufUml = (int) scalar("SELECT COALESCE(auftrag_id,0) FROM produktionsauftrag WHERE id=?", [$id]);
+    if ($aufUml > 0) { header('Location: ?p=auftrag&id=' . $aufUml . '&tab=material' . (isset($_GET['saved']) ? '&saved=1' : '')); exit; }
+}
 $pa = $id ? one("SELECT * FROM produktionsauftrag WHERE id=? AND status='vorbereitung'", [$id]) : null;
 
 $prioDot = function($p) {

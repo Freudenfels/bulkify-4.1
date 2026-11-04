@@ -90,3 +90,5 @@ Seit 03.11.2026 heißt die Liste „Produktionsfreigabe“ und hat wieder einen 
 - Bestandsabfragen sind request-lokal gecacht (`bx_stock_cache`), erst nach `vorbereitung_auto_sync()`.
 
 Detailseite (04.11.2026): unter „Bereitschaft“ der Block **„Ware da, aber nicht zugeordnet“** (gleicher Block wie am Auftrag). Er zeigt als Rohstoff gebuchte Kapseln, Bulk in Quarantäne und freie Bulk-Chargen ohne Auftrag mit den Knöpfen „Als Bulkware übernehmen“ bzw. „An Auftrag binden“.
+
+Soll-Kette 3 (04.11.2026): Die Einzelseite `?p=produktion_vorbereitung&id=…` leitet auf den Reiter **Material** des Auftrags um (Altlinks). Erhalten bleibt sie als erweiterte Ansicht mit `&voll=1` (Auf Quellen aufteilen: Lager/Fremd/Eigen) und für Bulk-PAs ohne Auftrag. Formulare nehmen `zurueck` (nur `?p=auftrag&id=…&tab=…`) als Rücksprung.
