@@ -200,6 +200,8 @@ Gibt das Team die Preise eines gesendeten Angebots wieder frei (nach Bearbeitung
 
 **Beutel-Typ (03.11.2026):** An der Verpackungs-Position eines Standbodenbeutels steht statt des Häkchens eine Auswahl
 „vollbedruckt (Standard, ohne Etikett)“ / „blanko + Etikett (Ausnahme)“ (`p_blanko[]` -> `angebot_position.blanko_etikett`).
+
+**Beutelgröße von Hand wählen (05.11.2026):** Die Automatik nimmt den kleinsten Beutel, dessen max. Füllgewicht die Füllmenge fasst – die echte Dichte je Stoff weicht davon ab. Deshalb steht in jeder Beutel-Verpackungszeile eine Auswahl **„Beutelgröße“** mit allen neutralen Standbodenbeuteln (Volumen + max. Füllgewicht; ab 11 Einträgen mit Suchfeld). Ein Wechsel speichert die Positionen sofort (`p_tausch[]` im Handler `pos_save`): Artikel-Nr., Bezeichnung/Größe, VK (Kundenrabatt) und EK der Zeile kommen aus dem neuen Beutel bei der Zeilenmenge, und die Herstellungszeile derselben Option bekommt den neuen Behälter (`verpackung_id`) – daraus entstehen bei Annahme Produkt und Auftrag. Etikett-Zeilen (Ausnahme blanko + Etikett) werden nicht automatisch getauscht.
 Andere Behälter behalten das Häkchen „bedruckt / kundenspezifisch (ohne Etikett)“.
 
 **Nachrichten mit dem Kunden (Report 5):** Kasten am Ende (Bearbeiten- und Lese-Ansicht), Antwort = Aktion `kunde_nachricht` -> Mail an den Kunden + im Portal.

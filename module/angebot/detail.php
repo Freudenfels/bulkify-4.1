@@ -97,12 +97,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $prez = $_POST['p_rez'] ?? []; $pstk = $_POST['p_stk'] ?? []; $pvid = $_POST['p_vid'] ?? [];
         $pkspez = $_POST['p_kspez'] ?? [];   // Punkt 6: Verpackung bedruckt/kundenspezifisch (0/1 je Zeile)
         $pblanko = $_POST['p_blanko'] ?? []; // Standbodenbeutel: 1 = Ausnahme „Blanko + Etikett" (Standard vollbedruckt)
+        $ptausch = $_POST['p_tausch'] ?? []; // Beutel von Hand gewählt: neue Item-ID je Verpackungszeile
+        $tauschGruppe = [];                  // Gruppe => neuer Behälter (für die Herstellungszeile)
+        $kidT = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]) ?: null;
         $sort = 0;
         foreach ($bez as $i => $b) {
             $b = trim($b); if ($b === '') continue;
             $gv = strtoupper(trim($grp[$i] ?? '')); $gv = ($gv !== '' && ctype_alpha($gv)) ? substr($gv, 0, 2) : null;
             $pEur = (float)str_replace(',', '.', $preis[$i] ?? '0');
             $qv = in_array($quelle[$i] ?? '', ['herstellung','verpackung','manuell'], true) ? $quelle[$i] : 'manuell';
+            $tid = (int)($ptausch[$i] ?? 0);
+            if ($qv === 'verpackung' && $tid > 0 && ($nb = one("SELECT id, name, artikelnummer, volumen_ml, etikett_format FROM item WHERE id=? AND verpackungsart='beutel' AND gesperrt=0", [$tid]))) {
+                $tm = (int) round((float)str_replace(',', '.', $mng[$i] ?? '1')) ?: 1;
+                $tt = verpackung_zeile_teile(['rolle' => 'Verpackung'] + $nb);
+                $pref = preg_match('/^([A-Z]{1,2}\)\s*)/', $b, $pm) ? $pm[1] : '';   // „A) " der Option behalten
+                $b = $pref . $tt['bezeichnung']; $besch[$i] = $tt['beschreibung']; $art[$i] = (string)($nb['artikelnummer'] ?? '');
+                $pEur = vk_fuer_kunde(verpackung_vk_bei_menge($tid, $tm), $kidT);
+                $ek[$i] = (string) pack_ek_bei_menge($tid, $tm);
+                $pvid[$i] = $tid;
+                $tauschGruppe[$gv ?? ''] = $tid;
+            }
             q("INSERT INTO angebot_position (angebot_id,sort,artikelnr,bezeichnung,beschreibung,menge,einheit,preis_cent,preis_e4,ek_cent,mwst_satz,quelle,gruppe,rezeptur_id,stueck,verpackung_id,kundenspezifisch,blanko_etikett) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               [(int)$id, $sort++, trim($art[$i] ?? ''), $b, trim($besch[$i] ?? ''),
                (float)str_replace(',', '.', $mng[$i] ?? '0'), trim($einh[$i] ?? ''),
@@ -113,6 +127,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                ($qv === 'verpackung' && !empty($pkspez[$i])) ? 1 : 0,
                ($qv === 'verpackung' && !empty($pblanko[$i])) ? 1 : 0]);
         }
+        // Getauschter Beutel gilt auch für die Herstellungszeile derselben Option (daraus entstehen Produkt + Auftrag).
+        foreach ($tauschGruppe as $tg => $tid)
+            q("UPDATE angebot_position SET verpackung_id=? WHERE angebot_id=? AND quelle='herstellung' AND COALESCE(gruppe,'')=?", [$tid, (int)$id, (string)$tg]);
         } catch (Throwable $e) { db()->rollBack(); throw $e; }
         db()->commit();
         // Mehrere Mengen-Varianten in derselben Gruppe wieder auftrennen (je Variante ein Buchstabe).
@@ -947,6 +964,7 @@ if (!$neu):
             <?php endif; ?>
             <input type="hidden" name="p_rez[]" value="<?= (int)($pp['rezeptur_id'] ?? 0) ?: '' ?>">
             <input type="hidden" name="p_vid[]" value="<?= (int)($pp['verpackung_id'] ?? 0) ?: '' ?>">
+            <input type="hidden" name="p_tausch[]" class="p_tausch" value="">
             <input type="hidden" name="p_kspez[]" class="p_kspez" value="<?= (int)($pp['kundenspezifisch'] ?? 0) ?>">
             <input type="hidden" name="p_blanko[]" class="p_blanko" value="<?= (int)($pp['blanko_etikett'] ?? 0) ?>">
             <?php if (($pp['quelle'] ?? '') === 'verpackung'):
@@ -954,7 +972,16 @@ if (!$neu):
                 $vpZeile = (int)($pp['verpackung_id'] ?? 0);
                 if ($vpZeile <= 0) foreach ($pos as $hp) if (($hp['quelle'] ?? '') === 'herstellung' && (string)($hp['gruppe'] ?? '') === (string)($pp['gruppe'] ?? '') && (int)($hp['verpackung_id'] ?? 0) > 0) { $vpZeile = (int)$hp['verpackung_id']; break; }
                 $istBeutelZeile = $vpZeile > 0 && (string) scalar("SELECT verpackungsart FROM item WHERE id=?", [verpackung_neutrale_basis($vpZeile) ?: $vpZeile]) === 'beutel';
-                if ($istBeutelZeile): $bl = (int)($pp['blanko_etikett'] ?? 0); ?>
+                if ($istBeutelZeile): $bl = (int)($pp['blanko_etikett'] ?? 0);
+                    // Beutel von Hand wählen (Nico 05.11.2026): die Automatik geht nach max. Füllgewicht, die echte Dichte
+                    // je Stoff weicht ab. Auswahl = alle neutralen Standbodenbeutel; Wechsel speichert sofort (Preis/EK neu).
+                    if (!isset($beutelListe)) $beutelListe = all("SELECT id, name, max_fuellgewicht_g FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer'
+                        AND verpackungsart='beutel' AND gesperrt=0 AND kunde_id IS NULL AND COALESCE(kundenspezifisch,0)=0 ORDER BY COALESCE(volumen_ml, max_fuellgewicht_g, 0), name");
+                    $beutelIst = verpackung_neutrale_basis($vpZeile) ?: $vpZeile; ?>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-top:4px;max-width:460px" class="muted bt-wahl"><style>.bt-wahl .rs-combo{flex:1 1 auto;min-width:0}.bt-wahl .rs-input{font-size:12px;padding:4px 8px}</style>Beutelgröße
+              <select class="<?= count($beutelListe) > 10 ? 'rscombo' : '' ?>" style="font-size:11px;padding:2px 4px;max-width:260px" data-ist="<?= (int)$beutelIst ?>" onchange="if(!this.value||this.value===this.getAttribute('data-ist'))return;var r=this.closest('.posrow');r.querySelector('.p_tausch').value=this.value;this.form.submit()">
+                <?php foreach ($beutelListe as $bt): ?><option value="<?= (int)$bt['id'] ?>" <?= (int)$bt['id'] === (int)$beutelIst ? 'selected' : '' ?>><?= h((string)$bt['name']) ?><?= (float)$bt['max_fuellgewicht_g'] > 0 ? ' · max. ' . h(rtrim(rtrim(number_format((float)$bt['max_fuellgewicht_g'], 1, ',', '.'), '0'), ',')) . ' g' : '' ?></option><?php endforeach; ?>
+              </select></label>
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;margin-top:4px" class="muted" title="Standbodenbeutel: vollbedruckt ist Standard (eigener bedruckter Beutel je Produkt + Kunde, KEIN Etikett). Ausnahme: Blanko-Beutel + Etikett (Etikettformat individuell, nach Rücksprache).">
               Beutel
               <select style="font-size:11px;padding:2px 4px" onchange="var r=this.closest('.posrow');r.querySelector('.p_blanko').value=this.value;r.querySelector('.p_kspez').value=this.value==='1'?0:1">
