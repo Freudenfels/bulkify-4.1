@@ -416,8 +416,8 @@ if ($mahnungen):
           foreach ($editRows as $p): ?>
           <tr>
             <td><input type="text" name="p_art[]" value="<?= h((string)($p['artikelnr'] ?? '')) ?>"></td>
-            <td><input type="text" name="p_bez[]" value="<?= h((string)($p['bezeichnung'] ?? '')) ?>" style="width:100%"><textarea name="p_besch[]" rows="<?= max(1, substr_count((string)($p['beschreibung'] ?? ''), "
-") + 1) ?>" placeholder="Beschreibung / 2. Zeile (z. B. MHD)" style="width:100%;margin-top:4px;font-size:12px;box-sizing:border-box;resize:vertical"><?= h((string)($p['beschreibung'] ?? '')) ?></textarea></td>
+            <td style="white-space:normal;min-width:260px"><input type="text" name="p_bez[]" value="<?= h((string)($p['bezeichnung'] ?? '')) ?>" style="display:block;width:100%;box-sizing:border-box"><textarea name="p_besch[]" rows="<?= max(1, substr_count((string)($p['beschreibung'] ?? ''), "
+") + 1) ?>" placeholder="Beschreibung / 2. Zeile (z. B. MHD)" style="display:block;width:100%;min-height:0;margin-top:4px;padding:5px 11px;font-size:12px;box-sizing:border-box;resize:vertical"><?= h((string)($p['beschreibung'] ?? '')) ?></textarea></td>
             <td class="bx-num"><input type="text" inputmode="decimal" name="p_menge[]" value="<?= h(rtrim(rtrim(number_format((float)($p['menge'] ?? 1),2,',',''),'0'),',')) ?>" style="width:80px;text-align:right"></td>
             <td><input type="text" name="p_einheit[]" value="<?= h((string)($p['einheit'] ?? '')) ?>" style="width:80px"></td>
             <td class="bx-num"><input type="text" inputmode="decimal" name="p_preis[]" value="<?= h(number_format((int)($p['preis_cent'] ?? 0)/100,2,',','')) ?>" style="width:110px;text-align:right"></td>
