@@ -164,3 +164,15 @@ Die Kundenauswahl zeigt nur Fulfillment-Kunden (`kunden.nutzt_fulfillment=1`); s
 „Artikel zusammenführen“ nutzt jetzt `item_zusammenfuehren()` (gleiche Logik wie die Datenprüfung, 04.11.2026).
 
 Form **Premix** (fertige Mischung einer Rezeptur, 04.11.2026): wird über den Beschaffungsweg am Auftrag angelegt.
+
+## Reiter Bestellt (05.11.2026)
+Neben „Einkauf“ steht der Reiter **Bestellt**. Die Zahl in Klammern zählt die offenen, schon an den Lieferanten gegangenen Bestellungen. Er zeigt alle Bestellpositionen dieses Artikels, offene zuerst (max. 200):
+- Bestellung (Link),
+- Lieferant bzw. Online-Händler,
+- Status (Entwurf / bestellt / geliefert …),
+- bestellt am,
+- erwartet bzw. angekommen,
+- Menge, geliefert, offen,
+- für welchen Auftrag (sonst „Lager“).
+
+Oben steht die Summe „noch unterwegs“ je Einheit. Entwürfe (Status offen, noch nicht verschickt) zählen dabei nicht mit. Aufruf direkt: `?p=rohstoff&id=…&tab=bestellt`.

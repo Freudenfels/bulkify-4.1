@@ -777,7 +777,17 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     <a href="#" data-tab="dok">Dokumente (CoA/Spec)</a>
     <a href="#" data-tab="web">Website</a>
     <a href="#" data-tab="ek">Einkauf</a>
-    <?php if (!$neu): ?>
+    <?php if (!$neu):
+        // Reiter „Bestellt“ (Nico 05.11.2026): alle Bestellpositionen dieses Artikels, offene zuerst – „wurde schon bestellt?“
+        $bstRows = all("SELECT bp.id, bp.menge, bp.einheit, COALESCE(bp.geliefert_menge,0) AS geliefert, bp.ek_preis, bp.auftrag_id,
+                               b.id AS bid, b.nummer, b.status, b.bestelldatum, b.angelegt, b.eta_geplant, b.angekommen_am, b.bestellart, b.online_haendler,
+                               COALESCE(l.firma,'') AS lieferant, a.nummer AS auftrag_nr,
+                               (b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL) AS offen
+                        FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                        LEFT JOIN lieferanten l ON l.id=b.lieferant_id LEFT JOIN auftrag a ON a.id=bp.auftrag_id
+                        WHERE bp.item_id=? ORDER BY offen DESC, COALESCE(b.bestelldatum, DATE(b.angelegt)) DESC, b.id DESC LIMIT 200", [(int)$id]);
+        $bstOffen = count(array_filter($bstRows, fn($r) => (int)$r['offen'] === 1 && (string)$r['status'] !== 'offen')); ?>
+    <a href="#" data-tab="bestellt">Bestellt<?= $bstOffen ? ' (' . $bstOffen . ')' : '' ?></a>
     <a href="#" data-tab="lager">Lager</a>
     <a href="#" data-tab="verw">Verwendung</a>
     <a href="#" data-tab="verlauf">Verlauf</a>
@@ -1674,6 +1684,40 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     </form>
   </div>
 </section>
+<?php if (!$neu):
+    $bstN = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $bstD = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '–';
+    $bstSumme = []; foreach ($bstRows as $r) if ((int)$r['offen'] === 1 && (string)$r['status'] !== 'offen') { $e = (string)($r['einheit'] ?: ($it['einheit'] ?? '')); $bstSumme[$e] = ($bstSumme[$e] ?? 0) + max(0.0, (float)$r['menge'] - (float)$r['geliefert']); } ?>
+<section data-panel="bestellt" hidden>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Bestellt</h2>
+    <p class="muted" style="margin-top:0">Alle Bestellungen dieses Artikels, offene zuerst.
+      <?php if ($bstSumme): ?>Noch unterwegs: <strong><?= h(implode(' · ', array_map(fn($e, $m) => $bstN($m) . ' ' . $e, array_keys($bstSumme), $bstSumme))) ?></strong><?php else: ?>Zurzeit ist nichts unterwegs.<?php endif; ?></p>
+    <?php if (!$bstRows): ?><div class="muted">Dieser Artikel wurde noch nie bestellt.</div>
+    <?php else: ?>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Bestellung</th><th>Lieferant</th><th>Status</th><th>Bestellt am</th><th>Erwartet / angekommen</th><th class="bx-num">Menge</th><th class="bx-num">Geliefert</th><th class="bx-num">Offen</th><th>Für Auftrag</th></tr></thead>
+      <tbody>
+      <?php foreach ($bstRows as $r): $e = (string)($r['einheit'] ?: ($it['einheit'] ?? '')); $offenM = max(0.0, (float)$r['menge'] - (float)$r['geliefert']); $istOffen = (int)$r['offen'] === 1; ?>
+        <tr<?= $istOffen ? '' : ' class="muted"' ?>>
+          <td><a href="?p=bestellung&id=<?= (int)$r['bid'] ?>"><?= h((string)$r['nummer']) ?></a></td>
+          <td style="white-space:normal"><?= h($r['lieferant'] !== '' ? $r['lieferant'] : ((string)$r['bestellart'] === 'online' ? 'Online: ' . (string)$r['online_haendler'] : '–')) ?></td>
+          <td><?= $istOffen ? ((string)$r['status'] === 'offen' ? bx_badge('Entwurf', '') : bx_badge(status_text((string)$r['status']), 'warn')) : bx_badge(status_text((string)$r['status']), (string)$r['status'] === 'storniert' ? '' : 'ok') ?></td>
+          <td><?= h($bstD($r['bestelldatum'] ?: substr((string)$r['angelegt'], 0, 10))) ?></td>
+          <td><?= $r['angekommen_am'] ? 'angekommen ' . h($bstD($r['angekommen_am'])) : ($r['eta_geplant'] ? 'erwartet ' . h($bstD($r['eta_geplant'])) : '–') ?></td>
+          <td class="bx-num"><?= h($bstN($r['menge']) . ' ' . $e) ?></td>
+          <td class="bx-num"><?= (float)$r['geliefert'] > 0 ? h($bstN($r['geliefert']) . ' ' . $e) : '–' ?></td>
+          <td class="bx-num"><?= $istOffen && $offenM > 0 ? '<strong>' . h($bstN($offenM) . ' ' . $e) . '</strong>' : '–' ?></td>
+          <td><?= $r['auftrag_nr'] ? '<a href="?p=auftrag&id=' . (int)$r['auftrag_id'] . '">' . h((string)$r['auftrag_nr']) . '</a>' : '<span class="muted">Lager</span>' ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Entwurf = angelegt, aber noch nicht an den Lieferanten geschickt (zählt nicht als unterwegs).</div>
+    <?php endif; ?>
+  </div>
+</section>
+<?php endif; ?>
 <section data-panel="dok" hidden><?php dokument_panel('item', (int)$id, $lieferanten); ?>
   <?php // Unsere bulkify-Dokumente: Spezifikation (immer, allgemein) + CoA je Charge mit Analysewerten.
         // Liegt bewusst AUCH hier im Dokumente-Reiter. Das Original des Lieferanten geht nie an den Kunden.
