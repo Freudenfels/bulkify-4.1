@@ -1068,7 +1068,7 @@ if (!$neu):
           <td class="bx-num"><?= $z['ek'] !== null ? h($nfrk($z['ek'], 4)) . ' &euro;' : '<span style="color:#8f231b">&ndash;</span>' ?></td>
           <td><?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span class="muted">&ndash;</span>' ?></td>
           <td class="bx-num"><?= $z['kosten'] !== null ? h($nfrk($z['kosten'])) . ' &euro;' : '<span class="muted">?</span>' ?></td>
-          <td><?= anfrage_badge((int)$z['item_id']) ?></td>
+          <td><?= ($z['ek_quelle'] ?? '') === 'ek' ? bx_badge('EK am Rohstoff', 'info') : anfrage_badge((int)$z['item_id']) ?></td>
           <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($z['name']) ?>" data-menge="<?= h(rtrim(rtrim(number_format((float)$z['bedarf'], 3, '.', ''), '0'), '.')) ?>" data-einheit="<?= h($z['bezug']) ?>" onclick="bxAnfrageOeffnen(<?= (int)$z['item_id'] ?>,this)">Preis anfragen</button></td>
         </tr>
       <?php endforeach; ?>

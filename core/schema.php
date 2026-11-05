@@ -6522,6 +6522,10 @@ function angebot_rohstoffkosten(int $angebot_id): array {
             $bedarf = $pb === 'kg' ? $mg / 1e6 : ($pb === 'g' ? $mg / 1e3
                     : ($pb === 'L' && $z['dichte'] ? $mg / 1e6 / (float)$z['dichte'] : $mg / 1e6));
             $best = rohstoff_bester_lieferant((int)$z['item_id'], $bedarf);
+            // Kein Lieferantenpreis (Staffel in EUR), aber EK-Preis direkt am Rohstoff gepflegt -> den nehmen
+            // (Nico 05.11.2026: Rohstoffseite zeigte EK, das Angebot „kein Preis“). Lieferant = Hauptlieferant, falls gesetzt.
+            if (!$best && ($ekR = one("SELECT i.ek_preis, l.id AS lid, l.firma FROM item i LEFT JOIN lieferanten l ON l.id=i.haupt_lieferant_id WHERE i.id=? AND i.ek_preis>0", [(int)$z['item_id']])))
+                $best = ['lieferant_id' => (int)($ekR['lid'] ?? 0), 'firma' => (string)($ekR['firma'] ?? ''), 'preis' => (float)$ekR['ek_preis'], 'quelle' => 'ek'];
             $kosten = $best ? $best['preis'] * $bedarf : null;
             if ($best) $summe += $kosten; else $ohne++;
             $zeilen[] = [
@@ -6529,6 +6533,7 @@ function angebot_rohstoffkosten(int $angebot_id): array {
                 'bedarf'    => $bedarf, 'bezug' => $pb,
                 'ek'        => $best['preis'] ?? null, 'lieferant' => $best['firma'] ?? '',
                 'lieferant_id' => $best['lieferant_id'] ?? 0, 'kosten' => $kosten,
+                'ek_quelle' => $best ? ($best['quelle'] ?? 'lieferant') : '',
             ];
         }
     }
