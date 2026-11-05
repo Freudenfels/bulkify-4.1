@@ -2127,6 +2127,26 @@ function init_schema(): void {
     // Die Partner-Marge lebt an EINER Quelle: kunden.rabatt_marge des verknuepften Kunden (hier nichts doppeln).
     ensure_column('lieferanten', 'ist_partner', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('lieferanten', 'kunde_id', "INT NULL");   // verknuepfter kunden-Datensatz, sobald Partner aktiviert
+    // Labore als Laborlieferant (Kategorie 'labor'): Auftragsformular-Vorlage + Feldzuordnung (core/labor_auftrag.php), 05.11.2026.
+    ensure_column('lieferanten', 'labor_formular', "VARCHAR(40) NULL");          // Vorlage-Schlüssel aus labor_formulare(), z. B. gba_food
+    ensure_column('lieferanten', 'labor_standorte', "VARCHAR(255) NULL");        // Auswahl beim Senden, z. B. „Hamburg, Hameln“
+    ensure_column('lieferanten', 'labor_angebotsnr', "VARCHAR(80) NULL");        // Angebotsnummer des Labors (aufs Formular)
+    ensure_column('lieferanten', 'labor_erste_proben', "TINYINT(1) NOT NULL DEFAULT 0");   // „Sind das Ihre ersten Proben?“ – Standard nein
+    ensure_column('lieferanten', 'labor_bericht_an', "VARCHAR(10) NOT NULL DEFAULT 'bulkify'");   // Berichtsempfänger: bulkify | kunde
+    ensure_column('lieferanten', 'labor_umfang', "TEXT NULL");                   // Standard-Untersuchungsumfang (bis 3 Zeilen, je Probe änderbar)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS labor_versand (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        lieferant_id INT NOT NULL,
+        standort VARCHAR(60) NULL,
+        kunde_id INT NULL,                       -- Auftraggeber auf dem Formular (Produkt-Eigentümer)
+        datum DATE NOT NULL,
+        bemerkung TEXT NULL,
+        proben TEXT NULL,                        -- JSON: je Probe auftrag_id, material, rueckverfolgbarkeit, umfang[3], beurteilung, express
+        datei VARCHAR(190) NULL,                 -- ausgefülltes Formular (data/uploads)
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        angelegt_von VARCHAR(120) NULL,
+        KEY idx_lief (lieferant_id), KEY idx_kunde (kunde_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_index('lieferant_preisliste', 'idx_lief', 'lieferant_id');
     // Einmalig: importierte/vorhandene Preislisten-Zeilen dem Lieferanten per Namen zuordnen (firma == lieferant-Text).
     if (meta_get('preisliste_lief_link', '') !== '1') {

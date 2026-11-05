@@ -463,3 +463,6 @@ Soll-Kette 6 (04.11.2026): Spalten `produktionsauftrag.karton_stueck`, `karton_m
 Soll-Kette 7 (04.11.2026): Spalte `auftrag.versandart` (paket | palette | abholung | lager2) – legt das Lager fest, wenn der Auftrag versandbereit ist.
 
 Gewicht & Bestand pro Gebinde (04.11.2026): `charge_gebinde.gewogen` (1 = echtes Gewicht erfasst, 0 = gleichmäßig verteilt/Altbestand) und `gewogen_am`. `produktion_rollen_abbuchen()` bucht jetzt alle Gebinde (nicht nur Etikettenrollen) mit ab – in die Produktion gescannte zuerst. Neu `charge_gebinde_abgleich($charge_id)`: zieht die Gebinde an `charge.menge_verfuegbar` an (weniger: Produktion, angebrochen, dann voll; mehr: aufs erste davon) – Grundsatz Charge = Summe der Gebinde.
+
+## Labor-Auftragsformular (05.11.2026)
+`lieferanten` bekommt `labor_formular`, `labor_standorte`, `labor_angebotsnr`, `labor_erste_proben`, `labor_bericht_an` (bulkify|kunde) und `labor_umfang`. Neue Tabelle `labor_versand` mit einer Zeile je erzeugtem Formular: Labor, Standort, Kunde, Datum, Bemerkung, Proben als JSON, Datei. Logik: [labor_auftrag.md](labor_auftrag.md).

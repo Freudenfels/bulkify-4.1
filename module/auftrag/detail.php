@@ -1816,6 +1816,7 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
   <?php else: ?>
     <div style="margin-bottom:10px"><?= bx_badge('läuft', 'warn') ?> <span class="muted">Probe beim Drittlabor – wird automatisch „abgeschlossen", sobald ein freigegebener Laborbericht vorliegt.</span></div>
   <?php endif; ?>
+  <?php if ($lt['status'] !== 'abgeschlossen'): ?><div style="margin-bottom:8px"><a class="btn btn-ghost btn-sm" href="?p=labor_senden&auftrag=<?= (int)$a['id'] ?>">Ans Labor senden (Auftragsformular)</a></div><?php endif; ?>
   <div class="muted" style="font-size:12px">Laborbericht hochladen &amp; für den Kunden freigeben unter <a href="?p=laboranalysen">Labortests</a> (oder direkt an diesem Auftrag). Der Kunde sieht den Punkt „Externer Labortest" im Bestell-Verlauf.</div>
 </div>
 <?php endif; ?>

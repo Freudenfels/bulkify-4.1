@@ -108,6 +108,7 @@ function route_rollen_map(): array {
         'coa_bulkify'        => ['production', 'einkauf', 'labor'],
         'dokument'           => ['production', 'einkauf', 'labor', 'sales'],
         'laboranalysen'      => ['production', 'einkauf', 'labor', 'sales'],
+        'labor_senden'       => ['production', 'einkauf', 'labor', 'sales'],
         'verpackungen'       => ['production', 'einkauf'],
         'verpackung'         => ['production', 'einkauf'],
         'verpackung_dok'     => ['production', 'einkauf'],

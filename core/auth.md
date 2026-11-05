@@ -34,3 +34,5 @@ Der Kunden-Direktlink läuft nicht über Autologin, sondern über den Portal-Mag
 
 ## QM-Gate (St-11)
 Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) oder Admin – Dashboard `darf_qm_freigeben()`, Lager-App `lg_darf_qm_freigeben()`. Andere Rollen sehen „Freigabe durch QM" statt des Knopfs; ein direkter POST wird abgewiesen. Sperren oder zurück in Quarantäne darf weiterhin jeder.
+
+- 05.11.2026: `labor_senden` (Ans Labor senden) mit denselben Rollen wie `laboranalysen` (production, einkauf, labor, sales).

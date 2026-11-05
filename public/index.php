@@ -124,6 +124,7 @@ $routes = [
     'coa_bulkify'    => 'lager/spec_bulkify.php',   // unser Analysenzertifikat zur Charge
     'dokument'       => 'lager/dokument_download.php',
     'laboranalysen'  => 'lager/laboranalysen.php',   // Laborberichte/CoA hochladen + mit Produkt verknuepfen (KI-Vorschlag)
+    'labor_senden'   => 'lager/labor_senden.php',    // Proben ans Labor: Auftragsformular des Labors (PDF) automatisch ausfuellen
     'naehrstoffe'    => 'lager/naehrstoffe_liste.php',
     'naehrstoff'     => 'lager/naehrstoff_detail.php',
     'verpackungen'   => 'lager/verpackungen_liste.php',

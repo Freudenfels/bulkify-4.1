@@ -137,7 +137,8 @@ if (!$kiAuftragId && !empty($vorschlag['charge'])) {
 }
 
 render_header('laboranalysen', 'Laboranalysen');
-bx_head('Laboranalysen', 'Laborberichte / Analysenzertifikate hochladen und mit einem Produkt verknüpfen. Freigegebene erscheinen im Kundenportal-Reiter „Labortest".');
+bx_head('Laboranalysen', 'Laborberichte / Analysenzertifikate hochladen und mit einem Produkt verknüpfen. Freigegebene erscheinen im Kundenportal-Reiter „Labortest".',
+        '<a class="btn btn-primary" href="?p=labor_senden">Ans Labor senden</a>');
 
 if ($hinweis) echo '<div class="bx-panel ' . ($hinweis[0] === 'ok' ? 'badge-ok' : '') . '" style="padding:10px 14px' . ($hinweis[0] === 'err' ? ';border-color:#e6c4c0;color:#8f231b' : '') . '">' . h($hinweis[1]) . '</div>';
 if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:10px 14px;font-size:13px;color:#8f231b">Hinweis: Der <strong>KI-Produktvorschlag läuft nur auf beta</strong>. Lokal bitte das Produkt selbst auswählen.</div>';

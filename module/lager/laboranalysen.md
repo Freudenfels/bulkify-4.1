@@ -19,3 +19,6 @@ Dort `objekt_typ='auftrag'`.
 
 ## Siehe auch
 `core/laboranalyse.php` (Logik), `core/dokument_ui.php` (generische Ablage), `core/ki.php` (KI-Leser).
+
+## Ans Labor senden (05.11.2026)
+Knopf „Ans Labor senden“ im Kopf → `?p=labor_senden` ([labor_senden.md](labor_senden.md)): füllt das Auftragsformular des Labors (z. B. GBA) mit Kunde, bulkify, Produkt/Charge/MHD und legt es am Auftrag ab.

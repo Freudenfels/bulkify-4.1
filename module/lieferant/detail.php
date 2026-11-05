@@ -8,6 +8,7 @@ $neu = ($id === 'neu' || !is_numeric($id));
 
 require_once BX_ROOT . '/core/nachricht.php';
 require_once BX_ROOT . '/core/lieferant_dateien.php';
+require_once BX_ROOT . '/core/labor_auftrag.php';   // Labor: Formular-Vorlagen (labor_formulare)
 
 $KATS = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','maschine'=>'Maschine','labor'=>'Labor','fertigprodukt'=>'Fertige Produkte'];
 $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
@@ -152,6 +153,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (in_array('rohstoff', $altKats, true) && !in_array('rohstoff', $katsSel, true)) {
                 lieferant_rohstoff_anfragen_zurueckziehen((int)$id);
             }
+        }
+        // Labor (Kategorie „labor“): Auftragsformular-Vorlage + Angaben fürs Formular (core/labor_auftrag.php).
+        if (in_array('labor', $katsSel, true) && function_exists('labor_formulare')) {
+            $lf = (string)($_POST['labor_formular'] ?? '');
+            q("UPDATE lieferanten SET labor_formular=?, labor_standorte=?, labor_angebotsnr=?, labor_erste_proben=?, labor_bericht_an=?, labor_umfang=? WHERE id=?",
+              [isset(labor_formulare()[$lf]) ? $lf : null, trim((string)($_POST['labor_standorte'] ?? '')) ?: null, trim((string)($_POST['labor_angebotsnr'] ?? '')) ?: null,
+               !empty($_POST['labor_erste_proben']) ? 1 : 0, ($_POST['labor_bericht_an'] ?? '') === 'kunde' ? 'kunde' : 'bulkify',
+               trim((string)($_POST['labor_umfang'] ?? '')) ?: null, (int)$id]);
         }
         // Partner: ist der Schalter an, verknuepfen wir einen kunden-Datensatz und schreiben die Marge dorthin
         // (eine Quelle: kunden.rabatt_marge). Beim Ausschalten bleibt die Verknuepfung bestehen, nur das Flag faellt.
@@ -453,6 +462,22 @@ if (!$neu) {
         <?php endforeach; ?>
       </div>
     </div>
+    <?php if (function_exists('labor_formulare')): $istLabor = in_array('labor', $aktKats, true); ?>
+    <div class="bx-panel" id="laborBlock" style="background:var(--panel-2);padding:12px 16px"<?= $istLabor ? '' : ' hidden' ?>>
+      <div style="margin-bottom:8px">Labor · Auftragsformular <span class="muted" style="font-size:12px">– für „Ans Labor senden“ unter Laborberichte. Ansprechpartner beim Labor = Feld Ansprechpartner oben.</span></div>
+      <div class="bx-grid">
+        <div class="bx-field"><label>Formular-Vorlage</label>
+          <select name="labor_formular"><option value="">– keine –</option><?php foreach (labor_formulare() as $fk => $fv): ?><option value="<?= h($fk) ?>" <?= (string)($l['labor_formular'] ?? '') === $fk ? 'selected' : '' ?>><?= h($fv['titel']) ?></option><?php endforeach; ?></select></div>
+        <div class="bx-field"><label>Standorte <?= bx_hint('Mit Komma trennen, z. B. Hamburg, Hameln – Auswahl beim Senden') ?></label><input type="text" name="labor_standorte" value="<?= $v('labor_standorte') ?>" placeholder="Hamburg, Hameln"></div>
+        <div class="bx-field"><label>Angebotsnummer des Labors</label><input type="text" name="labor_angebotsnr" value="<?= $v('labor_angebotsnr') ?>"></div>
+        <div class="bx-field"><label>Berichtsempfänger</label>
+          <select name="labor_bericht_an"><option value="bulkify" <?= (string)($l['labor_bericht_an'] ?? 'bulkify') !== 'kunde' ? 'selected' : '' ?>>bulkify (wir geben ihn an den Kunden weiter)</option><option value="kunde" <?= (string)($l['labor_bericht_an'] ?? '') === 'kunde' ? 'selected' : '' ?>>direkt der Kunde</option></select></div>
+      </div>
+      <div class="bx-field"><label>Standard-Untersuchungsumfang <?= bx_hint('Bis zu 3 Zeilen, wird je Probe vorbelegt und ist dort änderbar') ?></label><textarea name="labor_umfang" rows="3" style="min-height:0"><?= $v('labor_umfang') ?></textarea></div>
+      <label class="bx-check"><input type="checkbox" name="labor_erste_proben" value="1" <?= (int)($l['labor_erste_proben'] ?? 0) ? 'checked' : '' ?>> Erste Proben bei diesem Labor (Formular „Sind das Ihre ersten Proben?“ = ja)</label>
+    </div>
+    <script>(function(){var c=document.querySelector('input[name="kat[labor]"]'),b=document.getElementById('laborBlock');if(c&&b)c.addEventListener('change',function(){b.hidden=!c.checked;});})();</script>
+    <?php endif; ?>
     <div class="bx-field"><label>Notiz (intern)</label><textarea name="notiz"><?= $v('notiz') ?></textarea></div>
     </div>
   </section>

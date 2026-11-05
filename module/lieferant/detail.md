@@ -83,3 +83,14 @@ Der Reiter „Katalog" zeigt kein „Alles auf einmal anfragen" mehr; der `samme
 
 ## Bewerbung freigeben (Paket Mails)
 „Bewerbung freigeben" schickt dem Lieferanten `mail_lieferant_freigegeben()` (Zugang aktiv, Login-Link).
+
+## Labor-Block (05.11.2026)
+Ist die Kategorie **Labor** angehakt, erscheint im Reiter Stammdaten der Block „Labor · Auftragsformular“:
+- Formular-Vorlage (`labor_formular`, aus `labor_formulare()`, z. B. GBA Food),
+- Standorte (kommagetrennt, z. B. Hamburg, Hameln),
+- Angebotsnummer des Labors,
+- Berichtsempfänger (bulkify oder direkt der Kunde),
+- Standard-Untersuchungsumfang (3 Zeilen),
+- Haken „Erste Proben“.
+
+Ansprechpartner beim Labor ist das normale Feld Ansprechpartner. Gespeichert wird nur bei gesetzter Kategorie Labor. Genutzt von „Ans Labor senden“ ([core/labor_auftrag.md](../../core/labor_auftrag.md)).
