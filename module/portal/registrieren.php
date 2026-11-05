@@ -39,7 +39,7 @@ $laender = ['DE' => 'Deutschland', 'AT' => 'Österreich', 'CH' => 'Schweiz', 'NL
 <script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 </head><body>
 <div style="max-width:620px;margin:6vh auto;padding:0 16px">
-  <div style="text-align:center;margin-bottom:18px"><img src="assets/bulkify-logo-dark.png" alt="bulkify" style="height:40px"></div>
+  <div style="text-align:center;margin-bottom:18px"><style>.bx-logo-hell{display:inline-block}.bx-logo-dunkel{display:none}:root[data-theme="dark"] .bx-logo-hell{display:none}:root[data-theme="dark"] .bx-logo-dunkel{display:inline-block}</style><img src="assets/bulkify-logo-dark.png" alt="bulkify" class="bx-logo-hell" style="height:40px"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo-dunkel" style="height:40px"></div>
   <div class="bx-panel">
   <?php if ($ok): ?>
     <h1 style="margin:0 0 8px;font-size:22px">Vielen Dank für Ihre Registrierung</h1>

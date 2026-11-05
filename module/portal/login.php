@@ -37,7 +37,7 @@ $cssV = (int) @filemtime(BX_ROOT . '/public/assets/app.css');
 <script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 </head><body>
 <div style="max-width:400px;margin:9vh auto;padding:0 16px">
-  <div style="text-align:center;margin-bottom:18px"><img src="assets/bulkify-logo-dark.png" alt="bulkify" style="height:40px"></div>
+  <div style="text-align:center;margin-bottom:18px"><style>.bx-logo-hell{display:inline-block}.bx-logo-dunkel{display:none}:root[data-theme="dark"] .bx-logo-hell{display:none}:root[data-theme="dark"] .bx-logo-dunkel{display:inline-block}</style><img src="assets/bulkify-logo-dark.png" alt="bulkify" class="bx-logo-hell" style="height:40px"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo-dunkel" style="height:40px"></div>
   <div class="bx-panel">
     <h1 style="margin:0 0 4px;font-size:22px">Anmelden</h1>
     <p class="bx-sub" style="margin-top:0">Melden Sie sich mit Ihrer E-Mail und Ihrem Passwort an.</p>

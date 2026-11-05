@@ -997,7 +997,7 @@ if (empty($k['passwort']) && !$internVorschau) {
     $kv = fn($f, $d = '') => h((string)($k[$f] ?? $d));
     ?>
     <div style="max-width:460px;margin:6vh auto;padding:0 16px">
-      <div style="text-align:center;margin-bottom:18px"><img src="assets/bulkify-logo-dark.png" alt="bulkify" style="height:38px"></div>
+      <div style="text-align:center;margin-bottom:18px"><style>.bx-logo-hell{display:inline-block}.bx-logo-dunkel{display:none}:root[data-theme="dark"] .bx-logo-hell{display:none}:root[data-theme="dark"] .bx-logo-dunkel{display:inline-block}</style><img src="assets/bulkify-logo-dark.png" alt="bulkify" class="bx-logo-hell" style="height:38px"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo-dunkel" style="height:38px"></div>
       <div class="bx-panel">
         <h1 style="margin:0 0 4px;font-size:22px">Willkommen bei bulkify</h1>
         <p class="bx-sub" style="margin-top:0">Bitte richten Sie einmalig Ihren Zugang ein – in drei kurzen Schritten: Kontakt, Rechnungsadresse und Zugang.</p>

@@ -25,3 +25,5 @@ Route `?p=portal_registrieren`, öffentlich (in `$PUBLIC`). Seit 05.11.2026. Auf
 - verstecktes Feld (Honeypot) mit vorgetäuschtem Erfolg, es wird nichts angelegt,
 - Mindest-Ausfüllzeit 3 s,
 - höchstens 3 Registrierungen je Sitzung und Stunde.
+
+Logo (05.11.2026): Es folgt dem Design-Schalter (`data-theme`, wie app.css). Hell zeigt das dunkle Logo, dunkel das weiße (`.bx-logo-hell` / `.bx-logo-dunkel`). Vorher stand im dunklen Modus das dunkle Logo auf dunklem Grund. Gleiches gilt für den Kopf im Portal (portal/kunde.php).

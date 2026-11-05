@@ -6,3 +6,5 @@ Route `?p=portal_login` (öffentlich). GET zeigt ein Anmeldeformular (E-Mail + P
 
 ## Registrierung (05.11.2026)
 Unter dem Formular steht der Link „Noch kein Konto? Jetzt registrieren“ → `?p=portal_registrieren` ([registrieren.md](registrieren.md)). Wer sich selbst registriert hat und noch nicht freigegeben ist, bekommt bei richtigem Passwort die Meldung „Ihr Konto wird noch von bulkify geprüft …“ statt „E-Mail oder Passwort ist nicht korrekt“.
+
+Logo (05.11.2026): Es folgt dem Design-Schalter (`data-theme`, wie app.css). Hell zeigt das dunkle Logo, dunkel das weiße (`.bx-logo-hell` / `.bx-logo-dunkel`). Vorher stand im dunklen Modus das dunkle Logo auf dunklem Grund. Gleiches gilt für den Kopf im Portal (portal/kunde.php).
