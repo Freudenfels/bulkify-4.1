@@ -416,7 +416,8 @@ if ($mahnungen):
           foreach ($editRows as $p): ?>
           <tr>
             <td><input type="text" name="p_art[]" value="<?= h((string)($p['artikelnr'] ?? '')) ?>"></td>
-            <td><input type="text" name="p_bez[]" value="<?= h((string)($p['bezeichnung'] ?? '')) ?>" style="width:100%"><input type="hidden" name="p_besch[]" value="<?= h((string)($p['beschreibung'] ?? '')) ?>"></td>
+            <td><input type="text" name="p_bez[]" value="<?= h((string)($p['bezeichnung'] ?? '')) ?>" style="width:100%"><textarea name="p_besch[]" rows="<?= max(1, substr_count((string)($p['beschreibung'] ?? ''), "
+") + 1) ?>" placeholder="Beschreibung / 2. Zeile (z. B. MHD)" style="width:100%;margin-top:4px;font-size:12px;box-sizing:border-box;resize:vertical"><?= h((string)($p['beschreibung'] ?? '')) ?></textarea></td>
             <td class="bx-num"><input type="text" inputmode="decimal" name="p_menge[]" value="<?= h(rtrim(rtrim(number_format((float)($p['menge'] ?? 1),2,',',''),'0'),',')) ?>" style="width:80px;text-align:right"></td>
             <td><input type="text" name="p_einheit[]" value="<?= h((string)($p['einheit'] ?? '')) ?>" style="width:80px"></td>
             <td class="bx-num"><input type="text" inputmode="decimal" name="p_preis[]" value="<?= h(number_format((int)($p['preis_cent'] ?? 0)/100,2,',','')) ?>" style="width:110px;text-align:right"></td>
@@ -433,7 +434,7 @@ if ($mahnungen):
       </div>
     </form>
     <script>
-    function posAddRow(){var t=document.querySelector('#posTab tbody');var tr=t.rows[0];var n=tr?tr.cloneNode(true):null;if(!n)return;n.querySelectorAll('input').forEach(function(i){if(i.name==='p_menge[]')i.value='1';else if(i.name==='p_ust[]'){}else i.value='';});t.appendChild(n);}
+    function posAddRow(){var t=document.querySelector('#posTab tbody');var tr=t.rows[0];var n=tr?tr.cloneNode(true):null;if(!n)return;n.querySelectorAll('input,textarea').forEach(function(i){if(i.name==='p_menge[]')i.value='1';else if(i.name==='p_ust[]'){}else i.value='';});t.appendChild(n);}
     </script>
   </details>
   <?php endif; ?>
