@@ -21,3 +21,12 @@ Je Materialzeile ein Button **„Im Lager blinken"** (Pick-to-Light): `aktion=bl
 
 ## QM-Gate Schritte (St-11a)
 Die Schritte **Qualitätsprüfung, Produktions-Freigabe, Versand-Freigabe** schließt nur QM (Rolle `labor`) oder Admin ab: Dashboard `produktion_schritt_erledigen()` (`produktion_qm_stationen()`, `darf_qm_freigeben()`), Prod-App/Werk-App `erp_schritt_abschliessen($id, $akteur, $uid)` (`erp_darf_qm()`). Die Produktion bekommt „… schließt QM ab (Vier-Augen-Prinzip)", in der Werk-App ist der Knopf gesperrt. Auch die QS-Freigabe in der Prod-App (`?p=qs`) und ihr Zurückziehen sind nur für QM/Admin. Admin-Overrides/God-Mode bleiben. Noch nicht gebaut: echtes Personen-Vier-Augen (b).
+
+## Teilmenge produzieren (05.11.2026)
+Die Box steht jetzt **für alle** im Produktionsmodus, wie am Tablet. Vorher gab es sie nur für den Produktionsleiter, und nur komplett. Sie zeigt:
+- offene Packungen,
+- jetzt machbar komplett (mit begrenzendem Material),
+- machbar bis vor dem Etikettieren,
+- Hinweis, wenn das Etikett gesperrt ist.
+
+Eingabe Packungen (vorbelegt mit dem Machbaren) und Umfang. „komplett“ läuft über `erp_teilmenge_produzieren`, bucht anteilig ab und legt die Fertigware-Charge an. „bis vor dem Etikettieren“ läuft über `erp_teilmenge_vor_etikett`. Der Rest bleibt offen. Der Mengen-Fortschrittsbalken bleibt nur für den Produktionsleiter.
