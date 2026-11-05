@@ -8056,6 +8056,7 @@ function auftrag_deckung(int $auftrag_id): array {
     };
     $out = $leer; $out['ok'] = true; $out['bedarf'] = $bedarf; $out['einheit'] = $einheit; $out['bulk_item'] = $bulk; $out['premix_item'] = $prem;
     $out['schritte_erledigt'] = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [(int)$pa['id']]);
+    $out['pa_status'] = (string)($pa['status'] ?? '');
     $in = implode(',', array_map('intval', array_keys($items) ?: [0]));
     // (1) gekoppelt: fest zugeordnete Bulk-Chargen
     if ($bulk) foreach (all("SELECT id, charge_nr, mhd, menge_verfuegbar, einheit, status FROM charge WHERE auftrag_id=? AND item_id=? AND menge_verfuegbar>0 AND status IN ('frei','quarantaene') ORDER BY id", [$auftrag_id, $bulk]) as $c)
@@ -8153,11 +8154,21 @@ function auftrag_deckung_koppeln(int $auftrag_id, string $quelle, int $quelle_id
             q("UPDATE bestellung_position SET auftrag_id=? WHERE id=? AND auftrag_id IS NULL", [$auftrag_id, $quelle_id]);
         if (function_exists('bedarf_bump')) bedarf_bump();
     }
-    $weg = $src['art'] === 'premix' ? 'premix' : 'kapsel';
-    $pa = auftrag_aktiver_pa($auftrag_id); $wegNeu = '';
-    if ($pa && pa_beschaffungsweg($pa) === '') { $rw = auftrag_beschaffungsweg_setzen($auftrag_id, $weg, $wer); if (!empty($rw['ok'])) $wegNeu = beschaffungswege()[$weg]; }
+    $wegNeu = auftrag_deckung_weg_festlegen($auftrag_id, $src['art'] === 'premix' ? 'premix' : 'kapsel', $wer);
     log_aktivitaet('auftrag', $auftrag_id, 'team', 'Beschaffung: ' . $nf($menge) . ' ' . $src['einheit'] . ' aus ' . $src['text'] . ' dem Auftrag zugeordnet' . ($wegNeu !== '' ? ' – Weg festgelegt: ' . $wegNeu : '') . '.', 'notiz');
     return ['ok' => true, 'meldung' => $nf($menge) . ' ' . $src['einheit'] . ' aus ' . $src['text'] . ' zugeordnet.' . ($wegNeu !== '' ? ' Beschaffungsweg festgelegt: ' . $wegNeu . '.' : ''), 'warnung' => $warn];
+}
+// Weg nach einer Zuordnung festlegen: kein Weg -> aus der Quelle (Bulk = fertige Kapsel/Mischung, Premix); steht der PA noch
+// in Vorbereitung („Beschaffungsweg offen“), wird er mit dem vorhandenen (sonst dem abgeleiteten) Weg freigegeben.
+// Rückgabe: Name des festgelegten Wegs oder ''.
+function auftrag_deckung_weg_festlegen(int $auftrag_id, string $wegQuelle, string $wer = ''): string {
+    $pa = auftrag_aktiver_pa($auftrag_id);
+    if (!$pa) return '';
+    $ist = pa_beschaffungsweg($pa);
+    if ($ist !== '' && (string)($pa['status'] ?? '') !== 'vorbereitung') return '';
+    $weg = $ist !== '' ? $ist : $wegQuelle;
+    $rw = auftrag_beschaffungsweg_setzen($auftrag_id, $weg, $wer);
+    return !empty($rw['ok']) ? beschaffungswege()[$weg] : '';
 }
 // Kopplung zurücknehmen (solange die Produktion nicht läuft). 'charge_fest' -> Charge wieder frei; 'res' -> Reservierung
 // storniert, und eine nur durch die Kopplung gesetzte bestellung_position.auftrag_id (Artikel-Position) wird wieder leer.

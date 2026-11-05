@@ -502,9 +502,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?
     header('Location: ' . ($bid ? '?p=bestellung&id=' . $bid : $bwZ . '&bwfehler=' . urlencode('Bestellung nicht möglich (Weg nicht festgelegt oder kein Angebot).'))); exit;
 }
 // Beschaffungsweg: vorhandenen Bestand / offene Bestellung dem Auftrag zuordnen bzw. lösen (Nico 05.11.2026, nur Admin).
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['deckung_koppeln', 'deckung_loesen'], true)) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['deckung_koppeln', 'deckung_loesen', 'deckung_festlegen'], true)) {
     $bwZ = '?p=auftrag&id=' . $id . '&tab=beschaffung';
     if (!has_role('admin')) { header('Location: ' . $bwZ . '&bwfehler=' . urlencode('Nur Admins.')); exit; }
+    // Schon gedeckt (z. B. vorher gebundene Ware oder Bestellung für den Auftrag), PA aber noch „Beschaffungsweg offen“.
+    if ($_POST['aktion'] === 'deckung_festlegen') {
+        $wn = auftrag_deckung_weg_festlegen($id, ($_POST['weg'] ?? '') === 'premix' ? 'premix' : 'kapsel', (string)(current_user()['name'] ?? ''));
+        header('Location: ' . $bwZ . ($wn !== '' ? '&bwok=' . urlencode('Beschaffungsweg festgelegt: ' . $wn . '.') : '&bwfehler=' . urlencode('Weg nicht festgelegt (Produktion begonnen oder schon festgelegt).'))); exit;
+    }
     $r = ($_POST['aktion'] === 'deckung_koppeln')
         ? auftrag_deckung_koppeln($id, (string)($_POST['quelle'] ?? ''), (int)($_POST['qid'] ?? 0), zahl_lesen((string)($_POST['menge'] ?? '0'), true), (string)(current_user()['name'] ?? ''))
         : auftrag_deckung_loesen($id, (string)($_POST['typ'] ?? ''), (int)($_POST['zid'] ?? 0));
@@ -1304,6 +1309,13 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
   </div>
   <?php if ($gedeckt): ?>
   <div class="badge-ok" style="padding:10px 14px;border-radius:8px;margin-bottom:14px">Vollständig über Lager und Bestellung gedeckt – kein weiterer Bedarf, keine neue Bestellung nötig.</div>
+  <?php endif; ?>
+  <?php if ($dk['summe_gekoppelt'] > 0 && $dk['pa_status'] === 'vorbereitung' && $dkFrei): $dkWeg = in_array('premix', array_column($dk['gekoppelt'], 'art'), true) && !in_array('bulk', array_column($dk['gekoppelt'], 'art'), true) ? 'premix' : 'kapsel'; ?>
+  <form method="post" class="bx-panel" style="border-left:3px solid var(--warn);padding:10px 14px;margin:0 0 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="deckung_festlegen"><input type="hidden" name="weg" value="<?= $dkWeg ?>">
+    <span>Ware ist zugeordnet, der Beschaffungsweg steht aber noch offen.</span>
+    <button class="btn btn-primary btn-sm" type="submit">Weg festlegen: <?= h(beschaffungswege()[$bwWahl !== '' ? $bwWahl : $dkWeg]) ?></button>
+  </form>
   <?php endif; ?>
   <?php endif; ?>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
