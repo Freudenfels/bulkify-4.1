@@ -259,3 +259,16 @@ Soll-Kette 4c (04.11.2026): Schrittleiste 1 Material prüfen · 2 Beschaffungswe
 
 ## Ans Labor senden (05.11.2026)
 Im Block „Externer Labortest“ steht, solange kein Bericht vorliegt, der Knopf „Ans Labor senden (Auftragsformular)“ → `?p=labor_senden&auftrag=<id>`. Das erzeugte Formular liegt danach als internes Dokument (`typ='labor_auftrag'`) am Auftrag, und `labor_versendet_am` ist gesetzt.
+
+## Reiter Beschaffungsweg: Schon vorhanden / unterwegs (05.11.2026)
+- Über den drei Karten steht ein Block mit diesen Werten:
+  - Bedarf gesamt,
+  - dem Auftrag zugeordnet,
+  - im Lager frei,
+  - unterwegs/bestellt frei,
+  - noch zu beschaffen (plus „nach Zuordnen der freien Quellen“).
+- Darunter steht je Quelle eine Zeile:
+  - **zugeordnet:** mit „Lösen“.
+  - **frei:** freie Charge oder offene Bestellung mit Lieferant und erwartetem Termin. Daneben ein Mengenfeld, vorbelegt mit dem noch fehlenden Teil, und der Knopf „Dem Auftrag zuordnen“ (Handler `deckung_koppeln` / `deckung_loesen`, nur Admin, nur vor dem ersten Produktionsschritt).
+- Zuordnen legt den Weg fest, falls er noch fehlt. Die Karten zeigen danach „Noch zu beschaffen (Rest)“.
+- Ist der Rest 0, erscheint „vollständig gedeckt“. „An Bedarfsliste senden“ und „Bestellen“ entfallen dann. Bleibt ein Rest, gehen nur dieser an die Bedarfsliste bzw. in die Bestellung.

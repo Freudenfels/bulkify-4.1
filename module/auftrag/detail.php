@@ -501,6 +501,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?
     $bid = auftrag_beschaffung_bestellen($id, (string)($_POST['weg'] ?? ''), (int)($_POST['lieferant_id'] ?? 0));
     header('Location: ' . ($bid ? '?p=bestellung&id=' . $bid : $bwZ . '&bwfehler=' . urlencode('Bestellung nicht möglich (Weg nicht festgelegt oder kein Angebot).'))); exit;
 }
+// Beschaffungsweg: vorhandenen Bestand / offene Bestellung dem Auftrag zuordnen bzw. lösen (Nico 05.11.2026, nur Admin).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['deckung_koppeln', 'deckung_loesen'], true)) {
+    $bwZ = '?p=auftrag&id=' . $id . '&tab=beschaffung';
+    if (!has_role('admin')) { header('Location: ' . $bwZ . '&bwfehler=' . urlencode('Nur Admins.')); exit; }
+    $r = ($_POST['aktion'] === 'deckung_koppeln')
+        ? auftrag_deckung_koppeln($id, (string)($_POST['quelle'] ?? ''), (int)($_POST['qid'] ?? 0), zahl_lesen((string)($_POST['menge'] ?? '0'), true), (string)(current_user()['name'] ?? ''))
+        : auftrag_deckung_loesen($id, (string)($_POST['typ'] ?? ''), (int)($_POST['zid'] ?? 0));
+    $msg = !empty($r['ok']) ? trim((string)($r['meldung'] ?? 'Gespeichert.') . ' ' . (string)($r['warnung'] ?? '')) : '';
+    header('Location: ' . $bwZ . (!empty($r['ok']) ? '&bwok=' . urlencode($msg) : '&bwfehler=' . urlencode((string)($r['fehler'] ?? 'Nicht möglich.')))); exit;
+}
 // „Ware da, aber nicht zugeordnet“ (Nico 04.11.2026): Rohstoff-Charge als Bulk übernehmen bzw. freie Bulk-Charge binden.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bulk_diag') {
     $zur = (string)($_POST['zurueck'] ?? '');
@@ -1251,7 +1261,51 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
   <?php if (isset($_GET['bwok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-bottom:10px"><?= h((string)$_GET['bwok']) ?></div><?php endif; ?>
   <?php if (isset($_GET['bwfehler'])): ?><div style="color:#8f231b;margin-bottom:10px"><?= h((string)$_GET['bwfehler']) ?></div><?php endif; ?>
   <?php if (!$bw['rezeptur_id']): ?><div class="muted">Zum Produkt gibt es keine Rezeptur – kein Beschaffungsweg nötig.</div>
-  <?php else: ?>
+  <?php else: $dk = $bw['deckung'] ?? []; if (!empty($dk['ok'])): $dkE = (string)$dk['einheit'];
+      $dkM = fn($x) => $dkE === 'Stk' ? $bwM($x, 'Stk') : $bwM((float)$x / 1000, $dkE === 'g' ? 'kg' : 'L');   // Bedarfs-Einheiten lesbar (g -> kg)
+      $dkFrei = $bwAdmin && (int)$dk['schritte_erledigt'] === 0;
+      $gedeckt = $dk['rest'] <= 0.0001; ?>
+  <?php // Schon vorhanden / unterwegs: Bedarf gegen Lager + offene Bestellungen; zuordnen = Weg festgelegt, nur der Rest wird beschafft. ?>
+  <div style="border:1px solid <?= $gedeckt ? 'var(--gruen,#1D9E75)' : 'var(--line)' ?>;border-radius:10px;padding:14px 16px;margin-bottom:14px">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="font-weight:600">Schon vorhanden / unterwegs</div>
+      <div><?= $gedeckt ? bx_badge('vollständig gedeckt', 'ok') : '' ?></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px">
+      <div><div class="muted" style="font-size:12px">Bedarf gesamt</div><div style="font-size:16px"><?= h($dkM($dk['bedarf'])) ?></div></div>
+      <div><div class="muted" style="font-size:12px">Dem Auftrag zugeordnet</div><div style="font-size:16px"><?= h($dkM($dk['summe_gekoppelt'])) ?></div></div>
+      <div><div class="muted" style="font-size:12px">Im Lager frei</div><div style="font-size:16px"><?= h($dkM($dk['summe_lager'])) ?></div></div>
+      <div><div class="muted" style="font-size:12px">Unterwegs / bestellt, frei</div><div style="font-size:16px"><?= h($dkM($dk['summe_bestellt'])) ?></div></div>
+      <div><div class="muted" style="font-size:12px">Noch zu beschaffen</div><div style="font-size:16px;font-weight:600;color:<?= $gedeckt ? 'var(--gruen,#1D9E75)' : 'inherit' ?>"><?= h($dkM($dk['rest'])) ?></div>
+        <?php if (!$gedeckt && $dk['rest_offen'] < $dk['rest'] - 0.0001): ?><div class="muted" style="font-size:12px">nach Zuordnen der freien Quellen: <?= h($dkM($dk['rest_offen'])) ?></div><?php endif; ?></div>
+    </div>
+    <?php if ($dk['gekoppelt'] || $dk['lager'] || $dk['bestellt']): ?>
+    <table class="bx-table" style="font-size:13px"><tbody>
+    <?php foreach ($dk['gekoppelt'] as $z): ?>
+      <tr><td style="white-space:normal"><?= h($z['text']) ?></td><td class="bx-num"><?= h($bwM($z['menge'], $z['einheit'])) ?></td><td><?= bx_badge('zugeordnet', 'ok') ?></td>
+        <td style="text-align:right"><?php if ($dkFrei && $z['loesbar']): ?><form method="post" style="margin:0" onsubmit="return confirm('Zuordnung lösen? Die Ware/Bestellung ist dann wieder frei.')">
+          <input type="hidden" name="aktion" value="deckung_loesen"><input type="hidden" name="typ" value="<?= h($z['typ']) ?>"><input type="hidden" name="zid" value="<?= (int)$z['id'] ?>">
+          <button class="btn btn-ghost btn-sm" type="submit">Lösen</button></form><?php endif; ?></td></tr>
+    <?php endforeach; ?>
+    <?php $restQ = (float)$dk['rest'];
+      foreach (array_merge($dk['lager'], $dk['bestellt']) as $z): $vorschlagE = min((float)$z['e'], max(0.0, $restQ)); $fq = (float)$z['e'] > 0 ? (float)$z['frei'] / (float)$z['e'] : 1.0;
+        $vorschlag = $vorschlagE > 0 ? $vorschlagE * $fq : (float)$z['frei']; $restQ -= $vorschlagE; ?>
+      <tr><td style="white-space:normal"><?= h($z['text']) ?><?= !empty($z['eta']) ? ' <span class="muted">· erwartet ' . h(date('d.m.Y', strtotime((string)$z['eta']))) . '</span>' : '' ?></td>
+        <td class="bx-num"><?= h($bwM($z['frei'], $z['einheit'])) ?> frei</td>
+        <td><?= $z['quelle'] === 'charge' ? bx_badge('im Lager', 'info') : bx_badge('unterwegs', 'warn') ?></td>
+        <td style="text-align:right"><?php if ($dkFrei): ?><form method="post" class="bx-row" style="margin:0;gap:6px;justify-content:flex-end;flex-wrap:nowrap">
+          <input type="hidden" name="aktion" value="deckung_koppeln"><input type="hidden" name="quelle" value="<?= h($z['quelle']) ?>"><input type="hidden" name="qid" value="<?= (int)$z['id'] ?>">
+          <input type="text" inputmode="decimal" name="menge" value="<?= h(rtrim(rtrim(number_format($vorschlag, 3, ',', '.'), '0'), ',')) ?>" style="width:120px;text-align:right" title="Menge in <?= h($z['einheit']) ?>"> <span class="muted"><?= h($z['einheit']) ?></span>
+          <button class="btn btn-primary btn-sm" type="submit">Dem Auftrag zuordnen</button></form><?php endif; ?></td></tr>
+    <?php endforeach; ?>
+    </tbody></table>
+    <?php else: ?><div class="muted" style="font-size:13px">Nichts im Lager und keine offene Bestellung zum Bulk-<?= $dk['premix_item'] ? '/Premix-' : '' ?>Artikel dieser Rezeptur.</div><?php endif; ?>
+    <div class="muted" style="font-size:12px;margin-top:8px">Zuordnen = Ware/Bestellung gehört diesem Auftrag (beim Wareneingang gegen die Bestellung hängt sie direkt am Auftrag) und zählt als Deckung – die Karten unten rechnen nur noch den Rest. Ist noch kein Weg festgelegt, gilt er damit als festgelegt.</div>
+  </div>
+  <?php if ($gedeckt): ?>
+  <div class="badge-ok" style="padding:10px 14px;border-radius:8px;margin-bottom:14px">Vollständig über Lager und Bestellung gedeckt – kein weiterer Bedarf, keine neue Bestellung nötig.</div>
+  <?php endif; ?>
+  <?php endif; ?>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
   <?php foreach ($bw['wege'] as $k => $w): $ist = $bwWahl === $k; ?>
     <div style="border:1px solid <?= $ist ? 'var(--gruen,#1D9E75)' : 'var(--line)' ?>;border-radius:10px;padding:14px 16px;<?= $ist ? 'box-shadow:0 0 0 1px var(--gruen,#1D9E75) inset;' : '' ?>">
@@ -1259,7 +1313,7 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
         <div style="font-weight:600"><?= h($w['label']) ?></div>
         <div><?= $ist ? bx_badge('festgelegt', 'ok') : '' ?> <?= $bwBest === $k ? bx_badge('günstigster', 'info') : '' ?></div>
       </div>
-      <div class="muted" style="font-size:12px;margin-bottom:8px">Bedarf für diesen Auftrag: <span style="color:var(--text)"><?= h($bwM($w['menge'], $w['einheit'])) ?></span></div>
+      <div class="muted" style="font-size:12px;margin-bottom:8px"><?= !empty($dk['ok']) && $dk['summe_gekoppelt'] > 0 ? 'Noch zu beschaffen (Rest)' : 'Bedarf für diesen Auftrag' ?>: <span style="color:var(--text)"><?= h($bwM($w['menge'], $w['einheit'])) ?></span></div>
       <?php if ($k === 'rohstoffe'): ?>
         <table class="bx-table" style="font-size:13px"><tbody>
         <?php foreach ($w['positionen'] as $ps): ?>
@@ -1276,7 +1330,7 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
           <table class="bx-table" style="font-size:13px"><tbody>
           <?php foreach ($w['angebote'] as $ag): ?>
             <tr><td style="white-space:normal"><?= h($ag['lieferant']) ?></td><td class="bx-num"><?= h($bwPreis($ag['preis'])) ?>/<?= h($w['einheit']) ?></td><td class="bx-num"><?= h($bwE($ag['gesamt'])) ?></td>
-              <td style="text-align:right"><?php if ($ist && $bwAdmin): ?>
+              <td style="text-align:right"><?php if ($ist && $bwAdmin && $w['menge'] > 0.0001): ?>
                 <form method="post" style="margin:0" onsubmit="return confirm('Bestellung bei <?= h(addslashes($ag['lieferant'])) ?> als Entwurf anlegen (<?= h($bwM($w['menge'], $w['einheit'])) ?>)?')">
                   <input type="hidden" name="aktion" value="beschaffung_bestellen"><input type="hidden" name="weg" value="<?= h($k) ?>"><input type="hidden" name="lieferant_id" value="<?= (int)$ag['lieferant_id'] ?>">
                   <button class="btn btn-primary btn-sm" type="submit">Bestellen</button></form>
@@ -1293,7 +1347,7 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
           <form method="post" style="margin:0"><input type="hidden" name="aktion" value="beschaffungsweg_setzen"><input type="hidden" name="weg" value="<?= h($k) ?>">
             <button class="btn <?= $bwWahl === '' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" type="submit">Diesen Weg festlegen</button></form>
         <?php endif; ?>
-        <?php if ($ist && $bwAdmin): ?>
+        <?php if ($ist && $bwAdmin && !(!empty($dk['ok']) && $dk['rest'] <= 0.0001)): ?>
           <?php if (empty($bw['pa']['bedarf_gemeldet'])): ?>
             <form method="post" style="margin:0"><input type="hidden" name="aktion" value="beschaffung_bedarf">
               <button class="btn btn-ghost btn-sm" type="submit">An Bedarfsliste senden</button></form>

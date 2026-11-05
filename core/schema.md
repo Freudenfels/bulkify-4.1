@@ -466,3 +466,23 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `charge_gebinde.gewogen` (1 = echtes
 
 ## Labor-Auftragsformular (05.11.2026)
 `lieferanten` bekommt `labor_formular`, `labor_standorte`, `labor_angebotsnr`, `labor_erste_proben`, `labor_bericht_an` (bulkify|kunde) und `labor_umfang`. Neue Tabelle `labor_versand` mit einer Zeile je erzeugtem Formular: Labor, Standort, Kunde, Datum, Bemerkung, Proben als JSON, Datei. Logik: [labor_auftrag.md](labor_auftrag.md).
+
+## Beschaffungsweg: Bestand & offene Bestellungen koppeln (05.11.2026)
+- `auftrag_deckung($aid)` stellt den Bedarf (Stück bzw. g/ml) gegen das, was schon da ist.
+  - **gekoppelt:**
+    - fest zugeordnete Bulk-Chargen (`charge.auftrag_id`),
+    - aktive Reservierungen auf Bestellposition/Charge des Bulk- oder Premix-Artikels (nach dem Wareneingang nur, soweit die Ware noch frei ohne Auftrag liegt),
+    - Bestellpositionen genau für diesen Auftrag (Bulk-Freitext bzw. Artikel ohne Reservierung, noch nicht geliefert).
+  - **lager:** freie Chargen ohne Auftrag, abzüglich Reservierungen.
+  - **bestellt:** offene, nicht gelieferte Positionen des Bulk-/Premix-Artikels ohne Auftrag, abzüglich Reservierungen.
+  - Premix in kg wird über das Rezepturgewicht in Einheiten umgerechnet.
+  - `rest` = Bedarf − gekoppelt, `rest_offen` = Rest − Lager − bestellt.
+- `auftrag_deckung_koppeln($aid, 'charge'|'bestellung', $id, $menge)`:
+  - Bulk-Charge → `charge_auftrag_zuweisen` (Teilmenge = Kind-Charge).
+  - Bestellposition → `bulk_reservieren`. Geht die ganze offene Position an den Auftrag, wird auch `bestellung_position.auftrag_id` gesetzt, damit beim Wareneingang gegen die Bestellung (`bestellung_wareneingang` bzw. Lager-WE) die Charge direkt am Auftrag hängt.
+  - Premix → Reservierung.
+  - Ist noch kein Weg festgelegt, setzt sie ihn per `auftrag_beschaffungsweg_setzen`: Bulk → `kapsel`, Premix → `premix`. Ein PA in Vorbereitung wird damit freigegeben.
+  - Nur bis zum ersten erledigten Produktionsschritt.
+- `auftrag_deckung_loesen($aid, 'charge_fest'|'res', $id)`: Charge wieder frei bzw. Reservierung storniert. Eine nur durch die Kopplung gesetzte `bestellung_position.auftrag_id` (Artikel-Position) wird wieder leer.
+- `auftrag_beschaffungswege()` rechnet die drei Karten nur noch auf `rest`. Den Rohstoffbedarf aus `produktion_materialbedarf` (zieht reservierten Bulk schon ab) skaliert sie auf den Rest, ohne doppelt abzuziehen. Dazu kommen `deckung` und `bedarf_gesamt`.
+- **Keine Doppelbestellung:** `bedarf_bulk()` zählt dem Auftrag reservierte, noch nicht gelieferte Bestellpositionen des Bulk-Artikels als bestellt. Freitext-Zeilen der Aufträge zählten schon vorher, sie werden nicht doppelt gezählt.

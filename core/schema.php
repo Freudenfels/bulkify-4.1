@@ -7948,9 +7948,20 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
     $schuett = function_exists('form_groessen_einheit') && form_groessen_einheit($form) !== '';
     $einh = (float)$pa['menge'] * (float) produktion_stueck_je_packung($pa);   // Stück (Kapseln) bzw. g/ml bei Schüttgut
+    // Nur der echte Rest wird beschafft (05.11.2026): Bedarf minus gekoppeltem Bestand/Bestellung (auftrag_deckung).
+    $dk = auftrag_deckung($auftrag_id);
+    $out['deckung'] = $dk;
+    $out['bedarf_gesamt'] = $einh;
+    $rest = !empty($dk['ok']) ? (float)$dk['rest'] : $einh;
     $lief = fn(int $id) => (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$id]);
     // Rohstoffbedarf (immer die Einzelrohstoffe, auch wenn Premix gewählt ist) -> Mischungsgewicht in kg.
+    // produktion_materialbedarf zieht reservierte Bulkware schon ab -> auf den Rest skalieren, ohne doppelt abzuziehen.
     $roh = produktion_materialbedarf((int)$pa['id'], true);
+    $rohBasis = max(0.0, $einh - (float)($dk['res_bulk'] ?? 0));
+    $fRoh = $rohBasis > 0 ? min(1.0, $rest / $rohBasis) : 0.0;
+    foreach ($roh as &$rr) $rr['benoetigt'] = (float)$rr['benoetigt'] * $fRoh;
+    unset($rr);
+    $einh = $rest;
     $kg = 0.0;
     foreach ($roh as $r) $kg += (float)$r['benoetigt'] * (($r['einheit'] ?? '') === 'g' ? 0.001 : 1.0);
     // Leerkapseln gehören bei Premix + Einzelrohstoffen zu den Kosten (bei fertigen Kapseln stecken sie im Preis).
@@ -8005,6 +8016,171 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
     if ($kapZeile) { $pos[] = $kapZeile; if ($kapZeile['gesamt'] === null) $luecke = true; else $summe += $kapZeile['gesamt']; }
     $out['wege']['rohstoffe'] = ['menge' => $kg, 'einheit' => 'kg', 'positionen' => $pos, 'gesamt' => $summe, 'luecke' => $luecke, 'label' => 'Einzelrohstoffe (Eigenproduktion)'];
     return $out;
+}
+// --- Beschaffungsweg: vorhandenen Bestand & offene Bestellungen koppeln (Nico 05.11.2026) -----------------------
+// Der Reiter rechnete, als müsste alles neu beschafft werden (Q10: 9.000 Stk im Lager + 450.000 Stk bestellt -> trotzdem
+// „an die Bedarfsliste“ = doppelt). auftrag_deckung() stellt den Bedarf gegen das, was schon da ist:
+//  - gekoppelt: dem Auftrag fest zugeordnete Bulk-Chargen, aktive Reservierungen auf Bestellpositionen/Chargen (Bulk-
+//    oder Premix-Artikel), Bulk-Freitextbestellungen für genau diesen Auftrag (noch nicht geliefert);
+//  - lager / bestellt: noch freie Quellen zum Koppeln (freie Chargen ohne Auftrag; offene Bestellpositionen des Bulk-/
+//    Premix-Artikels ohne bzw. mit diesem Auftrag, abzüglich Reservierungen).
+// Alle Mengen werden zusätzlich in Bedarfs-Einheiten gerechnet (Stück bzw. g/ml der Rezeptur; Premix kg -> Einheiten).
+function _deckung_einheit_faktor(string $quellEinheit, string $itemEinheit): float {
+    $q = mb_strtolower(trim($quellEinheit)); $i = mb_strtolower(trim($itemEinheit));
+    if (in_array($q, ['kg', 'l'], true) && in_array($i, ['g', 'ml'], true)) return 1000.0;
+    if (in_array($q, ['g', 'ml'], true) && in_array($i, ['kg', 'l'], true)) return 0.001;
+    return 1.0;
+}
+function auftrag_deckung(int $auftrag_id): array {
+    $leer = ['ok' => false, 'bedarf' => 0.0, 'einheit' => 'Stk', 'gekoppelt' => [], 'lager' => [], 'bestellt' => [],
+             'summe_gekoppelt' => 0.0, 'summe_lager' => 0.0, 'summe_bestellt' => 0.0, 'rest' => 0.0, 'rest_offen' => 0.0, 'res_bulk' => 0.0];
+    $pa = auftrag_aktiver_pa($auftrag_id);
+    $a  = one("SELECT a.id, a.produkt_id, COALESCE(a.rezeptur_id, p.rezeptur_id) AS rezeptur_id FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    $rid = (int)($a['rezeptur_id'] ?? 0);
+    if (!$pa || $rid <= 0) return $leer;
+    $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
+    $schuett = function_exists('form_groessen_einheit') && form_groessen_einheit($form) !== '';
+    $bedarf = (float)$pa['menge'] * (float) produktion_stueck_je_packung($pa);   // Stück bzw. g/ml
+    $einheit = $schuett ? form_groessen_einheit($form) : 'Stk';
+    $bulk = auftrag_bulk_item($auftrag_id);
+    $prem = $schuett ? 0 : rezeptur_premixitem($rid, false);
+    $mgE  = $schuett ? 0.0 : rezeptur_gewicht_mg($rid);                           // mg je Einheit (Premix kg -> Einheiten)
+    $items = [];
+    if ($bulk) $items[$bulk] = ['art' => 'bulk', 'einheit' => (string) scalar("SELECT einheit FROM item WHERE id=?", [$bulk]) ?: $einheit];
+    if ($prem && $mgE > 0) $items[$prem] = ['art' => 'premix', 'einheit' => (string) scalar("SELECT einheit FROM item WHERE id=?", [$prem]) ?: 'kg'];
+    // Menge (in Artikel-Einheit) -> Bedarfs-Einheiten
+    $zuE = function (int $item, float $m) use ($items, $mgE, $einheit): float {
+        if (($items[$item]['art'] ?? '') !== 'premix') return $m * _deckung_einheit_faktor((string)$items[$item]['einheit'], $einheit);
+        $kg = $m * _deckung_einheit_faktor((string)$items[$item]['einheit'], 'kg');
+        return $mgE > 0 ? $kg * 1e6 / $mgE : 0.0;
+    };
+    $out = $leer; $out['ok'] = true; $out['bedarf'] = $bedarf; $out['einheit'] = $einheit; $out['bulk_item'] = $bulk; $out['premix_item'] = $prem;
+    $out['schritte_erledigt'] = (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [(int)$pa['id']]);
+    $in = implode(',', array_map('intval', array_keys($items) ?: [0]));
+    // (1) gekoppelt: fest zugeordnete Bulk-Chargen
+    if ($bulk) foreach (all("SELECT id, charge_nr, mhd, menge_verfuegbar, einheit, status FROM charge WHERE auftrag_id=? AND item_id=? AND menge_verfuegbar>0 AND status IN ('frei','quarantaene') ORDER BY id", [$auftrag_id, $bulk]) as $c)
+        $out['gekoppelt'][] = ['typ' => 'charge_fest', 'id' => (int)$c['id'], 'art' => 'bulk', 'text' => 'Charge ' . ($c['charge_nr'] ?: '#' . $c['id']) . ($c['status'] !== 'frei' ? ' (Quarantäne)' : ''),
+                               'menge' => (float)$c['menge_verfuegbar'], 'einheit' => (string)$items[$bulk]['einheit'], 'e' => $zuE($bulk, (float)$c['menge_verfuegbar']), 'loesbar' => true];
+    // (2) gekoppelt: aktive Reservierungen auf Bestellposition/Charge (Bulk + Premix)
+    $resBulk = 0.0;
+    foreach (all("SELECT r.id, r.item_id, r.menge, r.bestellung_position_id, r.charge_id, b.nummer, b.angekommen_am, b.status AS bstatus, b.eta_geplant,
+                         COALESCE(l.firma,'') AS lieferant, c.charge_nr
+                  FROM reservierung r
+                  LEFT JOIN bestellung_position bp ON bp.id=r.bestellung_position_id LEFT JOIN bestellung b ON b.id=bp.bestellung_id
+                  LEFT JOIN lieferanten l ON l.id=b.lieferant_id LEFT JOIN charge c ON c.id=r.charge_id
+                  WHERE r.auftrag_id=? AND r.status='aktiv' AND r.item_id IN ($in) AND (r.bestellung_position_id IS NOT NULL OR r.charge_id IS NOT NULL)
+                  ORDER BY r.id", [$auftrag_id]) as $r) {
+        $iid = (int)$r['item_id']; $m = (float)$r['menge'];
+        if ($r['bestellung_position_id']) {
+            if ((string)$r['bstatus'] === 'storniert') continue;
+            // geliefert: hängt die Charge schon am Auftrag, zählt sie oben als feste Zuordnung; sonst zählt die Reservierung,
+            // soweit die Ware aus dieser Position noch frei (ohne Auftrag) im Lager liegt.
+            if (!empty($r['angekommen_am'])) $m = min($m, (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE bestellung_position_id=? AND status IN ('frei','quarantaene') AND auftrag_id IS NULL", [(int)$r['bestellung_position_id']]));
+            if ($m <= 0.0001) continue;
+            $text = 'Bestellung ' . $r['nummer'] . ($r['lieferant'] !== '' ? ' · ' . $r['lieferant'] : '') . (empty($r['angekommen_am']) ? ($r['eta_geplant'] ? ' · erwartet ' . date('d.m.Y', strtotime((string)$r['eta_geplant'])) : ' · unterwegs') : ' · geliefert');
+        } else {
+            $text = 'Charge ' . ($r['charge_nr'] ?: '#' . $r['charge_id']) . ' (reserviert)';
+        }
+        if ($items[$iid]['art'] === 'bulk') $resBulk += (float)$r['menge'];
+        $out['gekoppelt'][] = ['typ' => 'res', 'id' => (int)$r['id'], 'art' => $items[$iid]['art'], 'text' => ($items[$iid]['art'] === 'premix' ? 'Premix: ' : '') . $text,
+                               'menge' => $m, 'einheit' => (string)$items[$iid]['einheit'], 'e' => $zuE($iid, $m), 'loesbar' => true];
+    }
+    $out['res_bulk'] = $resBulk;
+    // (3) gekoppelt: Bulk-Freitextbestellung genau für diesen Auftrag (Bedarfsliste/„Bestellen“), noch offen
+    foreach (all("SELECT bp.id, b.nummer, b.eta_geplant, COALESCE(l.firma,'') AS lieferant, bp.einheit, " . bulk_position_basis_sql() . " AS offen
+                  FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                  WHERE (bp.item_id IS NULL OR (bp.item_id IN ($in) AND NOT EXISTS (SELECT 1 FROM reservierung rx WHERE rx.bestellung_position_id=bp.id AND rx.status='aktiv')))
+                    AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$auftrag_id]) as $bp) {
+        if ((float)$bp['offen'] <= 0) continue;
+        $out['gekoppelt'][] = ['typ' => 'bestellt_auftrag', 'id' => (int)$bp['id'], 'art' => 'bulk', 'text' => 'Bestellung ' . $bp['nummer'] . ($bp['lieferant'] !== '' ? ' · ' . $bp['lieferant'] : '') . ' · für diesen Auftrag bestellt',
+                               'menge' => (float)$bp['offen'], 'einheit' => $einheit, 'e' => (float)$bp['offen'], 'loesbar' => false];
+    }
+    // (4) frei koppelbar: Lager (freie Chargen ohne Auftrag) und offene Bestellpositionen des Bulk-/Premix-Artikels
+    foreach ($items as $iid => $it) {
+        foreach (all("SELECT id, charge_nr, mhd, menge_verfuegbar FROM charge WHERE item_id=? AND status='frei' AND auftrag_id IS NULL AND fremd_kunde_id IS NULL AND menge_verfuegbar>0
+                      ORDER BY COALESCE(mhd,'9999-12-31'), id", [$iid]) as $c) {
+            $frei = (float)$c['menge_verfuegbar'] - charge_bulk_reserviert((int)$c['id']);
+            if ($frei <= 0.0001) continue;
+            $out['lager'][] = ['quelle' => 'charge', 'id' => (int)$c['id'], 'art' => $it['art'], 'text' => ($it['art'] === 'premix' ? 'Premix · ' : '') . 'Charge ' . ($c['charge_nr'] ?: '#' . $c['id']) . ($c['mhd'] ? ' · MHD ' . date('d.m.Y', strtotime((string)$c['mhd'])) : ''),
+                               'frei' => $frei, 'einheit' => (string)$it['einheit'], 'e' => $zuE($iid, $frei)];
+        }
+        foreach (all("SELECT bp.id, bp.menge, bp.einheit, COALESCE(bp.geliefert_menge,0) AS gel, bp.auftrag_id, b.nummer, b.status, b.eta_geplant, COALESCE(l.firma,'') AS lieferant
+                      FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                      WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND bp.auftrag_id IS NULL
+                      ORDER BY COALESCE(b.eta_geplant,'9999-12-31'), b.id", [$iid]) as $bp) {
+            $f = _deckung_einheit_faktor((string)$bp['einheit'], (string)$it['einheit']);
+            $frei = max(0.0, ((float)$bp['menge'] - (float)$bp['gel']) * $f - bestellposition_reserviert((int)$bp['id']));
+            if ($frei <= 0.0001) continue;
+            $out['bestellt'][] = ['quelle' => 'bestellung', 'id' => (int)$bp['id'], 'art' => $it['art'], 'text' => ($it['art'] === 'premix' ? 'Premix · ' : '') . 'Bestellung ' . $bp['nummer'] . ($bp['lieferant'] !== '' ? ' · ' . $bp['lieferant'] : ''),
+                                  'status' => (string)$bp['status'], 'eta' => $bp['eta_geplant'], 'frei' => $frei, 'einheit' => (string)$it['einheit'], 'e' => $zuE($iid, $frei)];
+        }
+    }
+    foreach (['gekoppelt' => 'summe_gekoppelt', 'lager' => 'summe_lager', 'bestellt' => 'summe_bestellt'] as $k => $s) $out[$s] = array_sum(array_column($out[$k], 'e'));
+    $out['rest']       = max(0.0, $bedarf - $out['summe_gekoppelt']);                                       // nach Kopplung noch zu beschaffen
+    $out['rest_offen'] = max(0.0, $out['rest'] - $out['summe_lager'] - $out['summe_bestellt']);             // wenn man alles Freie koppelt
+    return $out;
+}
+// Eine Quelle (freie Charge bzw. offene Bestellposition des Bulk-/Premix-Artikels) diesem Auftrag zuordnen. Bulk-Charge ->
+// fest zuordnen (auftrag_id, wie „Bulkware binden“); Bestellposition -> Reservierung, und wenn die GANZE offene Position an
+// diesen Auftrag geht, auch bestellung_position.auftrag_id (dann hängt die Ware beim Wareneingang gegen Bestellung direkt am
+// Auftrag). Premix -> Reservierung. Ist noch kein Weg festgelegt, wird er gesetzt (Bulk = fertige Kapsel/Mischung, Premix).
+function auftrag_deckung_koppeln(int $auftrag_id, string $quelle, int $quelle_id, float $menge, string $wer = ''): array {
+    $d = auftrag_deckung($auftrag_id);
+    if (empty($d['ok'])) return ['ok' => false, 'fehler' => 'Kein Produktionsauftrag mit Rezeptur.'];
+    if ($d['schritte_erledigt'] > 0) return ['ok' => false, 'fehler' => 'Die Produktion hat begonnen – Zuordnung nicht mehr änderbar.'];
+    $src = null; foreach ($quelle === 'charge' ? $d['lager'] : $d['bestellt'] as $q) if ((int)$q['id'] === $quelle_id) $src = $q;
+    if (!$src) return ['ok' => false, 'fehler' => 'Quelle ist nicht mehr frei.'];
+    $menge = min($menge > 0 ? $menge : (float)$src['frei'], (float)$src['frei']);
+    if ($menge <= 0) return ['ok' => false, 'fehler' => 'Menge fehlt.'];
+    $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $paId = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$auftrag_id]) ?: null;
+    $warn = '';
+    if ($quelle === 'charge' && $src['art'] === 'bulk') {
+        $r = charge_auftrag_zuweisen($quelle_id, $auftrag_id, $menge);
+        if (empty($r['ok'])) return $r;
+        $warn = (string)($r['warnung'] ?? ''); $menge = (float)$r['zugewiesen'];
+    } elseif ($src['art'] === 'bulk') {
+        $r = bulk_reservieren($auftrag_id, 'bestellung', $quelle_id, $menge);
+        if (empty($r['ok'])) return $r;
+        $warn = (string)($r['warnung'] ?? '');
+        if ($menge >= (float)$src['frei'] - 1e-6 && bestellposition_reserviert($quelle_id) <= $menge + 1e-6)
+            q("UPDATE bestellung_position SET auftrag_id=? WHERE id=? AND auftrag_id IS NULL", [$auftrag_id, $quelle_id]);
+    } else {
+        $item = (int)$d['premix_item'];
+        q("INSERT INTO reservierung (pa_id, auftrag_id, item_id, menge, status, bestellung_position_id, charge_id) VALUES (?,?,?,?, 'aktiv', ?, ?)",
+          [$paId, $auftrag_id, $item, $menge, $quelle === 'bestellung' ? $quelle_id : null, $quelle === 'charge' ? $quelle_id : null]);
+        if ($quelle === 'bestellung' && $menge >= (float)$src['frei'] - 1e-6 && bestellposition_reserviert($quelle_id) <= $menge + 1e-6)
+            q("UPDATE bestellung_position SET auftrag_id=? WHERE id=? AND auftrag_id IS NULL", [$auftrag_id, $quelle_id]);
+        if (function_exists('bedarf_bump')) bedarf_bump();
+    }
+    $weg = $src['art'] === 'premix' ? 'premix' : 'kapsel';
+    $pa = auftrag_aktiver_pa($auftrag_id); $wegNeu = '';
+    if ($pa && pa_beschaffungsweg($pa) === '') { $rw = auftrag_beschaffungsweg_setzen($auftrag_id, $weg, $wer); if (!empty($rw['ok'])) $wegNeu = beschaffungswege()[$weg]; }
+    log_aktivitaet('auftrag', $auftrag_id, 'team', 'Beschaffung: ' . $nf($menge) . ' ' . $src['einheit'] . ' aus ' . $src['text'] . ' dem Auftrag zugeordnet' . ($wegNeu !== '' ? ' – Weg festgelegt: ' . $wegNeu : '') . '.', 'notiz');
+    return ['ok' => true, 'meldung' => $nf($menge) . ' ' . $src['einheit'] . ' aus ' . $src['text'] . ' zugeordnet.' . ($wegNeu !== '' ? ' Beschaffungsweg festgelegt: ' . $wegNeu . '.' : ''), 'warnung' => $warn];
+}
+// Kopplung zurücknehmen (solange die Produktion nicht läuft). 'charge_fest' -> Charge wieder frei; 'res' -> Reservierung
+// storniert, und eine nur durch die Kopplung gesetzte bestellung_position.auftrag_id (Artikel-Position) wird wieder leer.
+function auftrag_deckung_loesen(int $auftrag_id, string $typ, int $id): array {
+    $pa = auftrag_aktiver_pa($auftrag_id);
+    if ($pa && (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [(int)$pa['id']]) > 0)
+        return ['ok' => false, 'fehler' => 'Die Produktion hat begonnen – Zuordnung nicht mehr änderbar.'];
+    if ($typ === 'charge_fest') {
+        $r = charge_auftrag_loesen($id, $auftrag_id);
+        if (!empty($r['ok'])) log_aktivitaet('auftrag', $auftrag_id, 'team', 'Beschaffung: Charge #' . $id . ' wieder gelöst (zurück ins freie Lager).', 'notiz');
+        return $r + ['meldung' => 'Charge gelöst.'];
+    }
+    if ($typ === 'res') {
+        $r = one("SELECT bestellung_position_id FROM reservierung WHERE id=? AND auftrag_id=? AND status='aktiv'", [$id, $auftrag_id]);
+        if (!$r || !bulk_reservierung_storno($id, $auftrag_id)) return ['ok' => false, 'fehler' => 'Zuordnung nicht gefunden.'];
+        $bp = (int)($r['bestellung_position_id'] ?? 0);
+        if ($bp && (int) scalar("SELECT COUNT(*) FROM reservierung WHERE bestellung_position_id=? AND auftrag_id=? AND status='aktiv'", [$bp, $auftrag_id]) === 0)
+            q("UPDATE bestellung_position SET auftrag_id=NULL WHERE id=? AND auftrag_id=? AND item_id IS NOT NULL", [$bp, $auftrag_id]);
+        if (function_exists('bedarf_bump')) bedarf_bump();
+        log_aktivitaet('auftrag', $auftrag_id, 'team', 'Beschaffung: Zuordnung einer Bestellung/Charge wieder gelöst.', 'notiz');
+        return ['ok' => true, 'meldung' => 'Zuordnung gelöst.'];
+    }
+    return ['ok' => false, 'fehler' => 'Unbekannte Zuordnung.'];
 }
 // Weg festlegen: Eigen/Fremd + Schritte. Steht der PA noch in Vorbereitung, ist das zugleich die Freigabe (Teil 4: es gibt
 // keine eigene Auftrags-Freigabe mehr). Nur solange kein Produktionsschritt erledigt ist.
@@ -10482,6 +10658,14 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
         $itemSql = ($g['art'] === 'fertig' && $lagerItem > 0) ? "(bp.item_id IS NULL OR bp.item_id=" . $lagerItem . ")" : "bp.item_id IS NULL";
         $bestellt = (float) scalar("SELECT COALESCE(SUM(" . bulk_position_basis_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                     WHERE $itemSql AND bp.auftrag_id IN ($in) AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL");
+        // Dem Auftrag gekoppelte, noch nicht gelieferte Bestellpositionen (Reiter Beschaffungsweg, 05.11.2026) zählen als
+        // bestellt – sonst würde der Bedarf trotz vorhandener Bestellung noch einmal bestellt (Q10-Fall). Freitext-Zeilen
+        // dieser Aufträge sind oben schon gezählt und bleiben hier außen vor.
+        if ($g['art'] === 'bulk' && $aids)
+            $bestellt += (float) scalar("SELECT COALESCE(SUM(r.menge),0) FROM reservierung r JOIN bestellung_position bp ON bp.id=r.bestellung_position_id
+                                         JOIN bestellung b ON b.id=bp.bestellung_id
+                                         WHERE r.status='aktiv' AND r.auftrag_id IN ($in) AND bp.item_id IS NOT NULL AND r.item_id IN (SELECT id FROM item WHERE kategorie='fertig')
+                                           AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL");
         $stockRaw = $lagerItem > 0 ? item_bestand($lagerItem, true) : 0.0;   // fertige Packungen (Beutel/Dosen)
         // Bei Schüttgut den Packungs-Bestand in dieselbe Einheit wie den Bedarf bringen (Packungen × Füllmenge = g/ml),
         // sonst würden Beutel von Gramm abgezogen. Stück-Formen bleiben wie bisher (Packungs-Bestand).
