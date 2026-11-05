@@ -1103,11 +1103,34 @@ function erp_fertigware_chargen(int $pa_id, string $status = 'frei'): array {
     $auf = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     $rid = erp_rezeptur_stamm(erp_pa_rezeptur_id($pa_id));   // Bulk-Artikel hängt an der Stammrezeptur (G5)
     if (!$auf && !$rid) return [];
-    return all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.item_id, i.name
+    // Eigene Chargen des Auftrags zuerst, dann freie Rezeptur-Bulkware OHNE Auftrag (Chargen anderer Aufträge nie, 05.11.2026).
+    // menge_verfuegbar = nutzbar (bei freier Ware minus Reservierungen anderer Aufträge, gedeckelt auf den Netto-Pool wie im
+    // Dashboard auftrag_bulk_lager_frei); menge_ist = tatsächlicher Bestand der Charge (für die Abbuchung).
+    $res = tabelle_da('reservierung');
+    $rows = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.menge_verfuegbar AS menge_ist, c.einheit, c.item_id, c.auftrag_id, i.name"
+                . ($res ? ", (SELECT COALESCE(SUM(r.menge),0) FROM reservierung r WHERE r.charge_id=c.id AND r.status='aktiv' AND r.auftrag_id<>?) AS res_andere" : ", 0 AS res_andere") . "
                 FROM charge c JOIN item i ON i.id=c.item_id
                 WHERE i.kategorie='fertig' AND c.status=? AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL
-                  AND (c.auftrag_id=? OR (?>0 AND i.rezeptur_id=?))
-                ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$status, $auf, $rid, $rid]);
+                  AND (c.auftrag_id=? OR (?>0 AND i.rezeptur_id=? AND c.auftrag_id IS NULL))
+                ORDER BY (c.auftrag_id=?) DESC, (c.mhd IS NULL), c.mhd ASC, c.id ASC", array_merge($res ? [$auf] : [], [$status, $auf, $rid, $rid, $auf]));
+    $freiIds = array_values(array_unique(array_map(fn($c) => (int)$c['item_id'], array_filter($rows, fn($c) => empty($c['auftrag_id'])))));
+    $pool = [];
+    foreach ($freiIds as $iid) {
+        $summe = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status=? AND auftrag_id IS NULL AND fremd_kunde_id IS NULL", [$iid, $status]);
+        $andere = $res ? (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND (auftrag_id IS NULL OR auftrag_id<>?)", [$iid, $auf]) : 0.0;
+        $pool[$iid] = max(0.0, $summe - $andere);
+    }
+    $out = [];
+    foreach ($rows as $c) {
+        if (empty($c['auftrag_id'])) {
+            $iid = (int)$c['item_id'];
+            $n = min((float)$c['menge_verfuegbar'] - (float)$c['res_andere'], $pool[$iid] ?? 0.0);
+            if ($n <= 0.0001) continue;
+            $pool[$iid] -= $n; $c['menge_verfuegbar'] = $n;
+        }
+        $out[] = $c;
+    }
+    return $out;
 }
 
 // Zugekaufte fertige Bulkware (Kategorie 'fertig') FEFO abbuchen (Auftrag ODER Rezeptur-Bulk) – Restbuchung bis $bis Packungen.
@@ -1135,8 +1158,8 @@ function erp_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $trocken 
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
-        $nimm = min($rest, (float)$c['menge_verfuegbar']);
-        $neu  = (float)$c['menge_verfuegbar'] - $nimm;
+        $nimm = min($rest, (float)$c['menge_verfuegbar']);   // nutzbar (s. erp_fertigware_chargen)
+        $neu  = (float)$c['menge_ist'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
           [$pa_id, (int)$c['item_id'], $c['id'], $nimm, (string)($c['einheit'] ?? '') ?: erp_fertigware_einheit($pa_id), gmdate('Y-m-d H:i:s')]);   // Einheit der Charge (Pulver g)

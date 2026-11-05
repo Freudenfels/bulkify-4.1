@@ -131,3 +131,6 @@ Gleiche Zahl wie Material-Übersicht (Auftragsseite) und `produktion_bereitschaf
 Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … – freigeben" (wartet auf QM) statt rot „fehlt". Reicht die Quarantäne nicht, bleibt „fehlt" mit Hinweis auf den Quarantäne-Teil. Dashboard-Helfer `bx_fehlt_quar()` (core/ui.php). Produktion bleibt bis zur Freigabe blockiert.
 
 Pulver-Panel (03.11.2026): Die Kontrollzeile heißt jetzt „≈ N Tagesdosen à x g (Rezeptur = 1 Tagesdosis)“ (`tagesdosen_txt()`) statt Portionen. Sie ist nur Info, gerechnet wird mit der Füllmenge in g.
+
+## Material-Kopf (05.11.2026)
+Das Kennzeichen heißt nur noch „alles vorhanden“, wenn wirklich nichts fehlt. Ist nichts mehr zu bestellen, aber noch Ware unterwegs (z. B. Bulk-Bestellung deckt den Rest), steht „nichts zu bestellen · N noch unterwegs“ (gelb). Vorher stand „alles vorhanden“ neben einer roten Zeile „fehlt“.

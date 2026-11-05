@@ -487,3 +487,8 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `charge_gebinde.gewogen` (1 = echtes
 - `auftrag_beschaffungswege()` rechnet die drei Karten nur noch auf `rest`. Den Rohstoffbedarf aus `produktion_materialbedarf` (zieht reservierten Bulk schon ab) skaliert sie auf den Rest, ohne doppelt abzuziehen. Dazu kommen `deckung` und `bedarf_gesamt`.
 - **Keine Doppelbestellung:** `bedarf_bulk()` zählt dem Auftrag reservierte, noch nicht gelieferte Bestellpositionen des Bulk-Artikels als bestellt. Freitext-Zeilen der Aufträge zählten schon vorher, sie werden nicht doppelt gezählt.
 - `auftrag_deckung_weg_festlegen($aid, $wegQuelle)` (05.11.2026, Nachbesserung): Nach einer Zuordnung wird nicht nur ein fehlender Weg gesetzt, sondern auch ein PA, der noch in **Vorbereitung** steht („Beschaffungsweg offen“), freigegeben. Dafür nimmt sie den schon gespeicherten Weg, sonst den aus der Quelle. Vorher blieb der Auftrag auf „offen“, wenn am PA schon ein Weg stand. `auftrag_deckung()` liefert dazu `pa_status`.
+
+## Bulkware aus dem freien Lager entnehmen (05.11.2026)
+`produktion_fertigware_entnehmen()` (Station „Fertigware bereitstellen“, Teilmenge, Machbar-Rechner) nimmt zuerst die dem Auftrag zugeordneten Bulk-Chargen. Danach nimmt sie freie Chargen des Rezeptur-Bulk-Artikels **ohne Auftrag** nach FEFO, höchstens bis zum Netto-Bestand `auftrag_bulk_lager_frei()` und je Charge abzüglich der Reservierungen anderer Aufträge.
+
+Vorher galt nur die zugeordnete Ware. Die Material-Übersicht zeigte z. B. 9.000 Stk verfügbar, die Teilproduktion aber 0 machbar (PR zu AB Q10). Chargen anderer Aufträge werden nie genommen.

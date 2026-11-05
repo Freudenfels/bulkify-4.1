@@ -3368,21 +3368,40 @@ function produktion_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $t
     $einh = produktion_stueck_je_packung($pa);                         // mit Fallback auf auftrag.stueck (v3-Import)
     $ziel = produktion_ziel_pakete($pa_id, $bis) * $einh;
     if ($ziel <= 0) return ['ok'=>true, 'fehlt'=>[]];
-    $itemIds = array_map('intval', array_column(all("SELECT DISTINCT c.item_id FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig'", [(int)$pa['auftrag_id']]), 'item_id'));
+    $aidF = (int)$pa['auftrag_id'];
+    $bulkF = auftrag_bulk_item($aidF);
+    $itemIds = array_map('intval', array_column(all("SELECT DISTINCT c.item_id FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig'", [$aidF]), 'item_id'));
+    if ($bulkF && !in_array($bulkF, $itemIds, true)) $itemIds[] = $bulkF;
     $schon = $itemIds ? (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id IN (" . implode(',', $itemIds) . ")", [$pa_id]) : 0.0;
     $benoetigt = $ziel - $schon;
     if ($benoetigt <= max(0.0001, $ziel * 0.001)) return ['ok'=>true, 'fehlt'=>[]];
+    // Zuerst die dem Auftrag zugeordneten Chargen, danach freie Bulkware des Rezeptur-Artikels OHNE Auftrag (Nico 04./05.11.2026:
+    // Ware im Lager = da, Zuordnen ist optional – sonst zeigte „Material“ 9.000 verfügbar, die Teilproduktion aber 0 machbar).
+    // Freie Ware nur bis zum Netto-Bestand (minus Reservierungen anderer Aufträge, wie auftrag_bulk_lager_frei).
     $chargen = all("SELECT c.* FROM charge c JOIN item i ON i.id=c.item_id
                     WHERE c.auftrag_id=? AND i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0
-                    ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id']]);
-    $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
+                    ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$aidF]);
+    foreach ($chargen as &$cf) $cf['_nutzbar'] = (float)$cf['menge_verfuegbar'];
+    unset($cf);
+    if ($bulkF) {
+        $pool = auftrag_bulk_lager_frei($aidF);
+        foreach (all("SELECT c.*, (SELECT COALESCE(SUM(r.menge),0) FROM reservierung r WHERE r.charge_id=c.id AND r.status='aktiv' AND r.auftrag_id<>?) AS res_andere
+                      FROM charge c WHERE c.item_id=? AND c.auftrag_id IS NULL AND c.fremd_kunde_id IS NULL AND c.status='frei' AND c.menge_verfuegbar>0
+                      ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$aidF, $bulkF]) as $cf) {
+            if ($pool <= 0.0001) break;
+            $n = min((float)$cf['menge_verfuegbar'] - (float)$cf['res_andere'], $pool);
+            if ($n <= 0.0001) continue;
+            $cf['_nutzbar'] = $n; $pool -= $n; $chargen[] = $cf;
+        }
+    }
+    $verf = array_sum(array_column($chargen, '_nutzbar'));
     if ($verf + 0.0001 < $benoetigt)
         return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>produktion_fertigware_einheit($pa)]]];
     if ($trocken) return ['ok'=>true, 'fehlt'=>[]];
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
-        $nimm = min($rest, (float)$c['menge_verfuegbar']);
+        $nimm = min($rest, (float)$c['_nutzbar']);
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         // Verbrauch in der Einheit der Charge (Pulver-Bulk in g), nicht pauschal „Stk".

@@ -668,7 +668,8 @@ if ($bedarfListe):
 <div class="bx-panel"<?= $fehlListe ? ' style="border-color:#e6c4c0"' : '' ?>>
   <?php $hatReserviert = false; foreach ($bedarfListe as $rr) if (($rr['reserviert_eigen'] ?? 0) > 1e-6) { $hatReserviert = true; break; } ?>
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
-    <h2 style="margin:0">Material <?= $fehlListe ? bx_badge(count($fehlListe) . ' fehlt / zu bestellen','err') : bx_badge('alles vorhanden','ok') ?></h2>
+    <?php $nochFehlt = 0; foreach ($bedarfListe as $rr) if ((float)$rr['fehlt'] > 1e-6) $nochFehlt++; ?>
+    <h2 style="margin:0">Material <?= $fehlListe ? bx_badge(count($fehlListe) . ' fehlt / zu bestellen','err') : ($nochFehlt ? bx_badge('nichts zu bestellen · ' . $nochFehlt . ' noch unterwegs','warn') : bx_badge('alles vorhanden','ok')) ?></h2>
     <div class="bx-row" style="gap:8px">
       <?php if ($pa['status'] !== 'erledigt'): ?>
         <form method="post" style="margin:0"><input type="hidden" name="aktion" value="reservieren">
