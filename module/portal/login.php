@@ -22,7 +22,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // KEIN Token in der URL -> die Rolle greift (Token = Inhaber-Zugang).
         header('Location: ?p=portal'); exit;
     }
-    $fehler = 'E-Mail oder Passwort ist nicht korrekt.';
+    // Selbst registriert, aber noch nicht freigegeben: bei richtigem Passwort klar sagen, statt „falsch“ zu melden.
+    $kr = one("SELECT passwort FROM kunden WHERE LOWER(email)=? AND quelle='registrierung' AND gesperrt=1 AND passwort IS NOT NULL", [trim(mb_strtolower($em))]);
+    $fehler = ($kr && $pwIn !== '' && password_verify($pwIn, (string)$kr['passwort']))
+        ? 'Ihr Konto wird noch von bulkify geprüft. Sie erhalten eine E-Mail, sobald es freigeschaltet ist.'
+        : 'E-Mail oder Passwort ist nicht korrekt.';
 }
 // Schon eingeloggt? Direkt ins Portal.
 if (empty($fehler) && !empty($_SESSION['portal_kid'])) { header('Location: ?p=portal'); exit; }
@@ -44,7 +48,8 @@ $cssV = (int) @filemtime(BX_ROOT . '/public/assets/app.css');
       <div class="bx-field"><label>Passwort</label><input type="password" name="passwort" required autocomplete="current-password"></div>
       <button class="btn btn-primary" type="submit" style="width:100%;margin-top:6px">Anmelden</button>
     </form>
-    <p class="muted" style="font-size:12px;margin-top:14px">Noch keinen Zugang? Ihren persönlichen Erstzugang-Link erhalten Sie von bulkify – darüber richten Sie E-Mail und Passwort einmalig ein.</p>
+    <p style="font-size:13px;margin:14px 0 4px">Noch kein Konto? <a href="?p=portal_registrieren">Jetzt registrieren</a></p>
+    <p class="muted" style="font-size:12px;margin-top:4px">Von bulkify einen persönlichen Erstzugang-Link bekommen? Darüber richten Sie E-Mail und Passwort einmalig ein.</p>
   </div>
 </div>
 </body></html>

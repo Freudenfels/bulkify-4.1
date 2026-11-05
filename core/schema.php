@@ -1459,7 +1459,10 @@ function init_schema(): void {
     // --- additive Migrationen ab hier (Beispielmuster) ---
     ensure_column('kunden', 'zeige_energetisierung', "TINYINT(1) NOT NULL DEFAULT 0");   // Energetisierung im Kundenportal zeigen (Spezialkunde, z. B. Annapurna/Pure Health)
     ensure_column('kunden', 'labortest_extern', "TINYINT(1) NOT NULL DEFAULT 0");        // Externer Labortest (Drittlabor) als paralleler Verlaufs-Punkt im Portal (Spezialkunde, will immer eine Drittlabor-Analyse)
-    ensure_column('kunden', 'betreuer_benutzer_id', "INT NULL");   // fester bulkify-Ansprechpartner dieses Kunden (Portal-Übersicht); leer = Standard aus app_meta portal_ansprechpartner_id
+    ensure_column('kunden', 'betreuer_benutzer_id', "INT NULL");
+    // Selbst-Registrierung neuer Kunden (05.11.2026): gesperrt bis zur Freigabe durchs Team.
+    ensure_column('kunden', 'quelle', "VARCHAR(20) NULL");            // 'registrierung' = selbst angelegt über ?p=portal_registrieren
+    ensure_column('kunden', 'registriert_am', "DATETIME NULL");       // UTC   // fester bulkify-Ansprechpartner dieses Kunden (Portal-Übersicht); leer = Standard aus app_meta portal_ansprechpartner_id
     ensure_column('kunden', 'benachrichtigung_aus', "TINYINT(1) NOT NULL DEFAULT 0");    // 1 = keine E-Mail-Benachrichtigungen an diesen Kunden (z. B. für Nachholbuchungen ohne Kunden-Mails)
     ensure_column('kunden', 'portal_token', "VARCHAR(64) NULL");   // Magic-Link-Zugang zum Kundenportal (Backup/Erstzugang)
     ensure_column('kunden', 'passwort', "VARCHAR(255) NULL");       // Passwort-Hash fuers Kunden-Login (password_hash); leer = noch nicht eingerichtet
@@ -4061,6 +4064,47 @@ function kunde_passwort_setzen(int $kid, string $passwort): bool {
     q("UPDATE kunden SET passwort=?, erstlogin_am=COALESCE(erstlogin_am, UTC_TIMESTAMP()) WHERE id=?",
       [password_hash($passwort, PASSWORD_DEFAULT), $kid]);
     return true;
+}
+
+// --- Kunden-Selbstregistrierung (Nico 05.11.2026) ------------------------------------------------------------------
+// Öffentliche Seite ?p=portal_registrieren: legt einen GESPERRTEN Kunden (quelle='registrierung') mit Passwort an. Anmelden
+// kann er sich erst, wenn das Team ihn auf der Kundenseite freigibt (kunde_registrierung_freigeben). Fehlertexte generisch.
+// Rückgabe ['ok'=>bool, 'fehler'=>string, 'id'=>int, 'dublette'=>?array (Kunde mit gleicher Firma, nur fürs Team)].
+function kunde_registrierung_anlegen(array $d): array {
+    $t = fn($k, $max = 190) => mb_substr(trim((string)($d[$k] ?? '')), 0, $max);
+    $firma = $t('firma'); $name = $t('ansprechpartner'); $email = mb_strtolower($t('email'));
+    $pass = (string)($d['passwort'] ?? '');
+    if ($firma === '') return ['ok' => false, 'fehler' => 'Bitte den Firmennamen angeben.'];
+    if ($name === '') return ['ok' => false, 'fehler' => 'Bitte einen Ansprechpartner angeben.'];
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return ['ok' => false, 'fehler' => 'Bitte eine gültige E-Mail-Adresse angeben.'];
+    if (mb_strlen($pass) < 8) return ['ok' => false, 'fehler' => 'Das Passwort muss mindestens 8 Zeichen haben.'];
+    if ($t('strasse') === '' || $t('plz', 20) === '' || $t('ort') === '') return ['ok' => false, 'fehler' => 'Bitte die vollständige Anschrift angeben.'];
+    $land = strtoupper(substr($t('land', 2) ?: 'DE', 0, 2));
+    if (scalar("SELECT id FROM kunden WHERE LOWER(email)=?", [$email])
+        || (table_exists('kunde_portal_user') && scalar("SELECT id FROM kunde_portal_user WHERE LOWER(email)=?", [$email])))
+        return ['ok' => false, 'fehler' => 'Für diese E-Mail gibt es bereits ein Konto. Bitte melden Sie sich an oder kontaktieren Sie uns.'];
+    $dub = one("SELECT id, kundennummer, firma FROM kunden WHERE LOWER(firma)=LOWER(?) LIMIT 1", [$firma]);
+    q("INSERT INTO kunden (kundennummer, firma, ansprechpartner, email, telefon, strasse, hausnummer, plz, ort, land, ust_id, notiz, gesperrt, quelle, registriert_am)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,'registrierung',UTC_TIMESTAMP())",
+      [naechste_nummer('K'), $firma, $name, $email, $t('telefon', 60) ?: null, $t('strasse'), $t('hausnummer', 20) ?: null, $t('plz', 20), $t('ort'), $land,
+       strtoupper(str_replace(' ', '', $t('ust_id', 30))) ?: null, $t('nachricht', 2000) !== '' ? 'Bei der Registrierung: ' . $t('nachricht', 2000) : null]);
+    $kid = (int) insert_id();
+    q("UPDATE kunden SET passwort=? WHERE id=?", [password_hash($pass, PASSWORD_DEFAULT), $kid]);
+    log_aktivitaet('kunde', $kid, 'kunde', 'Hat sich selbst registriert (' . $email . '). Wartet auf Freigabe.', 'notiz');
+    return ['ok' => true, 'fehler' => '', 'id' => $kid, 'dublette' => $dub ?: null];
+}
+// Registrierung freigeben (Team): Kunde entsperren -> Anmeldung über ?p=portal_login möglich. true bei Erfolg.
+function kunde_registrierung_freigeben(int $kunde_id, string $wer = ''): bool {
+    $k = $kunde_id > 0 ? one("SELECT id, gesperrt, quelle FROM kunden WHERE id=?", [$kunde_id]) : null;
+    if (!$k || (string)$k['quelle'] !== 'registrierung' || (int)$k['gesperrt'] !== 1) return false;
+    q("UPDATE kunden SET gesperrt=0 WHERE id=?", [$kunde_id]);
+    aenderung_protokollieren('kunde', $kunde_id, ['gesperrt' => 1], ['gesperrt' => 0], 'kunde');
+    log_aktivitaet('kunde', $kunde_id, 'team', 'Registrierung freigegeben' . ($wer !== '' ? ' von ' . $wer : '') . ' – Kunde kann sich anmelden.', 'notiz');
+    return true;
+}
+// Wartet dieser Kunde auf die Freigabe seiner Selbst-Registrierung?
+function kunde_registrierung_offen(array $k): bool {
+    return (string)($k['quelle'] ?? '') === 'registrierung' && (int)($k['gesperrt'] ?? 0) === 1;
 }
 
 // Nächste feste Nummer für einen Präfix, z. B. naechste_nummer('K') -> "K-0001". Atomar hochgezählt.

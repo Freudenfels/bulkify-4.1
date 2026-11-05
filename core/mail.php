@@ -999,6 +999,32 @@ function mail_lieferant_bewerbung_eingang(int $lieferant_id): string {
     return mail_senden((string)$l['email'], $b, $t, '');
 }
 
+// Kunden-Selbstregistrierung (05.11.2026): Team (Mail + Dashboard-Benachrichtigung) und Eingangsbestätigung an den Kunden.
+function mail_kunde_registrierung_eingang(int $kunde_id, ?array $dublette = null): string {
+    $k = one("SELECT kundennummer, firma, ansprechpartner, email, telefon, plz, ort, land, ust_id, notiz FROM kunden WHERE id=?", [$kunde_id]);
+    if (!$k) return 'Kunde nicht gefunden.';
+    mail_team('Neue Kunden-Registrierung: ' . $k['firma'],
+        'Über die Registrierungsseite hat sich ' . $k['firma'] . ' (' . $k['ansprechpartner'] . ', ' . $k['email'] . ', ' . trim($k['plz'] . ' ' . $k['ort']) . ', ' . $k['land'] . ') als Kunde angemeldet'
+        . ($k['ust_id'] ? ' – USt-IdNr. ' . $k['ust_id'] : ' – ohne USt-IdNr.') . ".\n"
+        . ($dublette ? 'Achtung: Es gibt schon einen Kunden mit gleichem Firmennamen (' . $dublette['kundennummer'] . ') – ggf. zusammenführen statt freigeben: ' . mail_basis_url() . '/?p=kunde&id=' . (int)$dublette['id'] . "\n" : '')
+        . (trim((string)$k['notiz']) !== '' ? "\n" . mb_substr(trim((string)$k['notiz']), 0, 600) . "\n" : '')
+        . "\nPrüfen und freigeben: " . mail_basis_url() . '/?p=kunde&id=' . $kunde_id . "\n");
+    if (trim((string)$k['email']) === '' || !mail_bereit()) return '';
+    $fa = beleg_firma(); $an = trim((string)$k['ansprechpartner']) ?: (string)$k['firma'];
+    return mail_senden((string)$k['email'], 'Ihre Registrierung bei ' . $fa['name'],
+        "Guten Tag $an,\n\nvielen Dank für Ihre Registrierung im Kundenportal von bulkify. Wir prüfen Ihre Angaben und schalten Ihr Konto frei – "
+        . "Sie erhalten dann eine weitere E-Mail und können sich mit Ihrer E-Mail-Adresse und Ihrem Passwort anmelden.\n\nViele Grüße\n" . $fa['name'] . "\n", '');
+}
+// Registrierung freigegeben -> Kunde (Anmeldung möglich, Login-Link).
+function mail_kunde_registrierung_freigegeben(int $kunde_id): string {
+    $k = one("SELECT firma, ansprechpartner, email FROM kunden WHERE id=?", [$kunde_id]);
+    if (!$k || trim((string)$k['email']) === '') return 'Keine E-Mail-Adresse.';
+    $fa = beleg_firma(); $an = trim((string)$k['ansprechpartner']) ?: (string)$k['firma'];
+    return mail_senden((string)$k['email'], 'Ihr Kundenkonto bei ' . $fa['name'] . ' ist freigeschaltet',
+        "Guten Tag $an,\n\nIhr Kundenkonto ist freigeschaltet. Sie können sich ab sofort mit Ihrer E-Mail-Adresse und Ihrem Passwort anmelden:\n"
+        . mail_basis_url() . "/?p=portal_login\n\nViele Grüße\n" . $fa['name'] . "\n", '');
+}
+
 // Lieferanten-Bewerbung freigegeben -> Lieferant (Zugang aktiv, Login-Link).
 function mail_lieferant_freigegeben(int $lieferant_id): string {
     $l = one("SELECT firma, ansprechpartner, email, sprache FROM lieferanten WHERE id=?", [$lieferant_id]);

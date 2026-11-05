@@ -173,6 +173,7 @@ $routes = [
     'fasttrack'       => 'produktion/fasttrack.php',   // Schnelles Nachtragen: Auftrag-Status + Datum + Sprach-Notiz
     'portal'          => 'portal/kunde.php',
     'portal_login'    => 'portal/login.php',   // Kunden-Login (E-Mail + Passwort)
+    'portal_registrieren' => 'portal/registrieren.php',   // Kunden-Selbstregistrierung (gesperrt bis Freigabe)
     'portal_dok'     => 'portal/dokument_download.php',
     'werk'               => 'intern/werk_cockpit.php',
     'aufgaben'           => 'intern/aufgaben.php',
@@ -252,7 +253,7 @@ if ($p === 'autologin') {
 }
 
 // Öffentliche Routen (ohne internen Login): Login-Seite + Kundenportal (Token-basiert)
-$PUBLIC = ['login', 'portal', 'portal_login', 'portal_dok', 'lieferant_login', 'lieferant_einladung', 'lieferant_bewerbung', 'ki_job', 'novelfood_export'];   // portal_dok prüft Token + Freigabe selbst; novelfood_export = öffentlicher JSON-Katalog
+$PUBLIC = ['login', 'portal', 'portal_login', 'portal_registrieren', 'portal_dok', 'lieferant_login', 'lieferant_einladung', 'lieferant_bewerbung', 'ki_job', 'novelfood_export'];   // portal_dok prüft Token + Freigabe selbst; novelfood_export = öffentlicher JSON-Katalog
 
 // Nicht angemeldet -> zur Login-Seite (außer öffentliche Routen)
 if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=login'); exit; }

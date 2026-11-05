@@ -492,3 +492,6 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `charge_gebinde.gewogen` (1 = echtes
 `produktion_fertigware_entnehmen()` (Station „Fertigware bereitstellen“, Teilmenge, Machbar-Rechner) nimmt zuerst die dem Auftrag zugeordneten Bulk-Chargen. Danach nimmt sie freie Chargen des Rezeptur-Bulk-Artikels **ohne Auftrag** nach FEFO, höchstens bis zum Netto-Bestand `auftrag_bulk_lager_frei()` und je Charge abzüglich der Reservierungen anderer Aufträge.
 
 Vorher galt nur die zugeordnete Ware. Die Material-Übersicht zeigte z. B. 9.000 Stk verfügbar, die Teilproduktion aber 0 machbar (PR zu AB Q10). Chargen anderer Aufträge werden nie genommen.
+
+## Kunden-Selbstregistrierung (05.11.2026)
+`kunden.quelle` ('registrierung') und `kunden.registriert_am` (UTC). `kunde_registrierung_anlegen($d)` legt einen gesperrten Kunden mit Passwort-Hash an. Abgelehnt wird eine schon vorhandene E-Mail, eine gleichnamige Firma kommt als `dublette` zurück. `kunde_registrierung_freigeben($id, $wer)` entsperrt den Kunden (nur selbst registrierte und gesperrte) und schreibt Änderungslog und Verlauf. `kunde_registrierung_offen($k)` sagt, ob er noch wartet. Seite: `module/portal/registrieren.php`.

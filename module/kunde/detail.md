@@ -45,3 +45,6 @@ Admin-Abschnitt über der Gefahrenzone: einen doppelten Kunden (Suchfeld-Dropdow
 Am Erstzugang gibt es neben „Link kopieren" den Knopf **„Per Mail senden"** (eigenes Formular `ezMailForm` außerhalb des Hauptformulars, Knopf über `form=…`): POST `aktion=zugang_senden` → `mail_kunde_zugang()`; Rückmeldung `zugangok` / `zugangfehler`. Ohne E-Mail-Adresse ist der Knopf gesperrt.
 
 **Ansprechpartner bei bulkify (Report 5):** im Kontakt-Kasten wählbar (`kunden.betreuer_benutzer_id`); leer = Standard aus Einstellungen → Firma. Steht im Kundenportal auf der Übersicht.
+
+## Selbst-Registrierung freigeben (05.11.2026)
+Hat sich der Kunde selbst registriert (`quelle='registrierung'`) und ist er noch gesperrt, steht oben ein gelber Hinweis mit Datum und Dubletten-Warnung (gleicher Firmenname), dazu der Knopf **„Registrierung freigeben“** (`aktion=registrierung_freigeben` → `kunde_registrierung_freigeben()` + Mail „Konto freigeschaltet“). Bestätigung `&regok=1` (Mail raus) bzw. `2` (keine Mail).

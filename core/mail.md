@@ -99,3 +99,6 @@ Bei Lieferung (`auftrag_rechnung_bei_lieferung`) geht keine eigene Rechnungsmail
 
 ## Anhänge + Angebots-PDF (Nacht 4a)
 `mail_senden()` / `smtp_senden()` haben einen optionalen Parameter `$anhaenge` (Liste mit name/daten/typ), der als multipart/mixed verschickt wird. `mail_kunde_angebot()` hängt das Angebot als PDF an (`angebot_pdf_bauen()`, Dateiname „Angebot AN-….pdf"). Schlägt das PDF fehl, geht die Mail trotzdem raus, mit Portal-Link und ohne Anhang. Wareneingang → Lieferant bekommt bewusst **keine** Mail.
+
+## Kunden-Registrierung (05.11.2026)
+`mail_kunde_registrierung_eingang($kid, $dublette)` schickt die Team-Meldung (`mail_team`: Dashboard-Benachrichtigung immer, Mail an Admins und CC) und die Eingangsbestätigung an den Kunden. `mail_kunde_registrierung_freigegeben($kid)` schickt „Konto freigeschaltet“ mit Link `?p=portal_login`.

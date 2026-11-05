@@ -14,6 +14,12 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
     q("UPDATE kunden SET betreuer_benutzer_id=? WHERE id=?", [(int)($_POST['betreuer_benutzer_id'] ?? 0) ?: null, (int)$id]);
     header('Location: ?p=kunde&id=' . (int)$id . '&betok=1'); exit;
 }
+// Selbst-Registrierung freigeben (05.11.2026): entsperren + Mail an den Kunden („freigeschaltet“, Login-Link).
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'registrierung_freigeben') {
+    $okF = kunde_registrierung_freigeben((int)$id, (string)(current_user()['name'] ?? ''));
+    $fm = ($okF && mail_bereit()) ? mail_kunde_registrierung_freigegeben((int)$id) : '';
+    header('Location: ?p=kunde&id=' . (int)$id . ($okF ? '&regok=' . ($fm === '' ? '1' : '2') : '')); exit;
+}
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zugang_senden') {
     $fz = mail_bereit() ? mail_kunde_zugang((int)$id) : 'Der E-Mail-Versand ist nicht eingerichtet.';
     if ($fz === '') log_aktivitaet('kunde', (int)$id, 'team', 'Zugang zum Kundenportal per Mail gesendet.', 'notiz');
@@ -209,6 +215,17 @@ bx_head($neu ? 'Neuer Kunde' : $v('firma'),
         $actions);
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['regok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Registrierung freigegeben – der Kunde kann sich jetzt anmelden.' . ($_GET['regok'] === '1' && mail_bereit() ? ' Er wurde per E-Mail informiert.' : ' Bitte informieren Sie ihn (keine Mail verschickt).') . '</div>';
+if (!$neu && kunde_registrierung_offen($k)):
+    $regDub = one("SELECT id, kundennummer, firma FROM kunden WHERE LOWER(firma)=LOWER(?) AND id<>? LIMIT 1", [(string)$k['firma'], (int)$id]); ?>
+<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+  <div style="flex:1 1 320px">Hat sich am <?= h(fmt_zeit((string)($k['registriert_am'] ?? ''), 'd.m.Y H:i')) ?> selbst registriert und wartet auf Freigabe. Bis dahin kann er sich nicht anmelden.
+    <?php if (empty($k['ust_id'])): ?><span class="muted">Ohne USt-IdNr.</span><?php endif; ?>
+    <?php if ($regDub): ?><div style="color:#8f231b;margin-top:4px">Es gibt schon einen Kunden mit gleichem Namen: <a href="?p=kunde&id=<?= (int)$regDub['id'] ?>"><?= h($regDub['kundennummer'] . ' ' . $regDub['firma']) ?></a> – ggf. zusammenführen statt freigeben.</div><?php endif; ?></div>
+  <form method="post" style="margin:0"><input type="hidden" name="aktion" value="registrierung_freigeben">
+    <button class="btn btn-primary btn-sm" type="submit">Registrierung freigeben</button></form>
+</div>
+<?php endif;
 if ($kiHinweis) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h($kiHinweis) . '</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 
