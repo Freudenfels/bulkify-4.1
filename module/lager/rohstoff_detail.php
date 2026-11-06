@@ -31,10 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis
     $inco = in_array($_POST['lp_incoterm'] ?? '', array_keys(incoterm_liste()), true) ? $_POST['lp_incoterm'] : null;
     $vers = in_array($_POST['lp_versandart'] ?? '', array_keys(versandart_liste()), true) ? $_POST['lp_versandart'] : null;
     if ($lid && $preis > 0) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart) VALUES (?,?,?,?, 'EUR', CURDATE(), ?, ?)", [(int)$id, $lid, $mengeab, $preis, $inco, $vers]);
+    item_ek_aus_lieferantenpreis((int)$id);   // leerer/automatischer EK folgt dem günstigsten Lieferantenpreis
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1#'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis_del' && !$neu) {
     q("DELETE FROM lieferant_preis WHERE id=? AND item_id=?", [(int)($_POST['preis_id'] ?? 0), (int)$id]);
+    item_ek_aus_lieferantenpreis((int)$id);
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1'); exit;
 }
 // Menge aus dem Warenlager (unser Bestand) ins Fremdlager eines Kunden umbuchen.
@@ -399,9 +401,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             log_aktivitaet('item', (int)$id, 'team', 'Rohstoff angelegt.', 'notiz');
         } else {
             $set = implode(',', array_map(fn($c) => "$c=?", $felder));
+            $ekAlt = (float) scalar("SELECT ek_preis FROM item WHERE id=?", [(int)$id]);
             $vals[] = (int)$id;
             q("UPDATE item SET $set WHERE id=?", $vals);
+            // EK von Hand geändert -> gilt als gepflegt, Lieferantenpreise überschreiben ihn nicht mehr. 0 = wieder automatisch.
+            if (abs((float)$vals[array_search('ek_preis', $felder)] - $ekAlt) > 1e-9) { try { q("UPDATE item SET ek_auto=0 WHERE id=?", [(int)$id]); } catch (Throwable $e) {} }
         }
+        item_ek_aus_lieferantenpreis((int)$id);
         // Fremdprodukt markiert: den vorhandenen eigenen Bestand dem Besitzer-Kunden zuschreiben (Lager 2).
         if ($fpOn && $vals[array_search('fremd_besitzer_id', $felder)]) {
             $n = fremdprodukt_bestand_zuordnen((int)$id, (int)$vals[array_search('fremd_besitzer_id', $felder)]);
@@ -486,6 +492,8 @@ if ($neuKi) {
     $casVorschlag = trim((string)($neuKi['cas_vorschlag'] ?? ''));
     if ($casVorschlag !== '' && trim((string)($neuDefault['cas'] ?? '')) === '') $neuDefault['cas'] = $casVorschlag;
 }
+// Leerer EK, aber Lieferantenpreise vorhanden (z. B. vor dem 06.11.2026 erfasst) -> beim Öffnen nachziehen.
+if (!$neu) item_ek_aus_lieferantenpreis((int)$id);
 $it = $neu ? $neuDefault : one("SELECT * FROM item WHERE id=?", [(int)$id]);
 if (!$it) { $neu = true; $it = $neuDefault; }
 $v = fn($key) => h((string)($it[$key] ?? ''));
@@ -1033,7 +1041,8 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
 
   <section data-panel="ek" hidden>
     <div class="bx-panel"><div class="bx-grid">
-      <div class="bx-field"><label>EK-Preis <?= bx_hint('Einkaufspreis je Bezugseinheit') ?></label><input type="number" step="0.0001" name="ek_preis" value="<?= $v('ek_preis') ?>"></div>
+      <div class="bx-field"><label>EK-Preis <?= bx_hint('Einkaufspreis je Bezugseinheit. Leer oder 0: wird automatisch aus dem günstigsten Lieferantenpreis (kleinste Staffel) übernommen. Von Hand geändert: bleibt so, bis du wieder 0 einträgst.') ?></label><input type="number" step="0.0001" name="ek_preis" value="<?= $v('ek_preis') ?>">
+        <?php if (!$neu && (int)($it['ek_auto'] ?? 0) === 1): ?><div class="muted" style="font-size:12px;margin-top:4px">aus Lieferantenpreis übernommen</div><?php endif; ?></div>
       <?php if (darf_verkauf()): ?><div class="bx-field"><label>VK-Aufschlag (%) <?= bx_hint('Nur für Rohstoff-Weiterverkauf an Kunden. Leer = globaler Aufschlag aus den Einstellungen.') ?></label><input type="number" step="0.1" name="vk_aufschlag_prozent" value="<?= $v('vk_aufschlag_prozent') ?>" placeholder="<?= h((string)(float)meta_get('aufschlag_rohstoff','30')) ?> (Standard)"></div><?php endif; ?>
       <div class="bx-field"><label>Preis je</label>
         <select name="preis_bezug">

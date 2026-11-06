@@ -141,6 +141,7 @@ function ek_lieferant_preis_schreiben(array $ek): void {
     q("INSERT INTO lieferant_preis (item_id,lieferant_id,lieferant_name,menge_ab,preis,waehrung,stand,quelle,ek_import_id,versandart)
        VALUES (?,?,?,?,?, 'EUR', CURDATE(), 'ek_import', ?, ?)",
       [(int)$ek['item_id'], $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, $mengeAb, (float)$ek['preis'], (int)$ek['id'], $vers]);
+    if (function_exists('item_ek_aus_lieferantenpreis')) item_ek_aus_lieferantenpreis((int)$ek['item_id']);
 }
 
 // Zukauf-Preis eines Fertigprodukts aus einer EK-Zeile übernehmen (idempotent über ek_import_id).

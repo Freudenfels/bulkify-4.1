@@ -250,6 +250,7 @@ function katalog_uebernehmen(int $zeile_id, ?int $item_id = null, bool $preis_ue
         if ($vorhanden) q("UPDATE lieferant_preis SET preis=?, waehrung=?, stand=CURDATE() WHERE id=?", [(float)$z['preis'], $z['waehrung'] ?: 'EUR', (int)$vorhanden]);
         else q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand) VALUES (?,?,?,?,?,CURDATE())",
                [$item_id, (int)$z['lieferant_id'], $ab, (float)$z['preis'], $z['waehrung'] ?: 'EUR']);
+        if (function_exists('item_ek_aus_lieferantenpreis')) item_ek_aus_lieferantenpreis((int)$item_id);
     }
     q("UPDATE lieferant_katalog SET status='uebernommen', item_id=?, entschieden=? WHERE id=?", [$item_id, gmdate('Y-m-d H:i:s'), $zeile_id]);
     return ['ok'=>true, 'item_id'=>$item_id, 'msg'=>''];

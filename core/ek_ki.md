@@ -29,3 +29,5 @@ der „Lief."-Marker in der Rohstoffliste automatisch. `lieferant_id` darf NULL 
 Die KI läuft nur auf **beta** (`ki_bereit()`), lokal ist der Batch-Knopf deaktiviert –
 die manuelle Zuordnung funktioniert überall. Fertigprodukt-Zeilen bleiben intern
 (Zukauf, nie Kundensicht); sie bekommen `produkt_id`, aber keinen lieferant_preis.
+
+**06.11.2026:** `ek_lieferant_preis_schreiben()` ruft danach `item_ek_aus_lieferantenpreis()` – leerer EK am Rohstoff wird aus dem Lieferantenpreis gefüllt.

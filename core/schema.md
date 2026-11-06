@@ -501,3 +501,7 @@ Vorher galt nur die zugeordnete Ware. Die Material-Übersicht zeigte z. B. 9.000
 
 ## Nachbuchen „komplett versendet" (06.11.2026)
 `produktion_nachbuchen_versendet($pa_id, $lieferschein, $wer)` holt für einen schon versendeten Auftrag die Buchungen nach: Rest einbuchen (`produktion_teilmenge_einbuchen`), Material tolerant abbuchen über `_nachbuchen_tolerant()` (ruft `produktion_fertigware_entnehmen`, `produktion_verpackung_entnehmen` und `produktion_etikett_entnehmen` erst trocken, dann voll oder bis zur machbaren Packungszahl), Fertigware des Auftrags ausbuchen, `versendet_menge`, Status „versendet“ mit `phase_override` = letzte Stufe, optional Lieferschein ohne Mail. Rohstoffe werden nie gebucht. Gesperrt, wenn schon alles nachgebucht ist, bei Fulfillment und bei Bulk-PA.
+
+## EK aus Lieferantenpreis (06.11.2026)
+
+`item_ek_aus_lieferantenpreis(int $item_id)`: setzt `item.ek_preis` auf den günstigsten Einstiegspreis aus `lieferant_preis` (kleinste Staffel je Lieferant, nur EUR) und `ek_auto=1`, wenn der EK leer ist oder schon automatisch kam. Von Hand gepflegter EK (`ek_auto=0`, > 0) bleibt. Haupt-Lieferant per COALESCE. Ohne Lieferantenpreis fällt ein automatischer EK auf 0. Nicht für Verpackung (eigene `pack_ek_staffel`). Aufgerufen in `lieferant_angebot_annehmen`, `lieferant_katalog` (Preis übernehmen), `ek_lieferant_preis_schreiben` und auf der Rohstoffseite. Neue Spalte `item.ek_auto`.

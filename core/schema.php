@@ -1514,7 +1514,8 @@ function init_schema(): void {
     ensure_column('lieferant_angebot', 'variante', "VARCHAR(190) NULL");          // E3: konkrete Variante/Gehalt des Lieferanten (z. B. "Bisglycinat 13% Mg")
     ensure_column('lieferant_angebot', 'kapsel_vorschlag_id', "INT NULL");        // E4: vom Lieferanten vorgeschlagene andere Kapselgröße
     ensure_column('lieferant_angebot', 'kapsel_vorschlag_grund', "VARCHAR(255) NULL"); // E4: Begründung für den Kapselgrößen-Vorschlag
-    ensure_column('item', 'cas', "VARCHAR(30) NULL");              // CAS-Nummer (z. B. Ascorbinsäure 50-81-7)
+    ensure_column('item', 'cas', "VARCHAR(30) NULL");
+    ensure_column('item', 'ek_auto', "TINYINT(1) NOT NULL DEFAULT 0");   // 1 = ek_preis kommt aus dem Lieferantenpreis (item_ek_aus_lieferantenpreis)              // CAS-Nummer (z. B. Ascorbinsäure 50-81-7)
     ensure_column('item', 'max_fuellgewicht_g', "DECIMAL(10,2) NULL"); // Verpackung: max. Füllgewicht (g) – für Pulver-Match (Glas/Dose)
     // Verpackungs-Stückliste: Rolle je Verpackungs-Item + Produkt-Slots für die komplette Stückliste
     ensure_column('item', 'verpackung_rolle', "VARCHAR(20) NULL");  // primaer|verschluss|etikett|karton|beipack (nur kategorie=verpackung)
@@ -6622,6 +6623,31 @@ function angebot_rohstoffkosten(int $angebot_id): array {
     }
     return ['zeilen'=>$zeilen, 'summe'=>$summe, 'ohne_preis'=>$ohne];
 }
+// EK-Preis am Artikel aus den Lieferantenpreisen übernehmen (Nico 06.11.2026: „wieso wird der EK nicht übernommen?").
+// EK = günstigster Einstiegspreis (kleinste Staffel je Lieferant, nur EUR). Gesetzt wird nur, wenn der EK noch leer ist
+// oder schon automatisch kam (ek_auto=1) – ein von Hand gepflegter EK bleibt unangetastet. Haupt-Lieferant wird
+// mitgesetzt, wenn noch keiner gewählt ist. Gibt es keinen Lieferantenpreis mehr, fällt ein automatischer EK auf 0.
+// Aufrufen nach jeder Änderung an lieferant_preis eines Artikels (best-effort).
+function item_ek_aus_lieferantenpreis(int $item_id): void {
+    try {
+        $it = one("SELECT ek_preis, ek_auto, kategorie FROM item WHERE id=?", [$item_id]);
+        if (!$it || ($it['kategorie'] ?? '') === 'verpackung') return;   // Verpackung hat ihre eigene EK-Staffel (pack_ek_staffel)
+        $auto = (int)($it['ek_auto'] ?? 0) === 1;
+        if (!$auto && (float)$it['ek_preis'] > 0) return;
+        $best = null; $seen = [];
+        foreach (all("SELECT lieferant_id, lieferant_name, preis FROM lieferant_preis
+                      WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR')
+                      ORDER BY lieferant_id, lieferant_name, menge_ab ASC, preis ASC", [$item_id]) as $r) {
+            $k = (int)$r['lieferant_id'] . '|' . (string)$r['lieferant_name'];
+            if (isset($seen[$k])) continue;   // erste Zeile je Lieferant = kleinste Staffel
+            $seen[$k] = true;
+            if ($best === null || (float)$r['preis'] < $best['preis']) $best = ['preis' => (float)$r['preis'], 'lid' => (int)$r['lieferant_id']];
+        }
+        if ($best === null) { if ($auto) q("UPDATE item SET ek_preis=0, ek_auto=0 WHERE id=?", [$item_id]); return; }
+        $lid = $best['lid'] > 0 && scalar("SELECT id FROM lieferanten WHERE id=?", [$best['lid']]) ? $best['lid'] : null;
+        q("UPDATE item SET ek_preis=?, ek_auto=1, haupt_lieferant_id=COALESCE(haupt_lieferant_id, ?) WHERE id=?", [$best['preis'], $lid, $item_id]);
+    } catch (Throwable $e) { /* best-effort: Spalte ek_auto evtl. noch nicht da */ }
+}
 function rohstoff_ek_bei_menge(int $item_id, float $menge): ?float {
     $rows = all("SELECT lieferant_id, preis FROM lieferant_preis
                  WHERE item_id=? AND menge_ab<=? AND (waehrung IS NULL OR waehrung='EUR')
@@ -7019,6 +7045,7 @@ function lieferant_angebot_annehmen(int $angebot_id): string {
     foreach ($zeilen as $z)
         q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart) VALUES (?,?,?,?,?,CURDATE(),?,?)",
           [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, (string)($an['waehrung'] ?: 'EUR'), $inco, $vers]);
+    item_ek_aus_lieferantenpreis($item);
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
     q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);
     log_aktivitaet('lieferant', $lief, 'team', 'Angebot zu ' . $an['anfr_nummer'] . ' angenommen – ' . count($zeilen) . ' EK-Staffel(n) übernommen.', 'angebot', 'item', $item);

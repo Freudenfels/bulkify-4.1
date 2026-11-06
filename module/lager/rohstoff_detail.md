@@ -176,3 +176,5 @@ Neben „Einkauf“ steht der Reiter **Bestellt**. Die Zahl in Klammern zählt d
 - für welchen Auftrag (sonst „Lager“).
 
 Oben steht die Summe „noch unterwegs“ je Einheit. Entwürfe (Status offen, noch nicht verschickt) zählen dabei nicht mit. Aufruf direkt: `?p=rohstoff&id=…&tab=bestellt`.
+
+**EK aus Lieferantenpreis (06.11.2026):** Der EK-Preis im Reiter Einkauf wird automatisch aus den Lieferantenpreisen übernommen (`item_ek_aus_lieferantenpreis()`): günstigster Einstiegspreis (kleinste Staffel je Lieferant, EUR), Haupt-Lieferant wird mitgesetzt, wenn keiner gewählt ist. Das passiert beim Hinzufügen/Löschen eines Lieferantenpreises, beim Speichern und beim Öffnen der Seite (falls der EK noch 0 ist). Unter dem Feld steht dann „aus Lieferantenpreis übernommen“. Wer den EK von Hand ändert, behält ihn (`item.ek_auto=0`); 0 eintragen schaltet wieder auf automatisch.
