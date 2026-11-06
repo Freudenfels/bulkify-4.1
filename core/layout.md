@@ -38,3 +38,5 @@ Gruppe Produktion, Key `produktionsfreigabe` (Route `produktion_vorbereitung`, n
 Badge **Freigaben** (Lager) zählt seit 04.11.2026 auch Chargen in Quarantäne (Lager 1, mit Bestand).
 
 Menüpunkt `produktionsfreigabe` heißt seit 04.11.2026 **Beschaffungsweg offen** (Zähler = Aufträge ohne festgelegten Weg).
+
+**Suchfeld-Pflichtfeld (06.11.2026):** Ein `<select class="rscombo" required>` ist versteckt – war es leer, brach der Browser das Absenden **still** ab (er kann versteckte Felder nicht markieren; z. B. Easy Production „Vorschau passiert nichts“ ohne Mitarbeiter). Jetzt fängt `bx_rscombo_script()` das `invalid`-Ereignis ab: Das Suchfeld bekommt einen roten Rahmen (`.rs-invalid`), den Fokus und die Meldung „Bitte aus der Liste auswählen.“. Nach der Auswahl ist beides weg.
