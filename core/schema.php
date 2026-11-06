@@ -8754,6 +8754,86 @@ function produktion_weg_fertigkapseln(int $pa_id, string $wer = ''): array {
     return ['ok'=>true, 'msg'=>'Auf fertige Kapseln umgestellt: ' . implode(', ', array_map(fn($s) => (string)$s['station'], $offen)) . ' entfallen, „Fertigware bereitstellen" kommt dazu.'];
 }
 
+// Nachbuchen „komplett versendet" (Nico 06.11.2026): Auftrag steht schon auf „versendet" (Fortschritt/God-Mode), im System wurde aber
+// nichts gebucht – Fertigware liegt noch frei im Lager, der Rest ist nie eingebucht, Material nie abgebucht. Diese Admin-Aktion holt das
+// nach, OHNE Rohstoffe (bei fertigen Kapseln gab es keine Rohstoffe): 1) offenen Rest als Charge einbuchen, 2) fertige Kapseln, Gläser/Deckel
+// und Etiketten abbuchen – soweit Bestand da ist (Fehlendes wird nur gemeldet, blockiert nicht), 3) die Fertigware des Auftrags ausbuchen,
+// versendet_menge = Menge, Status „versendet“ (auch wenn zwischendurch zurückgestellt), 4) optional Lieferschein (ohne Mail). Keine Kunden-Mail,
+// keine Rechnungsänderung. Erlaubt bei Auftrag „versendet“ ODER fertig abgehakter Produktion.
+function _nachbuchen_tolerant(callable $fn, float $menge, float $einh): array {
+    $r = $fn(null, true);
+    if ($r['ok'] ?? true) { $fn(null, false); return []; }
+    $bis = $menge;
+    foreach (($r['fehlt'] ?? []) as $f)
+        $bis = min($bis, floor(($menge * $einh - (float)$f['benoetigt'] + (float)$f['verfuegbar']) / max(1e-9, $einh) + 1e-6));
+    if ($bis > 0) $fn($bis, false);   // so viel wie da ist
+    return $r['fehlt'] ?? [];
+}
+function produktion_nachbuchen_versendet(int $pa_id, bool $lieferschein = false, string $wer = ''): array {
+    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa || empty($pa['auftrag_id'])) return ['ok'=>false, 'msg'=>'Produktionsauftrag ohne Auftrag – nichts nachzubuchen.'];
+    if (pa_ist_bulk($pa)) return ['ok'=>false, 'msg'=>'Bulk-Produktion wird nicht versendet.'];
+    $aid = (int)$pa['auftrag_id'];
+    $a = one("SELECT * FROM auftrag WHERE id=?", [$aid]);
+    if (!$a || (string)$a['status'] === 'storniert') return ['ok'=>false, 'msg'=>'Auftrag nicht gefunden oder storniert.'];
+    if ((string)$a['status'] !== 'versendet' && !in_array((string)$pa['status'], ['fertig', 'erledigt'], true))
+        return ['ok'=>false, 'msg'=>'Erst die Produktion abschließen – nachgebucht wird nur, was fertig produziert und schon versendet ist.'];
+    if (auftrag_ist_fulfillment($aid)) return ['ok'=>false, 'msg'=>'Fulfillment-Kunde: die Ware gehört ins Lager 2 – bitte dort umlagern statt nachbuchen.'];
+    $wer = trim($wer) ?: 'Team';
+    $menge = (float)$pa['menge'];
+    $imLager = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
+        WHERE (c.pa_id=? OR c.auftrag_id=?) AND i.kategorie='verkaufsfertig' AND c.fremd_kunde_id IS NULL AND c.status IN ('frei','quarantaene')", [$pa_id, $aid]);
+    if ((string)$a['status'] === 'versendet' && produktion_rest($pa_id) <= 0.0001 && $imLager <= 0.0001 && (float)($a['versendet_menge'] ?? 0) + 0.0001 >= (float)$a['menge'])
+        return ['ok'=>false, 'msg'=>'Es ist schon alles nachgebucht.'];
+    $txt = [];
+    // 1) offenen Rest einbuchen
+    $rest = produktion_rest($pa_id);
+    if ($rest > 0.0001) {
+        $r = produktion_teilmenge_einbuchen($pa_id, $rest, null, 'Nachbuchung: bereits versendet');
+        if (!$r['ok']) return ['ok'=>false, 'msg'=>'Rest konnte nicht eingebucht werden: ' . $r['msg']];
+        $txt[] = number_format($rest, 0, ',', '.') . ' Pkg als Charge ' . $r['charge_nr'] . ' eingebucht';
+    }
+    // 2) Material: fertige Kapseln, Gläser/Deckel, Etiketten – nie Rohstoffe
+    $einh = max(1.0, (float) produktion_stueck_je_packung($pa));
+    $fehlt = array_merge(
+        _nachbuchen_tolerant(fn($bis, $tr) => produktion_fertigware_entnehmen($pa_id, $bis, $tr), $menge, $einh),
+        _nachbuchen_tolerant(fn($bis, $tr) => produktion_verpackung_entnehmen($pa_id, $bis, $tr), $menge, 1.0),
+        _nachbuchen_tolerant(fn($bis, $tr) => produktion_etikett_entnehmen($pa_id, $bis, $tr), $menge, 1.0));
+    $txt[] = 'Material abgebucht (fertige Kapseln, Gläser/Deckel, Etiketten)';
+    $fehltTxt = array_map(fn($f) => (string)$f['name'] . ' ' . rtrim(rtrim(number_format((float)$f['fehlt'], 3, ',', '.'), '0'), ',') . ' ' . (string)($f['einheit'] ?? ''), $fehlt);
+    // 3) Fertigware des Auftrags ausbuchen (nur Chargen dieses Auftrags/PA, Lager 1)
+    $ship = max(0.0, (float)$a['menge'] - (float)($a['versendet_menge'] ?? 0));
+    $raus = 0.0;
+    foreach (all("SELECT c.* FROM charge c JOIN item i ON i.id=c.item_id
+                  WHERE (c.pa_id=? OR c.auftrag_id=?) AND i.kategorie='verkaufsfertig' AND c.fremd_kunde_id IS NULL
+                    AND c.status IN ('frei','quarantaene') AND c.menge_verfuegbar>0
+                  ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$pa_id, $aid]) as $c) {
+        if ($ship - $raus <= 0.0001) break;
+        $nimm = min($ship - $raus, (float)$c['menge_verfuegbar']);
+        $neu = (float)$c['menge_verfuegbar'] - $nimm;
+        q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : (string)$c['status'], $c['id']]);
+        $raus += $nimm;
+    }
+    if ($raus > 0) $txt[] = number_format($raus, 0, ',', '.') . ' Pkg Fertigware ausgebucht';
+    // Status auf „versendet“ (letzte Stufe), auch wenn er zwischendurch zurückgestellt wurde.
+    $letzte = count(auftrag_phasen(false)) - 1;
+    q("UPDATE auftrag SET versendet_menge=GREATEST(COALESCE(versendet_menge,0), menge),
+       status_datum=IF(status='versendet', status_datum, CURDATE()), status='versendet', phase_override=? WHERE id=?", [$letzte, $aid]);
+    // 4) optional Lieferschein (ohne Mail)
+    $lsNr = '';
+    if ($lieferschein) {
+        $lsNr = naechste_nummer('LS');
+        q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,menge,netto,ust_prozent,ust_betrag,brutto,status,datum)
+           VALUES (?,'lieferschein',?,?,?,?,0,0,?,'offen',CURDATE())", [$lsNr, $aid, $a['kunde_id'], (int)$a['menge'], (float)$a['gesamt_netto'], (float)$a['gesamt_netto']]);
+        $txt[] = 'Lieferschein ' . $lsNr;
+    }
+    log_aktivitaet('auftrag', $aid, 'team', 'Nachgebucht (bereits versendet, ' . $wer . '): ' . implode(', ', $txt) . '.'
+        . ($fehltTxt ? ' Nicht abgebucht, kein Bestand: ' . implode(', ', $fehltTxt) . '.' : ''), 'auftrag', 'auftrag', $aid);
+    bedarf_bump();
+    return ['ok'=>true, 'fehlt'=>$fehltTxt, 'ls'=>$lsNr,
+            'msg'=>'Nachgebucht: ' . implode(', ', $txt) . '.' . ($fehltTxt ? ' Nicht abgebucht, weil kein Bestand: ' . implode(', ', $fehltTxt) . '.' : '')];
+}
+
 // ===== PreProduktionsauftrag / Vor-Produktion =====================================================
 // Checkliste eines Vor-Produktionsauftrags: ist alles da, um die Produktion durchzuführen?
 // Rückgabe: ['pa'=>…, 'auftrag_id'=>…, 'einheiten_bedarf'=>…, 'checks'=>[['key','label','ok','wert','kritisch'], …],

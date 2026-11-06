@@ -49,6 +49,16 @@ Der Weg richtet sich nach der **Beschaffung**: Ist für den Auftrag **fertige Bu
 
 Auf der PA-Detailseite erscheint bei erkanntem Zukauf ein **Banner „Fertige Bulkware erkannt – verkürzter Weg möglich"** mit Button **Verkürzten Weg anwenden** (`aktion=weg_zukauf`). Umgekehrt kann auf den vollen Weg zurückgestellt werden (`aktion=weg_voll`). Beides über `produktion_schritte_regenerieren($pa_id,$zukauf)` – nur solange **kein Schritt erledigt** ist (sonst Hinweis). Kein manuelles Make-or-Buy-Flag nötig; die Info steckt in Kategorie/Form der eingegangenen Ware.
 
+### Nachbuchen: komplett versendet (06.11.2026)
+Für den Fall PR-2746: Die Ware ist längst beim Kunden, im System wurde beim Abhaken (God-Mode/Fortschritt) aber nichts gebucht. Der Rest war nie eingebucht, die Fertigware stand noch frei im Lager, und das Material war nie abgebucht.
+Nur für **Admin**. Das Panel **„Schon an den Kunden versendet? Bestand nachbuchen“** erscheint, wenn der Auftrag auf „versendet“ steht oder die Produktion fertig abgehakt ist und noch ein Rest offen ist (auch wenn der Auftrag wieder auf „In Produktion“ gestellt wurde). Es kommt nur dann, wenn wirklich etwas fehlt.
+Knopf **„Nachbuchen: komplett versendet“** (`aktion=nachbuchen_versendet`, optional Haken „Lieferschein nachträglich anlegen“) ruft `produktion_nachbuchen_versendet()`:
+1. Der offene Rest wird als Charge (.B …) eingebucht.
+2. Abgebucht werden fertige Kapseln, Gläser/Deckel und Etiketten, **keine Rohstoffe**. Es wird gebucht, was im Lager ist. Was fehlt, steht in der Meldung und im Verlauf und blockiert nichts.
+3. Die Fertigware dieses Auftrags wird ausgebucht, `versendet_menge` = Menge, der Status wird „versendet“ (letzte Stufe).
+4. Optional entsteht ein Lieferschein, ohne Mail.
+Keine Kunden-Mail, die Rechnung bleibt unverändert. Ein zweiter Klick meldet „Es ist schon alles nachgebucht.“ Nicht für Fulfillment-Kunden (Lager 2) und nicht für Bulk-Produktion.
+
 ### Nachträglich auf fertige Kapseln umstellen (06.11.2026)
 Wurde mit fertigen Kapseln produziert (aus dem Lager oder zugekauft), der Auftrag steht aber noch auf dem Eigen-Weg, verlangt die Teilmenge sonst Rohstoffe. Solange noch Herstellungsschritte offen sind (Rohstoffe bereitstellen, Mischen, Verkapselung …), steht oben das Feld **„Auf fertige Kapseln umstellen“** – auch wenn schon ein Schritt erledigt oder für den Auftrag bestellt wurde. Es nutzt dieselbe Aktion `weg_zukauf`: zuerst wie bisher `produktionsauftrag_art_setzen()`; geht das nicht, ruft die Seite `produktion_weg_fertigkapseln()` (`core/schema.php`):
 - löscht nur die **offenen** Herstellungsschritte, erledigte bleiben,

@@ -35,6 +35,12 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r['msg'])); exit;
 }
 
+// Nachbuchen „komplett versendet" (Admin, Nico 06.11.2026): Auftrag steht schon auf versendet, gebucht wurde aber nichts.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachbuchen_versendet' && has_role('admin')) {
+    $rN = produktion_nachbuchen_versendet($id, !empty($_POST['lieferschein']), (string)(current_user()['name'] ?? ''));
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&' . ($rN['ok'] ? 'nachok=' : 'nachfehler=') . rawurlencode($rN['msg'])); exit;
+}
+
 // Chargennummer einer eingebuchten Fertigware-Charge korrigieren (falls sie eine andere Nummer bekommen hat).
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'charge_edit') {
     $cid = (int)($_POST['charge_id'] ?? 0);
@@ -258,6 +264,8 @@ if (isset($_GET['angelegt'])) echo '<div class="bx-panel badge-ok" style="paddin
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Station abgeschlossen.</div>';
 if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Material unten. Bitte erst Wareneingang buchen.</div>';
 if (isset($_GET['weg']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsweg umgestellt.</div>';
+if (isset($_GET['nachok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['nachok']) . '</div>';
+if (isset($_GET['nachfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['nachfehler']) . '</div>';
 if (isset($_GET['wegfk']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['wegfk']) . '</div>';
 if (isset($_GET['wegfkfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['wegfkfehler']) . '</div>';
 if (isset($_GET['wegfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Eigen/Fremd bzw. der Weg kann nicht mehr geändert werden – es wurde bereits ein Schritt erledigt oder für den Auftrag bestellt.' . (($pa['produktionsart'] ?? '') === 'fremd' ? ' Für „doch selbst produzieren" den Knopf <strong>Rückabwicklung</strong> nutzen (storniert die Bulk-Bestellung mit).' : '') . '</div>';
@@ -319,6 +327,28 @@ if (has_role('admin')):
   </div>
 <?php endif; endif; ?>
 <?php
+// Nachbuchen „komplett versendet" (nur Admin): Auftrag ist versendet, aber Rest nicht eingebucht / Fertigware noch im Lager.
+// Auch wenn der Auftrag wieder auf „In Produktion“ gestellt wurde: Produktion fertig abgehakt, aber Rest nie eingebucht.
+if (has_role('admin') && !empty($pa['auftrag_id']) && !pa_ist_bulk($pa) && (string)($pa['auftrag_status'] ?? '') !== 'storniert'
+    && ((string)($pa['auftrag_status'] ?? '') === 'versendet' || (in_array((string)$pa['status'], ['fertig', 'erledigt'], true) && produktion_rest($id) > 0.0001))):
+    $nbRest = produktion_rest($id);
+    $nbLager = (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
+        WHERE (c.pa_id=? OR c.auftrag_id=?) AND i.kategorie='verkaufsfertig' AND c.fremd_kunde_id IS NULL AND c.status IN ('frei','quarantaene')", [$id, (int)$pa['auftrag_id']]);
+    $nbVers = (float) scalar("SELECT COALESCE(versendet_menge,0) FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]);
+    if ($nbRest > 0.0001 || $nbLager > 0.0001 || $nbVers + 0.0001 < (float)$pa['auftrag_menge']): ?>
+  <div class="bx-panel" style="border-left:3px solid var(--warn)">
+    <div style="font-weight:600">Schon an den Kunden versendet? Bestand nachbuchen</div>
+    <div class="muted" style="font-size:13px;margin:4px 0 10px">Im System ist das noch nicht gebucht:
+      <?= $nbRest > 0.0001 ? number_format($nbRest, 0, ',', '.') . ' Pkg nie eingebucht, ' : '' ?><?= number_format($nbLager, 0, ',', '.') ?> Pkg stehen noch im Lager.
+      Der Knopf bucht den Rest ein, die Fertigware aus und das Material ab: fertige Kapseln, Gläser/Deckel, Etiketten – <strong>keine Rohstoffe</strong>.
+      Was nicht im Lager ist, wird nur notiert. Der Auftrag steht danach auf „versendet“. Keine Mail an den Kunden, die Rechnung bleibt, wie sie ist.</div>
+    <form method="post" class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;margin:0" onsubmit="return confirm('Bestand für diesen versendeten Auftrag nachbuchen?');">
+      <input type="hidden" name="aktion" value="nachbuchen_versendet">
+      <label class="bx-check" style="margin:0"><input type="checkbox" name="lieferschein" value="1"> Lieferschein nachträglich anlegen</label>
+      <button class="btn btn-primary btn-sm" type="submit">Nachbuchen: komplett versendet</button>
+    </form>
+  </div>
+<?php endif; endif;
 
 // Einheitliche, ruhige Wertgröße für alle Kennzahl-Karten dieser Seite.
 echo '<style>.bx-cards .v{font-size:15px;line-height:1.4} details.bx-sek>summary{cursor:pointer;list-style:none;font-weight:600;font-size:15px;color:var(--gruen);padding:12px 2px}details.bx-sek>summary::-webkit-details-marker{display:none}details.bx-sek>summary::before{content:"\\25B8 ";color:var(--gruen)}details.bx-sek[open]>summary::before{content:"\\25BE "}</style>';
