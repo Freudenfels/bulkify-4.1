@@ -1330,7 +1330,7 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
         <table class="bx-table" style="font-size:13px"><tbody>
         <?php foreach ($w['positionen'] as $ps): ?>
           <tr><td style="white-space:normal"><?= $bwLink($ps) ?></td><td class="bx-num"><?= h($bwM($ps['menge'], $ps['einheit'])) ?></td>
-              <td class="bx-num"><?= $ps['gesamt'] !== null ? h($bwE($ps['gesamt'])) : '<span class="muted">kein Preis</span>' ?></td></tr>
+              <td class="bx-num"><?= $ps['gesamt'] !== null ? h($bwE($ps['gesamt'])) : '<span class="muted">kein Preis</span>' ?><?php if (!empty($ps['mindest'])): ?><div class="muted" style="font-size:11px">Mindestmenge <?= h($bwM($ps['mindest'], $ps['bezug'] ?? $ps['einheit'])) ?></div><?php endif; ?></td></tr>
         <?php endforeach; ?>
         </tbody></table>
         <div style="margin-top:8px"><?= $w['gesamt'] > 0 ? 'Summe ' . h($bwE($w['gesamt'])) : '' ?><?= $w['luecke'] ? ' <span class="muted" style="font-size:12px">(nicht vollständig: Preise fehlen)</span>' : '' ?></div>

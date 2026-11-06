@@ -505,3 +505,7 @@ Vorher galt nur die zugeordnete Ware. Die Material-Übersicht zeigte z. B. 9.000
 ## EK aus Lieferantenpreis (06.11.2026)
 
 `item_ek_aus_lieferantenpreis(int $item_id)`: setzt `item.ek_preis` auf den günstigsten Einstiegspreis aus `lieferant_preis` (kleinste Staffel je Lieferant, nur EUR) und `ek_auto=1`, wenn der EK leer ist oder schon automatisch kam. Von Hand gepflegter EK (`ek_auto=0`, > 0) bleibt. Haupt-Lieferant per COALESCE. Ohne Lieferantenpreis fällt ein automatischer EK auf 0. Nicht für Verpackung (eigene `pack_ek_staffel`). Aufgerufen in `lieferant_angebot_annehmen`, `lieferant_katalog` (Preis übernehmen), `ek_lieferant_preis_schreiben` und auf der Rohstoffseite. Neue Spalte `item.ek_auto`.
+
+## Staffelpreis unter der Mindestmenge (06.11.2026)
+
+`rohstoff_ek_bei_menge()` nimmt je Lieferant die größte passende Staffel; liegt die Menge **unter** seiner kleinsten Staffel (240 kg bei „ab 250 kg“), gilt deren Preis – wie `staffel_je_lieferant()`. Vorher kam dann gar kein Lieferantenpreis (nur der flache EK, oft 0) und der Beschaffungsweg zeigte „kein Preis“. `rohstoff_ek_detail()` liefert zusätzlich die Mindestmenge des gewählten Lieferanten; der Beschaffungsweg zeigt sie als „Mindestmenge 250 kg“ unter dem Betrag.

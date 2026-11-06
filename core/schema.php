@@ -6648,19 +6648,27 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
         q("UPDATE item SET ek_preis=?, ek_auto=1, haupt_lieferant_id=COALESCE(haupt_lieferant_id, ?) WHERE id=?", [$best['preis'], $lid, $item_id]);
     } catch (Throwable $e) { /* best-effort: Spalte ek_auto evtl. noch nicht da */ }
 }
-function rohstoff_ek_bei_menge(int $item_id, float $menge): ?float {
-    $rows = all("SELECT lieferant_id, preis FROM lieferant_preis
-                 WHERE item_id=? AND menge_ab<=? AND (waehrung IS NULL OR waehrung='EUR')
-                 ORDER BY lieferant_id, menge_ab DESC", [$item_id, $menge]);
-    $best = null; $seen = [];
-    foreach ($rows as $r) {
-        $lid = (int) $r['lieferant_id'];
-        if (isset($seen[$lid])) continue;   // erste Zeile je Lieferant = größte passende Staffel
-        $seen[$lid] = true;
-        $p = (float) $r['preis'];
-        if ($best === null || $p < $best) $best = $p;
+// Je Lieferant die größte passende Staffel; liegt die Menge UNTER seiner kleinsten Staffel (z. B. 240 kg bei „ab 250 kg"),
+// gilt deren Preis (wie staffel_je_lieferant – sonst stand „kein Preis", obwohl ein Lieferantenpreis da ist; Nico 06.11.2026).
+// Davon der günstigste Lieferant. Fallback: flacher item.ek_preis.
+// rohstoff_ek_detail(): dasselbe mit Mindestmenge des gewählten Lieferanten (kleinste Staffel; nur gesetzt, wenn die Menge darunter liegt).
+function rohstoff_ek_detail(int $item_id, float $menge): ?array {
+    $rows = all("SELECT lieferant_id, lieferant_name, menge_ab, preis FROM lieferant_preis
+                 WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR')", [$item_id]);
+    $je = [];
+    foreach ($rows as $r) $je[(int)$r['lieferant_id'] . '|' . (string)$r['lieferant_name']][] = [(float)$r['menge_ab'], (float)$r['preis']];
+    $best = null;
+    foreach ($je as $st) {
+        usort($st, fn($a, $b) => $a[0] <=> $b[0]);
+        $p = $st[0][1];                                         // kleinste Staffel
+        foreach ($st as [$ab, $pr]) if ($ab <= $menge + 1e-9) $p = $pr;   // größte passende Staffel
+        if ($best === null || $p < $best['preis']) $best = ['preis' => $p, 'mindest' => $st[0][0] > $menge + 1e-9 ? $st[0][0] : null];
     }
-    if ($best !== null) return $best;
+    return $best;
+}
+function rohstoff_ek_bei_menge(int $item_id, float $menge): ?float {
+    $d = rohstoff_ek_detail($item_id, $menge);
+    if ($d !== null) return $d['preis'];
     $flat = scalar("SELECT ek_preis FROM item WHERE id=?", [$item_id]);
     return ($flat !== null && (float) $flat > 0) ? (float) $flat : null;
 }
@@ -8097,11 +8105,14 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         $it = one("SELECT ek_preis, preis_bezug FROM item WHERE id=?", [(int)$r['item_id']]);
         $m = (float)$r['benoetigt']; $e = (string)$r['einheit'];
         $mBezug = ($it['preis_bezug'] ?? $e) === $e ? $m : ($e === 'g' && ($it['preis_bezug'] ?? '') === 'kg' ? $m / 1000 : ($e === 'kg' && ($it['preis_bezug'] ?? '') === 'g' ? $m * 1000 : $m));
-        $p = rohstoff_ek_bei_menge((int)$r['item_id'], $mBezug);
+        $ekD = rohstoff_ek_detail((int)$r['item_id'], $mBezug);
+        $p = $ekD['preis'] ?? rohstoff_ek_bei_menge((int)$r['item_id'], $mBezug);
         if ($p === null && (float)($it['ek_preis'] ?? 0) > 0) $p = (float)$it['ek_preis'];
         $g = $p !== null ? $p * $mBezug : null;
         if ($g === null) $luecke = true; else $summe += $g;
-        $pos[] = ['item_id' => (int)$r['item_id'], 'name' => (string)$r['name'], 'menge' => $m, 'einheit' => $e, 'preis' => $p, 'gesamt' => $g];
+        // Mindestmenge des gewählten Lieferanten: Bedarf unter seiner kleinsten Staffel -> Hinweis (der Preis gilt trotzdem).
+        $pos[] = ['item_id' => (int)$r['item_id'], 'name' => (string)$r['name'], 'menge' => $m, 'einheit' => $e, 'preis' => $p, 'gesamt' => $g,
+                  'mindest' => $ekD['mindest'] ?? null, 'bezug' => (string)($it['preis_bezug'] ?? $e)];
     }
     if ($kapZeile) { $pos[] = $kapZeile; if ($kapZeile['gesamt'] === null) $luecke = true; else $summe += $kapZeile['gesamt']; }
     $out['wege']['rohstoffe'] = ['menge' => $kg, 'einheit' => 'kg', 'positionen' => $pos, 'gesamt' => $summe, 'luecke' => $luecke, 'label' => 'Einzelrohstoffe (Eigenproduktion)'];

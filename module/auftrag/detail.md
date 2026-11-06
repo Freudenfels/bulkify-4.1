@@ -273,3 +273,5 @@ Im Block „Externer Labortest“ steht, solange kein Bericht vorliegt, der Knop
 - Zuordnen legt den Weg fest, falls er noch fehlt. Die Karten zeigen danach „Noch zu beschaffen (Rest)“.
 - Ist der Rest 0, erscheint „vollständig gedeckt“. „An Bedarfsliste senden“ und „Bestellen“ entfallen dann. Bleibt ein Rest, gehen nur dieser an die Bedarfsliste bzw. in die Bestellung.
 - Ist schon Ware zugeordnet (z. B. vorher über „Bulkware binden“ oder eine Bestellung für den Auftrag), steht der PA aber noch auf „Beschaffungsweg offen“, zeigt der Reiter den Knopf „Weg festlegen: …“ (`deckung_festlegen` → `auftrag_deckung_weg_festlegen`).
+
+**Beschaffungsweg – Mindestmenge (06.11.2026):** Bei den Einzelrohstoffen gilt auch unterhalb der kleinsten Lieferanten-Staffel deren Preis; unter dem Betrag steht dann klein „Mindestmenge 250 kg“ (Mindestmenge des gewählten Lieferanten).
