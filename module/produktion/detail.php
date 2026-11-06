@@ -140,6 +140,11 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?
     $fremd = ($_POST['aktion'] === 'weg_zukauf');
     // Über den zentralen Setter: setzt Produktionsart + markiert „festgelegt" (= Freigabe an die Produktion).
     $ok = produktionsauftrag_art_setzen($id, $fremd ? 'fremd' : 'eigen');
+    if (!$ok && $fremd) {
+        // Schon ein Schritt erledigt oder bestellt (Nico 06.11.2026): nachträglich auf fertige Kapseln – nur offene Herstellungsschritte tauschen.
+        $rF = produktion_weg_fertigkapseln($id, (string)(current_user()['name'] ?? ''));
+        header('Location: ?p=produktionsauftrag&id=' . $id . '&' . ($rF['ok'] ? 'wegfk=' : 'wegfkfehler=') . rawurlencode($rF['msg'])); exit;
+    }
     header('Location: ?p=produktionsauftrag&id=' . $id . ($ok ? '&weg=1' : '&wegfehler=1')); exit;
 }
 // Rückabwicklung: Lieferant kann/will doch nicht – Fremd-Bulk-Bestellung stornieren (+ Lieferant informieren)
@@ -182,6 +187,10 @@ if ($istZukauf && $istVollerWeg && $done === 0 && ($_SERVER['REQUEST_METHOD'] ??
     }
 }
 $wegUmstellbar = $done === 0;                            // nur solange nichts erledigt
+// Offene Herstellungsschritte (für „Auf fertige Kapseln umstellen“ nach erledigten Schritten bzw. trotz Bestellung)
+$herstOffen = array_values(array_map(fn($s) => (string)$s['station'], array_filter($schritte, fn($s) => (int)$s['erledigt'] === 0
+    && in_array((string)$s['station'], ['Rohstoffe bereitstellen', 'Mischen', 'Verkapselung', 'Tablettierung', 'Softgel-Herstellung', 'Stick-Abfüllung',
+                                        'Pulver-Abfüllung', 'Abfüllung', 'Gummi-Herstellung (Gießen)', 'Gel-Abfüllung', 'Herstellung'], true))));
 $firstOpenId = null;
 foreach ($schritte as $s) if ((int)$s['erledigt'] === 0) { $firstOpenId = (int)$s['id']; break; }
 
@@ -249,6 +258,8 @@ if (isset($_GET['angelegt'])) echo '<div class="bx-panel badge-ok" style="paddin
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Station abgeschlossen.</div>';
 if (isset($_GET['mangel'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht genug Bestand für die Produktion – siehe Material unten. Bitte erst Wareneingang buchen.</div>';
 if (isset($_GET['weg']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsweg umgestellt.</div>';
+if (isset($_GET['wegfk']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['wegfk']) . '</div>';
+if (isset($_GET['wegfkfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['wegfkfehler']) . '</div>';
 if (isset($_GET['wegfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Eigen/Fremd bzw. der Weg kann nicht mehr geändert werden – es wurde bereits ein Schritt erledigt oder für den Auftrag bestellt.' . (($pa['produktionsart'] ?? '') === 'fremd' ? ' Für „doch selbst produzieren" den Knopf <strong>Rückabwicklung</strong> nutzen (storniert die Bulk-Bestellung mit).' : '') . '</div>';
 if (isset($_GET['rueck']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['rueck']) . '</div>';
 if (isset($_GET['rueckfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['rueckfehler']) . '</div>';
@@ -404,6 +415,13 @@ ob_start(); ?>
   <p style="margin-top:0">Hast du die <strong>Kapseln/Bulkware schon fertig</strong> (zugekauft, bereits im Lager)? Dann brauchst du keine Rohstoffe/Mischen/Verkapseln – der Weg verkürzt sich auf <strong>Fertigware bereitstellen · Verpacken · Etikettieren · Qualitätsprüfung · Freigaben</strong>.</p>
   <?php endif; ?>
   <form method="post" style="margin:0"><input type="hidden" name="aktion" value="weg_zukauf"><button class="btn btn-primary" type="submit">Verkürzten Weg anwenden</button></form>
+</div>
+<?php elseif ($istVollerWeg && $herstOffen && !pa_ist_bulk($pa)): ?>
+<div class="bx-panel" style="padding:12px 16px">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <span class="muted">Mit fertigen Kapseln produziert (aus dem Lager oder zugekauft)? Dann fallen die offenen Schritte <?= h(implode(', ', $herstOffen)) ?> weg, dafür kommt „Fertigware bereitstellen“. Erledigte Schritte bleiben.</span>
+    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="weg_zukauf"><button class="btn btn-ghost btn-sm" type="submit">Auf fertige Kapseln umstellen</button></form>
+  </div>
 </div>
 <?php elseif (!$istVollerWeg && $wegUmstellbar): ?>
 <div class="bx-panel" style="padding:12px 16px">

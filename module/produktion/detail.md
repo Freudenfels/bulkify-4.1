@@ -49,6 +49,14 @@ Der Weg richtet sich nach der **Beschaffung**: Ist für den Auftrag **fertige Bu
 
 Auf der PA-Detailseite erscheint bei erkanntem Zukauf ein **Banner „Fertige Bulkware erkannt – verkürzter Weg möglich"** mit Button **Verkürzten Weg anwenden** (`aktion=weg_zukauf`). Umgekehrt kann auf den vollen Weg zurückgestellt werden (`aktion=weg_voll`). Beides über `produktion_schritte_regenerieren($pa_id,$zukauf)` – nur solange **kein Schritt erledigt** ist (sonst Hinweis). Kein manuelles Make-or-Buy-Flag nötig; die Info steckt in Kategorie/Form der eingegangenen Ware.
 
+### Nachträglich auf fertige Kapseln umstellen (06.11.2026)
+Wurde mit fertigen Kapseln produziert (aus dem Lager oder zugekauft), der Auftrag steht aber noch auf dem Eigen-Weg, verlangt die Teilmenge sonst Rohstoffe. Solange noch Herstellungsschritte offen sind (Rohstoffe bereitstellen, Mischen, Verkapselung …), steht oben das Feld **„Auf fertige Kapseln umstellen“** – auch wenn schon ein Schritt erledigt oder für den Auftrag bestellt wurde. Es nutzt dieselbe Aktion `weg_zukauf`: zuerst wie bisher `produktionsauftrag_art_setzen()`; geht das nicht, ruft die Seite `produktion_weg_fertigkapseln()` (`core/schema.php`):
+- löscht nur die **offenen** Herstellungsschritte, erledigte bleiben,
+- fügt an ihrer Stelle **„Fertigware bereitstellen“** ein (falls noch nicht da),
+- setzt `produktionsart='fremd'` – Bedarf und Teilmenge rechnen dann mit der fertigen Bulkware statt mit Rohstoffen,
+- lässt Bestellungen unangetastet und schreibt einen Verlaufseintrag am Auftrag.
+Nicht bei Bulk-Produktion und nicht bei fertigen/stornierten Aufträgen. Meldung `wegfk` bzw. `wegfkfehler`.
+
 ### Rückabwicklung: Fremd → Eigen („Doch selbst produzieren")
 Wenn der Lieferant die Fremdfertigung doch nicht macht: Panel **„Doch selbst produzieren (Rückabwicklung)"** (nur bei `produktionsart='fremd'`, offener **Bulk-Bestellung** für den Auftrag und `done=0`). `aktion=rueckabwicklung` ruft `produktion_rueckabwicklung_eigen($pa_id, $wer)` (`core/schema.php`):
 - storniert **nur die Fremd-Bulk-Bestellung(en)** des Auftrags (Position `item_id IS NULL`, Bezeichnung `Bulk…`) – Verpackung/Etikett-Bestellungen bleiben,

@@ -8725,6 +8725,35 @@ function produktion_rueckabwicklung_eigen(int $pa_id, string $wer = ''): array {
             'msg'=>'Auf Eigenproduktion umgestellt' . ($n ? ' – ' . $n . ' Bulk-Bestellung(en) storniert' . ($mail ? ' und Lieferant informiert' : '') : '') . '. Der Rohstoffbedarf steht jetzt im Einkauf.'];
 }
 
+// Weg nachträglich auf „mit fertigen Kapseln" (Bulk aus dem Lager / zugekauft) umstellen (Nico 06.11.2026) – auch wenn schon
+// Schritte erledigt oder Verpackung/Etikett bestellt sind. Die OFFENEN Herstellungsschritte (Rohstoffe bereitstellen, Mischen,
+// Verkapselung …) fallen weg, an ihre Stelle kommt „Fertigware bereitstellen". Erledigte Schritte bleiben unangetastet.
+// produktionsart='fremd' -> Bedarf/Teilmenge rechnen mit der fertigen Bulkware statt mit Rohstoffen. Bestellungen bleiben.
+function produktion_weg_fertigkapseln(int $pa_id, string $wer = ''): array {
+    $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!$pa) return ['ok'=>false, 'msg'=>'Produktionsauftrag nicht gefunden.'];
+    if (pa_ist_bulk($pa)) return ['ok'=>false, 'msg'=>'Eine Bulk-Produktion stellt die Kapseln selbst her – hier gibt es keinen Weg mit fertigen Kapseln.'];
+    if (in_array((string)$pa['status'], ['fertig', 'storniert'], true)) return ['ok'=>false, 'msg'=>'Der Produktionsauftrag ist schon abgeschlossen.'];
+    $form = (string) (scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$pa['produkt_id']]) ?: 'kapsel');
+    $wege = produktion_wege_aufloesen((int)$pa['produkt_id'], (int)($pa['kunde_id'] ?? 0));
+    $herst = array_values(array_diff(produktionsschritte_fuer($form, false, false, $wege), produktionsschritte_fuer($form, true, false, $wege)));
+    $schritte = all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
+    $offen = array_values(array_filter($schritte, fn($s) => (int)$s['erledigt'] === 0 && in_array((string)$s['station'], $herst, true)));
+    $hatBereit = (bool) array_filter($schritte, fn($s) => (string)$s['station'] === 'Fertigware bereitstellen');
+    if (!$offen && $hatBereit) return ['ok'=>false, 'msg'=>'Der Auftrag läuft schon auf dem Weg mit fertigen Kapseln.'];
+    if (!$offen) return ['ok'=>false, 'msg'=>'Die Herstellungsschritte (Rohstoffe, Mischen, Verkapseln) sind schon abgehakt – hier gibt es nichts mehr umzustellen.'];
+    $sort = min(array_map(fn($s) => (int)$s['sort'], $offen));
+    q("DELETE FROM produktion_schritt WHERE id IN (" . implode(',', array_map(fn($s) => (int)$s['id'], $offen)) . ")");
+    if (!$hatBereit) q("INSERT INTO produktion_schritt (pa_id,station,sort,erledigt) VALUES (?,?,?,0)", [$pa_id, 'Fertigware bereitstellen', $sort]);
+    q("UPDATE produktionsauftrag SET produktionsart='fremd', art_festgelegt_am=COALESCE(art_festgelegt_am, NOW()) WHERE id=?", [$pa_id]);
+    $aid = (int)($pa['auftrag_id'] ?? 0);
+    if ($aid > 0 && function_exists('log_aktivitaet'))
+        log_aktivitaet('auftrag', $aid, 'team', 'Produktion ' . (string)$pa['nummer'] . ': Weg auf fertige Kapseln umgestellt (' . (trim($wer) ?: 'Team') . '). Entfallen: '
+            . implode(', ', array_map(fn($s) => (string)$s['station'], $offen)) . '.', 'auftrag', 'auftrag', $aid);
+    bedarf_bump();
+    return ['ok'=>true, 'msg'=>'Auf fertige Kapseln umgestellt: ' . implode(', ', array_map(fn($s) => (string)$s['station'], $offen)) . ' entfallen, „Fertigware bereitstellen" kommt dazu.'];
+}
+
 // ===== PreProduktionsauftrag / Vor-Produktion =====================================================
 // Checkliste eines Vor-Produktionsauftrags: ist alles da, um die Produktion durchzuführen?
 // Rückgabe: ['pa'=>…, 'auftrag_id'=>…, 'einheiten_bedarf'=>…, 'checks'=>[['key','label','ok','wert','kritisch'], …],

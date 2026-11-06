@@ -495,3 +495,6 @@ Vorher galt nur die zugeordnete Ware. Die Material-Übersicht zeigte z. B. 9.000
 
 ## Kunden-Selbstregistrierung (05.11.2026)
 `kunden.quelle` ('registrierung') und `kunden.registriert_am` (UTC). `kunde_registrierung_anlegen($d)` legt einen gesperrten Kunden mit Passwort-Hash an. Abgelehnt wird eine schon vorhandene E-Mail, eine gleichnamige Firma kommt als `dublette` zurück. `kunde_registrierung_freigeben($id, $wer)` entsperrt den Kunden (nur selbst registrierte und gesperrte) und schreibt Änderungslog und Verlauf. `kunde_registrierung_offen($k)` sagt, ob er noch wartet. Seite: `module/portal/registrieren.php`.
+
+## Weg nachträglich auf fertige Kapseln (06.11.2026)
+`produktion_weg_fertigkapseln($pa_id, $wer)` stellt einen Produktionsauftrag auch nach erledigten Schritten oder trotz Bestellung auf den Weg mit fertigen Kapseln um. Nur die offenen Herstellungsschritte (Unterschied zwischen vollem und kurzem Weg aus `produktionsschritte_fuer()`) werden gelöscht, "Fertigware bereitstellen" kommt an ihre Stelle, `produktionsart='fremd'`. Erledigte Schritte und Bestellungen bleiben. Nicht für Bulk-Produktion. Aufruf über die Produktionsseite (Aktion `weg_zukauf`, wenn `produktionsauftrag_art_setzen()` nicht geht).
