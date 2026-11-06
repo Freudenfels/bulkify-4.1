@@ -49,3 +49,6 @@ bzw. „Spezifikation“. Sicherheitsnetz: liegt die Rechnung über einem Höchs
 wird **nicht** für den Kunden sichtbar abgelegt und das Team bekommt einen Verlaufseintrag am Auftrag.
 
 **Nachtrag:** Keine Höchstgehalt-Spalte (verwirrt neben „konform“). Spalten: Parameter · Gehalt (berechnet, mg/kg, ohne „max.“) · Bewertung „konform“ · Grundlage. Die NEM-Höchstgehalte (VO (EU) 2023/915) stehen nur als Bezug im Kleingedruckten.
+
+**Lieferantennummer (06.11.2026):** In der Spalte „Rohstoff-Charge(n)“ steht hinter jeder Charge in Klammern die interne
+Lieferantennummer, z. B. „LS-VC-D1 (L-2690)“ – nie der Lieferantenname (wie auf dem Lager-Etikett). Ohne Nummer nur die Charge.

@@ -319,8 +319,9 @@ function build_spec_pdf(int $item_id, bool $nur_freigegeben = false): ?string {
 // Analysenzertifikat (CoA) zu einer Charge – aus den erfassten Analysewerten.
 // ---------------------------------------------------------------------------
 function build_coa_pdf(int $charge_id): ?string {
-    $c = one("SELECT c.*, i.name AS item_name, i.spec_nr, i.spec_version, i.herkunftsland, i.allergene
-              FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
+    // Lieferant nur als interne Lieferantennummer (wie auf dem Lager-Etikett) – nie der Name.
+    $c = one("SELECT c.*, i.name AS item_name, i.spec_nr, i.spec_version, i.herkunftsland, i.allergene, l.lieferantennummer AS lieferant_nr
+              FROM charge c JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id WHERE c.id=?", [$charge_id]);
     if (!$c) return null;
     // Eine echte COA braucht echte Analysewerte (Schwermetalle/Mikrobiologie …). Fehlen sie, ist das Dokument
     // KEINE COA, sondern höchstens eine Spezifikation – dann Titel/Schlusssatz entsprechend kennzeichnen.
@@ -340,6 +341,7 @@ function build_coa_pdf(int $charge_id): ?string {
         ['Charge', (string)($c['charge_nr'] ?: '–')],
         ['Mindesthaltbar bis', $fmtD($c['mhd'] ?? '')],
     ];
+    if (trim((string)($c['lieferant_nr'] ?? '')) !== '') $kopf[] = ['Lieferant', trim((string)$c['lieferant_nr'])];
     if (!empty($c['herkunftsland'])) $kopf[] = ['Herkunft', (string)$c['herkunftsland']];
     $kopf[] = ['Spezifikation', trim((string)($c['spec_nr'] ?? '') . '  ' . (string)($c['spec_version'] ?? '')) ?: '–'];
     $y = spec_grid($p, $y, $kopf);

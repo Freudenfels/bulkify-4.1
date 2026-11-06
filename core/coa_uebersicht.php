@@ -67,7 +67,9 @@ function coa_uebersicht_daten(int $charge_id): ?array {
     $summe = array_sum(array_map(fn($z) => (float)$z['menge_mg'], $zut));
     // Verbrauchte Rohstoff-Chargen dieses PA je Artikel (Rückverfolgbarkeit).
     $verb = [];
-    foreach (all("SELECT DISTINCT pv.item_id, pv.charge_id, ch.charge_nr FROM produktion_verbrauch pv JOIN charge ch ON ch.id=pv.charge_id
+    // Lieferant nur als interne Lieferantennummer (wie auf dem Lager-Etikett) – nie der Name.
+    foreach (all("SELECT DISTINCT pv.item_id, pv.charge_id, ch.charge_nr, l.lieferantennummer AS lieferant_nr FROM produktion_verbrauch pv
+                  JOIN charge ch ON ch.id=pv.charge_id LEFT JOIN lieferanten l ON l.id=ch.lieferant_id
                   WHERE pv.pa_id=? AND pv.charge_id IS NOT NULL", [(int)$pa['id']]) as $v) $verb[(int)$v['item_id']][] = $v;
     $K = coa_uebersicht_kontaminanten();
     $quellen = []; $mikro = []; $beitrag = [];   // $beitrag[key] = ['summe'=>, 'grenze'=>bool, 'gw'=>bool, 'fehlt'=>[Zutat]]
@@ -99,7 +101,8 @@ function coa_uebersicht_daten(int $charge_id): ?array {
         }
         $mikro = array_merge($mikro, $mikroZ);
         $quellen[] = ['zutat' => (string)$z['name'], 'mg' => (float)$z['menge_mg'], 'anteil' => $anteil,
-                      'chargen' => implode(', ', array_map(fn($ch) => (string)$ch['charge_nr'], $chs)) ?: '–',
+                      'chargen' => implode(', ', array_map(fn($ch) => (string)$ch['charge_nr']
+                          . (trim((string)($ch['lieferant_nr'] ?? '')) !== '' ? ' (' . trim((string)$ch['lieferant_nr']) . ')' : ''), $chs)) ?: '–',
                       'basis' => $quelleTxt ? (isset($quelleTxt['Grenzwert']) && count($quelleTxt) === 1 ? 'Spezifikation' : (isset($quelleTxt['Grenzwert']) ? 'Analyse + Spezifikation' : 'Analyse der Charge')) : 'keine Werte'];
     }
     // Bewertung je Parameter: „konform", wenn der berechnete Wert (Obergrenze) den NEM-Höchstgehalt einhält. Der Zahlenwert
