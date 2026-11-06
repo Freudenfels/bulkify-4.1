@@ -133,8 +133,10 @@ function produktionsauftrag_pdf_bauen(int $pa_id): ?string {
         $y += 20;
     }
 
-    // Fußzeile
+    // Pflicht-Hinweis + Fußzeile
     $fa = beleg_firma();
+    if ($y > 806) { $p->addPage(); $y = 54; }
+    $p->textCenter(($L + $R) / 2, 816, $p->fit(pdf_hinweis_maschinell(), $R - $L, 7, false), 7, false, $GRAY);
     $p->textCenter(($L + $R) / 2, 828, $p->fit('Interner Produktionsauftrag · ' . $fa['name'] . ' · gedruckt ' . fmt_zeit(gmdate('Y-m-d H:i:s')), $R - $L, 7, false), 7, false, $GRAY);
     return $p->output();
 }

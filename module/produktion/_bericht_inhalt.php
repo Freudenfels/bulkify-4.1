@@ -220,3 +220,6 @@ if (!$fuerKunde && !empty($D['abschlussfotos'])): ?>
   <div style="white-space:pre-line"><?= h((string)$pa['bericht_notiz']) ?></div>
 </div>
 <?php endif; ?>
+
+<?php // Pflicht-Hinweis auf jedem Dokument (Nico 06.11.2026) – auch im Kundenportal und im Druck. ?>
+<p class="muted" style="font-size:11px;margin:14px 2px 0"><?= h(function_exists('pdf_hinweis_maschinell') ? pdf_hinweis_maschinell() : 'Dieses Dokument wurde maschinell erstellt und ist ohne Unterschrift gültig. Die Angaben beruhen auf den uns bereitgestellten Daten.') ?></p>

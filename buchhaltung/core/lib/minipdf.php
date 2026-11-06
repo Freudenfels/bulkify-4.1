@@ -331,3 +331,15 @@ class MiniPDF
         return $pdf;
     }
 }
+
+// Pflicht-Hinweis auf JEDEM erzeugten Dokument (Nico 06.11.2026): maschinell erstellt + beruht auf den uns bereitgestellten Daten.
+// $ohneUnterschrift=false für Dokumente, die unterschrieben werden (Jahresvertrag) – dann ohne „ohne Unterschrift gültig".
+if (!function_exists('pdf_hinweis_maschinell')) {
+    function pdf_hinweis_maschinell(string $sprache = 'de', bool $ohneUnterschrift = true): string {
+        if (strtolower(trim($sprache)) === 'en')
+            return 'This document was generated automatically' . ($ohneUnterschrift ? ' and is valid without signature' : '')
+                 . '. The information is based on the data provided to us.';
+        return 'Dieses Dokument wurde maschinell erstellt' . ($ohneUnterschrift ? ' und ist ohne Unterschrift gültig' : '')
+             . '. Die Angaben beruhen auf den uns bereitgestellten Daten.';
+    }
+}

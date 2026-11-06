@@ -203,7 +203,8 @@ function spec_release(MiniPDF $p, float $y, string $datum): float {
 function spec_fuss(MiniPDF $p, float $y, bool $maschHinweis = true): void {
     $fa = beleg_firma(); $L = 40; $R = 555;
     if ($y > 748) { $p->addPage(); $y = 54; }
-    if ($maschHinweis) $p->text($L, $y, 'Dieses Dokument wurde maschinell erstellt und ist ohne Unterschrift gültig.', 8, false, SPEC_GRAU);
+    // Pflicht-Hinweis immer (Nico 06.11.2026); $maschHinweis=false lässt nur „ohne Unterschrift gültig" weg (Vertrag).
+    foreach ($p->wrap(pdf_hinweis_maschinell('de', $maschHinweis), $R - $L, 8, false) as $wl) { $p->text($L, $y, $wl, 8, false, SPEC_GRAU); $y += 10; }
     // Rechtlicher Hinweis (Haftungsausschluss) – unverbindliche Angaben, Nutzung auf eigenes Risiko.
     $disc = 'Die in diesem Dokument enthaltenen Angaben beruhen auf unserem derzeitigen Wissen und unserer Erfahrung, '
           . 'jedoch ohne jede Verbindlichkeit und ohne Übernahme einer Haftung unsererseits. Die Angaben dürfen nach '

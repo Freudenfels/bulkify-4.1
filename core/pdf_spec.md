@@ -31,3 +31,5 @@ Im Panel **Analysenwerte je Charge** gibt es **Werte vorschlagen**: Das hochgela
 `spec_kopf()` bricht einen langen Untertitel (z. B. langer Produktname im PIB) auf bis zu 3 zentrierte Zeilen um, statt über den Rand zu laufen. Die folgenden Inhalte rücken entsprechend nach unten.
 
 `spec_grid()` (03.11.2026): Die Bezeichnung links wird umgebrochen statt mit „…“ gekürzt (z. B. „Nettofüllmenge je Packung (für die Verpackung)“ im PIB). Die Zeilenhöhe richtet sich nach der längeren Seite. Lange Einzelwörter teilt `wrap()`.
+
+**Pflicht-Hinweis (06.11.2026):** `spec_fuss()` schreibt immer `pdf_hinweis_maschinell()` (maschinell erstellt + beruht auf den uns bereitgestellten Daten) – damit haben Spec, CoA, PIB, Informationsdokument und Jahresvertrag ihn automatisch. `$maschHinweis=false` lässt nur „ohne Unterschrift gültig“ weg.

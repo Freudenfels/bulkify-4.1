@@ -13,3 +13,5 @@ PA-Kopf. Rollen: production/labor/fulfillment.
 
 ## Pulver (St-13)
 Bei Pulver/Granulat steht „300 g je Packung" (über `inhalt_je_packung_txt()`) statt „300 Stück je Packung". Der Laufzettel zeigt zusätzlich „gesamt 600 kg" statt „600.000 Stk", die Spalte heißt „mg je Portion" und die Rückfall-Gesamtmengen der Zutaten rechnen mit Portionen (Füllgewicht / mg je Portion).
+
+**Pflicht-Hinweis (06.11.2026):** Über der Fußzeile steht `pdf_hinweis_maschinell()` (maschinell erstellt + beruht auf den uns bereitgestellten Daten).

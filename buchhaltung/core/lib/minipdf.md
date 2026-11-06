@@ -37,3 +37,5 @@ denselben Generator verwenden.
 
 ## Lange Wörter umbrechen (03.11.2026)
 `wrap()` teilt ein einzelnes Wort, das breiter als die Spalte ist (lange Artikelnummer, Name ohne Leerzeichen), in Stücke. Es bricht bevorzugt nach „-“, „/“, „·“, „_“ oder „.“. Vorher lief es aus der Spalte bzw. wurde abgeschnitten (abgeschnittene Texte in PIB-Tabellen).
+
+**Pflicht-Hinweis (06.11.2026):** Wie im Dashboard steht unter der Klasse `pdf_hinweis_maschinell()` – „maschinell erstellt, ohne Unterschrift gültig, Angaben beruhen auf den uns bereitgestellten Daten“. Die Rechnungs-/Gutschrift-PDFs der Buchhaltung setzen ihn über die Fußzeile.

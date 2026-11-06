@@ -71,3 +71,5 @@ Cent gerundet × Menge).
 - Lieferschein: Abstand vor „Hinweis zur Herstellung", er liegt nicht mehr auf der Positions-Unterzeile.
 - Einheitenspalte wächst mit der längsten Einheit (bis 90 pt), z. B. „Palettenplatz/Monat" auf DL-Angebot/-Rechnung. Menge und Einheit rücken dafür nach links.
 - Angebots-Positionen: Füllgewicht auf 1 mg gerundet („~435mg" statt „~440mg").
+
+**Pflicht-Hinweis (06.11.2026):** Über der Fußzeile steht `pdf_hinweis_maschinell($b['sprache'])` – maschinell erstellt, ohne Unterschrift gültig, Angaben beruhen auf den uns bereitgestellten Daten (Spiegel von core/pdf_beleg.php).

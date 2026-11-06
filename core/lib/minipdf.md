@@ -37,3 +37,5 @@ denselben Generator verwenden.
 
 ## Lange Wörter umbrechen (03.11.2026)
 `wrap()` teilt ein einzelnes Wort, das breiter als die Spalte ist (lange Artikelnummer, Name ohne Leerzeichen), in Stücke. Es bricht bevorzugt nach „-“, „/“, „·“, „_“ oder „.“. Vorher lief es aus der Spalte bzw. wurde abgeschnitten (abgeschnittene Texte in PIB-Tabellen).
+
+**Pflicht-Hinweis (06.11.2026):** Unter der Klasse steht `pdf_hinweis_maschinell(string $sprache='de', bool $ohneUnterschrift=true)`. Liefert den Satz, der auf **jedem** erzeugten Dokument steht: „Dieses Dokument wurde maschinell erstellt und ist ohne Unterschrift gültig. Die Angaben beruhen auf den uns bereitgestellten Daten.“ (englisch bei `en`). Mit `$ohneUnterschrift=false` fehlt „ohne Unterschrift gültig“ (für den Jahresvertrag, der unterschrieben wird). Alle PDF-Bauer nutzen diese eine Stelle.

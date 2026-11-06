@@ -106,6 +106,6 @@ function build_jahresvertrag_pdf(int $angebot_id): ?string {
     $p->text($L, $ly + 11, 'Ort, Datum, Unterschrift Besteller (' . (string)($k['firma'] ?? '') . ')', 8.5, false, SPEC_GRAU);
     $p->text($colR, $ly + 11, $fa['name'] . ' · Tabea Albers, Qualitätssicherung · ' . $vonD, 8.5, false, SPEC_GRAU);
 
-    spec_fuss($p, $ly + 30, false);   // kein „ohne Unterschrift gültig" – der Vertrag wird ja unterschrieben
+    spec_fuss($p, $ly + 30, false);   // „maschinell erstellt" ja, aber kein „ohne Unterschrift gültig" – der Vertrag wird ja unterschrieben
     return $p->output();
 }

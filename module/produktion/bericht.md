@@ -37,3 +37,5 @@ Button „Drucken / PDF" (`window.print()`); `@media print` blendet Seitenleiste
 **Auto-Freigabe (03.11.2026):** Der Bericht wird bei der QM-Freigabe der Fertigware automatisch für den Kunden freigegeben.
 „Zurückhalten“ (früher „Freigabe zurücknehmen“) setzt `bericht_zurueckgehalten=1` – dann bleibt er auch nach weiteren QM-Freigaben
 unsichtbar; „Für Kunden freigeben“ setzt das wieder zurück.
+
+**Pflicht-Hinweis (06.11.2026):** Am Ende von `_bericht_inhalt.php` steht klein „Dieses Dokument wurde maschinell erstellt und ist ohne Unterschrift gültig. Die Angaben beruhen auf den uns bereitgestellten Daten.“ – intern, im Druck und im Kundenportal.

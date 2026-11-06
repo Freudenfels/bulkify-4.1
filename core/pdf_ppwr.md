@@ -32,3 +32,5 @@ Komponenten und liefert `application/pdf` inline. Download-Link steht in der Por
 Material, Leergewicht und Maße kommen aus der Verpackung (Reiter Stammdaten in
 `verpackung_detail.php`). Fehlen sie, steht „–" im Dokument – also je Verpackung pflegen.
 Die hochgeladenen Nachweise (Reiter „Dokumente (PPWR)") sind der interne Beleg dahinter.
+
+**Pflicht-Hinweis (06.11.2026):** Unter dem Aussteller steht `pdf_hinweis_maschinell()` (maschinell erstellt + beruht auf den uns bereitgestellten Daten).

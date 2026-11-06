@@ -112,7 +112,8 @@ function build_ppwr_pdf(array $b, array $komponenten): string
     if ($y > 740) { $p->addPage(); $y = 54; }
     $p->text($L, $y, $fa['plz_ort'] !== '' ? (explode(' ', $fa['plz_ort'] . ' ')[1] ?? $fa['plz_ort']) . ', den ' . $fmtD($b['datum'] ?? '') : 'Datum: ' . $fmtD($b['datum'] ?? ''), 9, false, $INK);
     $p->text($L, $y + 26, $fa['name'], 9, true, $INK);
-    $p->text($L, $y + 38, 'Diese Erklärung wurde maschinell erstellt und ist ohne Unterschrift gültig.', 8, false, $GRAY);
+    $hy = $y + 38;
+    foreach ($p->wrap(pdf_hinweis_maschinell(), $R - $L, 8, false) as $wl) { $p->text($L, $hy, $wl, 8, false, $GRAY); $hy += 10; }
 
     // Fußzeile
     $foot = 'bulkify® ist eine Marke der ' . $fa['name'] . ', ' . $fa['strasse'] . ', ' . $fa['plz_ort']

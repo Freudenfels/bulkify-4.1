@@ -368,7 +368,9 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $y += 6;
     }
 
-    // ---- Fußzeile ----
+    // ---- Pflicht-Hinweis (maschinell erstellt, beruht auf bereitgestellten Daten) + Fußzeile ----
+    if ($y > 806) { $p->addPage(); $y = 54; }
+    $p->textCenter(($L + $R) / 2, 816, $p->fit(pdf_hinweis_maschinell((string)($b['sprache'] ?? 'de')), $R - $L, 7, false), 7, false, $GRAY);
     $foot = 'bulkify® ist eine Marke der ' . $fa['name'] . ', ' . $fa['strasse'] . ', ' . $fa['plz_ort']
           . ($fa['land'] !== '' ? ', ' . $fa['land'] : '')
           . ($fa['ust_id'] !== '' ? ', USt-Id: ' . $fa['ust_id'] : '')
