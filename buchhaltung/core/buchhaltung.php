@@ -88,6 +88,40 @@ function bh_umsatz_steuersatz(int $jahr): array {
           ORDER BY ust_prozent DESC", [$jahr]);
 }
 
+// Vereinnahmte USt je Monat eines Jahres. $basis: 'soll' = nach Rechnungs-/Belegdatum (Soll-Versteuerung),
+// 'ist' = nach Zahlungsdatum anteilig (Ist-Versteuerung). ausgang = USt aus Ausgangsrechnungen (eingenommen,
+// Rechnung minus Gutschrift), eingang = Vorsteuer aus Eingangsrechnungen. Rein lesend.
+// Rückgabe: [1..12 => ['ausgang'=>float, 'eingang'=>float]].
+function bh_ust_monate(int $jahr, string $basis = 'soll'): array {
+    $monate = [];
+    for ($m = 1; $m <= 12; $m++) $monate[$m] = ['ausgang' => 0.0, 'eingang' => 0.0];
+    $set = function(array $rows, string $feld) use (&$monate) {
+        foreach ($rows as $r) { $m = (int)$r['m']; if ($m >= 1 && $m <= 12) $monate[$m][$feld] = (float)$r['s']; }
+    };
+    $hatKred   = tabelle_da('lieferant_rechnung');
+    $hatKredZ  = tabelle_da('lieferant_zahlung');
+    if ($basis === 'ist') {
+        // USt-Anteil der Zahlungseingänge (zahlung) nach Zahlungsdatum
+        $set(all("SELECT MONTH(z.datum) m, SUM(z.betrag * (b.ust_betrag / NULLIF(b.brutto,0))) s
+                    FROM zahlung z JOIN beleg b ON b.id=z.beleg_id
+                   WHERE b.typ='rechnung' AND b.status<>'storniert' AND z.datum IS NOT NULL AND YEAR(z.datum)=?
+                   GROUP BY MONTH(z.datum)", [$jahr]), 'ausgang');
+        if ($hatKred && $hatKredZ)
+            $set(all("SELECT MONTH(z.datum) m, SUM(z.betrag * (r.ust_betrag / NULLIF(r.brutto,0))) s
+                        FROM lieferant_zahlung z JOIN lieferant_rechnung r ON r.id=z.lief_rechnung_id
+                       WHERE r.status<>'storniert' AND z.datum IS NOT NULL AND YEAR(z.datum)=?
+                       GROUP BY MONTH(z.datum)", [$jahr]), 'eingang');
+    } else {
+        $set(all("SELECT MONTH(datum) m, SUM(CASE WHEN typ='gutschrift' THEN -ust_betrag ELSE ust_betrag END) s
+                    FROM beleg WHERE typ IN ('rechnung','gutschrift') AND status<>'storniert'
+                      AND datum IS NOT NULL AND YEAR(datum)=? GROUP BY MONTH(datum)", [$jahr]), 'ausgang');
+        if ($hatKred)
+            $set(all("SELECT MONTH(datum) m, SUM(ust_betrag) s FROM lieferant_rechnung
+                       WHERE status<>'storniert' AND datum IS NOT NULL AND YEAR(datum)=? GROUP BY MONTH(datum)", [$jahr]), 'eingang');
+    }
+    return $monate;
+}
+
 // ---------------------------------------------------------------------------
 // GoBD: Nummernkreis-Prüfung (Lücken, Dubletten, Rückdatierung, Storno-Bezug)
 // ---------------------------------------------------------------------------

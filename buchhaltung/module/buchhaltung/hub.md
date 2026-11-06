@@ -24,3 +24,9 @@ ist Euro (DECIMAL), direkt formatiert. `beleg.status` wird bei Zahlung fortgesch
 ## Grenzen
 Read-only Auswertung. Export-Downloads laufen über die eigenen Endpunkte
 `beleg_export` (`export.php`) und `rechnung_xml` (`rechnung_xml.php`).
+
+## Reiter Steuern (neu)
+Reiter „Steuern": vereinnahmte Umsatzsteuer je Monat + Quartalssumme. Auswahl Jahr + Quartal (Default = laufendes
+Quartal) + Basis: „Rechnungsdatum (Soll)" oder „Zahlungseingang (Ist, anteilig)". Spalten: USt eingenommen
+(Ausgangsrechnungen, Rechnung minus Gutschrift), Vorsteuer (Eingangsrechnungen), Zahllast (= USt − Vorsteuer).
+CSV-Link für die Belege des Quartals. Daten: bh_ust_monate($jahr,$basis) in core/buchhaltung.php. Keine Steuerberatung.
