@@ -17,6 +17,13 @@ $rows = all("SELECT pa.id, pa.nummer, pa.kunde_id, pa.produkt_id, pa.menge, pa.s
              LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id LEFT JOIN auftrag a ON a.id=pa.auftrag_id
              WHERE " . pa_aktiv_sql());   // ohne stornierte PAs / PAs stornierter Aufträge
 
+// Bereits produziert = als Ware gebuchte Chargen des PA (charge.pa_id), in EINER Abfrage. Bei Produkt-PAs nur
+// Fertigware (verkaufsfertig), damit keine Bulk-/Zwischenchargen mitzählen; Bulk-PAs (ohne Produkt) alle ihre Chargen.
+$prodMap = [];
+foreach (all("SELECT c.pa_id, i.kategorie, COALESCE(SUM(c.menge),0) AS m FROM charge c JOIN item i ON i.id=c.item_id
+              WHERE c.pa_id IS NOT NULL GROUP BY c.pa_id, i.kategorie") as $row)
+    $prodMap[(int)$row['pa_id']][(string)$row['kategorie']] = (float)$row['m'];
+
 $heute = new DateTime('today', new DateTimeZone('Europe/Berlin'));
 $n = ['offen' => 0, 'erledigt' => 0, 'alle' => count($rows)];
 foreach ($rows as &$r) {
@@ -28,13 +35,15 @@ foreach ($rows as &$r) {
     $seit = new DateTime(fmt_zeit((string)$r['angelegt'], 'Y-m-d'), new DateTimeZone('Europe/Berlin'));   // angelegt ist UTC
     $r['seit'] = $seit->format('Y-m-d');
     $r['tage'] = (int)$seit->diff($heute)->days;
+    $pm = $prodMap[(int)$r['id']] ?? [];
+    $r['produziert'] = !empty($r['produkt_id']) ? (float)($pm['verkaufsfertig'] ?? 0) : (float)array_sum($pm);
     $n[$r['status'] === 'erledigt' ? 'erledigt' : 'offen']++;
 }
 unset($r);
 if ($tab !== 'alle') $rows = array_values(array_filter($rows, fn($r) => ($r['status'] === 'erledigt') === ($tab === 'erledigt')));
 
 $key = ['tage' => fn($r) => $r['tage'], 'nummer' => fn($r) => (string)$r['nummer'], 'produkt' => fn($r) => mb_strtolower((string)$r['produkt_name']),
-        'kunde' => fn($r) => mb_strtolower((string)$r['kunde_firma']), 'menge' => fn($r) => (float)$r['menge']][$sort] ?? null;
+        'kunde' => fn($r) => mb_strtolower((string)$r['kunde_firma']), 'menge' => fn($r) => (float)$r['menge'], 'produziert' => fn($r) => $r['produziert']][$sort] ?? null;
 if (!$key) { $sort = 'tage'; $key = fn($r) => $r['tage']; }
 usort($rows, fn($x, $y) => ($dir === 'asc' ? 1 : -1) * ($key($x) <=> $key($y)) ?: ($y['tage'] <=> $x['tage']));
 
@@ -48,6 +57,13 @@ bx_tabs(['offen' => 'Offen (' . $n['offen'] . ')', 'erledigt' => 'Abgeschlossen 
     'produkt' => ['label' => 'Produkt', 'sort' => true, 'render' => fn($r) => h((string)($r['produkt_name'] ?? '')) ?: '<span class="muted">–</span>'],
     'kunde'   => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r) => $r['kunde_id'] ? kunde_link($r['kunde_id'], $r['kunde_firma']) : '<span class="muted">Lager</span>'],
     'menge'   => ['label' => 'Menge', 'sort' => true, 'num' => true, 'render' => fn($r) => number_format((float)$r['menge'], 0, ',', '.') . ' Stk'],
+    'produziert' => ['label' => 'Produziert', 'sort' => true, 'num' => true, 'render' => function($r) {
+                    $g = $r['produziert']; $z = (float)$r['menge'];
+                    if ($g <= 0.0001) return '<span class="muted">–</span>';
+                    $voll = $z > 0 && $g + 0.001 >= $z;
+                    return '<span style="color:' . ($voll ? 'var(--gruen,#1D9E75)' : 'inherit') . '">' . number_format($g, 0, ',', '.') . ' Stk</span>'
+                         . ($voll ? '' : ' <span class="muted" style="font-size:12px">(' . round($g / max($z, 1) * 100) . ' %)</span>');
+                 }],
     'seit'    => ['label' => 'Seit', 'render' => fn($r) => h(date('d.m.Y', strtotime($r['seit'])))],
     'tage'    => ['label' => 'Tage', 'sort' => true, 'num' => true, 'render' => fn($r) => '<strong>' . $r['tage'] . '</strong>'],
 ], $rows, [

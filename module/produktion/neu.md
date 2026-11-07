@@ -10,7 +10,8 @@ Nico (08.11.2026): Die neue Sicht wird parallel gebaut, ohne die bestehende Prod
 ## Stand
 **Stufe 1 (08.11.2026): Übersicht aller Produktionsaufträge.** Spalten: Nummer, Produkt (kundenspezifischer Name,
 sonst Auftrag-/Produktname, Bulk = Rezeptur · Bulk), Kunde (ohne Kunde = „Lager"), Menge (Stk), Seit (Anlagedatum,
-Berliner Zeit), Tage (seit Anlage bis heute). Standard: **älteste zuerst**; Spalten sortierbar.
+Berliner Zeit), Tage (seit Anlage bis heute), **Produziert** (Summe der Chargen mit `charge.pa_id` = dieser PA; bei
+Produkt-PAs nur Fertigware `verkaufsfertig`, bei Bulk-PAs alle; „–" = noch nichts, Teilmenge mit %, komplett grün). Standard: **älteste zuerst**; Spalten sortierbar.
 Reiter Offen (alles außer erledigt, auch Beschaffungsweg offen) / Abgeschlossen / Alle. Stornierte PAs und PAs
 stornierter Aufträge fehlen (`pa_aktiv_sql()`). Zeilen-Klick öffnet den Produktionsauftrag. Rein lesend.
 
