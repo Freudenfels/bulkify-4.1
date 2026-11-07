@@ -242,6 +242,7 @@ if (!$neu) {
 }
 ?>
 <?php if (!$neu): ?><form method="post" id="ezMailForm"><input type="hidden" name="aktion" value="zugang_senden"></form><?php endif; // eigenes Formular, Knopf liegt im Hauptformular (form=…) ?>
+<?php if (!$neu): ?><form method="post" id="betreuerForm"><input type="hidden" name="aktion" value="betreuer_setzen"></form><?php endif; // Ansprechpartner: Felder im Hauptformular per form=… (nie form in form – sonst schließt es das Hauptformular und Stammdaten-Speichern geht ins Leere) ?>
 <?php if (isset($_GET['zugangok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Zugang per Mail an den Kunden gesendet.</div><?php endif; ?>
 <?php if (isset($_GET['zugangfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Zugang nicht gesendet: <?= h((string)$_GET['zugangfehler']) ?></div><?php endif; ?>
 <form method="post" class="bx-form">
@@ -275,16 +276,15 @@ if (!$neu) {
         <div><div class="k muted">Telefon</div><div><?= $v('telefon') ?: '–' ?></div></div>
         <div><div class="k muted">Zahlungsart</div><div><?= $v('zahlungsart') ?></div></div>
       </div>
-      <form method="post" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 0">
-        <input type="hidden" name="aktion" value="betreuer_setzen">
+      <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 0">
         <span class="muted" style="white-space:nowrap">Ansprechpartner bei bulkify <?= bx_hint('Steht im Kundenportal auf der Übersicht (Name, Telefon, E-Mail). Leer = Standard aus Einstellungen → Firma.') ?></span>
-        <select name="betreuer_benutzer_id" class="rscombo" style="min-width:240px"><option value="">– Standard –</option>
+        <select name="betreuer_benutzer_id" form="betreuerForm" class="rscombo" style="min-width:240px"><option value="">– Standard –</option>
           <?php $btAkt = (int)($k['betreuer_benutzer_id'] ?? 0); foreach (all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name") as $bu): ?>
           <option value="<?= (int)$bu['id'] ?>" <?= $btAkt === (int)$bu['id'] ? 'selected' : '' ?>><?= h((string)$bu['name']) ?></option>
           <?php endforeach; ?></select>
-        <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+        <button class="btn btn-ghost btn-sm" type="submit" form="betreuerForm">Speichern</button>
         <?php if (isset($_GET['betok'])): ?><span class="muted" style="font-size:12px">gespeichert</span><?php endif; ?>
-      </form>
+      </div>
       <?php if ($marken): ?>
       <hr class="bx">
       <div class="k muted">Marken &amp; Webseiten</div>
