@@ -25,3 +25,4 @@ $positionen, $opt, $datei, $orig)` (verknüpfte Rechnung + Preis). Siehe auch [r
 (Knopf „Aufträge ohne Preis (N)", erscheint nur wenn es welche gibt). Braucht die KI (Einstellungen → KI).
 
 Knopf „Preise zentral nachtragen“ öffnet `?p=kundenpreise&ohne=1` (Herstellungspreis je Kunde × Produkt eintippen).
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

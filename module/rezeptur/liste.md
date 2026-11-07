@@ -20,3 +20,4 @@
 
 ## Noch nicht angenommene Kundenrezepturen sichtbar (Stand 2026-10-08)
 Die Liste zeigt jetzt auch kundenspezifische Rezepturen im Status `vorschlag` und `entwurf` (vorher nur Hausrezepturen + angenommene `eingefroren`/`freigegeben`). So sieht das Team die noch nicht vom Kunden angenommenen Rezepturen und kann z. B. schon Lieferanten anfragen (Fremdfertigung), bevor der Kunde annimmt. Erkennbar am Status-Badge („Vorschlag"/„Entwurf"). Nur vom Kunden `abgelehnt`e bleiben draußen (werden an der Anfrage überarbeitet). Die Fremdfertigungs-Anfrage ist ohnehin nicht an `eingefroren` gebunden (siehe `module/einkauf/lief_anfragen`).
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

@@ -468,7 +468,7 @@ if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
               $__keBi = $__ke['kunde_id'] ? etikett_bestand_info((int)$id, (int)$__ke['kunde_id']) : ['physisch'=>(float)item_bestand((int)$__ke['id'], true), 'bezahlt'=>0];
               $__keFn = $__ke['dok'] ? (string) scalar("SELECT COALESCE(NULLIF(datei_orig,''),'Etikett-Design') FROM dokument WHERE id=?", [(int)$__ke['dok']]) : ''; ?>
             <tr>
-              <td><?= $__ke['kunde_id'] ? h((string)$__ke['firma']) : '<span class="muted">ohne Kunde (Altbestand)</span>' ?></td>
+              <td><?= $__ke['kunde_id'] ? kunde_link($__ke['kunde_id'], (string)$__ke['firma']) : '<span class="muted">ohne Kunde (Altbestand)</span>' ?></td>
               <td>v<?= (int)$__ke['v'] ?></td>
               <td><?php if ($__ke['dok']): ?><a href="?p=dokument&id=<?= (int)$__ke['dok'] ?>" download target="_blank" rel="noopener"><?= h($__keFn) ?> &#8681;</a><?php else: ?><span class="muted">noch kein Design freigegeben</span><?php endif; ?></td>
               <td class="bx-num"><?= number_format((float)$__keBi['physisch'], 0, ',', '.') ?> Stk</td>
@@ -818,7 +818,7 @@ recalc();
       <?php if (!$kundennamen): ?><tr><td colspan="3" class="muted">Noch keine kundenspezifischen Namen. Unten einen Kunden wählen und den gewünschten Namen eintragen.</td></tr><?php endif; ?>
       <?php foreach ($kundennamen as $kn): ?>
         <tr>
-          <td><?= h($kn['firma']) ?></td>
+          <td><?= kunde_link($kn['kunde_id'], $kn['firma']) ?></td>
           <td><strong><?= h($kn['name']) ?></strong></td>
           <td style="text-align:right"><form method="post" style="display:inline" onsubmit="return confirm('Kundennamen entfernen? Danach gilt wieder der Standard-/interne Name.');"><input type="hidden" name="aktion" value="kn_del"><input type="hidden" name="kn_kunde" value="<?= (int)$kn['kunde_id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td>
         </tr>
@@ -844,7 +844,7 @@ recalc();
       <?php if (!$kundenpreise): ?><tr><td colspan="6" class="muted">Noch keine Kundenpreise. Unten eintragen – danach sieht der Kunde „ab xy €" im Portal.</td></tr><?php endif; ?>
       <?php foreach ($kundenpreise as $kp): ?>
         <tr>
-          <td><?= h($kp['firma']) ?></td>
+          <td><?= kunde_link($kp['kunde_id'], $kp['firma']) ?></td>
           <td class="bx-num"><?= $kp['menge_pro_vpe'] !== null ? h(form_groessen_label((string)$pForm, (float)$kp['menge_pro_vpe'])) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $kp['anzahl_vpe'] !== null ? number_format((int)$kp['anzahl_vpe'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $kp['preis'] !== null ? '<strong>' . number_format((float)$kp['preis'], 2, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
@@ -873,13 +873,13 @@ if (!$neu):
     $pRezId = (int)($p['rezeptur_id'] ?? 0);
     $eur2 = function($x){ $x=(float)$x; $d=(abs($x*100-round($x*100))<1e-6)?2:4; return number_format($x,$d,',','.').' €'; };
     $stLblA = fn($s) => match ($s) { 'offen'=>'Entwurf','gesendet'=>'gesendet','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt', default=>$s };
-    $pAngebote = all("SELECT a.id, a.nummer, a.status, a.angelegt, k.firma AS kunde,
+    $pAngebote = all("SELECT a.id, a.nummer, a.status, a.angelegt, k.firma AS kunde, a.kunde_id,
                         (SELECT ap.menge FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id=? AND ?>0 ORDER BY ap.id LIMIT 1) AS pos_menge,
                         (SELECT ap.preis_cent FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id=? AND ?>0 ORDER BY ap.id LIMIT 1) AS pos_preis
                       FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id
                       WHERE a.produkt_id=? OR a.id IN (SELECT angebot_id FROM angebot_produkt WHERE produkt_id=?)
                       ORDER BY a.id DESC", [$pRezId, $pRezId, $pRezId, $pRezId, (int)$id, (int)$id]);
-    $pRechnungen = all("SELECT b.id, b.nummer, b.netto, b.status, b.datum, k.firma AS kunde, a.menge, a.vk_stueck
+    $pRechnungen = all("SELECT b.id, b.nummer, b.netto, b.status, b.datum, k.firma AS kunde, b.kunde_id, a.menge, a.vk_stueck
                         FROM beleg b JOIN auftrag a ON a.id=b.auftrag_id LEFT JOIN kunden k ON k.id=b.kunde_id
                         WHERE a.produkt_id=? AND b.typ='rechnung' ORDER BY b.id DESC", [(int)$id]);
 ?>
@@ -896,7 +896,7 @@ if (!$neu):
       <?php foreach ($pAngebote as $a2): ?>
         <tr>
           <td><?= h($a2['nummer']) ?></td>
-          <td><?= $a2['kunde'] ? h($a2['kunde']) : '<span class="muted">–</span>' ?></td>
+          <td><?= kunde_link($a2['kunde_id'], $a2['kunde']) ?></td>
           <td class="bx-num"><?= $a2['pos_menge'] !== null ? number_format((int)$a2['pos_menge'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $a2['pos_preis'] !== null ? $eur2(((int)$a2['pos_preis']) / 100) : '<span class="muted">–</span>' ?></td>
           <td><?= h($stLblA($a2['status'])) ?></td>
@@ -918,7 +918,7 @@ if (!$neu):
       <?php foreach ($pRechnungen as $b2): ?>
         <tr>
           <td><?= h($b2['nummer']) ?></td>
-          <td><?= $b2['kunde'] ? h($b2['kunde']) : '<span class="muted">–</span>' ?></td>
+          <td><?= kunde_link($b2['kunde_id'], $b2['kunde']) ?></td>
           <td class="bx-num"><?= number_format((int)$b2['menge'], 0, ',', '.') ?></td>
           <td class="bx-num"><?= (float)$b2['vk_stueck'] > 0 ? $eur2((float)$b2['vk_stueck']) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $eur2((float)$b2['netto']) ?></td>

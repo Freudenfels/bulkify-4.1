@@ -133,7 +133,7 @@ if (isset($_GET['syncleer']))  echo '<div class="bx-panel" style="border-color:#
 if (isset($_GET['stdvorhanden'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Es sind bereits Schritte vorhanden – es wurde nichts angelegt.</div>';
 ?>
 <div class="bx-cards">
-  <div class="bx-card"><div class="k">Kunde</div><div class="v"><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
+  <div class="bx-card"><div class="k">Kunde</div><div class="v"><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma'], true) ?></div></div>
   <div class="bx-card"><div class="k">Status</div><div class="v"><?= $statusBadge($a['status']) ?></div></div>
   <div class="bx-card"><div class="k">Netto</div><div class="v"><?= number_format((float)$a['gesamt_netto'],2,',','.') ?> €</div></div>
   <div class="bx-card"><div class="k">Rechnung</div><div class="v"><?= $rechnung ? '<a href="/buchhaltung/?p=rechnung&id=' . (int)$rechnung['id'] . '">' . h($rechnung['nummer']) . '</a>' : '–' ?></div></div>

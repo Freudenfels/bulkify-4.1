@@ -75,6 +75,13 @@ function erp_kunden_alle(): array {
     if (!tabelle_da('kunden')) return [];
     return all("SELECT id, firma, kundennummer, ust_id FROM kunden ORDER BY firma");
 }
+// Interne Kunden-Kürzel (kunden.kuerzel) als Map id => Kürzel – nur für interne Tabellen (kunde_link/kunde_anzeige in ui.php).
+function erp_kunden_kuerzel(): array {
+    $map = [];
+    try { foreach (all("SELECT id, kuerzel FROM kunden WHERE kuerzel IS NOT NULL AND kuerzel<>''") as $r) $map[(int)$r['id']] = (string)$r['kuerzel']; }
+    catch (\Throwable $e) { /* Spalte (noch) nicht da */ }
+    return $map;
+}
 function erp_kunde(int $id): ?array {
     return ($id && tabelle_da('kunden')) ? one("SELECT * FROM kunden WHERE id=?", [$id]) : null;
 }

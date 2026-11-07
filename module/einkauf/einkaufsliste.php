@@ -293,10 +293,10 @@ if ($ohneFestlegung): ?>
     ?>
       <div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 12px">
         <span style="flex:1 1 240px;min-width:0">
-          <strong><?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?></strong><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' <span class="muted">· ' . h(firma_kurz($o['kunde'])) . '</span>' : '' ?>
+          <strong><?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?></strong><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' <span class="muted">· ' . kunde_anzeige($o['kunde_id'] ?? 0, $o['kunde'], true) . '</span>' : '' ?>
           <?php if ($letzte): ?>
             <div class="muted" style="font-size:12px;margin-top:2px">Letzte Festlegung: <strong><?= $letztArt === 'fremd' ? 'Fremdproduktion' : 'Eigenproduktion' ?></strong>
-              <?= $letzte['auftrag_nr'] ? '· ' . h($letzte['auftrag_nr']) . ' ' : '' ?><?= $letzte['am'] ? '· ' . h(fmt_zeit($letzte['am'], 'd.m.Y')) . ' ' : '' ?><?= ((int)$letzte['kunde_id'] === (int)$o['kunde_id'] && $o['kunde']) ? '· selber Kunde' : ($letzte['kunde'] ? '· ' . h(firma_kurz($letzte['kunde'])) : '') ?></div>
+              <?= $letzte['auftrag_nr'] ? '· ' . h($letzte['auftrag_nr']) . ' ' : '' ?><?= $letzte['am'] ? '· ' . h(fmt_zeit($letzte['am'], 'd.m.Y')) . ' ' : '' ?><?= ((int)$letzte['kunde_id'] === (int)$o['kunde_id'] && $o['kunde']) ? '· selber Kunde' : ($letzte['kunde'] ? '· ' . kunde_anzeige($letzte['kunde_id'] ?? 0, $letzte['kunde'], true) : '') ?></div>
           <?php else: ?>
             <div class="muted" style="font-size:12px;margin-top:2px">Letzte Festlegung: – (erstmalig)</div>
           <?php endif; ?>
@@ -377,7 +377,7 @@ if ($ohneFestlegung): ?>
             <?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>
             <div style="margin-bottom:5px">
               <a href="?p=produktionsauftrag&id=<?= (int)$o['pa_id'] ?>" target="_blank" title="Produktionsauftrag im neuen Tab öffnen" style="white-space:nowrap;display:inline-block"><?= h($o['auftrag_nr'] ?: ('#'.$o['auftrag_id'])) ?> (<?= $mfmt($o['need']) ?>)&#8599;</a>
-              <?php $oKd = firma_kurz((string)($o['kunde'] ?? '')); $oPr = (string)($o['produkt'] ?? ''); if ($oKd !== '' || $oPr !== ''): ?><div class="muted" style="font-size:11px"><?= h($oKd) ?><?= $oKd !== '' && $oPr !== '' ? ' · ' : '' ?><?= h($oPr) ?></div><?php endif; ?>
+              <?php $oKd = (string)($o['kunde'] ?? '') !== '' ? kunde_anzeige($o['kunde_id'] ?? 0, (string)$o['kunde'], true) : ''; $oPr = (string)($o['produkt'] ?? ''); if ($oKd !== '' || $oPr !== ''): ?><div class="muted" style="font-size:11px"><?= $oKd ?><?= $oKd !== '' && $oPr !== '' ? ' · ' : '' ?><?= h($oPr) ?></div><?php endif; ?>
             </div><?php endforeach; ?>
           <?php else: // Gläser u. a.: keine Unterzeile -> Auftrags-Links nebeneinander, umbrechend ?>
             <div style="display:flex;flex-wrap:wrap;gap:4px 12px"><?php foreach ($a['orders'] as $o): if ($o['need'] <= 1e-6) continue; ?>

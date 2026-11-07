@@ -24,7 +24,7 @@ $rows = all("SELECT DISTINCT i.id, i.artikelnummer, i.name
 $verwendung = [];
 if ($rows) {
     $ids = implode(',', array_map(fn($r) => (int)$r['id'], $rows));
-    foreach (all("SELECT DISTINCT z.item_id, r.id AS rez_id, r.nummer AS rez_nr, r.name AS rez_name, k.firma AS kunde
+    foreach (all("SELECT DISTINCT z.item_id, r.id AS rez_id, r.nummer AS rez_nr, r.name AS rez_name, k.firma AS kunde, r.kunde_id
                   FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id LEFT JOIN kunden k ON k.id=r.kunde_id
                   WHERE z.item_id IN ($ids) AND r.status IN ($inStatus) ORDER BY r.name") as $v)
         $verwendung[(int)$v['item_id']][] = $v;
@@ -40,7 +40,7 @@ if ($rows) {
 
 // Freitext-Zutaten (noch keinem Rohstoff zugeordnet) in angebotenen Rezepturen – die haben per se keine Papiere
 // und müssen zuerst im Rezeptur-Editor einem Rohstoff zugeordnet werden.
-$freitext = all("SELECT DISTINCT z.bezeichnung, r.id AS rez_id, r.nummer AS rez_nr, r.name AS rez_name, k.firma AS kunde
+$freitext = all("SELECT DISTINCT z.bezeichnung, r.id AS rez_id, r.nummer AS rez_nr, r.name AS rez_name, k.firma AS kunde, r.kunde_id
                  FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id LEFT JOIN kunden k ON k.id=r.kunde_id
                  WHERE z.item_id IS NULL AND TRIM(COALESCE(z.bezeichnung,''))<>'' AND r.status IN ($inStatus)
                  ORDER BY z.bezeichnung");
@@ -73,7 +73,7 @@ if (isset($_GET['angefragt'])) echo '<div class="bx-panel badge-ok" style="paddi
         <td class="muted"><?= h($r['artikelnummer'] ?: '–') ?></td>
         <td style="max-width:360px;white-space:normal">
           <?php foreach (($verwendung[$iid] ?? []) as $v): ?>
-            <div style="font-size:13px"><a href="?p=rezeptur_detail&id=<?= (int)$v['rez_id'] ?>"><?= h($v['rez_nr'] ?: $v['rez_name']) ?></a><?= $v['kunde'] ? ' <span class="muted">· ' . h($v['kunde']) . '</span>' : '' ?></div>
+            <div style="font-size:13px"><a href="?p=rezeptur_detail&id=<?= (int)$v['rez_id'] ?>"><?= h($v['rez_nr'] ?: $v['rez_name']) ?></a><?= $v['kunde'] ? ' <span class="muted">· ' . kunde_anzeige($v['kunde_id'], $v['kunde']) . '</span>' : '' ?></div>
           <?php endforeach; ?>
         </td>
         <td><?= !empty($angefragt[$iid]) ? bx_badge('angefragt','info') : '<span class="muted">offen</span>' ?></td>
@@ -95,7 +95,7 @@ if (isset($_GET['angefragt'])) echo '<div class="bx-panel badge-ok" style="paddi
     <?php foreach ($freitext as $f): ?>
       <tr>
         <td><?= h($f['bezeichnung']) ?></td>
-        <td><a href="?p=rezeptur_detail&id=<?= (int)$f['rez_id'] ?>"><?= h($f['rez_nr'] ?: $f['rez_name']) ?></a><?= $f['kunde'] ? ' <span class="muted">· ' . h($f['kunde']) . '</span>' : '' ?></td>
+        <td><a href="?p=rezeptur_detail&id=<?= (int)$f['rez_id'] ?>"><?= h($f['rez_nr'] ?: $f['rez_name']) ?></a><?= $f['kunde'] ? ' <span class="muted">· ' . kunde_anzeige($f['kunde_id'], $f['kunde']) . '</span>' : '' ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

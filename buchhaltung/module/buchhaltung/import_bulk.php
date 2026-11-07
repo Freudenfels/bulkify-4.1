@@ -201,7 +201,7 @@ elseif ($step === 'verknuepfen'): imp_auto_verknuepfen($batch); $rechnungen = im
       <?php foreach ($rechnungen as $r): ?>
       <tr>
         <td><strong><?= h((string)($r['nummer'] ?: '#'.$r['id'])) ?></strong></td>
-        <td><?= $r['kunde_firma'] ? h($r['kunde_firma']) : '<span style="color:var(--warn)">kein Kunde</span>' ?></td>
+        <td><?= $r['kunde_firma'] ? kunde_link($r['kunde_id'], $r['kunde_firma']) : '<span style="color:var(--warn)">kein Kunde</span>' ?></td>
         <td class="bx-num"><?= $eur($r['brutto']) ?></td>
         <td><?= $r['angebot_ref'] ? h($r['angebot_ref']) : '<span class="muted">–</span>' ?></td>
         <td><select name="link[<?= (int)$r['id'] ?>]">

@@ -328,7 +328,7 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8
 <?php
 $cols = [
     'produkt_name' => ['label'=>'Produkt', 'render'=>fn($r)=> $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">ohne Namen</span>'],
-    'kunde_firma' => ['label'=>'Kunde', 'render'=>fn($r)=> $r['kunde_firma'] ? h($r['kunde_firma']) . ($r['kunde_neu'] ? ' <span class="badge badge-warn">neu</span>' : '') : '<span class="muted">–</span>'],
+    'kunde_firma' => ['label'=>'Kunde', 'render'=>fn($r)=> $r['kunde_firma'] ? kunde_link($r['kunde_id'], $r['kunde_firma']) . ($r['kunde_neu'] ? ' <span class="badge badge-warn">neu</span>' : '') : '<span class="muted">–</span>'],
     'vk'         => ['label'=>'ab VK/Packung', 'num'=>true, 'render'=>fn($r)=> (float)$r['vk'] > 0 ? $eur($r['vk']) : '<span class="muted">–</span>'],
     'rez_nummer' => ['label'=>'Rezeptur', 'render'=>fn($r)=> $r['rez_nummer'] ? h($r['rez_nummer']) . ($r['rezeptur_neu'] ? ' <span class="badge badge-warn">neu</span>' : '') : '<span class="muted">–</span>'],
     'angelegt'   => ['label'=>'Gescannt', 'render'=>fn($r)=> h(fmt_zeit($r['angelegt'], 'd.m.Y H:i'))],

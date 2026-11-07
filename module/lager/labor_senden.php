@@ -42,7 +42,7 @@ if (!empty($_GET['fertig'])):
       <thead><tr><th>Labor</th><th>Auftraggeber (Kunde)</th><th class="bx-num">Proben</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($rows as $v): $dok = (int) scalar("SELECT id FROM dokument WHERE typ='labor_auftrag' AND datei=? LIMIT 1", [(string)$v['datei']]); ?>
-        <tr><td><?= h((string)$v['labor']) ?><?= $v['standort'] ? ' · ' . h((string)$v['standort']) : '' ?></td><td><?= h((string)$v['kunde']) ?></td>
+        <tr><td><?= h((string)$v['labor']) ?><?= $v['standort'] ? ' · ' . h((string)$v['standort']) : '' ?></td><td><?= kunde_link($v['kunde_id'], $v['kunde']) ?></td>
             <td class="bx-num"><?= count(json_decode((string)$v['proben'], true) ?: []) ?></td>
             <td style="text-align:right"><?php if ($dok): ?><a class="btn btn-primary btn-sm" href="?p=dokument&id=<?= $dok ?>" target="_blank">PDF öffnen / drucken</a><?php endif; ?></td></tr>
       <?php endforeach; ?>
@@ -90,7 +90,7 @@ if (!$schritt2): ?>
     <?php if (!$kand): ?><tr><td colspan="5" class="muted">Keine offenen Aufträge mit Labortest. Eine andere Probe unten über „Weiterer Auftrag“ hinzufügen.</td></tr><?php endif; ?>
     <?php foreach ($kand as $r): ?>
       <tr><td><input type="checkbox" name="a[]" value="<?= (int)$r['id'] ?>" <?= in_array((int)$r['id'], $gewaehlt, true) ? 'checked' : '' ?>></td>
-          <td><a href="?p=auftrag&id=<?= (int)$r['id'] ?>"><?= h((string)$r['nummer']) ?></a></td><td><?= h((string)$r['firma']) ?></td><td style="white-space:normal"><?= h((string)$r['produkt']) ?></td>
+          <td><a href="?p=auftrag&id=<?= (int)$r['id'] ?>"><?= h((string)$r['nummer']) ?></a></td><td><?= kunde_link($r['kunde_id'], $r['firma']) ?></td><td style="white-space:normal"><?= h((string)$r['produkt']) ?></td>
           <td><?= $r['labor_versendet_am'] ? bx_badge('Probe beim Labor seit ' . date('d.m.Y', strtotime((string)$r['labor_versendet_am'])), 'warn') : '<span class="muted">noch nicht gesendet</span>' ?></td></tr>
     <?php endforeach; ?>
     </tbody>
@@ -149,7 +149,7 @@ if ($hist): ?>
     <thead><tr><th>Datum</th><th>Labor</th><th>Auftraggeber</th><th>Proben</th><th></th></tr></thead>
     <tbody>
     <?php foreach ($hist as $v): $pr = json_decode((string)$v['proben'], true) ?: []; $dok = (int) scalar("SELECT id FROM dokument WHERE typ='labor_auftrag' AND datei=? LIMIT 1", [(string)$v['datei']]); ?>
-      <tr><td><?= h(date('d.m.Y', strtotime((string)$v['datum']))) ?></td><td><?= h((string)$v['labor']) ?><?= $v['standort'] ? ' · ' . h((string)$v['standort']) : '' ?></td><td><?= h((string)$v['kunde']) ?></td>
+      <tr><td><?= h(date('d.m.Y', strtotime((string)$v['datum']))) ?></td><td><?= h((string)$v['labor']) ?><?= $v['standort'] ? ' · ' . h((string)$v['standort']) : '' ?></td><td><?= kunde_link($v['kunde_id'], $v['kunde']) ?></td>
           <td style="white-space:normal"><?= h(implode(', ', array_map(fn($x) => (string)($x['material'] ?? ''), $pr))) ?></td>
           <td style="text-align:right"><?php if ($dok): ?><a href="?p=dokument&id=<?= $dok ?>" target="_blank">PDF</a><?php endif; ?></td></tr>
     <?php endforeach; ?>

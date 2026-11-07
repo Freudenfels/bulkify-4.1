@@ -26,3 +26,4 @@ Spalte „Anfrage" jetzt der **Produktname** dahinter, zu dem die Dienstleistung
 Magnesium Komplex 5-Fach"). Das Produkt wird aufgelöst aus `pa.produkt_id` **oder** – falls dort nicht gesetzt
 (ältere Labor-Upsell-Anfragen, die das Produkt nur in der Positionszeile tragen) – aus der ersten
 `portal_anfrage_pos.produkt_id`. So sieht man ohne Öffnen, zu welchem Produkt die Laboranalyse gehört.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

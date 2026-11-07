@@ -7,3 +7,4 @@ Route `?p=dl_split_bereinigung` (nur Admin). Entfernt DL-Aufträge, die durch di
 **Sicherheit:** Vorschau per Default, Löschen nur auf Klick. Kandidaten mit eigener (nicht stornierter) Rechnung werden **nicht** gelöscht, sondern markiert (erst Buchhaltung klären). Gelöscht wird gezielt je ID über `auftrag_komplett_loeschen()` (räumt evtl. Produktion/Charge/Beleg mit auf, löst Lieferantenbestellungen nur). Angebot + Positionen bleiben erhalten. Idempotent.
 
 Voraussetzung: Die einmalige Service-Heilung (`dl_auftraege_service_backfill`, läuft beim Deploy) hat zuvor echten Service-Aufträgen ihre `dienstleistung_id` zurückgegeben – sonst würden auch sie als „ohne Service" erscheinen.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

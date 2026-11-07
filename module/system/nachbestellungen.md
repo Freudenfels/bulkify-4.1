@@ -9,3 +9,4 @@ Route `?p=nachbestellungen` (Rollen admin/sales/finance; Nav: Vertrieb · Nachbe
 - **Zuletzt freigegeben**: die letzten bestätigten Nachbestellungen mit Link zum erzeugten Auftrag.
 
 Logik liegt vollständig in [../../core/nachbestellung.php](../../core/nachbestellung.php); diese Seite ist nur die Team-Oberfläche. Kein eigener Buchungs-/Preis-Code hier.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

@@ -27,3 +27,4 @@ Ein Suchfeld (`?q=`) filtert nach **Auftrag, Produkt, Kunde und Rohstoff/Kompone
 Spalte „Fehlt": liegt der fehlende Rest in Quarantäne, steht dort „N in Quarantäne" + Link „freigeben" statt einer Bestell-Menge; „Material vollständig" zählt nur, was wirklich zu bestellen wäre (`zu_bestellen`).
 
 Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief. Dazu zählt auch `bedarf_aggregiert()` (Einkaufsliste) sie nicht mehr. Vorher hätte der Einkauf das Material für die volle Jahresmenge vorgeschlagen.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

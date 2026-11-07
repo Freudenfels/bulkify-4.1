@@ -57,3 +57,4 @@ Im Match-/Vorschau-Schritt wird das hochgeladene **Original** (PDF im iframe, Bi
 - **Verpackung/Glas**: angebotsscan_ki liest jetzt zusaetzlich `verpackung` (Freitext mit Groesse) aus und zeigt sie im Match-Schritt (nur Info; Rezeptur hat keine Verpackung).
 - **Layout**: gelesener Kundenname unter das Feld (umbrechend) statt ins einzeilige Label (lief vorher aus dem Panel).
 - **Original-Viewer** (PDF/Bild) oben im Match-Schritt (schritt=datei streamt die Session-Datei).
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

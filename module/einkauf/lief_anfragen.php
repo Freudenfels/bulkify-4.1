@@ -45,7 +45,7 @@ $rows = all("SELECT la.id, la.nummer, la.art, la.betreff, la.menge, la.einheit, 
                        AND ((d.objekt_typ='lieferant' AND d.lieferant_id=la.lieferant_id)
                             OR (la.item_id>0 AND d.objekt_typ='item' AND d.objekt_id=la.item_id))) AS coa_docs,
                     i.name AS item_name, i.artikelnummer AS item_nr,
-                    rz.name AS rez_name, rz.nummer AS rez_nummer, kz.firma AS rez_kunde
+                    rz.name AS rez_name, rz.nummer AS rez_nummer, kz.firma AS rez_kunde, rz.kunde_id AS rez_kunde_id
              FROM lieferant_anfrage la
              LEFT JOIN lieferanten l ON l.id = la.lieferant_id
              LEFT JOIN lieferant_angebot ag ON ag.anfrage_id = la.id
@@ -148,7 +148,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
         <td style="max-width:200px;white-space:normal;overflow-wrap:anywhere"><?= h((string)($r['firma'] ?: '–')) ?></td>
         <td style="max-width:320px;white-space:normal;overflow-wrap:anywhere">
           <?php if ($wasLink): ?><a href="<?= $wasLink ?>"><?= h($wasText) ?></a><?php else: ?><?= h($wasText) ?><?php endif; ?>
-          <?php if ((int)$r['rezeptur_id'] > 0 && !empty($r['rez_kunde'])): ?><div class="muted" style="font-size:11px">Kunde: <?= h((string)$r['rez_kunde']) ?></div><?php endif; ?>
+          <?php if ((int)$r['rezeptur_id'] > 0 && !empty($r['rez_kunde'])): ?><div class="muted" style="font-size:11px">Kunde: <?= kunde_anzeige($r['rez_kunde_id'], (string)$r['rez_kunde']) ?></div><?php endif; ?>
           <?php if ($artBadge): ?><div><?= $artBadge ?></div><?php endif; ?>
         </td>
         <td class="bx-num"><?= $menge($r['menge'], $r['einheit']) ?></td>

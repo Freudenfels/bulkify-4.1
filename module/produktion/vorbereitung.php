@@ -506,7 +506,7 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
         <td title="<?= h($kann ? 'Alles da – kann produziert werden' : 'Noch nicht: ' . implode(' · ', $grund)) ?>"><?= $kann ? $punkt('#1D9E75', 'Alles da – kann produziert werden') . ' <span style="font-size:12px;color:#1D9E75">ja</span>'
                                     : $punkt('#f59e0b', 'Noch nicht produzierbar') . ' <span class="muted" style="font-size:12px">nein</span>' ?></td>
         <td><a href="<?= $href ?>"><?= h($r['nummer'] ?: ('PR#' . $paId)) ?></a><?php if ($r['auftrag_nr']): ?><br><a class="muted" style="font-size:12px" href="?p=auftrag&id=<?= (int)$r['auftrag_id'] ?>" onclick="event.stopPropagation()" title="Zum Auftrag"><?= h($r['auftrag_nr']) ?></a><?php endif; ?></td>
-        <td><?= $r['kunde'] ? h(firma_kurz($r['kunde'])) : '<span class="muted">–</span>' ?></td>
+        <td><?= kunde_anzeige($r['kunde_id'], $r['kunde'], true) ?></td>
         <td style="white-space:normal;min-width:220px"><?= h($r['produkt'] ?: '–') ?></td>
         <td class="bx-num"><?= number_format((int)$r['menge'], 0, ',', '.') ?></td>
         <td><?= $glasOk ? $flagOk(true) : '<span style="color:#d64545">fehlt</span>' ?></td>

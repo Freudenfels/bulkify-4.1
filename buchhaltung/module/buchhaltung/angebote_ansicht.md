@@ -13,3 +13,4 @@ Route `angebote_ansicht` (Rolle finance/admin). Rein lesend, verändert nichts.
 - Angebote/Aufträge über die Naht `erp_angebote()` / `erp_auftraege()` (lesen `angebot`/`auftrag`/`kunden`
   gebündelt in `core/erp.php` — nirgends sonst direkter Zugriff auf diese Dashboard-Tabellen).
 - Rechnungen aus der finanz-eigenen Tabelle `beleg` (direkt gelesen). Angebot/Auftrag als Netto, Rechnung als Brutto.
+- Kopfbereich zeigt den Kunden immer mit vollem Firmennamen (Link ins Dashboard), nicht das interne Kürzel – das gilt nur in Tabellen, 08.11.2026

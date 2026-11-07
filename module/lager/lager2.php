@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), 
 $produkte = lager2_produkte();
 // Chargen der Energetisierungs-Kunden (Fulfillment) mit Startdatum – wie im Kundenportal (frei + verfügbar).
 $energChargen = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.energetisiert_am,
-                            COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name, p.nummer AS produkt_nr, k.firma AS kunde
+                            COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt_name, p.nummer AS produkt_nr, k.firma AS kunde, k.id AS kunde_id
                      FROM charge c
                      JOIN item i ON i.id=c.item_id AND i.kategorie='verkaufsfertig'
                      JOIN produkt p ON p.id=i.produkt_id
@@ -92,7 +92,7 @@ if (!$ffKunden) {
       <?php if (!$produkte): ?><tr><td colspan="4" class="muted">Noch keine Fertigware eingebucht. Unten „Fertigware einbuchen" nutzen oder einen Produktionsauftrag abschließen.</td></tr><?php endif; ?>
       <?php foreach ($produkte as $r): ?>
         <tr>
-          <td><?= h($r['kunde']) ?></td>
+          <td><?= kunde_link($r['kunde_id'], $r['kunde']) ?></td>
           <td><?= h($r['anzeigename']) ?><div class="muted" style="font-size:11px"><?= h($r['produkt_nr']) ?><?= $r['name'] !== $r['anzeigename'] ? ' · ' . h($r['name']) : '' ?></div></td>
           <td>
             <?php if ($r['bsku']): ?><span style="font-family:monospace;font-weight:600"><?= h($r['bsku']) ?></span>
@@ -118,7 +118,7 @@ if (!$ffKunden) {
     <tbody>
     <?php foreach ($energChargen as $c): $start = (string)($c['energetisiert_am'] ?? ''); $dval = $start !== '' ? date('Y-m-d', strtotime($start)) : ''; ?>
       <tr>
-        <td><?= h($c['kunde']) ?></td>
+        <td><?= kunde_link($c['kunde_id'], $c['kunde']) ?></td>
         <td><?= h($c['produkt_name']) ?><div class="muted" style="font-size:11px"><?= h($c['produkt_nr']) ?></div></td>
         <td><?= $c['charge_nr'] ? h($c['charge_nr']) : '<span class="muted">ohne</span>' ?></td>
         <td class="bx-num"><?= $mfmt($c['menge_verfuegbar']) ?> Stk</td>

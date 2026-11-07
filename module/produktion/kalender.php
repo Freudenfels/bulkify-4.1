@@ -127,7 +127,7 @@ bx_head('Produktions-Kalender', 'Aufträge per Drag & Drop auf einen Tag ziehen 
           <td><?= bereitschaft_badge($ber['status']) ?></td>
           <td><a href="?p=produktionsauftrag&id=<?= (int)$g['id'] ?>"><?= h($g['nummer'] ?: ('#'.$g['id'])) ?></a></td>
           <td><?= h($g['produkt_name'] ?: '–') ?></td>
-          <td><?= $g['kunde'] ? h($g['kunde']) : '<span class="muted">–</span>' ?></td>
+          <td><?= kunde_anzeige($g['kunde_id'], $g['kunde']) ?></td>
           <td><?= $mSelect((int)$g['id'], (int)($g['mitarbeiter_id'] ?? 0)) ?></td>
           <td>
             <form method="post" class="bx-row" style="gap:6px;margin:0">

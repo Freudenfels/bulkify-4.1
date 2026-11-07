@@ -34,3 +34,4 @@ Die Dienstleistungsanfrage (Portal, `portal_anfrage` typ='dienstleistung' + `die
 - Bei Laboranalysen (`dl_ist_labortest`) heißt er **Laborbericht**. Mit dem Haken „auch als Laboranalyse beim Produkt ablegen" entsteht zusätzlich eine eigene Dateikopie als `dokument typ='analyse'` an der Bestellung (sonst am Produkt), Befund „unklar", kundensichtbar. Damit erscheint der Bericht unter Laboranalysen und im Portal-Reiter Labortest.
 - Ohne zugeordnetes Produkt ist der Haken gesperrt.
 - Kopfzeile zeigt das Produkt mit an.
+- Kopfbereich zeigt den Kunden immer mit vollem Firmennamen (nicht das interne Kürzel – das gilt nur in Tabellen), 08.11.2026

@@ -23,7 +23,7 @@ $name_expr = "COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.name,''), CONC
 if (!$id) {
     $GLOBALS['bx_stock_cache'] = [];   // Bestands-/Bedarfsabfragen für die Machbarkeit request-lokal cachen
     $offene = all("SELECT pa.id, pa.nummer, pa.status, pa.prio, pa.angelegt, pa.auftrag_id,
-                          a.nummer AS auftrag_nr, k.firma AS kunde, p.etikett_id AS etikett_id,
+                          a.nummer AS auftrag_nr, k.firma AS kunde, pa.kunde_id, p.etikett_id AS etikett_id,
                           $name_expr AS produkt,
                           (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id) AS n_total,
                           (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=1) AS n_done
@@ -71,7 +71,7 @@ if (!$id) {
         <tr style="<?= $rowStyle ?><?= $machbar ? ';cursor:pointer' : '' ?>"<?= $machbar ? ' onclick="location.href=\'?p=produktion_run&id=' . (int)$o['id'] . '\'"' : '' ?>>
           <td><?= prio_badge((int)($o['prio'] ?? 2)) ?></td>
           <td><strong><?= h($o['auftrag_nr'] ?: $o['nummer']) ?></strong></td>
-          <td><?= h($o['produkt'] ?: '–') ?><?= $o['kunde'] ? ' <span class="muted">· ' . h($o['kunde']) . '</span>' : '' ?></td>
+          <td><?= h($o['produkt'] ?: '–') ?><?= $o['kunde'] ? ' <span class="muted">· ' . kunde_anzeige($o['kunde_id'], $o['kunde']) . '</span>' : '' ?></td>
           <td><?= $statusLbl ?></td>
           <td><div style="height:7px;border-radius:5px;background:var(--line);overflow:hidden"><div style="height:100%;width:<?= $pct ?>%;background:var(--gruen)"></div></div><div class="muted" style="font-size:11px;margin-top:3px"><?= $done ?> / <?= $tot ?></div></td>
           <td><?= $mLbl ?></td>

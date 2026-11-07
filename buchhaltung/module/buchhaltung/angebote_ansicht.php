@@ -114,7 +114,7 @@ foreach ($angebote as $ang) if (empty($auftragVonAngebot[(int)$ang['id']]) && !i
     $fehlt = '<span style="color:var(--err)">fehlt</span>';
 ?>
   <div class="bx-panel" style="margin-bottom:16px">
-    <h2 style="margin-top:0"><?= $kd['firma'] ? kunde_link($kid, $kd['firma']) : '<span class="muted">(ohne Kunde)</span>' ?></h2>
+    <h2 style="margin-top:0"><?= $kd['firma'] ? kunde_link($kid, $kd['firma'], true) : '<span class="muted">(ohne Kunde)</span>' ?></h2>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Angebot</th><th class="bx-num">netto</th><th>Auftrag</th><th class="bx-num">netto</th><th>Rechnung</th><th class="bx-num">brutto</th></tr></thead>
       <tbody>

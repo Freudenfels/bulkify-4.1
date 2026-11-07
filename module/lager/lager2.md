@@ -37,3 +37,4 @@ Das Panel **„Energetisierung"** listet die betroffenen Chargen (frei + verfüg
 
 ## Besitzer (S-16)
 „Fertigware einbuchen" bucht die Charge als Kundenware: `fremd_kunde_id` = Kunde des Produkts, Standort Lager 2. Sie erscheint damit nicht mehr als eigener Bestand in Lager 1.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

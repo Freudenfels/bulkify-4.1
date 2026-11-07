@@ -7,3 +7,4 @@ Route `import_bulk` (finance). Schritt-Seite (?batch=&step=):
 - Zahlungen: je Rechnung Teilzahlungen (Datum+Betrag) erfassen; Status leitet sich ab.
 - Uebernehmen/Fertig: erzeugt bleibende Belege (kundensichtbar) + archivierte Angebote; Staging danach loeschbar.
 Logik in core/importer.php.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

@@ -25,3 +25,4 @@ Anker ist die **Rezepturanfrage mit gesetzter `rezeptur_id`** (gesetzt beim Vers
 ## Hinweise
 - Zeiten gemischt: `*.angelegt` sind `DEFAULT CURRENT_TIMESTAMP` (Server-Zeit), `freigabe_am`/`erledigt_at` sind UTC (`gmdate`/`UTC_TIMESTAMP`). Solange die DB-Serverzeit UTC ist (Projektkonvention), sind die Differenzen konsistent.
 - Verwandt, aber nur Teilstrecke: `erp_durchlaufzeit_schnitt()` (`produktion/core/erp.php`) misst nur Auftrag → fertig. Dieser Tracker deckt die ganze Reise ab Rezepturanfrage ab.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

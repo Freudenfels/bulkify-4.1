@@ -27,7 +27,7 @@ if ($q !== '') {
     $where = "WHERE (a.nummer LIKE ? OR k.firma LIKE ? OR p.name LIKE ? OR p.kundenname LIKE ?)";
     $par = [$like, $like, $like, $like];
 }
-$treffer = all("SELECT a.id, a.nummer, a.status, a.status_datum, k.firma,
+$treffer = all("SELECT a.id, a.nummer, a.status, a.status_datum, k.firma, a.kunde_id,
                        COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt
                 FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
                 $where ORDER BY a.id DESC LIMIT 60", $par);
@@ -95,7 +95,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <?php foreach ($treffer as $t): ?>
         <tr style="cursor:pointer" onclick="location.href='?p=fasttrack&auftrag=<?= (int)$t['id'] ?><?= $q !== '' ? '&q=' . urlencode($q) : '' ?>'">
           <td><?= h($t['nummer']) ?></td>
-          <td><?= $t['firma'] ? h($t['firma']) : '<span class="muted">–</span>' ?></td>
+          <td><?= kunde_link($t['kunde_id'], $t['firma']) ?></td>
           <td><?= $t['produkt'] ? h($t['produkt']) : '<span class="muted">–</span>' ?></td>
           <td><?= $badge($t['status']) ?></td>
           <td class="muted"><?= $t['status_datum'] ? h(date('d.m.Y', strtotime($t['status_datum']))) : '' ?></td>

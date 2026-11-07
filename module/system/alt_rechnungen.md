@@ -18,3 +18,4 @@ Auftrag, nur `kunde_sichtbar=1`). Da nur hier hochgeladen wird, betrifft das fak
 ## Später entfernen
 Wie der v3-Import-Upload wieder rausnehmen: Route (`public/index.php`), Menüpunkt (`core/layout.php`), Datei.
 Die Portal-Anzeige/`v=auftrag_dok` kann bleiben. Siehe Memory `alt-rechnungen-reiter-temporaer`.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

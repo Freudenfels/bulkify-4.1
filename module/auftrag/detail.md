@@ -275,3 +275,4 @@ Im Block „Externer Labortest“ steht, solange kein Bericht vorliegt, der Knop
 - Ist schon Ware zugeordnet (z. B. vorher über „Bulkware binden“ oder eine Bestellung für den Auftrag), steht der PA aber noch auf „Beschaffungsweg offen“, zeigt der Reiter den Knopf „Weg festlegen: …“ (`deckung_festlegen` → `auftrag_deckung_weg_festlegen`).
 
 **Beschaffungsweg – Mindestmenge (06.11.2026):** Bei den Einzelrohstoffen gilt auch unterhalb der kleinsten Lieferanten-Staffel deren Preis; unter dem Betrag steht dann klein „Mindestmenge 250 kg“ (Mindestmenge des gewählten Lieferanten).
+- Kopfbereich zeigt den Kunden immer mit vollem Firmennamen (nicht das interne Kürzel – das gilt nur in Tabellen), 08.11.2026

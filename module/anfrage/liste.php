@@ -72,7 +72,7 @@ $statusBadge = function(array $r) use ($rezRaus): string {
 $cols = [
     'nummer'        => ['label'=>'Nummer', 'sort'=>true],
     'produktname'   => ['label'=>'Rezeptur / Wunsch-Produkt', 'sort'=>true, 'render'=>fn($r)=> !empty($r['produktname'])?h($r['produktname']):'<span class="muted">–</span>'],
-    'kunde_firma'   => ['label'=>'Kunde', 'sort'=>true, 'render'=>fn($r)=> $r['kunde_firma'] ? h($r['kunde_firma']) : '<span class="muted">–</span>'],
+    'kunde_firma'   => ['label'=>'Kunde', 'sort'=>true, 'render'=>fn($r)=> kunde_link($r['kunde_id'], $r['kunde_firma'])],
     'darreichungsform' => ['label'=>'Form', 'sort'=>true, 'render'=>fn($r)=> h($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])],
     'wunsch_anzahl' => ['label'=>'Wünsche', 'sort'=>true, 'num'=>true],
     'rezeptur_nr'   => ['label'=>'Rezeptur', 'render'=>fn($r)=> $r['rezeptur_nr']?h($r['rezeptur_nr']):'<span class="muted">–</span>'],

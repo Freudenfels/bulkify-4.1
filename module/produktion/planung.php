@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'plan_
 
 // Offene/laufende Produktionsaufträge. Sortierung: ohne Termin zuerst, dann nach Datum, dann Prio.
 $rows = all("SELECT pa.id, pa.nummer, pa.menge, pa.prio, pa.geplant_am, pa.art_festgelegt_am, pa.produktionsart,
-                   k.firma AS kunde_firma,
+                   k.firma AS kunde_firma, pa.kunde_id,
                    COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.name,''), CONCAT(rz.name, ' · Bulk')) AS produkt_name
             FROM produktionsauftrag pa
             LEFT JOIN kunden k    ON k.id=pa.kunde_id
@@ -57,7 +57,7 @@ if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="pad
         <tr>
           <td><?= $prioDot($r['prio']) ?></td>
           <td><a href="?p=produktionsauftrag&id=<?= (int)$r['id'] ?>"><?= h($r['nummer'] ?: ('#' . (int)$r['id'])) ?></a></td>
-          <td><?= $r['kunde_firma'] ? h(firma_kurz($r['kunde_firma'])) : '<span class="muted">–</span>' ?></td>
+          <td><?= kunde_anzeige($r['kunde_id'], $r['kunde_firma'], true) ?></td>
           <td><?= $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>' ?></td>
           <td><?= empty($r['art_festgelegt_am'])
                     ? '<span title="Eigen/Fremd noch nicht festgelegt – erst danach geht der Auftrag in die Produktion">' . bx_badge('festlegen', 'err') . '</span>'

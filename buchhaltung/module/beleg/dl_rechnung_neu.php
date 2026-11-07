@@ -47,7 +47,7 @@ if ($vorhanden) echo '<div class="bx-panel" style="padding:12px 16px;border-colo
 ?>
 <div class="bx-panel">
   <div class="bx-grid">
-    <div><div class="k muted">Kunde</div><div><?= $kunde ? kunde_link((int)$a['kunde_id'], $kunde['firma']) : '<span class="muted">–</span>' ?></div></div>
+    <div><div class="k muted">Kunde</div><div><?= $kunde ? kunde_link((int)$a['kunde_id'], $kunde['firma'], true) : '<span class="muted">–</span>' ?></div></div>
     <div><div class="k muted">DL-Auftrag</div><div><a href="/?p=auftrag&id=<?= (int)$a['id'] ?>" target="_blank"><?= h((string)$a['nummer']) ?></a></div></div>
     <div><div class="k muted">Netto</div><div><?= $eur($s['netto']) ?></div></div>
     <div><div class="k muted">USt (<?= number_format($ustP,0) ?> %)</div><div><?= $eur($s['ust']) ?></div></div>

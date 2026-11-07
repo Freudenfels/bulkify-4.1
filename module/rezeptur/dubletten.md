@@ -17,3 +17,4 @@ Popup, Tabelle („Bulk-Bestand"-Spalte) und Vergleich zeigen je Rezeptur den Be
 
 ## Zusammenführen je Gruppe (Übersicht)
 Jede noch nicht verknüpfte Gruppe hat einen Button **„Zusammenführen"** (Admin). Er öffnet dasselbe Bestätigungs-Pop-up wie die Detailseite: Vorauswahl der **Stammrezeptur = Rezeptur mit dem meisten Bulk-Bestand** (im Dropdown änderbar), darunter die hineingezogenen Rezepturen mit ihrem Bulk-Impact (Chargen/Reservierungen/Produkte). Erst auf „Jetzt zusammenführen" läuft der Merge (POST `aktion=gruppe_zusammenfuehren`). Gemeinsame Logik: `rezeptur_stamm_zusammenfuehren($child,$stamm)` (core/schema.php) – dieselbe Funktion nutzt das Stamm-Panel. Sicherheit: nur Rezepturen mit identischem `rezeptur_fingerprint` zur Stammrezeptur werden zusammengeführt. Nichts automatisch.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

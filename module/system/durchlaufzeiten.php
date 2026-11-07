@@ -107,7 +107,7 @@ bx_head('Durchlaufzeiten', 'Wie lange von der Rezepturanfrage bis zur fertigen P
       <tr>
         <td style="white-space:nowrap"><?php if ($r['rez_id']): ?><a href="?p=rezeptur_detail&id=<?= (int)$r['rez_id'] ?>"><?= h($r['rez_nr'] ?: $r['anf_nr']) ?></a><?php else: ?><?= h($r['rez_nr'] ?: $r['anf_nr']) ?><?php endif; ?>
           <div class="muted" style="font-size:12px;max-width:220px;overflow-wrap:anywhere"><?= h((string)$r['rez_name']) ?></div></td>
-        <td style="max-width:180px;overflow-wrap:anywhere"><?= $r['firma'] ? h($r['firma']) : '<span class="muted">–</span>' ?></td>
+        <td style="max-width:180px;overflow-wrap:anywhere"><?= kunde_link($r['kunde_id'], $r['firma']) ?></td>
         <td style="white-space:nowrap" class="muted"><?= $r['ms']['m1'] ? h(fmt_zeit($r['ms']['m1'], 'd.m.Y')) : '–' ?></td>
         <?php foreach ($SEG as $j => $s): ?><td class="bx-num" style="white-space:nowrap"><?= $fmt($r['segVals'][$j]) ?></td><?php endforeach; ?>
         <td class="bx-num" style="white-space:nowrap"><strong><?= $fmt($r['gesamt']) ?></strong></td>

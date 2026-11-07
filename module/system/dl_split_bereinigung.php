@@ -96,7 +96,7 @@ if (isset($_GET['fertig']))
     <?php foreach ($cands as $c): ?>
       <tr<?= $c['handeln'] ? '' : ' class="muted"' ?>>
         <td><a href="?p=dl_auftrag&id=<?= (int)$c['id'] ?>"><?= h((string)$c['nummer']) ?></a></td>
-        <td><?= h((string)($c['kunde'] ?: '–')) ?></td>
+        <td><?= kunde_link($c['kunde_id'], $c['kunde']) ?></td>
         <td><?= h((string)($c['material'] ?: '–')) ?></td>
         <td class="muted"><?= h((string)($c['angebot_nr'] ?: '–')) ?></td>
         <td class="bx-num"><?= number_format((float)$c['gesamt_netto'],2,',','.') ?> €</td>

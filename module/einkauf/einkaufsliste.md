@@ -72,3 +72,4 @@ Zeilen aus `bedarf_bulk()` mit `art='fertig'` heißen „Fertigware: …", Menge
 
 **Vollbedruckter Beutel (03.11.2026):** wie Etiketten gesperrt („gesperrt“, kein Haken), bis der Kunde das Beutel-Design
 aller Aufträge mit diesem Beutel freigegeben hat (`druck` + `etikett_ok` aus `bedarf_aggregiert()`).
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

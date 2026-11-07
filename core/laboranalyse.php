@@ -168,7 +168,8 @@ function laboranalysen_alle(string $suche = ''): array {
                CASE WHEN d.objekt_typ='auftrag' THEN a.nummer ELSE NULL END AS auftrag_nr,
                CASE WHEN d.objekt_typ='item' THEN it.kategorie ELSE NULL END AS item_kategorie,
                COALESCE(CASE WHEN d.objekt_typ='produkt' THEN kp.firma
-                             WHEN d.objekt_typ='auftrag' THEN ka.firma ELSE NULL END, lf.firma) AS kunde
+                             WHEN d.objekt_typ='auftrag' THEN ka.firma ELSE NULL END, lf.firma) AS kunde,
+               CASE WHEN d.objekt_typ='produkt' THEN kp.id WHEN d.objekt_typ='auftrag' THEN ka.id ELSE NULL END AS kunde_id
           FROM dokument d
           LEFT JOIN produkt pp ON d.objekt_typ='produkt' AND pp.id=d.objekt_id
           LEFT JOIN kunden  kp ON kp.id=pp.kunde_id

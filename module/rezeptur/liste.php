@@ -121,7 +121,7 @@ $cols = [
     'name'             => ['label' => 'Rezeptur', 'sort' => true, 'render' => $nameCell],
     'darreichungsform' => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])],
     'kaps_name'        => ['label' => 'Kapselgröße', 'sort' => true, 'render' => $kapsCell],
-    'kunde_firma'      => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> $r['kunde_firma'] ? h($r['kunde_firma']) : '<span class="muted">–</span>'],
+    'kunde_firma'      => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'], $r['kunde_firma'])],
     'roh_anzahl'       => ['label' => 'Rohstoffe', 'sort' => true, 'num' => true, 'render' => $rohCell],
     'status'           => ['label' => 'Status', 'sort' => true, 'render' => $statusCell],
 ];

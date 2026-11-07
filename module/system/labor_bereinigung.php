@@ -121,7 +121,7 @@ $mapAngStatus = fn($s) => match ((string)$s) {
     <tbody>
     <?php foreach ($cands as $c): ?>
       <tr<?= $c['handeln'] ? '' : ' class="muted"' ?>>
-        <td><?= h((string)($c['kunde'] ?: '–')) ?></td>
+        <td><?= kunde_link($c['kunde_id'], $c['kunde']) ?></td>
         <td><?= h((string)$c['anfrage_nr']) ?></td>
         <td><?= h((string)($c['produkt_name'] ?: '–')) ?></td>
         <td><?= $c['angebot'] ? h((string)$c['angebot']['nummer']) . ' ' . $mapAngStatus($c['angebot']['status']) : '<span class="muted">kein Angebot</span>' ?></td>

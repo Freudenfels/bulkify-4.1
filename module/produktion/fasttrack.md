@@ -10,3 +10,4 @@ Zweck: viele Aufträge zügig auf den richtigen Stand bringen (Rückstand aufhol
 
 Kern-Logik: `auftrag_status_setzen($id,$status,$datum,$notiz,$akteur)` in core/schema.php (setzt Status+Datum, protokolliert,
 storniert bei 'storniert' automatisch offene Rechnungen). Dieselbe Datums-Logik greift auch im normalen Auftrag-Detail.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

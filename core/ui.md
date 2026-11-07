@@ -14,7 +14,11 @@ Wandelt einen Statuswert aus der Datenbank in lesbares Deutsch **mit Umlauten**:
   **Internes Kürzel (08.11.2026):** hat der Kunde `kunden.kuerzel`, zeigt der Link das Kürzel, voller Firmenname als Tooltip.
 - `kunde_kuerzel($kunde_id)` – internes Kürzel ('' = keins); alle Kürzel einmal je Aufruf geladen (eine Abfrage). **Nur interne
   Tabellen** – nie in PDFs, Mails oder im Kundenportal verwenden.
-- `kunde_anzeige($kunde_id, $firma)` – wie `kunde_link`, aber ohne Link (Kürzel mit Tooltip, sonst Firma).
+- `kunde_anzeige($kunde_id, $firma, $kurz=false)` – wie `kunde_link`, aber ohne Link (Kürzel mit Tooltip, sonst Firma;
+  `$kurz=true` = ohne Kürzel `firma_kurz()` für schmale Spalten).
+- `kunde_link(..., $voll=true)` – immer voller Name: für Detailseiten-Köpfe (Auftrag, PA, DL-Auftrag, Kontingent) – Kürzel nur in Tabellen.
+- `kunde_kuerzel_html($kz, $firma)` – Kürzel + voller Name in `<span hidden>`, damit Tabellen-Suchfelder (textContent)
+  den Kunden weiter über den Firmennamen finden.
 - `bx_hint($text)` – das kleine **ⓘ**-Symbol mit Tooltip für Hinweise.
 - `bx_tabs($tabs, $aktiv, $baseUrl)` – Reiter, die per Link umschalten.
 - `bx_table($cols, $rows, $opts)` – **die Listen-Tabelle**: definiert Spalten (Label, sortierbar, eigene Darstellung), macht Kopfzeilen anklickbar zum Sortieren, Zeilen anklickbar zum Öffnen. Optional `group` (fn($row) => HTML): Zwischenüberschrift je Gruppe, sobald sich der Wert ändert (Zeilen vorher nach der Gruppe sortieren) – z. B. Produkte je Rezeptur.

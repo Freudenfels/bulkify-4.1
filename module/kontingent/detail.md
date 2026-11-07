@@ -17,3 +17,4 @@ Zeigt zu einem Kontingent (Jahresvertrag):
 
 Erreichbar aus `kontingent/liste.php` über den Produktnamen und den Button „Details".
 Siehe auch `core/schema.php`: `kontingent_abruf_positionen()` (Aufschlüsselung) und `kontingent_abruf()`.
+- Kopfbereich zeigt den Kunden immer mit vollem Firmennamen (nicht das interne Kürzel – das gilt nur in Tabellen), 08.11.2026

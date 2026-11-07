@@ -38,7 +38,7 @@ if ($q !== '') {
     $where .= " AND (b.nummer LIKE ? OR k.firma LIKE ?)";
     $args[] = $like; $args[] = $like;
 }
-$rows = all("SELECT b.id, b.nummer, b.typ, b.datum, b.netto, b.brutto, b.status, b.kunde_sichtbar, k.firma
+$rows = all("SELECT b.id, b.nummer, b.typ, b.datum, b.netto, b.brutto, b.status, b.kunde_sichtbar, k.firma, b.kunde_id
              FROM beleg b LEFT JOIN kunden k ON k.id = b.kunde_id
              WHERE $where ORDER BY b.datum DESC, b.id DESC LIMIT 500", $args);
 $darfZiehen = has_role('admin') || has_role('finance') || has_role('sales');
@@ -78,7 +78,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel badge-err" style="padding
         <tr>
           <td><?= h((string)($b['nummer'] ?: '–')) ?></td>
           <td style="white-space:nowrap"><?= $dat($b['datum']) ?></td>
-          <td style="max-width:260px;overflow-wrap:anywhere"><?= h((string)($b['firma'] ?: '–')) ?></td>
+          <td style="max-width:260px;overflow-wrap:anywhere"><?= kunde_link($b['kunde_id'], $b['firma']) ?></td>
           <td><?= h($typLbl[(string)$b['typ']] ?? (string)$b['typ']) ?></td>
           <td class="bx-num"><?= $eur($b['netto']) ?></td>
           <td class="bx-num"><?= $eur($b['brutto']) ?></td>

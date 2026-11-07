@@ -32,3 +32,4 @@ Panel „Rezeptur": zeigt die zugeordnete Rezeptur – direkter Override `beleg.
 
 ## Mail bei Freigabe (Paket Mails)
 „Für Kunde freigeben" einer Rechnung schickt dem Kunden `mail_kunde_rechnung_freigegeben()` (Betrag, Fälligkeit, Link auf „Rechnungen"). Dafür lädt die Seite das Dashboard-Mailmodul `core/mail.php` (enthält nur Mail-Funktionen, keine DB-Funktionen → keine Kollision) und `buchhaltung/core/pdf_beleg.php` (`beleg_firma()`).
+- Kopfbereich zeigt den Kunden immer mit vollem Firmennamen (Link ins Dashboard), nicht das interne Kürzel – das gilt nur in Tabellen, 08.11.2026

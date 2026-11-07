@@ -145,7 +145,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   ?>
     <tr style="cursor:pointer" onclick="location.href='?p=portal_anfrage&id=<?= (int)$r['id'] ?>'">
       <td><a href="?p=portal_anfrage&id=<?= (int)$r['id'] ?>"><?= h($r['nummer']) ?></a></td>
-      <td><?= h($r['firma'] ?: '–') ?></td>
+      <td><?= kunde_link($r['kunde_id'], $r['firma']) ?></td>
       <td><?= h($TYP[$r['typ']] ?? $r['typ']) ?></td>
       <td><?= h($txt) ?><?php if ($r['notiz']): ?> <a href="#" class="kundenlink" style="font-size:12px;white-space:nowrap" onclick="event.stopPropagation(); document.getElementById('nz<?= (int)$r['id'] ?>').showModal(); return false;" title="Notiz des Kunden ansehen">Notiz&nbsp;ansehen</a><?php endif; ?></td>
       <td><?= $stBadge($r) ?></td>

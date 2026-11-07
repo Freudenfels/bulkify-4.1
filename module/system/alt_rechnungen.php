@@ -46,7 +46,7 @@ $like = '%' . $suche . '%';
 $qk = mb_strtolower(preg_replace('/[^a-z0-9]+/i', '', $suche));
 $auftraege = all("SELECT a.id, a.nummer, a.status, a.angelegt, a.menge, a.v3_id,
                         COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt,
-                        k.firma AS kunde,
+                        k.firma AS kunde, a.kunde_id,
                         (SELECT COUNT(*) FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ IN ('rechnung','angebot','ab','sonstiges')) AS docs
                  FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
                  WHERE (? = '' OR a.nummer LIKE ? OR k.firma LIKE ? OR p.name LIKE ? OR p.kundenname LIKE ?
@@ -80,7 +80,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="padding:10px 14px
       <?php foreach ($auftraege as $a): $d = $a['angelegt']; ?>
       <tr>
         <td><strong><?= h($a['nummer']) ?></strong></td>
-        <td><?= h($a['kunde'] ?: '–') ?></td>
+        <td><?= kunde_link($a['kunde_id'], $a['kunde']) ?></td>
         <td><?= h($a['produkt'] ?: '–') ?></td>
         <td><?= $d ? h(fmt_zeit($d, 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
         <td><?= $a['v3_id'] ? bx_badge('alt (v3)', 'info') : '<span class="muted">neu</span>' ?></td>
@@ -146,6 +146,6 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="padding:10px 14px
 </dialog>
 <?php endif; ?>
 <script>
-function arFilter(v){ v=(v||'').toLowerCase().replace(/[^a-z0-9]+/g,''); document.querySelectorAll('#arTab tbody tr').forEach(function(tr){ var t=tr.textContent.toLowerCase().replace(/[^a-z0-9]+/g,''); tr.style.display = t.indexOf(v)>=0 ? '' : 'none'; }); }
+function arFilter(v){ v=(v||'').toLowerCase().replace(/[^a-z0-9]+/g,''); document.querySelectorAll('#arTab tbody tr').forEach(function(tr){ var t=(tr.textContent+Array.prototype.map.call(tr.querySelectorAll('[title]'),function(e){return e.title;}).join('')).toLowerCase().replace(/[^a-z0-9]+/g,''); tr.style.display = t.indexOf(v)>=0 ? '' : 'none'; }); }
 </script>
 <?php render_footer(); ?>

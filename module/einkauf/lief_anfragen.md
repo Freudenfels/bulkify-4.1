@@ -33,3 +33,4 @@ Umschalter „Liste / Vergleich (nach Produkt)" (`?p=lief_anfragen&ansicht=vergl
 
 ## E8 – Lieferantenrechnung bezahlen (an der Bestellung)
 Die Zahlung steht auf der Bestelldetailseite (`module/einkauf/detail.php`, Panel „Zahlung"): Download der vom Lieferanten hochgeladenen Rechnung, „Als bezahlt markieren" mit Datum + Zahlungsweg + optionaler Überweisungsbestätigung (`bestellung_bezahlt_markieren()` → `bestellung.bezahlt_am/zahlungsweg` + `dokument` typ='zahlungsbeleg'). Der Lieferant sieht im Portal (`module/lieferant/bestellung.php`) den Status „bezahlt am …" und kann die Überweisungsbestätigung herunterladen (nicht löschen). Noch NICHT mit Buchhaltung/OP-Liste verknüpft.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

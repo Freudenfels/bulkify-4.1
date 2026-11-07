@@ -365,7 +365,7 @@ if (!$neu) {
 
     // Kontext: für welche(n) Auftrag/Produkt/Kunde wird bestellt? Damit die Dringlichkeit einschätzbar ist.
     $kontext = all("SELECT DISTINCT a.id, a.nummer, a.menge, a.stueck,
-                           COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma AS kunde,
+                           COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma AS kunde, a.kunde_id,
                            pa.id AS pa_id, pa.prio, pa.geplant_am
                     FROM bestellung_position bp
                     JOIN auftrag a ON a.id=bp.auftrag_id
@@ -383,7 +383,7 @@ if (!$neu) {
             echo '<tr onclick="location.href=\'' . $ziel . '\'" style="cursor:pointer">';
             echo '<td>' . h($c['nummer']) . '</td>';
             echo '<td>' . h($c['produkt'] ?: '–') . '</td>';
-            echo '<td>' . ($c['kunde'] ? h($c['kunde']) : '<span class="muted">–</span>') . '</td>';
+            echo '<td>' . kunde_link($c['kunde_id'], $c['kunde']) . '</td>';
             echo '<td class="bx-num">' . $mengeTxt . '</td>';
             echo '<td>' . prio_badge((int)($c['prio'] ?? 2)) . '</td>';
             echo '<td>' . ($c['geplant_am'] ? h(date('d.m.Y', strtotime($c['geplant_am']))) : '<span class="muted">–</span>') . '</td>';

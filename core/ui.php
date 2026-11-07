@@ -79,12 +79,18 @@ function firma_kurz(?string $firma): string {
 // Kundenname als Link zum Kunden-Cockpit (?p=kunde&id=…). In klickbaren Listenzeilen verhindert
 // event.stopPropagation(), dass zusätzlich der Zeilen-Klick auslöst. Ohne Firma: „–", ohne id: nur Text.
 // Ist am Kunden ein internes Kürzel gepflegt, steht das Kürzel da (voller Name als Tooltip) – spart Platz in Tabellen.
-function kunde_link($kunde_id, ?string $firma): string {
+// $voll=true: immer voller Name (Detailseiten-Köpfe, Fließtext) – das Kürzel gehört nur in Tabellen.
+function kunde_link($kunde_id, ?string $firma, bool $voll = false): string {
     if ($firma === null || $firma === '') return '<span class="muted">–</span>';
     if (!$kunde_id) return h($firma);
-    $kz = kunde_kuerzel((int)$kunde_id);
+    $kz = $voll ? '' : kunde_kuerzel((int)$kunde_id);
     return '<a class="kundenlink" href="?p=kunde&id=' . (int)$kunde_id . '" onclick="event.stopPropagation()"'
-         . ($kz !== '' ? ' title="' . h($firma) . '">' . h($kz) : '>' . h($firma)) . '</a>';
+         . ($kz !== '' ? ' title="' . h($firma) . '">' . kunde_kuerzel_html($kz, $firma) : '>' . h($firma)) . '</a>';
+}
+
+// Kürzel + voller Name unsichtbar dahinter: Tabellen-Suchfelder (textContent) finden den Kunden weiter über den Firmennamen.
+function kunde_kuerzel_html(string $kz, string $firma): string {
+    return h($kz) . '<span hidden>' . h(' ' . $firma) . '</span>';
 }
 
 // Internes Kürzel eines Kunden ('' = keins). NUR für interne Tabellen – nie in PDFs, Mails oder im Kundenportal.
@@ -100,11 +106,14 @@ function kunde_kuerzel(int $kunde_id): string {
 }
 
 // Kundenname für interne Tabellen als Text (ohne Link): Kürzel, sonst Firma. Mit Tooltip, wenn gekürzt.
-function kunde_anzeige($kunde_id, ?string $firma): string {
+// $kurz=true: ohne Kürzel die Kurzform firma_kurz() (für sehr schmale Spalten), Tooltip dann voller Name.
+function kunde_anzeige($kunde_id, ?string $firma, bool $kurz = false): string {
     $firma = (string)$firma;
+    if ($firma === '') return '<span class="muted">–</span>';
     $kz = $kunde_id ? kunde_kuerzel((int)$kunde_id) : '';
-    if ($kz === '') return $firma !== '' ? h($firma) : '<span class="muted">–</span>';
-    return '<span title="' . h($firma) . '">' . h($kz) . '</span>';
+    if ($kz !== '') return '<span title="' . h($firma) . '">' . kunde_kuerzel_html($kz, $firma) . '</span>';
+    if ($kurz && ($fk = firma_kurz($firma)) !== $firma) return '<span title="' . h($firma) . '">' . h($fk) . '<span hidden>' . h(' ' . $firma) . '</span></span>';
+    return h($firma);
 }
 
 // PDF-Download-Button (Dokument-Icon + Label). Klar als „hier gibt's ein PDF" erkennbar – statt eines nackten Pfeils.

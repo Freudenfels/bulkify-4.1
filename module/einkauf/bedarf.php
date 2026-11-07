@@ -174,7 +174,7 @@ $BM_KAT = betriebsmittel_kategorien();
     <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px">
       <div>
         <a href="?p=produktionsauftrag&id=<?= (int)$pa['id'] ?>"><strong><?= h($pa['auftrag_nr'] ?: $pa['nummer']) ?></strong></a>
-        · <?= h($pa['produkt'] ?: '–') ?><?= $pa['kunde'] ? ' · ' . h($pa['kunde']) : '' ?>
+        · <?= h($pa['produkt'] ?: '–') ?><?= $pa['kunde'] ? ' · ' . kunde_link($pa['kunde_id'], $pa['kunde']) : '' ?>
         <span class="muted">· <?= number_format((int)$pa['menge'], 0, ',', '.') ?> Packungen</span>
         <?php $groesse = produktion_groesse_label((int)$pa['produkt_id']); if ($groesse !== ''): ?><span class="muted">· <?= h($groesse) ?></span><?php endif; ?>
         <?= prio_badge((int)($pa['prio'] ?? 2)) ?>

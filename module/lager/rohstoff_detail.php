@@ -1471,7 +1471,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
           $mStr = rtrim(rtrim(number_format((float)$r['menge'],3,',','.'),'0'),','); ?>
         <tr>
           <td><?php if (!empty($r['auftrag_id'])): ?><a href="?p=auftrag&id=<?= (int)$r['auftrag_id'] ?>"><?= h((string)($r['auftrag_nr'] ?: '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
-          <td style="max-width:220px;overflow-wrap:anywhere"><?= $r['kunde_firma'] ? h((string)$r['kunde_firma']) : '<span class="muted">–</span>' ?></td>
+          <td style="max-width:220px;overflow-wrap:anywhere"><?= kunde_link($r['kunde_id'] ?? 0, $r['kunde_firma']) ?></td>
           <td class="bx-num">
             <?php if ($ausProd): ?>
               <?= h($mStr) ?> <?= h($einheitLbl) ?>
@@ -1546,7 +1546,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
       <thead><tr><th>Kunde</th><th class="bx-num">Bestand</th></tr></thead>
       <tbody>
       <?php foreach ($fremdJeKunde as $fk): ?>
-        <tr><td><?= h($fk['firma'] ?: ('Kunde #' . (int)$fk['kunde_id'])) ?></td>
+        <tr><td><?= kunde_link($fk['kunde_id'], $fk['firma'] ?: ('Kunde #' . (int)$fk['kunde_id'])) ?></td>
             <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$fk['menge'], 3, ',', '.'), '0'), ',')) ?> <?= h($fk['einheit'] ?? $it['einheit']) ?></td></tr>
       <?php endforeach; ?>
       </tbody>

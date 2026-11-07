@@ -94,3 +94,4 @@ Detailseite (04.11.2026): unter „Bereitschaft“ der Block **„Ware da, aber 
 Soll-Kette 3 (04.11.2026): Die Einzelseite `?p=produktion_vorbereitung&id=…` leitet auf den Reiter **Material** des Auftrags um (Altlinks). Erhalten bleibt sie als erweiterte Ansicht mit `&voll=1` (Auf Quellen aufteilen: Lager/Fremd/Eigen) und für Bulk-PAs ohne Auftrag. Formulare nehmen `zurueck` (nur `?p=auftrag&id=…&tab=…`) als Rücksprung.
 
 Liste heißt **Beschaffungsweg offen** (Soll-Kette 4c, 04.11.2026); eine Zeile öffnet den Auftrag im Reiter Beschaffungsweg.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

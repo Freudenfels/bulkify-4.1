@@ -10,3 +10,4 @@ Der Knopf „Ans Labor senden“ steht oben auf der Seite Laboranalysen (`?p=lab
 3. **Erzeugen.** `labor_versand_anlegen()` legt die PDFs am Auftrag ab und setzt den Status „Probe beim Labor“. Die Ergebnisseite verlinkt jedes PDF zum Öffnen und Drucken. Es wird in den Karton zur Probe gelegt.
 
 Unten auf der Seite stehen die zuletzt erstellten Laboraufträge mit PDF-Link. Logik und Feldzuordnung: [core/labor_auftrag.md](../../core/labor_auftrag.md).
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

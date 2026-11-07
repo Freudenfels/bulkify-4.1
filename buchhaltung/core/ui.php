@@ -41,10 +41,34 @@ function firma_kurz(?string $firma): string {
 }
 
 // Kundenname als Link ins DASHBOARD-Kundencockpit (absolut, da die Buchhaltung keine Kundenseite hat).
-function kunde_link($kunde_id, ?string $firma): string {
+// Ist am Kunden ein internes Kürzel gepflegt, steht das Kürzel da (voller Name als Tooltip) – spart Platz in Tabellen.
+// $voll=true: immer voller Name (Detailseiten-Köpfe) – das Kürzel gehört nur in Tabellen.
+function kunde_link($kunde_id, ?string $firma, bool $voll = false): string {
     if ($firma === null || $firma === '') return '<span class="muted">–</span>';
     if (!$kunde_id) return h($firma);
-    return '<a class="kundenlink" href="/?p=kunde&id=' . (int)$kunde_id . '" target="_blank" onclick="event.stopPropagation()">' . h($firma) . '</a>';
+    $kz = $voll ? '' : kunde_kuerzel((int)$kunde_id);
+    return '<a class="kundenlink" href="/?p=kunde&id=' . (int)$kunde_id . '" target="_blank" onclick="event.stopPropagation()"'
+         . ($kz !== '' ? ' title="' . h($firma) . '">' . h($kz) . '<span hidden>' . h(' ' . $firma) . '</span>' : '>' . h($firma)) . '</a>';
+}
+
+// Internes Kürzel eines Kunden ('' = keins). NUR für interne Tabellen – nie in PDFs, Mails, E-Rechnung oder Exporten.
+// Einmal je Seitenaufruf über die Naht (erp.php) geladen. Guard, falls je die Dashboard-ui.php mitgeladen wird.
+if (!function_exists('kunde_kuerzel')) {
+    function kunde_kuerzel(int $kunde_id): string {
+        static $map = null;
+        if ($map === null) { require_once __DIR__ . '/erp.php'; $map = erp_kunden_kuerzel(); }
+        return $map[$kunde_id] ?? '';
+    }
+}
+
+// Kundenname für interne Tabellen als Text (ohne Link): Kürzel, sonst Firma. Mit Tooltip, wenn gekürzt.
+if (!function_exists('kunde_anzeige')) {
+    function kunde_anzeige($kunde_id, ?string $firma): string {
+        $firma = (string)$firma;
+        $kz = $kunde_id ? kunde_kuerzel((int)$kunde_id) : '';
+        if ($kz === '') return $firma !== '' ? h($firma) : '<span class="muted">–</span>';
+        return '<span title="' . h($firma) . '">' . h($kz) . '<span hidden>' . h(' ' . $firma) . '</span></span>';
+    }
 }
 
 function pdf_btn(string $href, string $label = 'PDF', bool $stopRow = false, string $title = ''): string {

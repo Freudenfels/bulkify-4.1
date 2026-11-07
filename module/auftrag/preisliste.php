@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'uploa
 // Aufträge ohne Preis (0,00 € Netto), nicht storniert.
 $offene = all("SELECT a.id, a.nummer, a.menge, a.stueck, a.status, a.angelegt,
                       COALESCE(NULLIF(p.kundenname,''), p.name, a.produkt_bezeichnung) AS produkt,
-                      k.firma AS kunde
+                      k.firma AS kunde, a.kunde_id
                FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
                WHERE a.status<>'storniert' AND COALESCE(a.gesamt_netto,0) <= 0
                ORDER BY k.firma, a.id DESC");
@@ -69,7 +69,7 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8
     <?php foreach ($offene as $a): ?>
     <tr>
       <td><strong><?= h((string)$a['nummer']) ?></strong></td>
-      <td><?= h((string)($a['kunde'] ?: '–')) ?></td>
+      <td><?= kunde_link($a['kunde_id'], $a['kunde']) ?></td>
       <td><?= h((string)($a['produkt'] ?: '–')) ?></td>
       <td class="bx-num"><?= number_format((int)$a['menge'], 0, ',', '.') ?></td>
       <td>

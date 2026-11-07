@@ -24,3 +24,4 @@ Freigeben/PDF/E-Rechnung bereits vorhanden sind.
 ## Grenzen
 Kein Direktzugriff auf geteilte Dashboard-Tabellen – alles über `core/erp.php`. Die Rechnung
 selbst (`beleg`/`beleg_position`) gehört der Buchhaltung.
+- Kopfbereich zeigt den Kunden immer mit vollem Firmennamen (Link ins Dashboard), nicht das interne Kürzel – das gilt nur in Tabellen, 08.11.2026

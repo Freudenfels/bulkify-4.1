@@ -152,3 +152,4 @@ Pulver-Panel (03.11.2026): Die Kontrollzeile heißt jetzt „≈ N Tagesdosen à
 
 ## Material-Kopf (05.11.2026)
 Das Kennzeichen heißt nur noch „alles vorhanden“, wenn wirklich nichts fehlt. Ist nichts mehr zu bestellen, aber noch Ware unterwegs (z. B. Bulk-Bestellung deckt den Rest), steht „nichts zu bestellen · N noch unterwegs“ (gelb). Vorher stand „alles vorhanden“ neben einer roten Zeile „fehlt“.
+- Kopfbereich zeigt den Kunden immer mit vollem Firmennamen (nicht das interne Kürzel – das gilt nur in Tabellen), 08.11.2026

@@ -49,7 +49,7 @@ bx_head('Rezepturen überarbeiten', count($rows) . ' Rezeptur(en) mit nicht gema
       <tr>
         <td><a href="?p=rezeptur_detail&id=<?= (int)$r['id'] ?>"><strong><?= h((string)$r['name']) ?></strong></a>
             <div class="muted" style="font-size:12px"><?= h((string)($r['nummer'] ?? '')) ?></div></td>
-        <td><?= $r['kunde'] ? h((string)$r['kunde']) : '<span class="muted">Hausrezeptur</span>' ?></td>
+        <td><?= $r['kunde'] ? kunde_link($r['kunde_id'], (string)$r['kunde']) : '<span class="muted">Hausrezeptur</span>' ?></td>
         <td><?= h($DFORM[(string)$r['darreichungsform']] ?? (string)$r['darreichungsform']) ?></td>
         <td><?= match((string)$r['status']){'freigegeben'=>bx_badge('freigegeben','ok'),'eingefroren'=>bx_badge('eingefroren','warn'),'vorschlag'=>bx_badge('Vorschlag','info'),'entwurf'=>bx_badge('Entwurf'),default=>bx_badge((string)$r['status'])} ?>
             <?php if ((int)$r['naehrwerte_fixiert']): ?><span class="muted" style="font-size:11px">· NW fix</span><?php endif; ?></td>

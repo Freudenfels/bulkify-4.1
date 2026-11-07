@@ -18,3 +18,4 @@ Der **Status-Badge** wird ebenfalls aus beiden Status abgeleitet (z. B. „offen
 4. Tabelle: **Nummer · Rezeptur/Wunsch-Produkt · Kunde · Form · Wünsche · Rezeptur · Status · Angefragt**.
    - Klick öffnet die Anfrage-Bearbeitung (`?p=anfrage&id=...`).
 5. Button „Neue Anfrage".
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

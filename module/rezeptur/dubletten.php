@@ -176,7 +176,7 @@ bx_head('Doppelte Rezepturen', count($dubletten) . ' Gruppe(n) inhaltlich identi
         <tr>
           <td><a href="#" class="rz-open" data-rz="<?= (int)$r['id'] ?>"><?= h(trim(((string)$r['nummer'] !== '' ? $r['nummer'] . ' · ' : '') . $r['name'])) ?></a></td>
           <td><?= $gtr !== '' ? h($gtr) : '<span class="muted">–</span>' ?></td>
-          <td><?= $r['kunde_firma'] ? h((string)$r['kunde_firma']) : '<span class="muted">– (kundenübergreifend)</span>' ?></td>
+          <td><?= $r['kunde_firma'] ? kunde_link($r['kunde_id'], (string)$r['kunde_firma']) : '<span class="muted">– (kundenübergreifend)</span>' ?></td>
           <td><?= h((string)$r['status']) ?></td>
           <td class="bx-num"><?= $bd ? h($nz($bd['menge']) . ' ' . $bd['einheit']) : '<span class="muted">–</span>' ?></td>
           <td><?= $stammId > 0 ? '&rarr; #' . $stammId : '<span class="muted">eigenständig</span>' ?></td>

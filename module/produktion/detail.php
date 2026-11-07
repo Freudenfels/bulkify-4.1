@@ -377,7 +377,7 @@ echo '<div class="bx-card"><div class="k">Fortschritt</div><div class="v">' . $d
 echo '<div class="bx-card"><div class="k">Priorität</div><div class="v">' . $prioSel . '</div></div>';
 // 2) Kunde (prominent) + Produkt (bei Bulk: Rezeptur)
 $kundeIdEff = (int)($pa['kunde_id_eff'] ?? 0);
-echo '<div class="bx-card"><div class="k">Kunde</div><div class="v">' . ($pa['kunde_firma'] ? kunde_link($kundeIdEff ?: null, $pa['kunde_firma']) : '<span class="muted">–</span>') . '</div></div>';
+echo '<div class="bx-card"><div class="k">Kunde</div><div class="v">' . ($pa['kunde_firma'] ? kunde_link($kundeIdEff ?: null, $pa['kunde_firma'], true) : '<span class="muted">–</span>') . '</div></div>';
 if (!empty($pa['auftrag_id'])) echo '<div class="bx-card"><div class="k">Auftrag</div><div class="v"><a href="?p=auftrag&id=' . (int)$pa['auftrag_id'] . '">' . h((string)$pa['auftrag_nr']) . '</a></div></div>';
 $istBulkPa = pa_ist_bulk($pa);
 $prodKarteLabel = $istBulkPa ? 'Rezeptur (Bulk)' : 'Produkt';
@@ -870,7 +870,7 @@ ob_start(); ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">Details</h2>
   <div class="bx-grid">
-    <div><div class="k muted">Kunde</div><div><?= $pa['kunde_firma'] ? kunde_link((int)($pa['kunde_id_eff'] ?? 0) ?: null, $pa['kunde_firma']) : '–' ?></div></div>
+    <div><div class="k muted">Kunde</div><div><?= $pa['kunde_firma'] ? kunde_link((int)($pa['kunde_id_eff'] ?? 0) ?: null, $pa['kunde_firma'], true) : '–' ?></div></div>
     <div><div class="k muted">Aus Auftrag</div><div><?php if ($pa['auftrag_id']): ?><a href="?p=auftrag&id=<?= (int)$pa['auftrag_id'] ?>"><?= h($pa['auftrag_nr']) ?></a><?php else: ?>–<?php endif; ?></div></div>
   </div>
 </div>

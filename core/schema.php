@@ -8939,7 +8939,7 @@ function vorbereitung_liste(): array {
     return all("SELECT pa.id AS pa_id, pa.nummer, pa.auftrag_id, pa.produktionsart, pa.menge, pa.prio,
                        a.nummer AS auftrag_nr, a.angelegt AS auftrag_eingang,
                        COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt,
-                       rz.name AS rezeptur, k.firma AS kunde
+                       rz.name AS rezeptur, k.firma AS kunde, pa.kunde_id
                 FROM produktionsauftrag pa
                 LEFT JOIN auftrag a   ON a.id=pa.auftrag_id
                 LEFT JOIN produkt p   ON p.id=pa.produkt_id
@@ -9047,7 +9047,7 @@ function item_reserviert_gesamt(int $item_id): float {
 // Aktive Reservierungen eines Items für die Anzeige (mit Auftrag/Kunde/Produktionsauftrag).
 // pa_id IS NULL = manuell am Item/Auftrag gesetzt (hier editierbar); pa_id gesetzt = aus der Produktion (nur Anzeige).
 function item_reservierungen_liste(int $item_id): array {
-    return all("SELECT r.*, a.nummer AS auftrag_nr, a.status AS auftrag_status, k.firma AS kunde_firma, pa.nummer AS pa_nr
+    return all("SELECT r.*, a.nummer AS auftrag_nr, a.status AS auftrag_status, k.firma AS kunde_firma, a.kunde_id, pa.nummer AS pa_nr
                 FROM reservierung r
                 LEFT JOIN auftrag a ON a.id=r.auftrag_id
                 LEFT JOIN kunden k ON k.id=a.kunde_id
@@ -10717,7 +10717,7 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
     // Nur FESTGELEGTE Aufträge (Eigen/Fremd entschieden) – sonst steht die Stückliste noch nicht fest (Rohstoffe vs. Bulk).
     $wo = "pa.status IN ('offen','laufend') AND pa.auftrag_id IS NOT NULL AND pa.art_festgelegt_am IS NOT NULL AND " . pa_aktiv_sql()
         . ($nur_gemeldet ? " AND pa.bedarf_gemeldet IS NOT NULL" : "");
-    foreach (all("SELECT pa.id, pa.auftrag_id, a.nummer AS auftrag_nr, k.firma AS kunde,
+    foreach (all("SELECT pa.id, pa.auftrag_id, a.nummer AS auftrag_nr, k.firma AS kunde, a.kunde_id,
                          COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt
                   FROM produktionsauftrag pa
                   LEFT JOIN auftrag a ON a.id=pa.auftrag_id
@@ -10737,7 +10737,7 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
                 $agg[$key] = ['item_id'=>$iid,'name'=>$r['name'],'rolle'=>$r['rolle'],'typ'=>$typ,'einheit'=>$r['einheit'],'need'=>0.0,'orders'=>[],'etikett'=>$etikett,'auftrag_id'=>$etikett?(int)$pa['auftrag_id']:0,'verpackungsart'=>$vart];
             }
             $agg[$key]['need'] += (float)$r['benoetigt'];
-            $agg[$key]['orders'][] = ['pa_id'=>(int)$pa['id'],'auftrag_id'=>(int)$pa['auftrag_id'],'auftrag_nr'=>$pa['auftrag_nr'],'kunde'=>(string)($pa['kunde'] ?? ''),'produkt'=>(string)($pa['produkt'] ?? ''),'need'=>(float)$r['benoetigt']];
+            $agg[$key]['orders'][] = ['pa_id'=>(int)$pa['id'],'auftrag_id'=>(int)$pa['auftrag_id'],'auftrag_nr'=>$pa['auftrag_nr'],'kunde'=>(string)($pa['kunde'] ?? ''),'kunde_id'=>(int)($pa['kunde_id'] ?? 0),'produkt'=>(string)($pa['produkt'] ?? ''),'need'=>(float)$r['benoetigt']];
         }
     }
     foreach ($agg as &$a) {

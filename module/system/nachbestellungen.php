@@ -53,7 +53,7 @@ $paket = fn($stk, $pid = 0) => (int)$stk > 0 ? form_groessen_label(auftrag_darre
     <tbody>
     <?php foreach ($offen as $n): $menge = (int)$n['menge']; $vk = (float)$n['vk_stueck']; $netto = $menge * $vk; ?>
       <tr>
-        <td><?= h((string)($n['kunde'] ?: ('Kunde #' . (int)$n['kunde_id']))) ?></td>
+        <td><?= kunde_link($n['kunde_id'], (string)($n['kunde'] ?: ('Kunde #' . (int)$n['kunde_id']))) ?></td>
         <td><?= h((string)($n['produkt'] ?: '–')) ?> <span class="muted"><?= h($paket($n['stueck'], $n['produkt_id'] ?? 0)) ?></span></td>
         <td class="bx-num"><?= number_format($menge, 0, ',', '.') ?></td>
         <td class="bx-num"><?= $eur($vk) ?></td>
@@ -97,7 +97,7 @@ $paket = fn($stk, $pid = 0) => (int)$stk > 0 ? form_groessen_label(auftrag_darre
     <tbody>
     <?php foreach ($erledigt as $n): ?>
       <tr>
-        <td><?= h((string)($n['kunde'] ?: ('Kunde #' . (int)$n['kunde_id']))) ?></td>
+        <td><?= kunde_link($n['kunde_id'], (string)($n['kunde'] ?: ('Kunde #' . (int)$n['kunde_id']))) ?></td>
         <td><?= h((string)($n['produkt'] ?: '–')) ?></td>
         <td class="bx-num"><?= number_format((int)$n['menge'], 0, ',', '.') ?></td>
         <td class="bx-num"><?= $eur((float)$n['vk_stueck']) ?></td>

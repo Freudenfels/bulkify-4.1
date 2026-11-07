@@ -15,3 +15,4 @@ gesperrten Rezepturen stattdessen ein normaler „Bearbeiten"-Link auf `#zutaten
 
 Einstieg zusätzlich aus der Rezeptur-Liste: Button **„Überarbeiten (N)"** im Kopf, sobald N>0
 (`liste.php`, zählt über dieselbe Funktion).
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

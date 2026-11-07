@@ -45,3 +45,4 @@ Textfeld `mail_signatur_vorlage` (app_meta) im E-Mail-Block: zentrale HTML-Signa
 **Informationsdokument zum Produkt (03.11.2026):** Schalter im Reiter Preise & Margen (Abschnitt Portal) für `app_meta coa_uebersicht_auto` (Standard aus). Nico schaltet ein, sobald die neuen Produktionsaufträge sauber erfasst sind; wirkt nur für künftige QM-Freigaben (je Charge einmal).
 
 Reiter Produktion (04.11.2026): Schalter **Wareneingang in Quarantäne** (`wareneingang_quarantaene`, Standard aus = alles, was im Wareneingang gebucht wird, ist sofort frei). Gespeichert mit `charge_std_save`.
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

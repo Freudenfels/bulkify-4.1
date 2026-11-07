@@ -1100,7 +1100,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     $kportal= fn(string $tok) => $base . '/?p=portal&token=' . $tok;
     $team   = all("SELECT name, email, login_token FROM benutzer WHERE aktiv=1 AND (lieferant_id IS NULL OR lieferant_id=0) ORDER BY name");
     $liefU  = all("SELECT b.name, b.email, b.login_token, lf.firma FROM benutzer b JOIN lieferanten lf ON lf.id=b.lieferant_id WHERE b.aktiv=1 ORDER BY lf.firma, b.name");
-    $kunden = all("SELECT firma, portal_token FROM kunden ORDER BY firma");
+    $kunden = all("SELECT id, firma, portal_token FROM kunden ORDER BY firma");
     $fehlt  = (int) scalar("SELECT COUNT(*) FROM benutzer WHERE aktiv=1 AND (login_token IS NULL OR login_token='')")
             + (int) scalar("SELECT COUNT(*) FROM kunden WHERE portal_token IS NULL OR portal_token=''");
 ?>
@@ -1160,7 +1160,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   <div class="bx-tablewrap"><table class="bx-table"><tbody>
     <?php if (!$kunden): ?><tr><td class="muted">Keine Kunden angelegt.</td></tr><?php endif; ?>
     <?php foreach ($kunden as $k): ?>
-      <tr><td style="width:240px"><?= h($k['firma']) ?></td>
+      <tr><td style="width:240px"><?= kunde_link($k['id'], $k['firma']) ?></td>
           <td><?php if ($k['portal_token']): ?><a href="<?= h($kportal($k['portal_token'])) ?>" target="_blank"><?= h($kportal($k['portal_token'])) ?></a><?php else: ?><span class="muted">kein Token</span><?php endif; ?></td></tr>
     <?php endforeach; ?>
   </tbody></table></div>

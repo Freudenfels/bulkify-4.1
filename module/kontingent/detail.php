@@ -33,7 +33,7 @@ bx_head('Jahresvertrag', ($kunde['firma'] ?? '–') . ' · ' . (($prod['kundenna
     bx_btn('Zurück zur Liste', '?p=kontingente', 'ghost'));
 ?>
 <div class="bx-cards">
-  <div class="bx-card"><div class="k">Kunde</div><div class="v" style="font-size:16px"><?= kunde_link($k['kunde_id'] ?? null, $kunde['firma'] ?? '–') ?></div></div>
+  <div class="bx-card"><div class="k">Kunde</div><div class="v" style="font-size:16px"><?= kunde_link($k['kunde_id'] ?? null, $kunde['firma'] ?? '–', true) ?></div></div>
   <div class="bx-card"><div class="k">Produkt</div><div class="v" style="font-size:16px"><?php if ($pid): ?><a href="?p=produkt&id=<?= $pid ?>"><?= h(($prod['kundenname'] ?? '') ?: ($prod['name'] ?? '–')) ?></a><?php else: ?>–<?php endif; ?></div></div>
   <div class="bx-card"><div class="k">Status</div><div class="v"><?= $statusBadge($k['status']) ?></div></div>
   <div class="bx-card"><div class="k">VK je Packung</div><div class="v" style="font-size:16px"><?= $eurP($k['vk_stueck']) ?></div></div>

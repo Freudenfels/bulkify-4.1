@@ -990,7 +990,7 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   <?php endif; ?>
   <h2>Details</h2>
   <div class="bx-grid">
-    <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma']) ?></div></div>
+    <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma'], true) ?></div></div>
     <div><div class="k muted">Produkt <span class="muted" style="font-size:11px">(intern)</span></div><div><?php if (!empty($a['produkt_id']) && $produktName): ?><a href="?p=produkt&id=<?= (int)$a['produkt_id'] ?>"><?= h($produktName) ?></a><?php elseif ($produktName): ?><?= h($produktName) ?> <span class="muted" style="font-size:12px">(aus v3)</span><?php else: ?>–<?php endif; ?><?php if ($artKey !== 'none'): ?> <span title="<?= h($artHint) ?>"><?= bx_badge($artLabel, $artStil) ?></span><?php endif; ?></div></div>
     <?php // Kundenspezifischer Name: so sieht der Kunde das Produkt (Portal/Belege). Intern beide Namen sichtbar.
           if (!empty($a['produkt_id']) && !empty($a['kunde_id'])): $effKn = trim((string)($a['produkt_kundenname'] ?? '')); ?>

@@ -16,3 +16,4 @@ Kunde, Typ, Netto, Brutto, Status. Suche über Nummer/Kunde, neueste 500. Pro Ze
 ## Grenze
 Keine Schreibaktionen hier. Liegt bewusst NICHT in `$FINANZ_ROUTEN` (public/index.php), damit die Route
 nicht nach `/buchhaltung/` umgeleitet wird. Angebote sind ohnehin im Dashboard (`?p=angebote`).
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026

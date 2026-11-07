@@ -46,7 +46,7 @@ $heutePlan = all("SELECT pa.*, p.name AS produkt_name, k.firma AS kunde
 
 // Baustein 4: Wareneingänge, die gezielt für einen Auftrag gekommen sind
 $wareFuerAuftrag = all("SELECT c.*, i.name AS item_name, i.kategorie AS kategorie, i.form AS form,
-                               a.nummer AS auftrag_nr, ak.firma AS kunde
+                               a.nummer AS auftrag_nr, ak.firma AS kunde, a.kunde_id AS auftrag_kunde_id
                         FROM charge c LEFT JOIN item i ON i.id=c.item_id
                         JOIN auftrag a ON a.id=c.auftrag_id LEFT JOIN kunden ak ON ak.id=a.kunde_id
                         WHERE a.status <> 'versendet'
@@ -114,7 +114,7 @@ echo '</div>';
           <td><?= bereitschaft_badge($ber['status']) ?></td>
           <td><?= h($r['nummer'] ?: ('#'.$r['id'])) ?></td>
           <td><?= h($r['produkt_name'] ?: '–') ?></td>
-          <td><?= $r['kunde'] ? h($r['kunde']) : '<span class="muted">–</span>' ?></td>
+          <td><?= kunde_anzeige($r['kunde_id'], $r['kunde']) ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
@@ -135,7 +135,7 @@ echo '</div>';
           <td><?= h($c['item_name'] ?: '–') ?></td>
           <td><?= h($katLbl[$c['kategorie']] ?? $c['kategorie']) ?><?= $c['form'] ? ' · ' . h($c['form']) : '' ?></td>
           <td class="bx-num"><?= rtrim(rtrim(number_format((float)$c['menge_verfuegbar'],3,',','.'),'0'),',') ?> <?= h($c['einheit']) ?></td>
-          <td><?= h($c['auftrag_nr']) ?><?= $c['kunde'] ? ' · ' . h($c['kunde']) : '' ?></td>
+          <td><?= h($c['auftrag_nr']) ?><?= $c['kunde'] ? ' · ' . kunde_anzeige($c['auftrag_kunde_id'], $c['kunde']) : '' ?></td>
           <td><?= $chBadge($c['status']) ?></td>
         </tr>
       <?php endforeach; ?>

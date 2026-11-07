@@ -312,7 +312,7 @@ if (!$kiBereit) echo '<div class="bx-panel" style="border-color:#e6c4c0;padding:
       <tr>
         <td><?= $d['datum'] ? h(fmt_zeit($d['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
         <td><?= h($d['produkt'] ?: '–') ?></td>
-        <td><?= $d['kunde'] ? h($d['kunde']) : '<span class="muted">–</span>' ?></td>
+        <td><?= kunde_link($d['kunde_id'], $d['kunde']) ?></td>
         <td><?= $d['charge_nr'] ? h($d['charge_nr']) : '<span class="muted">–</span>' ?></td>
         <td><?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '<span class="muted">–</span>' ?></td>
         <td><?php

@@ -10,3 +10,4 @@
 - Zweite Tabelle **„Zutaten ohne Rohstoff-Zuordnung"**: Freitext-Zutaten (`rezeptur_zutat.item_id IS NULL`) in angebotenen Rezepturen – erst im Rezeptur-Editor einem Rohstoff zuordnen, dann lassen sich Papiere erfassen/anfragen.
 
 **Verwandt:** `module/lager/rohstoffe_liste.php` (Lücken-Filter über ALLE Rohstoffe), `module/lager/freigaben.php` (Freigabe der bulkify-Spec/CoA an Kunden – anderes Thema), `module/rezeptur/detail.php` (Rohstoffpreise-Panel je Rezeptur).
+- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
