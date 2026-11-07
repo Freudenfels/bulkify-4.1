@@ -30,3 +30,8 @@ Reiter „Steuern": vereinnahmte Umsatzsteuer je Monat + Quartalssumme. Auswahl 
 Quartal) + Basis: „Rechnungsdatum (Soll)" oder „Zahlungseingang (Ist, anteilig)". Spalten: USt eingenommen
 (Ausgangsrechnungen, Rechnung minus Gutschrift), Vorsteuer (Eingangsrechnungen), Zahllast (= USt − Vorsteuer).
 CSV-Link für die Belege des Quartals. Daten: bh_ust_monate($jahr,$basis) in core/buchhaltung.php. Keine Steuerberatung.
+
+Seit 07.11.2026 stehen **beide USt-Sichten immer nebeneinander** (Spalten + Kacheln):
+- **USt laut Rechnung** – nach Rechnungsdatum, offene/teilbezahlte Rechnungen voll (Soll).
+- **USt eingenommen** – nur wirklich bezahlt: je Zahlung anteilig Zahlung / Brutto × USt, im Monat der Zahlung (Ist).
+Der Umschalter heißt jetzt „Zahllast nach" und steuert nur noch Vorsteuer + Zahllast.

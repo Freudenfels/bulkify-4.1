@@ -276,11 +276,16 @@ if (!in_array($jahr, $jahre, true)) $jahr = $jahre[0];
 $quartal = (int)($_GET['quartal'] ?? 0);
 if ($quartal < 1 || $quartal > 4) $quartal = ($jahr === (int)date('Y')) ? (int)ceil((int)date('n') / 3) : 1;
 $basis = ($_GET['basis'] ?? 'soll') === 'ist' ? 'ist' : 'soll';
-$monate = bh_ust_monate($jahr, $basis);
+// USt immer in beiden Sichten: laut Rechnung (Soll) und wirklich eingenommen (Ist, nach Zahlung anteilig).
+// Die Basis steuert nur Vorsteuer + Zahllast.
+$soll = bh_ust_monate($jahr, 'soll');
+$ist  = bh_ust_monate($jahr, 'ist');
+$monate = $basis === 'ist' ? $ist : $soll;
 $mVon = ($quartal - 1) * 3 + 1; $mBis = $mVon + 2;
 $mn = ['', 'Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-$sAus = 0.0; $sEin = 0.0;
-for ($m = $mVon; $m <= $mBis; $m++) { $sAus += $monate[$m]['ausgang']; $sEin += $monate[$m]['eingang']; }
+$sSoll = 0.0; $sIst = 0.0; $sEin = 0.0;
+for ($m = $mVon; $m <= $mBis; $m++) { $sSoll += $soll[$m]['ausgang']; $sIst += $ist[$m]['ausgang']; $sEin += $monate[$m]['eingang']; }
+$sAus = $basis === 'ist' ? $sIst : $sSoll;
 $sZahl = $sAus - $sEin;
 $qVon = sprintf('%04d-%02d-01', $jahr, $mVon);
 $qBis = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $jahr, $mBis)));
@@ -295,7 +300,7 @@ $qBis = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $jahr, $mBis)));
   <select name="quartal" onchange="this.form.submit()">
     <?php foreach ([1,2,3,4] as $q): ?><option value="<?= $q ?>" <?= $q === $quartal ? 'selected' : '' ?>>Q<?= $q ?> (<?= $mn[($q-1)*3+1] ?>–<?= $mn[$q*3] ?>)</option><?php endforeach; ?>
   </select>
-  <label class="muted" style="align-self:center">Basis</label>
+  <label class="muted" style="align-self:center">Zahllast nach</label>
   <select name="basis" onchange="this.form.submit()">
     <option value="soll" <?= $basis==='soll'?'selected':'' ?>>Rechnungsdatum (Soll)</option>
     <option value="ist" <?= $basis==='ist'?'selected':'' ?>>Zahlungseingang (Ist)</option>
@@ -304,31 +309,32 @@ $qBis = date('Y-m-t', strtotime(sprintf('%04d-%02d-01', $jahr, $mBis)));
   <a class="btn btn-ghost btn-sm" href="?p=beleg_export&art=belege&von=<?= $qVon ?>&bis=<?= $qBis ?>">Belege Q<?= $quartal ?> als CSV</a>
 </form>
 <div class="bx-cards">
-  <?php fkachel('USt eingenommen · Q' . $quartal . ' ' . $jahr, $eur($sAus), '#', $sAus > 0 ? 'color:var(--gruen)' : ''); ?>
+  <?php fkachel('USt laut Rechnung · Q' . $quartal . ' ' . $jahr, $eur($sSoll), '#'); ?>
+  <?php fkachel('USt eingenommen · Q' . $quartal . ' ' . $jahr, $eur($sIst), '#', $sIst > 0 ? 'color:var(--gruen)' : ''); ?>
   <?php fkachel('Vorsteuer · Q' . $quartal, $eur($sEin), '#'); ?>
   <?php fkachel('Zahllast (USt − Vorsteuer)', $eur($sZahl), '#', $sZahl >= 0 ? '' : 'color:var(--gruen)'); ?>
 </div>
 <div class="bx-panel">
   <h2>Umsatzsteuer je Monat · Q<?= $quartal ?> <?= $jahr ?></h2>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Monat</th><th class="bx-num">USt eingenommen</th><th class="bx-num">Vorsteuer</th><th class="bx-num">Zahllast</th></tr></thead>
+    <thead><tr><th>Monat</th><th class="bx-num">USt laut Rechnung</th><th class="bx-num">USt eingenommen</th><th class="bx-num">Vorsteuer</th><th class="bx-num">Zahllast</th></tr></thead>
     <tbody>
       <?php for ($m = $mVon; $m <= $mBis; $m++): $a = $monate[$m]['ausgang']; $e = $monate[$m]['eingang']; $z = $a - $e; ?>
         <tr>
           <td><?= h($mn[$m]) ?></td>
-          <td class="bx-num"><?= $a != 0 ? h($eur($a)) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $soll[$m]['ausgang'] != 0 ? h($eur($soll[$m]['ausgang'])) : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $ist[$m]['ausgang'] != 0 ? h($eur($ist[$m]['ausgang'])) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $e != 0 ? h($eur($e)) : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= $z != 0 ? h($eur($z)) : '<span class="muted">–</span>' ?></td>
         </tr>
       <?php endfor; ?>
     </tbody>
-    <tfoot><tr><td><strong>Summe Q<?= $quartal ?></strong></td><td class="bx-num"><strong><?= $eur($sAus) ?></strong></td><td class="bx-num"><strong><?= $eur($sEin) ?></strong></td><td class="bx-num"><strong><?= $eur($sZahl) ?></strong></td></tr></tfoot>
+    <tfoot><tr><td><strong>Summe Q<?= $quartal ?></strong></td><td class="bx-num"><strong><?= $eur($sSoll) ?></strong></td><td class="bx-num"><strong><?= $eur($sIst) ?></strong></td><td class="bx-num"><strong><?= $eur($sEin) ?></strong></td><td class="bx-num"><strong><?= $eur($sZahl) ?></strong></td></tr></tfoot>
   </table></div>
   <p class="muted" style="margin:12px 0 0;font-size:12px">
-    „USt eingenommen" = Umsatzsteuer aus deinen Ausgangsrechnungen (Rechnung minus Gutschrift, ohne Storno).
-    <strong>Basis Rechnungsdatum (Soll):</strong> gezählt im Monat des Rechnungsdatums – wie bei der Soll-Versteuerung/USt-Voranmeldung üblich.
-    <strong>Basis Zahlungseingang (Ist):</strong> anteilig im Monat des Zahlungseingangs (für Ist-Versteuerung/Kleinunternehmer-Logik).
-    „Zahllast" = USt eingenommen minus Vorsteuer aus Eingangsrechnungen. Keine Steuerberatung – bitte mit dem Steuerberater abgleichen.
+    „USt laut Rechnung" = Umsatzsteuer aus deinen Ausgangsrechnungen im Monat des Rechnungsdatums (Rechnung minus Gutschrift, ohne Storno) – offene und teilbezahlte Rechnungen voll (Soll-Versteuerung).
+    „USt eingenommen" = nur was wirklich bezahlt wurde: je Zahlungseingang der anteilige USt-Betrag im Monat der Zahlung (Teilzahlung anteilig, offene Rechnungen 0).
+    „Zahllast" = USt minus Vorsteuer aus Eingangsrechnungen, nach der oben gewählten Basis. Keine Steuerberatung – bitte mit dem Steuerberater abgleichen.
   </p>
 </div>
 <?php
