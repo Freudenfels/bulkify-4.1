@@ -22,11 +22,17 @@ dl_subtabs('dl_auftraege');
     <?php foreach ($rows as $r):
         $leistung = trim((string)($r['pos_bezeichnung'] ?? '')) !== '' ? (string)$r['pos_bezeichnung'] : (string)($r['dl_name'] ?? '');
         $kontext  = trim((string)($r['pos_beschreibung'] ?? ''));
+        // Bezug (Produkt / Bestellung / Charge) statt der immer gleichen Katalog-Beschreibung.
+        $bezug = array_filter([(string)($r['bezug_produkt_name'] ?? ''), (string)($r['bezug_auftrag_nummer'] ?? ''),
+                               trim((string)($r['dl_bezug_charge'] ?? '')) !== '' ? 'Charge ' . trim((string)$r['dl_bezug_charge']) : '']);
+        $ohneBezug = !$bezug && dl_ist_labortest(null, $leistung);
     ?>
       <tr style="cursor:pointer" onclick="location.href='?p=dl_auftrag&id=<?= (int)$r['id'] ?>'">
         <td><strong><?= h($r['nummer'] ?: '–') ?></strong></td>
         <td><?= kunde_link($r['kunde_id'] ?? null, $r['kunde_firma']) ?></td>
-        <td style="max-width:320px"><?= $leistung !== '' ? h($leistung) : '<span class="muted">–</span>' ?><?= $kontext !== '' ? '<div class="muted" style="font-size:12px;white-space:normal">' . h(mb_substr(preg_replace('/\s+/', ' ', $kontext), 0, 90)) . '</div>' : '' ?></td>
+        <td style="max-width:320px"><?= $leistung !== '' ? h($leistung) : '<span class="muted">–</span>' ?><?php if ($bezug): ?><div style="font-size:12px;white-space:normal"><span class="muted">Produkt:</span> <?= h(implode(' · ', $bezug)) ?></div>
+          <?php elseif ($ohneBezug): ?><div style="font-size:12px;color:var(--err)">Produkt nicht zugeordnet</div>
+          <?php elseif ($kontext !== ''): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h(mb_substr(preg_replace('/\s+/', ' ', $kontext), 0, 90)) ?></div><?php endif; ?></td>
         <td class="muted"><?= h($r['angebot_nummer'] ?: '–') ?></td>
         <td class="bx-num"><?= number_format((float)$r['gesamt_netto'],2,',','.') ?> €</td>
         <td><?= $statusBadge($r['status']) ?></td>

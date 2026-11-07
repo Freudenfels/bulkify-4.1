@@ -25,3 +25,12 @@ Hat ein DL-Auftrag **keinen verknüpften Service** (z. B. reine Abfüllung mit B
 
 ## F1/F2 – Dienstleistungsanfrage & Konfektionierung
 Die Dienstleistungsanfrage (Portal, `portal_anfrage` typ='dienstleistung' + `dienstleistung_typ`) hat die Unterarten u. a. **Laboranalyse, Konfektionierung, Rezepturentwicklung** (Namen „Kundenbeistellung"/„Fremdproduktion" bewusst NICHT verwendet). Bei **Konfektionierung** erfasst der Kunde im Portal, **was er anliefert** (Rohstoffe/fertige Ware + Menge) – wird der Notiz als „Anlieferung des Kunden: …" vorangestellt; die Arbeitsschritte legt bulkify fest (editierbar, s. o.). Konfektionierung läuft über den DL-Auftrag; ein **Einkauf wird dabei nicht ausgelöst** (DL-Aufträge tragen keinen Rohstoffbedarf). Bestehende DL-Aufträge behalten ihre DA-/DB-/DR-Nummern (nichts gelöscht).
+
+## Bezug + Laborbericht (07.11.2026)
+- Neues Panel **Bezug** (`#bezug`, `aktion=bezug` → `dl_auftrag_bezug_setzen`): Produkt, Bestellung (AB-) und Charge, für die die Leistung ist. Gespeichert in `auftrag.produkt_id`, `auftrag.dl_bezug_auftrag_id`, `auftrag.dl_bezug_charge`.
+- Vorbelegung über `dl_auftrag_bezug()`: von Hand zugeordnet, sonst Produkt der Bestellung, sonst das Produkt aus der DL-Anfrage (Hinweis „aus der Anfrage übernommen"). Eine einzige Fertigware-Charge der Bestellung wird als Charge vorgeschlagen.
+- Fehlt bei einer Laboranalyse das Produkt, steht ein roter Hinweis im Panel.
+- Der Upload ist jetzt **immer** da (außer bei Services „ohne Fortschritt"), nicht nur, wenn im Katalog `ergebnis_upload` gesetzt ist.
+- Bei Laboranalysen (`dl_ist_labortest`) heißt er **Laborbericht**. Mit dem Haken „auch als Laboranalyse beim Produkt ablegen" entsteht zusätzlich eine eigene Dateikopie als `dokument typ='analyse'` an der Bestellung (sonst am Produkt), Befund „unklar", kundensichtbar. Damit erscheint der Bericht unter Laboranalysen und im Portal-Reiter Labortest.
+- Ohne zugeordnetes Produkt ist der Haken gesperrt.
+- Kopfzeile zeigt das Produkt mit an.

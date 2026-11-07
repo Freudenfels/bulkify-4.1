@@ -31,7 +31,8 @@ Spiegelt den Produkt-Weg (`auftrag_aus_angebot` / `rechnung_aus_auftrag`), aber 
 - `dl_angebot_senden($id)` – DL-Angebot an den Kunden senden (wie Produkt-Angebot): Status `gesendet`, **`preise_kunde=1`** (sonst im Portal unsichtbar), `gueltig_bis` (Default +30 Tage), Anfrage auf `beantwortet`, Mail via `mail_kunde_angebot()` (Portal-Link). Angenommen wird im Kundenportal über `aktion=angebot_annehmen`; der Portal-Handler erkennt `kategorie='dienstleistung'` und ruft `dl_auftrag_aus_angebot()` statt des Produkt-Wegs (`module/portal/kunde.php`). Die DL-Maske (`module/dienstleistung/angebot.php`) zeigt zusätzlich den **Wunsch des Kunden** aus der verknüpften `portal_anfrage` (Betreff/Notiz/Art/Zielpreis/Menge).
 - `dl_auftrag_aus_angebot()` – DB- aus bestätigtem DA- (idempotent)
 - `dl_rechnung_aus_auftrag()` – DR- aus DB-, kopiert die Positionen (idempotent, verweigert ohne Betrag)
-- `dl_auftraege_alle()` / `dl_auftrag_laden()` / `dl_rechnungen_alle()`
+- `dl_auftraege_alle()` / `dl_auftrag_laden()` / `dl_rechnungen_alle()` (Liste liefert zusätzlich `bezug_produkt_id`/`bezug_produkt_name`/`bezug_auftrag_nummer`)
+- `dl_auftrag_bezug($a)` / `dl_auftrag_bezug_setzen()`: Produkt, Bezugs-Bestellung (`auftrag.dl_bezug_auftrag_id`) und Charge (`auftrag.dl_bezug_charge`) eines DL-Auftrags; Rückfall auf das Produkt der DL-Anfrage. `dl_ist_labortest()` erkennt Laboranalyse-Services.
 
 Produkt-Listen (`module/angebot/liste.php`, `module/auftrag/liste.php`) blenden DL-Vorgänge per `COALESCE(kategorie,'produkt')<>'dienstleistung'` aus. Das Kundenportal zeigt DL-Angebote ohnehin nicht (kein `produkt_id`, keine Rezeptur-Position, `preise_kunde=0`).
 
@@ -53,7 +54,7 @@ Produkt-Listen (`module/angebot/liste.php`, `module/auftrag/liste.php`) blenden 
 - **Ein Service pro Auftrag:** `dl_auftrag_aus_angebot()` legt je DL-Angebotsposition **einen eigenen DB-Auftrag** an (`auftrag.dienstleistung_id`, `auftrag.angebot_position_id`) und materialisiert die Schritte (`dl_auftrag_schritt`) via `dl_auftrag_schritte_anlegen()`. Rückgabe = erster Auftrag. Rückwärtskompatibel: Alt-Angebote mit Sammel-Auftrag (ohne Position) bleiben unverändert.
 - **DL-Rechnung je Auftrag** rechnet nur dessen **eine** Position ab (über `angebot_position_id`; Legacy ohne Position = alles).
 - **Fortschritt:** `dl_auftrag_track()` (Schritte + erledigt), `dl_auftrag_schritt_setzen($aid,$schritt_id)` (alle bis dorthin = erledigt), `dl_auftrag_status_ableiten()` (offen/in_arbeit/erledigt). Status des DL-Auftrags wird daraus abgeleitet.
-- **Endergebnis:** `dl_ergebnis_upload()` legt `dokument typ='dl_ergebnis'` (kundensichtbar) an; bei `upload_schliesst_ab` → alle Schritte erledigt + `mail_kunde_dl_ergebnis()` (respektiert `kunde_mails_aus`). `dl_ergebnis_dateien()` listet sie.
+- **Endergebnis:** `dl_ergebnis_upload()` legt `dokument typ='dl_ergebnis'` (kundensichtbar) an; bei `upload_schliesst_ab` → alle Schritte erledigt + `mail_kunde_dl_ergebnis()` (respektiert `kunde_mails_aus`). `dl_ergebnis_dateien()` listet sie. Optional (`$alsLaboranalyse`) zusätzlich als `typ='analyse'` (eigene Dateikopie) an der Bezugs-Bestellung bzw. am Produkt.
 
 ## Varianten (A/B/C) in DL-Angeboten (2026-10-26)
 DL-Angebote unterstützen jetzt Mengen-/Leistungs-Varianten wie Produkt-Angebote: Positionen tragen einen Gruppen-Buchstaben (`angebot_position.gruppe`, A/B/C …). Positionen **ohne** Buchstaben = Basis (immer enthalten), gleicher Buchstabe = eine wählbare Variante.

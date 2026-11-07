@@ -60,8 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=dl_auftrag&id=' . $id . ($n > 0 ? '&ok=1#schritte' : '&stdvorhanden=1#schritte')); exit;
     }
     if ($aktion === 'ergebnis_upload') {       // Endergebnis-Dokument hochladen (ggf. Abschluss + Kunden-Mail)
-        $r = dl_ergebnis_upload($id);
-        header('Location: ?p=dl_auftrag&id=' . $id . ($r['ok'] ? ('&ok=1' . (!empty($r['abgeschlossen']) ? '&done=1' : '')) : '&uperr=' . urlencode($r['msg']))); exit;
+        $r = dl_ergebnis_upload($id, 'ergebnis', !empty($_POST['als_analyse']));
+        header('Location: ?p=dl_auftrag&id=' . $id . ($r['ok'] ? ('&ok=1' . (!empty($r['abgeschlossen']) ? '&done=1' : '') . (!empty($r['analyse']) ? '&analyse=1' : '')) : '&uperr=' . urlencode($r['msg']))); exit;
+    }
+    // Bezug: für welches Produkt / welche Bestellung / Charge ist diese Leistung (z. B. Laboranalyse)?
+    if ($aktion === 'bezug') {
+        dl_auftrag_bezug_setzen($id, (int)($_POST['produkt_id'] ?? 0), (int)($_POST['bezug_auftrag_id'] ?? 0), (string)($_POST['charge'] ?? ''));
+        header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1#bezug'); exit;
     }
     // Leistungstext aus allem im Auftrag per KI zusammenfassen (Grundlage für die Rechnung). Wird gespeichert
     // und danach als Rechnungstext vorbelegt – man muss nichts mehr von Hand zusammensuchen.
@@ -95,18 +100,29 @@ if (($a['status'] ?? '') !== 'storniert') { dl_auftrag_heilen($id); $a = dl_auft
 $track  = dl_auftrag_track($id);
 $dlRow  = !empty($a['dienstleistung_id']) ? dienstleistung_laden((int)$a['dienstleistung_id']) : null;
 $ergDok = dl_ergebnis_dateien($id);
-$zeigeUpload = ($dlRow && (int)($dlRow['ergebnis_upload'] ?? 0) === 1) || !empty($ergDok);
+$leistungName = (string)(scalar("SELECT bezeichnung FROM angebot_position WHERE id=?", [(int)($a['angebot_position_id'] ?? 0)]) ?: ($dlRow['name'] ?? ''));
+$istLabor = dl_ist_labortest($dlRow, $leistungName);
+$bezug = dl_auftrag_bezug($a);
+// Upload immer anbieten (außer reine Abrechnungs-Services ohne Fortschritt) – nicht nur, wenn im Katalog eingeschaltet.
+$zeigeUpload = (int)($dlRow['ohne_fortschritt'] ?? 0) !== 1 || !empty($ergDok);
+// Auswahl für den Bezug: Produkte des Kunden (eigene + bestellte) und seine Produkt-Bestellungen.
+$kidB = (int)($a['kunde_id'] ?? 0);
+$bezugProdukte = $kidB ? all("SELECT DISTINCT p.id FROM produkt p WHERE p.kunde_id=? OR p.id IN (SELECT produkt_id FROM auftrag WHERE kunde_id=? AND produkt_id IS NOT NULL AND COALESCE(kategorie,'produkt')<>'dienstleistung')", [$kidB, $kidB]) : [];
+$bezugProdukte = array_map(fn($p) => ['id'=>(int)$p['id'], 'name'=>produkt_kundenname((int)$p['id'], $kidB)], $bezugProdukte);
+usort($bezugProdukte, fn($x, $y) => strcasecmp($x['name'], $y['name']));
+$bezugAuftraege = $kidB ? all("SELECT id, nummer, produkt_id, menge, status FROM auftrag WHERE kunde_id=? AND COALESCE(kategorie,'produkt')<>'dienstleistung' AND status<>'storniert' ORDER BY id DESC LIMIT 200", [$kidB]) : [];
+$pnamen = array_column($bezugProdukte, 'name', 'id');
 $rechnung = one("SELECT id, nummer, brutto, status FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert' LIMIT 1", [$id]);
 $statusBadge = fn($s) => match ($s) {
     'offen'=>bx_badge('offen','info'), 'in_arbeit'=>bx_badge('in Arbeit','warn'),
     'erledigt'=>bx_badge('erledigt','ok'), default=>bx_badge(status_text($s)) };
 
-$kopfSub = trim(($dlRow ? (string)$dlRow['name'] : '') . ($a['angebot_nummer'] ? ($dlRow ? ' · ' : '') . 'aus Angebot ' . (string)$a['angebot_nummer'] : ''));
+$kopfSub = implode(' · ', array_filter([$dlRow ? (string)$dlRow['name'] : '', $bezug['produkt_name'] !== '' ? 'Produkt: ' . $bezug['produkt_name'] : '', $a['angebot_nummer'] ? 'aus Angebot ' . (string)$a['angebot_nummer'] : '']));
 render_header('dienstleistungen', (string)$a['nummer']);
 bx_head('DL-Auftrag ' . h((string)$a['nummer']), h($kopfSub), bx_btn('Zurück zur Liste', '?p=dl_auftraege', 'ghost'));
 dl_subtabs('dl_auftraege');
 if (isset($_GET['done']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Endergebnis hochgeladen – Auftrag abgeschlossen, Kunde benachrichtigt.</div>';
-elseif (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+elseif (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.' . (isset($_GET['analyse']) ? ' Zusätzlich als Laboranalyse beim Produkt abgelegt (Befund bitte unter <a href="?p=laboranalysen">Laboranalysen</a> prüfen).' : '') . '</div>';
 if (isset($_GET['uperr']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Upload: ' . h((string)$_GET['uperr']) . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Rechnung konnte nicht erstellt werden (keine Positionen/kein Betrag).</div>';
 if (isset($_GET['kiok']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zusammenfassung erstellt – unten als Rechnungstext übernommen. Bitte prüfen und ggf. anpassen.</div>';
@@ -121,6 +137,28 @@ if (isset($_GET['stdvorhanden'])) echo '<div class="bx-panel" style="border-colo
   <div class="bx-card"><div class="k">Status</div><div class="v"><?= $statusBadge($a['status']) ?></div></div>
   <div class="bx-card"><div class="k">Netto</div><div class="v"><?= number_format((float)$a['gesamt_netto'],2,',','.') ?> €</div></div>
   <div class="bx-card"><div class="k">Rechnung</div><div class="v"><?= $rechnung ? '<a href="/buchhaltung/?p=rechnung&id=' . (int)$rechnung['id'] . '">' . h($rechnung['nummer']) . '</a>' : '–' ?></div></div>
+</div>
+
+<div class="bx-panel" id="bezug">
+  <h2 style="margin-top:0">Bezug <?= bx_hint('Für welches Produkt, welche Bestellung und welche Charge ist diese Leistung? Bei einer Laboranalyse landet der Bericht dort.') ?></h2>
+  <?php if ($bezug['quelle'] === 'anfrage'): ?><p class="muted" style="font-size:12px;margin:0 0 8px">Produkt aus der Anfrage <?= h($bezug['anfrage_nr']) ?> übernommen – mit Speichern fest zuordnen.</p>
+  <?php elseif ($bezug['produkt_id'] === 0 && $istLabor): ?><p style="font-size:12px;margin:0 0 8px;color:var(--err)">Noch kein Produkt zugeordnet – bitte auswählen, damit klar ist, welche Analyse das ist.</p><?php endif; ?>
+  <form method="post" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="bezug">
+    <div class="bx-field" style="margin:0;min-width:260px"><label>Produkt</label>
+      <select name="produkt_id"<?= count($bezugProdukte) > 10 ? ' class="rscombo" data-ph="Produkt suchen …"' : '' ?> style="min-width:260px"><option value="">– kein Produkt –</option>
+        <?php foreach ($bezugProdukte as $bp): ?><option value="<?= $bp['id'] ?>"<?= $bp['id'] === $bezug['produkt_id'] ? ' selected' : '' ?>><?= h($bp['name']) ?></option><?php endforeach; ?>
+      </select></div>
+    <div class="bx-field" style="margin:0;min-width:260px"><label>Bestellung</label>
+      <select name="bezug_auftrag_id"<?= count($bezugAuftraege) > 10 ? ' class="rscombo" data-ph="Bestellung suchen …"' : '' ?> style="min-width:260px"><option value="">– keine bestimmte –</option>
+        <?php foreach ($bezugAuftraege as $ba): ?><option value="<?= (int)$ba['id'] ?>"<?= (int)$ba['id'] === $bezug['auftrag_id'] ? ' selected' : '' ?>><?= h($ba['nummer'] . (isset($pnamen[(int)$ba['produkt_id']]) ? ' · ' . $pnamen[(int)$ba['produkt_id']] : '') . ((float)$ba['menge'] > 0 ? ' · ' . number_format((float)$ba['menge'], 0, ',', '.') . ' Stk' : '')) ?></option><?php endforeach; ?>
+      </select></div>
+    <div class="bx-field" style="margin:0;max-width:180px"><label>Charge</label>
+      <input type="text" name="charge" value="<?= h($bezug['charge']) ?>" list="bxDlBezugCharge" maxlength="60" placeholder="optional">
+      <datalist id="bxDlBezugCharge"><?php foreach ($bezug['chargen'] as $cn): ?><option value="<?= h((string)$cn) ?>"><?php endforeach; ?></datalist></div>
+    <button class="btn btn-ghost btn-sm" type="submit">Bezug speichern</button>
+  </form>
+  <?php if ($bezug['auftrag_id']): ?><p class="muted" style="font-size:12px;margin:8px 0 0">Bestellung öffnen: <a href="?p=auftrag&id=<?= $bezug['auftrag_id'] ?>"><?= h($bezug['auftrag_nr']) ?></a></p><?php endif; ?>
 </div>
 
 <div class="bx-panel">
@@ -224,7 +262,7 @@ if (isset($_GET['stdvorhanden'])) echo '<div class="bx-panel" style="border-colo
 
 <?php if ($zeigeUpload): ?>
 <div class="bx-panel">
-  <h2 style="margin-top:0">Endergebnis</h2>
+  <h2 style="margin-top:0"><?= $istLabor ? 'Laborbericht' : 'Endergebnis' ?></h2>
   <?php if ($ergDok): ?>
     <div style="margin-bottom:10px">
       <?php foreach ($ergDok as $ed): ?>
@@ -238,8 +276,12 @@ if (isset($_GET['stdvorhanden'])) echo '<div class="bx-panel" style="border-colo
   <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center">
     <input type="hidden" name="aktion" value="ergebnis_upload">
     <input type="file" name="ergebnis" required accept="application/pdf,image/*,.doc,.docx,.xlsx,.csv,.zip">
-    <button class="btn btn-primary btn-sm" type="submit"><?= $ergDok ? 'Weiteres Ergebnis hochladen' : 'Endergebnis hochladen' ?></button>
+    <?php if ($istLabor): ?>
+      <label style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-weight:400"<?= $bezug['produkt_id'] ? '' : ' title="Erst oben ein Produkt zuordnen"' ?>><input type="checkbox" name="als_analyse" value="1"<?= $bezug['produkt_id'] ? ' checked' : ' disabled' ?>> auch als Laboranalyse beim Produkt ablegen</label>
+    <?php endif; ?>
+    <button class="btn btn-primary btn-sm" type="submit"><?= $ergDok ? 'Weiteres Ergebnis hochladen' : ($istLabor ? 'Laborbericht hochladen' : 'Endergebnis hochladen') ?></button>
   </form>
+  <?php if ($istLabor): ?><p class="muted" style="font-size:12px;margin-top:8px">Der Kunde sieht den Bericht an diesem Auftrag im Portal. Mit dem Haken liegt er zusätzlich unter Laboranalysen<?= $bezug['auftrag_id'] ? ' an der Bestellung ' . h($bezug['auftrag_nr']) : ($bezug['produkt_id'] ? ' am Produkt' : '') ?><?= $bezug['charge'] !== '' ? ' (Charge ' . h($bezug['charge']) . ')' : '' ?>.</p><?php endif; ?>
   <?php if ($dlRow && (int)($dlRow['upload_schliesst_ab'] ?? 0) === 1): ?>
     <p class="muted" style="font-size:12px;margin-top:8px">Mit dem Upload wird der Auftrag auf „erledigt" gesetzt und der Kunde benachrichtigt.</p>
   <?php endif; ?>

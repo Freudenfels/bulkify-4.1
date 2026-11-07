@@ -150,6 +150,10 @@ function dienstleistung_schema(): void {
     // (Leistung, Positionen, erledigte Arbeitsschritte, Endergebnisse). Wird von der KI vorgeschlagen, ist frei
     // editierbar und fließt als Rechnungstext in die DR-Rechnung. Spart das Zusammensuchen von Hand.
     ensure_column('auftrag', 'dl_leistungstext', "TEXT NULL");
+    // Bezug eines DL-Auftrags (v. a. Laboranalyse): für welche Produkt-Bestellung (AB-) und welche Charge.
+    // Das Produkt selbst steht in auftrag.produkt_id (bei DL sonst leer).
+    ensure_column('auftrag', 'dl_bezug_auftrag_id', "INT NULL");
+    ensure_column('auftrag', 'dl_bezug_charge', "VARCHAR(60) NULL");
     // Materialisierte Schritte des DL-Auftrags (Fortschritt), aus dem Service kopiert.
     $pdo->exec("CREATE TABLE IF NOT EXISTS dl_auftrag_schritt (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -417,8 +421,10 @@ function dl_auftrag_schritt_setzen(int $auftrag_id, int $schritt_id): void {
 }
 // Endergebnis-Dokument hochladen (Feld „ergebnis"). Legt dokument typ='dl_ergebnis' an (kundensichtbar).
 // Ist am Service „Upload schließt ab" gesetzt: alle Schritte auf erledigt + Kunde benachrichtigen.
-function dl_ergebnis_upload(int $auftrag_id, string $feld = 'ergebnis'): array {
-    $a = one("SELECT id, kunde_id, dienstleistung_id, nummer FROM auftrag WHERE id=? AND kategorie='dienstleistung'", [$auftrag_id]);
+// $alsLaboranalyse: zusätzlich (eigene Dateikopie) als Laboranalyse typ='analyse' an der Bezugs-Bestellung bzw.
+// am Produkt ablegen -> erscheint unter Laboranalysen, im Portal-Reiter „Labortest" und schließt den Labor-Punkt.
+function dl_ergebnis_upload(int $auftrag_id, string $feld = 'ergebnis', bool $alsLaboranalyse = false): array {
+    $a = one("SELECT * FROM auftrag WHERE id=? AND kategorie='dienstleistung'", [$auftrag_id]);
     if (!$a) return ['ok'=>false, 'msg'=>'Auftrag nicht gefunden.'];
     if (empty($_FILES[$feld]['name']) || ($_FILES[$feld]['error'] ?? 1) !== UPLOAD_ERR_OK) return ['ok'=>false, 'msg'=>'Keine Datei empfangen.'];
     if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
@@ -428,6 +434,19 @@ function dl_ergebnis_upload(int $auftrag_id, string $feld = 'ergebnis'): array {
     if (!move_uploaded_file($_FILES[$feld]['tmp_name'], BX_UPLOADS . '/' . $fn)) return ['ok'=>false, 'msg'=>'Upload fehlgeschlagen.'];
     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar) VALUES ('auftrag',?, 'dl_ergebnis', ?,?,?,1)",
       [$auftrag_id, 'Endergebnis', $fn, $orig]);
+    $analyse = false;
+    if ($alsLaboranalyse) {
+        $bz = dl_auftrag_bezug($a);
+        [$objTyp, $objId] = $bz['auftrag_id'] ? ['auftrag', $bz['auftrag_id']] : ['produkt', $bz['produkt_id']];
+        $fn2 = 'analyse_' . gmdate('Ymd_His') . '_' . bin2hex(random_bytes(5)) . ($ext ? '.' . $ext : '');
+        if ($objId > 0 && @copy(BX_UPLOADS . '/' . $fn, BX_UPLOADS . '/' . $fn2)) {
+            q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
+               VALUES (?,?,'analyse',?,?,?,?,?,'unklar',1,'team')",
+              [$objTyp, $objId, 'Laboranalyse ' . (string)$a['nummer'], $fn2, $orig, gmdate('Y-m-d'), $bz['charge'] !== '' ? $bz['charge'] : null]);
+            log_aktivitaet($objTyp, $objId, 'team', 'Laboranalyse aus ' . (string)$a['nummer'] . ' abgelegt' . ($bz['charge'] !== '' ? ' (Charge ' . $bz['charge'] . ')' : '') . ': ' . mb_substr($orig, 0, 100), 'coa', $objTyp, $objId);
+            $analyse = true;
+        }
+    }
     $dlid = (int)($a['dienstleistung_id'] ?? 0);
     $schliesst = $dlid ? (int) scalar("SELECT upload_schliesst_ab FROM dienstleistung WHERE id=?", [$dlid]) : 0;
     if (!empty($a['kunde_id'])) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team', 'Endergebnis zu ' . (string)$a['nummer'] . ' hochgeladen.', 'auftrag', 'auftrag', $auftrag_id);
@@ -437,7 +456,7 @@ function dl_ergebnis_upload(int $auftrag_id, string $feld = 'ergebnis'): array {
         if (!empty($a['kunde_id']) && function_exists('mail_bereit') && mail_bereit())
             nach_antwort(fn() => mail_kunde_dl_ergebnis($auftrag_id));
     }
-    return ['ok'=>true, 'msg'=>'', 'abgeschlossen'=>(bool)$schliesst];
+    return ['ok'=>true, 'msg'=>'', 'abgeschlossen'=>(bool)$schliesst, 'analyse'=>$analyse];
 }
 // Endergebnis-Dokument(e) eines DL-Auftrags.
 function dl_ergebnis_dateien(int $auftrag_id): array {
@@ -730,15 +749,66 @@ function dl_auftrag_leistungstext_speichern(int $auftrag_id, ?string $text): voi
 
 // DL-Auftraege (Liste) + ein Auftrag mit Rechnungsinfo.
 function dl_auftraege_alle(): array {
-    return all("SELECT a.*, k.firma AS kunde_firma, ang.nummer AS angebot_nummer,
+    $rows = all("SELECT a.*, k.firma AS kunde_firma, ang.nummer AS angebot_nummer,
                    dl.name AS dl_name, ap.bezeichnung AS pos_bezeichnung, ap.beschreibung AS pos_beschreibung,
+                   ba.nummer AS bezug_auftrag_nummer,
+                   COALESCE(a.produkt_id, ba.produkt_id, pa.produkt_id,
+                            (SELECT MIN(pp.produkt_id) FROM portal_anfrage_pos pp WHERE pp.anfrage_id=ang.anfrage_id)) AS bezug_produkt_id,
                    (SELECT id FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' AND b.status<>'storniert' LIMIT 1) AS rechnung_id,
                    (SELECT nummer FROM beleg b WHERE b.auftrag_id=a.id AND b.typ='rechnung' AND b.status<>'storniert' LIMIT 1) AS rechnung_nummer
                 FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN angebot ang ON ang.id=a.angebot_id
                 LEFT JOIN dienstleistung dl ON dl.id=a.dienstleistung_id
                 LEFT JOIN angebot_position ap ON ap.id=a.angebot_position_id
+                LEFT JOIN auftrag ba ON ba.id=a.dl_bezug_auftrag_id
+                LEFT JOIN portal_anfrage pa ON pa.id=ang.anfrage_id
                 WHERE a.kategorie='dienstleistung'
                 ORDER BY a.angelegt DESC, a.id DESC");
+    foreach ($rows as &$r) $r['bezug_produkt_name'] = !empty($r['bezug_produkt_id']) ? produkt_kundenname((int)$r['bezug_produkt_id'], (int)($r['kunde_id'] ?? 0) ?: null) : '';
+    unset($r);
+    return $rows;
+}
+// Bezug eines DL-Auftrags: zu welchem Produkt / welcher Produkt-Bestellung / Charge gehört die Leistung?
+// Reihenfolge: von Hand zugeordnet (auftrag.produkt_id / dl_bezug_auftrag_id) -> Produkt der Bezugs-Bestellung
+// -> Produkt aus der DL-Anfrage, aus der das Angebot entstand (Kopf, sonst erste Anfrage-Position).
+// 'quelle' = zugeordnet | anfrage | '' (unbekannt).
+function dl_auftrag_bezug(array $a): array {
+    $b = ['produkt_id'=>0, 'produkt_name'=>'', 'quelle'=>'', 'auftrag_id'=>0, 'auftrag_nr'=>'', 'charge'=>'',
+          'chargen'=>[], 'anfrage_id'=>0, 'anfrage_nr'=>''];
+    $kid = (int)($a['kunde_id'] ?? 0) ?: null;
+    $baid = (int)($a['dl_bezug_auftrag_id'] ?? 0);
+    $ba = $baid ? one("SELECT id, nummer, produkt_id FROM auftrag WHERE id=?", [$baid]) : null;
+    if ($ba) { $b['auftrag_id'] = (int)$ba['id']; $b['auftrag_nr'] = (string)$ba['nummer']; }
+    $anf = !empty($a['angebot_id']) ? one("SELECT pa.id, pa.nummer, pa.produkt_id,
+                   (SELECT MIN(pp.produkt_id) FROM portal_anfrage_pos pp WHERE pp.anfrage_id=pa.id) AS pos_produkt_id
+                 FROM angebot ang JOIN portal_anfrage pa ON pa.id=ang.anfrage_id WHERE ang.id=?", [(int)$a['angebot_id']]) : null;
+    if ($anf) { $b['anfrage_id'] = (int)$anf['id']; $b['anfrage_nr'] = (string)$anf['nummer']; }
+    if (!empty($a['produkt_id']))      { $b['produkt_id'] = (int)$a['produkt_id'];  $b['quelle'] = 'zugeordnet'; }
+    elseif ($ba && $ba['produkt_id'])  { $b['produkt_id'] = (int)$ba['produkt_id']; $b['quelle'] = 'zugeordnet'; }
+    elseif ($anf && ($anf['produkt_id'] || $anf['pos_produkt_id'])) { $b['produkt_id'] = (int)($anf['produkt_id'] ?: $anf['pos_produkt_id']); $b['quelle'] = 'anfrage'; }
+    if ($b['produkt_id']) $b['produkt_name'] = produkt_kundenname($b['produkt_id'], $kid);
+    $b['charge'] = trim((string)($a['dl_bezug_charge'] ?? ''));
+    // Fertigware-Chargen der Bezugs-Bestellung (Vorschlag für die Charge auf dem Laborbericht).
+    // Nur Fertigware (aus dem PA bzw. verkaufsfertig) – keine reservierten Bulk-/Rohstoff-/Verpackungschargen.
+    if ($b['auftrag_id']) $b['chargen'] = array_column(all("SELECT DISTINCT c.charge_nr FROM charge c LEFT JOIN item i ON i.id=c.item_id
+        WHERE c.auftrag_id=? AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' AND (c.pa_id IS NOT NULL OR i.kategorie='verkaufsfertig') ORDER BY c.charge_nr", [$b['auftrag_id']]), 'charge_nr');
+    if ($b['charge'] === '' && count($b['chargen']) === 1) $b['charge'] = (string)$b['chargen'][0];
+    return $b;
+}
+// Bezug von Hand setzen. Bestellung ohne Produkt -> Produkt der Bestellung übernehmen.
+function dl_auftrag_bezug_setzen(int $auftrag_id, int $produkt_id, int $bezug_auftrag_id, string $charge): void {
+    $kid = (int) scalar("SELECT COALESCE(kunde_id,0) FROM auftrag WHERE id=? AND kategorie='dienstleistung'", [$auftrag_id]);
+    if ($bezug_auftrag_id > 0) {
+        $ba = one("SELECT id, produkt_id, kunde_id FROM auftrag WHERE id=? AND COALESCE(kategorie,'produkt')<>'dienstleistung'", [$bezug_auftrag_id]);
+        if (!$ba || ($kid && (int)$ba['kunde_id'] !== $kid)) $bezug_auftrag_id = 0;
+        elseif ($produkt_id <= 0 && $ba['produkt_id']) $produkt_id = (int)$ba['produkt_id'];
+    }
+    q("UPDATE auftrag SET produkt_id=?, dl_bezug_auftrag_id=?, dl_bezug_charge=? WHERE id=? AND kategorie='dienstleistung'",
+      [$produkt_id > 0 ? $produkt_id : null, $bezug_auftrag_id > 0 ? $bezug_auftrag_id : null, mb_substr(trim($charge), 0, 60) ?: null, $auftrag_id]);
+}
+// Ist der Service eine Laboranalyse? (Katalog-Baustein/Kategorie, sonst Name der Leistung)
+function dl_ist_labortest(?array $dlRow, string $leistung = ''): bool {
+    if ($dlRow && (($dlRow['baustein'] ?? '') === 'labortest' || ($dlRow['kategorie'] ?? '') === 'labortest')) return true;
+    return (bool) preg_match('/labor/i', $leistung);
 }
 function dl_auftrag_laden(int $id): ?array {
     return one("SELECT a.*, k.firma AS kunde_firma, ang.nummer AS angebot_nummer FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN angebot ang ON ang.id=a.angebot_id WHERE a.id=? AND a.kategorie='dienstleistung'", [$id]);
