@@ -35,7 +35,7 @@ function bx_nav_default(): array {
         // 'produktion_vorbereitung'), damit ein früher ausgeblendeter Eintrag im gespeicherten Menü ihn nicht verdeckt.
         // Soll-Kette 4c (04.11.2026): heißt jetzt „Beschaffungsweg offen“ – es gibt keine eigene Freigabe mehr, nur den Weg.
         'Produktion'   => ['produktionsfreigabe' => ['label'=>'Beschaffungsweg offen', 'route'=>'produktion_vorbereitung', 'href'=>'?p=produktion_vorbereitung'],
-                           'produktion' => 'Produktion', 'easy_production' => 'Easy Production', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
+                           'produktion' => 'Produktion', 'produktion_neu' => 'Produktion (neu)', 'easy_production' => 'Easy Production', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         // Warenlager = Gesamtsystem (alle Lager), darunter die Einzel-Sichten Lager 1 und Fremdlager (Lager 2).
         // Alle drei nutzen dieselbe Seite (?p=lager) mit dem Filter ?ort=…; der aktive Punkt entscheidet sich über 'ort'.
         'Lager'        => [
@@ -93,11 +93,22 @@ function bx_nav(): array {
         }
         if ($items) $nav[$label] = array_merge($nav[$label] ?? [], $items);
     }
-    // Nicht einsortierte, nicht ausgeblendete Punkte -> an ihre Standardgruppe anhängen (sonst „Weitere").
+    // Nicht einsortierte, nicht ausgeblendete Punkte -> in ihre Standardgruppe (sonst „Weitere"), und zwar direkt
+    // hinter ihren Vorgänger aus dem Standardmenü, wenn der dort steht (z. B. „Produktion (neu)" unter „Produktion").
+    $vorgaenger = []; $vorher = null; $vorherGrp = null;
+    foreach ($reg as $key => $r) { $vorgaenger[$key] = $vorherGrp === $r['group'] ? $vorher : null; $vorher = $key; $vorherGrp = $r['group']; }
     foreach ($reg as $key => $r) {
         if (isset($benutzt[$key]) || isset($hidden[$key])) continue;
         $grp = isset($nav[$r['group']]) ? $r['group'] : 'Weitere';
-        $nav[$grp][$key] = $r['def'];
+        $vg = $vorgaenger[$key];
+        if ($vg !== null && isset($nav[$grp][$vg])) {
+            $neu = [];
+            foreach ($nav[$grp] as $k => $d) { $neu[$k] = $d; if ($k === $vg) $neu[$key] = $r['def']; }
+            $nav[$grp] = $neu;
+        } else {
+            $nav[$grp][$key] = $r['def'];
+        }
+        $benutzt[$key] = true;
     }
     return $nav;
 }

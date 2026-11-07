@@ -179,6 +179,7 @@ $routes = [
     'aufgaben'           => 'intern/aufgaben.php',
     'aufgabe'            => 'intern/aufgabe_detail.php',
     'produktion'         => 'produktion/liste.php',
+    'produktion_neu'     => 'produktion/neu.php',       // Produktion (neu): neue Übersicht im Aufbau, ersetzt später die Liste
     'produktionsauftrag' => 'produktion/detail.php',
     'produktionsauftrag_pdf' => 'produktion/pdf.php',   // Laufzettel fürs Werk (Druck/Download)
     'produktion_run'     => 'produktion/run.php',

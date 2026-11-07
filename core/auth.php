@@ -81,6 +81,7 @@ function route_rollen_map(): array {
         'novelfood_verlauf'  => ['production', 'sales', 'labor'],   // Aktualisierungs-Verlauf (je Lauf)
 
         'produktion'         => ['production', 'labor', 'fulfillment'],
+        'produktion_neu'     => ['admin'],   // Produktion (neu) – im Aufbau, erst nur Admin
         'produktionsauftrag' => ['production', 'labor', 'fulfillment'],
         'produktionsauftrag_pdf' => ['production', 'labor', 'fulfillment'],
         'produktion_run'     => ['production', 'labor', 'fulfillment'],   // geführte Mitarbeiter-Produktion

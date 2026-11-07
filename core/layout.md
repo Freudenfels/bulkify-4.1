@@ -40,3 +40,8 @@ Badge **Freigaben** (Lager) zählt seit 04.11.2026 auch Chargen in Quarantäne (
 Menüpunkt `produktionsfreigabe` heißt seit 04.11.2026 **Beschaffungsweg offen** (Zähler = Aufträge ohne festgelegten Weg).
 
 **Suchfeld-Pflichtfeld (06.11.2026):** Ein `<select class="rscombo" required>` ist versteckt – war es leer, brach der Browser das Absenden **still** ab (er kann versteckte Felder nicht markieren; z. B. Easy Production „Vorschau passiert nichts“ ohne Mitarbeiter). Jetzt fängt `bx_rscombo_script()` das `invalid`-Ereignis ab: Das Suchfeld bekommt einen roten Rahmen (`.rs-invalid`), den Fokus und die Meldung „Bitte aus der Liste auswählen.“. Nach der Auswahl ist beides weg.
+
+## Neue Menüpunkte bei gespeichertem Menü (08.11.2026)
+Hat der Admin das Menü im Menü-Editor gespeichert (`app_meta menu_layout`), landen neue, dort noch nicht
+einsortierte Punkte in ihrer Standardgruppe **direkt hinter ihrem Vorgänger aus `bx_nav_default()`** (falls der in
+der Gruppe steht), sonst am Gruppenende. Beispiel: „Produktion (neu)" (`produktion_neu`) erscheint direkt unter „Produktion".

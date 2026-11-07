@@ -24,3 +24,6 @@ Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route,
 - `labor_senden` → `module/lager/labor_senden.php`: Proben ans Labor, Auftragsformular (PDF) automatisch ausfüllen (05.11.2026). Rollen wie `laboranalysen`.
 
 - `portal_registrieren` → `module/portal/registrieren.php`: öffentliche Kunden-Registrierung, Kunde gesperrt bis zur Freigabe (05.11.2026). Steht in `$PUBLIC`.
+
+## produktion_neu (08.11.2026)
+Route `produktion_neu` → `module/produktion/neu.php` (Produktion (neu), im Aufbau), nur Admin.
