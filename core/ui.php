@@ -78,10 +78,33 @@ function firma_kurz(?string $firma): string {
 
 // Kundenname als Link zum Kunden-Cockpit (?p=kunde&id=…). In klickbaren Listenzeilen verhindert
 // event.stopPropagation(), dass zusätzlich der Zeilen-Klick auslöst. Ohne Firma: „–", ohne id: nur Text.
+// Ist am Kunden ein internes Kürzel gepflegt, steht das Kürzel da (voller Name als Tooltip) – spart Platz in Tabellen.
 function kunde_link($kunde_id, ?string $firma): string {
     if ($firma === null || $firma === '') return '<span class="muted">–</span>';
     if (!$kunde_id) return h($firma);
-    return '<a class="kundenlink" href="?p=kunde&id=' . (int)$kunde_id . '" onclick="event.stopPropagation()">' . h($firma) . '</a>';
+    $kz = kunde_kuerzel((int)$kunde_id);
+    return '<a class="kundenlink" href="?p=kunde&id=' . (int)$kunde_id . '" onclick="event.stopPropagation()"'
+         . ($kz !== '' ? ' title="' . h($firma) . '">' . h($kz) : '>' . h($firma)) . '</a>';
+}
+
+// Internes Kürzel eines Kunden ('' = keins). NUR für interne Tabellen – nie in PDFs, Mails oder im Kundenportal.
+// Alle Kürzel werden einmal je Seitenaufruf geladen (eine Abfrage), danach aus dem Speicher.
+function kunde_kuerzel(int $kunde_id): string {
+    static $map = null;
+    if ($map === null) {
+        $map = [];
+        try { foreach (all("SELECT id, kuerzel FROM kunden WHERE kuerzel IS NOT NULL AND kuerzel<>''") as $r) $map[(int)$r['id']] = (string)$r['kuerzel']; }
+        catch (\Throwable $e) { /* Spalte (noch) nicht da */ }
+    }
+    return $map[$kunde_id] ?? '';
+}
+
+// Kundenname für interne Tabellen als Text (ohne Link): Kürzel, sonst Firma. Mit Tooltip, wenn gekürzt.
+function kunde_anzeige($kunde_id, ?string $firma): string {
+    $firma = (string)$firma;
+    $kz = $kunde_id ? kunde_kuerzel((int)$kunde_id) : '';
+    if ($kz === '') return $firma !== '' ? h($firma) : '<span class="muted">–</span>';
+    return '<span title="' . h($firma) . '">' . h($kz) . '</span>';
 }
 
 // PDF-Download-Button (Dokument-Icon + Label). Klar als „hier gibt's ein PDF" erkennbar – statt eines nackten Pfeils.

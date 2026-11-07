@@ -1927,6 +1927,7 @@ function init_schema(): void {
     ensure_column('item', 'basis_item_id', "INT NULL");                         // bedruckter Behälter: der neutrale Standard-Behälter, aus dem er kopiert wurde (Blocker 1)
     ensure_column('kunden', 'nutzt_fulfillment', "TINYINT NOT NULL DEFAULT 0"); // Kunde nutzt unser Fulfillment → hat ein Lager 2
     ensure_column('kunden', 'eigener_dhl', "TINYINT NOT NULL DEFAULT 0"); // Kunde hat eigenen DHL-Vertrag → Monatsabrechnung ohne Paketzeilen, nur Fulfillment-Service
+    ensure_column('kunden', 'kuerzel', "VARCHAR(20) NULL");   // internes Kürzel (nur intern, in Tabellen statt Firmenname; nie PDF/Mail/Portal)
     // Betriebsmittel (Kartons/Verbrauchsgüter/Inventar/Maschinen/Sonstiges): einfacher Bestand + Geräteprüfung.
     ensure_column('item', 'bestand_menge', "DECIMAL(12,3) NOT NULL DEFAULT 0"); // manueller Bestand (keine Chargen)
     ensure_column('item', 'mindestbestand', "DECIMAL(12,3) NULL");              // Meldebestand (optional)

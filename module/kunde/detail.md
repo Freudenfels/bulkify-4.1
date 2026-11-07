@@ -54,3 +54,8 @@ Das Formular „Ansprechpartner bei bulkify" (Reiter Übersicht) stand seit 03.1
 schließen dann das Hauptformular am inneren `</form>` – alle Felder danach (Stammdaten, Adressen, Zahlung, Portal, …)
 hingen an keinem Formular mehr, „Speichern" tat nichts. Jetzt eigenes leeres Formular `#betreuerForm` außerhalb,
 Auswahl + Knopf hängen per `form="betreuerForm"` daran (wie `#ezMailForm`). Regel: nie form in form.
+
+## Internes Kürzel (08.11.2026)
+Feld „Internes Kürzel" im Reiter Stammdaten (Spalte `kunden.kuerzel`, max. 20 Zeichen, leer = NULL). Muss eindeutig sein
+(Groß-/Kleinschreibung egal) – sonst Fehlermeldung, nichts gespeichert. **Nur intern:** erscheint in den internen Tabellen
+statt des Firmennamens (über `kunde_link()` / `kunde_anzeige()` in core/ui.php), nie in PDFs, Mails oder im Kundenportal.

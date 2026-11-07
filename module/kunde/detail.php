@@ -53,8 +53,11 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
 $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f = fn($k) => trim($_POST[$k] ?? '');
+    $kuerzel = mb_substr($f('kuerzel'), 0, 20);
     if ($f('firma') === '') {
         $fehler = 'Firma ist ein Pflichtfeld.';
+    } elseif ($kuerzel !== '' && ($dub = one("SELECT id, firma FROM kunden WHERE LOWER(kuerzel)=LOWER(?) AND id<>?", [$kuerzel, (int)($id ?? 0)]))) {
+        $fehler = 'Das Kürzel „' . $kuerzel . '" hat schon ' . $dub['firma'] . '. Bitte ein anderes wählen.';
     } else {
         $felder = ['kundennummer','firma','ansprechpartner','email','telefon','gesperrt',
                    'strasse','hausnummer','plz','ort','land','ust_id',
@@ -62,7 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    'liefer_strasse','liefer_hausnummer','liefer_plz','liefer_ort','liefer_land',
                    'zahlungsart','zahlungsziel_tage','rabatt_marge','aufschlag_marge',
                    'portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','eigener_dhl','zeige_energetisierung','labortest_extern','benachrichtigung_aus','notiz'];
+        $felder[] = 'kuerzel';
         $vals = array_map($f, $felder);
+        $vals[array_search('kuerzel', $felder)] = $kuerzel !== '' ? $kuerzel : null;   // leer = NULL -> Tabellen zeigen den Firmennamen
         $vals[array_search('gesperrt', $felder)] = isset($_POST['gesperrt']) ? 1 : 0;
         foreach (['portal_rezeptur','portal_produkte','portal_rohstoffe','portal_dienstleistung','portal_rezeptur_ableiten','nutzt_fulfillment','eigener_dhl','zeige_energetisierung','labortest_extern','benachrichtigung_aus'] as $pf)
             $vals[array_search($pf, $felder)] = isset($_POST[$pf]) ? 1 : 0;
@@ -421,6 +426,7 @@ if (!$neu) {
     <div class="bx-panel"><div class="bx-grid">
       <div class="bx-field"><label>Kundennummer <?= bx_hint('leer lassen = wird automatisch vergeben (K-…)') ?></label><input type="text" name="kundennummer" value="<?= $v('kundennummer') ?>" placeholder="<?= $neu ? 'automatisch (K-…)' : '' ?>"></div>
       <div class="bx-field"><label>Firma</label><input type="text" name="firma" value="<?= $v('firma') ?>" required></div>
+      <div class="bx-field"><label>Internes Kürzel <?= bx_hint('Nur für uns: steht in den internen Tabellen statt des Firmennamens (voller Name beim Darüberfahren). Nie auf Dokumenten, in Mails oder im Kundenportal. Leer = Firmenname.') ?></label><input type="text" name="kuerzel" value="<?= $v('kuerzel') ?>" maxlength="20" placeholder="z. B. PH"></div>
       <div class="bx-field"><label>Ansprechpartner</label><input type="text" name="ansprechpartner" value="<?= $v('ansprechpartner') ?>"></div>
       <div class="bx-field"><label>E-Mail</label><input type="email" name="email" value="<?= $v('email') ?>"></div>
       <div class="bx-field"><label>Telefon</label><input type="text" name="telefon" value="<?= $v('telefon') ?>"></div>
