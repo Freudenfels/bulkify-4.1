@@ -159,6 +159,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&vpok=1'); exit;
 }
 
+// Stift-Kacheln im Reiter Details (Nico 08.11.2026, „Auftragsseite entschlacken" Teil 1): EIN Speichern-Weg für Verpackung,
+// Füllmenge/Stk je Packung, Kapselgröße, Tablettenform, Gewicht je Einheit. Stammdaten-Logik: Speichern schreibt ans PRODUKT
+// (gilt für künftige Aufträge) bzw. an die Rezeptur; „nur für diesen Auftrag" gibt es dort, wo der Auftrag einen eigenen Wert
+// führt (Verpackung: auftrag.verpackung_id; Füllmenge nur ohne Produkt-Wert, da der Produkt-Wert Vorrang hat).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'kachel_speichern') {
+    if (!(has_role('admin') || has_role('sales'))) { header('Location: ?p=auftrag&id=' . $id); exit; }
+    $au   = one("SELECT a.id, a.produkt_id, a.verpackung_id, a.stueck, COALESCE(a.rezeptur_id, p.rezeptur_id) AS rid, p.einheiten_pro_packung, p.verpackung_id AS p_vp
+                 FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$id]) ?: [];
+    $pid  = (int)($au['produkt_id'] ?? 0); $rid = (int)($au['rid'] ?? 0);
+    $nurA = !empty($_POST['nur_auftrag']) || $pid <= 0;
+    $feld = (string)($_POST['feld'] ?? '');
+    if ($feld === 'verpackung') {
+        $vp = (int)($_POST['verpackung_id'] ?? 0);
+        if ($vp > 0 && !scalar("SELECT id FROM item WHERE id=? AND kategorie='verpackung'", [$vp])) $vp = 0;
+        q("UPDATE auftrag SET verpackung_id=? WHERE id=?", [$vp ?: null, $id]);
+        auftrag_name_behaelter_nachziehen($id, 'auftrag');
+        aenderung_protokollieren('auftrag', $id, ['verpackung_id' => $au['verpackung_id'] ?? null], ['verpackung_id' => $vp ?: null], 'auftrag');
+        if (!$nurA && $vp > 0 && $vp !== (int)($au['p_vp'] ?? 0)) {
+            q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vp, $pid]);
+            produkt_name_behaelter_nachziehen($pid, (int)($au['p_vp'] ?? 0), $vp, 'auftrag');
+            aenderung_protokollieren('produkt', $pid, ['verpackung_id' => $au['p_vp'] ?? null], ['verpackung_id' => $vp], 'auftrag');
+        }
+    } elseif ($feld === 'fuellmenge') {
+        $n = (int) round((float) zahl_lesen((string)($_POST['einheiten'] ?? '0')));
+        if ($n > 0) {
+            if ($pid > 0 && !($nurA && (int)($au['einheiten_pro_packung'] ?? 0) <= 0)) {
+                q("UPDATE produkt SET einheiten_pro_packung=? WHERE id=?", [$n, $pid]);
+                aenderung_protokollieren('produkt', $pid, ['einheiten_pro_packung' => $au['einheiten_pro_packung'] ?? null], ['einheiten_pro_packung' => $n], 'auftrag');
+            } else {
+                q("UPDATE auftrag SET stueck=? WHERE id=?", [$n, $id]);
+                aenderung_protokollieren('auftrag', $id, ['stueck' => $au['stueck'] ?? null], ['stueck' => $n], 'auftrag');
+            }
+        }
+    } elseif ($rid > 0 && in_array($feld, ['kapsel', 'tablettenform', 'gewicht'], true)) {
+        $alt = one("SELECT kapselgroesse_id, tabletten_form, einheit_fuellmenge FROM rezeptur WHERE id=?", [$rid]) ?: [];
+        if ($feld === 'kapsel') {
+            $kg = ($_POST['kapselgroesse_id'] ?? '') !== '' ? (int)$_POST['kapselgroesse_id'] : null;
+            q("UPDATE rezeptur SET kapselgroesse_id=? WHERE id=?", [$kg, $rid]); $neu = ['kapselgroesse_id' => $kg];
+        } elseif ($feld === 'tablettenform') {
+            $tf = trim((string)($_POST['tabletten_form'] ?? '')); $tf = array_key_exists($tf, tabletten_formen()) ? $tf : null;
+            q("UPDATE rezeptur SET tabletten_form=? WHERE id=?", [$tf, $rid]); $neu = ['tabletten_form' => $tf];
+        } else {
+            $g = trim((string)($_POST['einheit_fuellmenge'] ?? '')); $g = $g !== '' ? (float) zahl_lesen($g) : null;
+            q("UPDATE rezeptur SET einheit_fuellmenge=? WHERE id=?", [$g, $rid]); $neu = ['einheit_fuellmenge' => $g];
+        }
+        aenderung_protokollieren('rezeptur', $rid, $alt, $neu, 'auftrag');
+    }
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    header('Location: ?p=auftrag&id=' . $id . '&kok=1'); exit;
+}
+
 // Punkt 6 / Blocker 1: Bedruckten Behälter als eigenen Lagerartikel je (Produkt + Kunde des Auftrags) anlegen
 // (wie das Kundenetikett) und diesem Auftrag zuweisen. Ein Katalogprodukt behält den neutralen Behälter;
 // getrennt vom Standard-Beutel, einkaufbar, bei Nachbestellung wiederverwendet.
@@ -754,23 +805,35 @@ $fehltCard = fn($txt) => '<span style="color:var(--warn)">' . h($txt) . '</span>
 // Die Kennzahl-Kacheln stehen jetzt IM Reiter „Details" (siehe unten, data-panel="details"), nicht mehr
 // über den Reitern. Als Closure vorbereitet, damit sie dort an der richtigen Stelle gerendert werden.
 $designLbl = auftrag_design_label((int)$a['id']);   // „Etikett" bzw. „Beutel-Design" (vollbedruckter Beutel)
-$kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCard, $einhProP, $gesamtStk, $groesseLbl, $istFremd, $etikettBadge, $eur, $istFuellG, $designLbl) {
+// Stift je änderbarer Kachel (öffnet ein kleines Fenster mit genau diesem Feld). Herstellung springt in den Reiter Beschaffungsweg.
+$darfStift = has_role('admin') || has_role('sales');
+$stiftIco  = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+$stift = fn(string $dlg) => $darfStift ? '<button type="button" class="bx-stift" title="Bearbeiten" onclick="document.getElementById(\'' . $dlg . '\').showModal()">' . $stiftIco . '</button>' : '';
+$kachelK = fn(string $label, string $knopf = '') => '<div class="k" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' . $label . '</span>' . $knopf . '</div>';
+$knEff = trim((string)($a['produkt_kundenname'] ?? ''));
+$kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCard, $einhProP, $gesamtStk, $groesseLbl, $istFremd, $etikettBadge, $eur, $istFuellG, $designLbl, $stift, $kachelK, $darfStift, $stiftIco, $knEff, $rezeptur) {
     echo '<div class="bx-cards" style="margin-bottom:16px">';
     echo '<div class="bx-card bx-card-status" title="Status" style="background:' . $stBg . ';color:' . $stFg . ';border:1px solid rgba(0,0,0,.15)"><div class="v" style="color:' . $stFg . '">' . h($stText) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Menge (Packungen)</div><div class="v">' . number_format((int)$a['menge'], 0, ',', '.') . '</div></div>';
     // Glas + Kapselzahl IMMER zeigen (auch wenn leer) – sonst sieht man bei alten Nachbestellungen nicht, dass es fehlt.
-    echo '<div class="bx-card"><div class="k">Verpackung (Glas)</div><div class="v" style="font-size:16px">' . ($glasName !== '' ? h($glasName) : $fehltCard('nicht gesetzt')) . '</div></div>';
+    echo '<div class="bx-card">' . $kachelK('Verpackung (Glas)', $stift('dlgVerp')) . '<div class="v" style="font-size:16px">' . ($glasName !== '' ? h($glasName) : $fehltCard('nicht gesetzt')) . '</div></div>';
     if ($istFuellG) {
-        echo '<div class="bx-card"><div class="k">Füllmenge je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') . ' g' : $fehltCard('nicht gesetzt')) . '</div></div>';
+        echo '<div class="bx-card">' . $kachelK('Füllmenge je Packung', $stift('dlgMenge')) . '<div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') . ' g' : $fehltCard('nicht gesetzt')) . '</div></div>';
         if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamt-Füllmenge</div><div class="v">' . ($gesamtStk >= 1000 ? rtrim(rtrim(number_format($gesamtStk / 1000, 3, ',', '.'), '0'), ',') . ' kg' : number_format($gesamtStk, 0, ',', '.') . ' g') . '</div></div>';
     } else {
-        echo '<div class="bx-card"><div class="k">Stk je Packung</div><div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
+        echo '<div class="bx-card">' . $kachelK('Stk je Packung', $stift('dlgMenge')) . '<div class="v">' . ($einhProP > 0 ? number_format($einhProP, 0, ',', '.') : $fehltCard('nicht gesetzt')) . '</div></div>';
         if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamtstückzahl</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
     }
     if ($groesseLbl !== '') { $grK = match((string)($rezeptur['darreichungsform'] ?? '')) { 'kapsel','softgel'=>'Kapselgröße', 'tablette'=>'Tablettenform', 'gummi','stick','pulver','gel','fluessig','oel'=>'Größe je Einheit', default=>'Größe/Form' };
-        echo '<div class="bx-card"><div class="k">' . $grK . '</div><div class="v">' . h($groesseLbl) . '</div></div>'; }
-    echo '<div class="bx-card"><div class="k">Herstellung</div><div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">' . h($designLbl) . '</div><div class="v">' . $etikettBadge . '</div></div>';
+        echo '<div class="bx-card">' . $kachelK($grK, $stift('dlgMenge')) . '<div class="v">' . h($groesseLbl) . '</div></div>'; }
+    echo '<div class="bx-card">' . $kachelK('Herstellung', $darfStift ? '<a class="bx-stift" href="#" data-goto="beschaffung" title="Im Reiter Beschaffungsweg festlegen">' . $stiftIco . '</a>' : '') . '<div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
+    echo '<div class="bx-card">' . $kachelK(h($designLbl), auftrag_braucht_etikett((int)$a['id']) ? $stift('dlgEtikett') : '') . '<div class="v">' . $etikettBadge . '</div></div>';
+    if (!empty($a['produkt_id']) && !empty($a['kunde_id']))
+        echo '<div class="bx-card">' . $kachelK('Name beim Kunden', $stift('dlgName')) . '<div class="v" style="font-size:15px">' . ($knEff !== '' ? h($knEff) : '<span class="muted">wie intern</span>') . '</div></div>';
+    if (!in_array((string)$a['status'], ['versendet', 'storniert'], true)) {
+        $ltK = trim((string) preg_replace('/^Voraussichtliche Lieferung:\s*/u', '', auftrag_liefertermin_text($a)));
+        echo '<div class="bx-card">' . $kachelK('Lieferung', $stift('dlgLiefer')) . '<div class="v" style="font-size:15px">' . ($ltK !== '' ? h($ltK) : '<span class="muted">nicht gesetzt</span>') . '</div></div>';
+    }
     echo '<div class="bx-card"><div class="k">VK / Packung (gesamt)</div><div class="v">' . $eur(auftrag_vk_gesamt($a)) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Netto gesamt</div><div class="v">' . $eur($a['gesamt_netto']) . '</div></div>';
     if (!empty($a['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($a['angelegt'], 'd.m.Y H:i')) . '</div></div>';
@@ -925,101 +988,154 @@ if (has_role('admin') || has_role('sales')):
     $effName  = $effVp ? (string) scalar("SELECT name FROM item WHERE id=?", [$effVp]) : '';
     $effKspez = $effVp ? (int) scalar("SELECT COALESCE(kundenspezifisch,0) FROM item WHERE id=?", [$effVp]) : 0;
 ?>
-<div class="bx-panel" data-panel="material">
-  <h2 style="margin-top:0">Verpackung (Behälter)</h2>
-  <?php if (isset($_GET['vpok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Verpackung gespeichert.</div><?php endif; ?>
-  <p class="muted" style="margin-top:0">Behälter/Glas für diesen Auftrag – bestimmt Etikett und Etikettmaß (fürs PIB). Der Auftrag hat Vorrang vor dem Produkt; nötig z. B. bei alten Aufträgen ohne Produkt-Verpackung.</p>
-  <form method="post" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:0">
-    <input type="hidden" name="aktion" value="verpackung_setzen">
-    <select name="verpackung_id" class="rscombo" style="min-width:260px">
-      <option value="">– kein Behälter (reine Bulkware) –</option>
-      <?php foreach ($vpListe as $vpi): ?><option value="<?= (int)$vpi['id'] ?>" <?= $aVp === (int)$vpi['id'] ? 'selected' : '' ?>><?= h($vpi['name']) ?></option><?php endforeach; ?>
-    </select>
-    <button class="btn btn-primary btn-sm" type="submit">Verpackung speichern</button>
-  </form>
-  <?php if ($effVp): ?>
-    <div class="muted" style="font-size:12px;margin-top:8px">Aktueller Behälter: <strong><?= h($effName) ?></strong><?= $aVp ? '' : ' (vom Produkt übernommen)' ?> · Etikett-Endformat: <?= trim($effFinal) !== '' ? '<strong>' . h($effFinal) . '</strong>' : '<span style="color:var(--warn)">nicht hinterlegt – am Behälter unter Lager → Verpackungen pflegen</span>' ?></div>
-    <?php if ($effKspez): ?>
-      <div style="font-size:12px;margin-top:6px"><?= bx_badge('bedruckt · kundenspezifisch','info') ?> <span class="muted">Eigener Behälter-Artikel dieses Kunden (je Produkt + Kunde) – getrennt vom Standard-Beutel, im Einkauf bestellbar, bei Nachbestellung wiederverwendet.</span></div>
-    <?php elseif (!empty($a['produkt_id'])): ?>
-      <form method="post" style="margin:10px 0 0" onsubmit="return confirm('Aus dem aktuellen Standard-Behälter einen bedruckten Behälter für diesen Kunden anlegen und diesem Auftrag zuweisen? Er gehört dem Kunden (je Produkt + Kunde), wird getrennt vom Standard geführt und bei Nachbestellungen wiederverwendet.');">
-        <input type="hidden" name="aktion" value="verpackung_kundenspezifisch">
-        <button class="btn btn-ghost btn-sm" type="submit">Bedruckten, kundenspezifischen Behälter anlegen</button>
-        <span class="muted" style="font-size:12px;display:block;margin-top:4px">Für einen bedruckten Kundenbeutel, der kein Standard-Basic ist: legt einen eigenen Lagerartikel je Produkt + Kunde an (wie das Kundenetikett), das Produkt behält den neutralen Behälter – im Einkauf bestellbar, im Lager getrennt vom Standard-Beutel.</span>
-      </form>
-    <?php endif; ?>
-  <?php else: ?>
-    <div class="muted" style="font-size:12px;margin-top:8px">Noch kein Behälter gewählt.</div>
-  <?php endif; ?>
-</div>
-<?php endif; ?>
-
-<?php // Reiter „Verpackung": Etikett-Verwaltung (Team/Admin) – hochladen/ersetzen (Last-Minute), Freigabe im Namen des Kunden, entfernen.
-if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $etDokA = etikett_datei($id); ?>
-<div class="bx-panel" data-panel="material">
-  <h2 style="margin-top:0"><?= auftrag_vollbedruckt($id) ? 'Beutel-Design (vollbedruckt, statt Etikett)' : 'Etikett' ?></h2>
-  <?php if (isset($_GET['etikettok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Etikett aktualisiert.</div><?php endif; ?>
-  <p class="muted" style="margin-top:0">Admin/Vertrieb kann hier ein Etikett für den Kunden hochladen (z.&nbsp;B. Last-Minute-Änderung) und die Freigabe im Namen des Kunden bestätigen.</p>
-  <p style="margin:0 0 10px">
-    <?php if ($etDokA): ?>Hinterlegt: <strong><?= h((string)($etDokA['datei_orig'] ?: 'Etikett-Design')) ?></strong>
-      <?= $etikettFrei ? bx_badge('freigegeben', 'ok') : bx_badge('nicht freigegeben', 'warn') ?>
-      <a class="btn btn-ghost btn-sm" style="margin-left:8px" href="?p=dokument&id=<?= (int)$etDokA['id'] ?>" download target="_blank" rel="noopener">&#8681; Herunterladen (für die Druckerei)</a>
-    <?php else: ?><span class="muted">Noch kein Etikett hinterlegt.</span><?php endif; ?>
-  </p>
-  <div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:flex-end">
-    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0">
-      <input type="hidden" name="aktion" value="etikett_upload_team">
-      <input type="file" name="etikett" required accept="application/pdf,image/*">
-      <button class="btn btn-ghost btn-sm" type="submit"><?= $etDokA ? 'Etikett ersetzen' : 'Etikett hochladen' ?></button>
-    </form>
-    <?php if ($etDokA && !$etikettFrei): ?>
-    <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0">
-      <input type="hidden" name="aktion" value="etikett_freigeben_team">
-      <input type="text" name="freigabe_name" required placeholder="Name (Freigabe im Namen des Kunden)" style="padding:7px 10px;border:1px solid var(--line);border-radius:8px;min-width:230px">
-      <button class="btn btn-primary btn-sm" type="submit">Freigabe bestätigen</button>
-    </form>
-    <?php endif; ?>
-    <?php if ($etDokA): ?>
-    <form method="post" style="margin:0" onsubmit="return confirm('Etikett wirklich entfernen? Die Freigabe wird zurückgesetzt.');">
-      <input type="hidden" name="aktion" value="etikett_del_team">
-      <button class="btn btn-ghost btn-sm" type="submit">Entfernen</button>
-    </form>
-    <?php endif; ?>
-  </div>
-  <p class="muted" style="font-size:12px;margin:12px 0 0">Kapselgröße wird im Reiter „Details" gesetzt (gehört zur Produktkonfiguration). Der Behälter wird oben gewählt.</p>
-</div>
 <?php endif; ?>
 
 <?php if (!empty($a['kunde_id'])) { echo kunde_nachricht_panel((int)$a['kunde_id'], (int)$a['id'], 0, 'details'); kunde_nachricht_gelesen((int)$a['kunde_id'], (int)$a['id'], 0, 'team'); } ?>
 <div class="bx-panel" data-panel="details">
-  <?php $kachelnRender(); // Kennzahl-Kacheln (aus dem Seitenkopf in den Details-Reiter verschoben) ?>
-  <?php if (!in_array((string)$a['status'], ['versendet', 'storniert'], true)): $ltTxt = auftrag_liefertermin_text($a); ?>
-  <form method="post" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px">
-    <input type="hidden" name="aktion" value="liefertermin_setzen">
-    <span class="muted" style="white-space:nowrap">Voraussichtliche Lieferung <?= bx_hint('Zeitraum, den der Kunde im Portal im Fortschritt sieht. Leer = es gilt der geplante Produktionstermin (falls gesetzt).') ?></span>
-    <input type="date" name="liefertermin_von" value="<?= h((string)($a['liefertermin_von'] ?? '')) ?>"> <span class="muted">bis</span>
-    <input type="date" name="liefertermin_bis" value="<?= h((string)($a['liefertermin_bis'] ?? '')) ?>">
-    <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
-    <?php if (isset($_GET['ltok'])): ?><span class="muted" style="font-size:12px">gespeichert</span><?php endif; ?>
-    <?php if (!portal_liefertermin_aktiv()): ?><span class="muted" style="font-size:12px">Im Kundenportal zentral ausgeblendet (Einstellungen) – nur intern.</span>
-    <?php elseif ($ltTxt !== ''): ?><span class="muted" style="font-size:12px">Kunde sieht: <?= h($ltTxt) ?></span><?php endif; ?>
-  </form>
+  <?php if (isset($_GET['kok']) || isset($_GET['vpok']) || isset($_GET['knok']) || isset($_GET['ltok']) || isset($_GET['etikettok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Gespeichert.</div><?php endif; ?>
+  <?php $kachelnRender(); // Kennzahl-Kacheln; änderbare Werte per Stift (Fenster unten) ?>
+  <?php // Stift-Fenster (Teil 1): je änderbarer Kachel genau dieses Feld. Liegen außerhalb jeder Tabelle/jedes Formulars.
+  if ($darfStift):
+      $dlgRez = !empty($rezeptur['id']) ? one("SELECT id, darreichungsform, kapselgroesse_id, tabletten_form, einheit_fuellmenge FROM rezeptur WHERE id=?", [(int)$rezeptur['id']]) : null;
+      $dlgDarr = (string)($dlgRez['darreichungsform'] ?? '');
+      $dlgAttr = in_array($dlgDarr, ['kapsel', 'softgel'], true) ? 'kapsel' : ($dlgDarr === 'tablette' ? 'tablette' : (in_array($dlgDarr, ['gummi', 'stick', 'pulver', 'gel', 'fluessig', 'oel'], true) ? 'gewicht' : ''));
+      $dlgPEinh = !empty($a['produkt_id']) ? (int) scalar("SELECT COALESCE(einheiten_pro_packung,0) FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : 0;
+      $dlgKopf = fn(string $t, string $dlg) => '<div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><h2 style="margin:0;font-size:17px">' . $t . '</h2><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'' . $dlg . '\').close()" aria-label="schließen">&#10005;</button></div>';
+      $nurAuftragHaken = fn(bool $an = true, string $hinweis = '') => !empty($a['produkt_id'])
+          ? '<label class="bx-check" style="margin:10px 0 0;font-weight:400"><input type="checkbox" name="nur_auftrag" value="1"' . ($an ? '' : ' disabled') . '> nur für diesen Auftrag</label>'
+            . '<div class="muted" style="font-size:12px;margin-top:4px">' . ($hinweis !== '' ? $hinweis : 'Ohne Haken gilt der Wert am Produkt – auch für künftige Aufträge.') . '</div>'
+          : '<div class="muted" style="font-size:12px;margin-top:8px">Kein Produkt verknüpft – gilt nur für diesen Auftrag.</div>'; ?>
+  <dialog id="dlgVerp" class="bx-dialog">
+    <?= $dlgKopf('Verpackung (Glas/Behälter)', 'dlgVerp') ?>
+    <form method="post" style="margin:0">
+      <input type="hidden" name="aktion" value="kachel_speichern"><input type="hidden" name="feld" value="verpackung">
+      <select name="verpackung_id"<?= count($vpListe ?? []) > 10 ? ' class="rscombo"' : '' ?> style="width:100%">
+        <option value="">– kein Behälter (reine Bulkware) –</option>
+        <?php foreach (($vpListe ?? []) as $vpi): ?><option value="<?= (int)$vpi['id'] ?>" <?= (int)($effVp ?? 0) === (int)$vpi['id'] ? 'selected' : '' ?>><?= h($vpi['name']) ?></option><?php endforeach; ?>
+      </select>
+      <?= $nurAuftragHaken() ?>
+      <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
+    </form>
+    <?php if (!empty($a['produkt_id']) && empty($effKspez)): ?>
+    <form method="post" style="margin:16px 0 0;padding-top:12px;border-top:1px solid var(--line)" onsubmit="return confirm('Aus dem aktuellen Standard-Behälter einen bedruckten Behälter für diesen Kunden anlegen und diesem Auftrag zuweisen?');">
+      <input type="hidden" name="aktion" value="verpackung_kundenspezifisch">
+      <button class="btn btn-ghost btn-sm" type="submit">Bedruckten, kundenspezifischen Behälter anlegen</button>
+      <div class="muted" style="font-size:12px;margin-top:4px">Eigener Lagerartikel je Produkt + Kunde (wie das Kundenetikett) – im Einkauf bestellbar, getrennt vom Standard-Behälter.</div>
+    </form>
+    <?php elseif (!empty($effKspez)): ?><div style="margin-top:12px;font-size:12px"><?= bx_badge('bedruckt · kundenspezifisch', 'info') ?></div><?php endif; ?>
+  </dialog>
+
+  <dialog id="dlgMenge" class="bx-dialog">
+    <?= $dlgKopf($istFuellG ? 'Füllmenge je Packung' : 'Menge je Packung & Größe', 'dlgMenge') ?>
+    <form method="post" style="margin:0">
+      <input type="hidden" name="aktion" value="kachel_speichern"><input type="hidden" name="feld" value="fuellmenge">
+      <div class="bx-field" style="margin:0"><label><?= $istFuellG ? 'Füllmenge je Packung (g)' : 'Stk je Packung' ?></label>
+        <input type="text" inputmode="numeric" name="einheiten" value="<?= $einhProP > 0 ? h(number_format($einhProP, 0, ',', '.')) : '' ?>" required></div>
+      <?= $nurAuftragHaken($dlgPEinh <= 0, $dlgPEinh > 0 ? 'Gilt am Produkt (auch künftige Aufträge). Der Produktwert hat Vorrang – eine Abweichung nur für diesen Auftrag geht über „Für diesen Auftrag überarbeiten“ (Rezeptur).' : '') ?>
+      <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
+    </form>
+    <?php if ($dlgRez && $dlgAttr !== ''): ?>
+    <form method="post" style="margin:16px 0 0;padding-top:12px;border-top:1px solid var(--line)">
+      <input type="hidden" name="aktion" value="kachel_speichern">
+      <?php if ($dlgAttr === 'kapsel'): $vSet = (int)($dlgRez['kapselgroesse_id'] ?? 0); $vAuto = $vSet <= 0 ? rezeptur_kapselgroesse((int)$dlgRez['id']) : null; ?>
+        <input type="hidden" name="feld" value="kapsel">
+        <div class="bx-field" style="margin:0"><label>Kapselgröße</label>
+          <select name="kapselgroesse_id" style="width:100%"><option value="">– automatisch<?= $vAuto ? ' (' . h((string)$vAuto['name']) . ')' : '' ?> –</option>
+            <?php foreach (all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") as $kg): ?><option value="<?= (int)$kg['id'] ?>" <?= $vSet === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option><?php endforeach; ?>
+          </select></div>
+      <?php elseif ($dlgAttr === 'tablette'): ?>
+        <input type="hidden" name="feld" value="tablettenform">
+        <div class="bx-field" style="margin:0"><label>Tablettenform</label>
+          <select name="tabletten_form" style="width:100%"><option value="">– wählen –</option>
+            <?php foreach (tabletten_formen() as $tk => $tl): ?><option value="<?= h($tk) ?>" <?= (string)($dlgRez['tabletten_form'] ?? '') === $tk ? 'selected' : '' ?>><?= h($tl) ?></option><?php endforeach; ?>
+          </select></div>
+      <?php else: [$vGl, $vGe] = form_gewicht_feld($dlgDarr); $vGv = (float)($dlgRez['einheit_fuellmenge'] ?? 0); ?>
+        <input type="hidden" name="feld" value="gewicht">
+        <div class="bx-field" style="margin:0"><label><?= h($vGl) ?> (<?= h($vGe) ?>)</label>
+          <input type="text" inputmode="decimal" name="einheit_fuellmenge" value="<?= $vGv > 0 ? h(rtrim(rtrim(number_format($vGv, 3, ',', ''), '0'), ',')) : '' ?>" placeholder="z. B. 2,5"></div>
+      <?php endif; ?>
+      <div class="muted" style="font-size:12px;margin-top:4px">Gilt für die Rezeptur<?= $rezIstKopie ? ' (Auftrags-Kopie – nur dieser Auftrag)' : ' – Abweichung nur für diesen Auftrag über „Für diesen Auftrag überarbeiten“' ?>.</div>
+      <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
+    </form>
+    <?php endif; ?>
+  </dialog>
+
+  <?php if (auftrag_braucht_etikett($id)):
+      $etDokA = etikett_datei($id); $etPrev = $etDokA ?: etikett_quelle($id);
+      $etExt  = $etPrev ? strtolower(pathinfo((string)($etPrev['datei_orig'] ?: $etPrev['datei']), PATHINFO_EXTENSION)) : '';
+      $etIstBild = in_array($etExt, ['jpg','jpeg','png','gif','webp','avif','bmp','svg'], true); $etIstPdf = $etExt === 'pdf';
+      $etVers = !empty($a['produkt_id']) ? (int) scalar("SELECT etikett_version FROM item WHERE id=?", [etikett_item_fuer_auftrag_kunde($id, (int)$a['produkt_id'])]) : 0; ?>
+  <dialog id="dlgEtikett" class="bx-dialog" style="max-width:820px">
+    <?= $dlgKopf(h($designLbl), 'dlgEtikett') ?>
+    <div class="bx-row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <?= $etikettBadge ?><?php if ($etVers > 0): ?> <span class="muted" style="font-size:13px">Version v<?= $etVers ?></span><?php endif; ?>
+      <?php if ($etPrev): ?><span class="muted" style="font-size:13px">· <?= h((string)($etPrev['datei_orig'] ?: 'Design')) ?><?= !empty($etPrev['alt']) ? ' · aus einer Vorbestellung' : '' ?></span><?php endif; ?>
+    </div>
+    <?php if ($etPrev): ?>
+    <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel-2,#f6f7f8);padding:10px;display:flex;align-items:center;justify-content:center;min-height:180px">
+      <?php if ($etIstBild): ?><img src="?p=dokument&id=<?= (int)$etPrev['id'] ?>" alt="Etikett-Vorschau" style="max-width:100%;max-height:360px;border-radius:6px">
+      <?php elseif ($etIstPdf): ?><iframe src="?p=dokument&id=<?= (int)$etPrev['id'] ?>#toolbar=0&view=FitH" title="Etikett-Vorschau" style="width:100%;height:380px;border:0;border-radius:6px;background:#fff"></iframe>
+      <?php else: ?><a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" target="_blank" rel="noopener">Datei öffnen</a><?php endif; ?>
+    </div>
+    <div style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" download target="_blank" rel="noopener">Herunterladen (für die Druckerei)</a></div>
+    <?php else: ?><div class="muted" style="padding:16px;border:1px dashed var(--line);border-radius:10px;text-align:center">Noch kein Design hinterlegt.</div><?php endif; ?>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+      <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0;flex-wrap:wrap">
+        <input type="hidden" name="aktion" value="etikett_upload_team">
+        <input type="file" name="etikett" required accept="application/pdf,image/*">
+        <button class="btn btn-ghost btn-sm" type="submit"><?= $etDokA ? 'Design ersetzen' : 'Design hochladen' ?></button>
+      </form>
+      <?php if ($etDokA && !$etikettFrei): ?>
+      <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0;flex-wrap:wrap">
+        <input type="hidden" name="aktion" value="etikett_freigeben_team">
+        <input type="text" name="freigabe_name" required placeholder="Name (Freigabe im Namen des Kunden)" style="min-width:230px">
+        <button class="btn btn-primary btn-sm" type="submit">Freigabe bestätigen</button>
+      </form>
+      <?php endif; ?>
+      <?php if ($etDokA): ?>
+      <form method="post" style="margin:0" onsubmit="return confirm('Design wirklich entfernen? Die Freigabe wird zurückgesetzt.');">
+        <input type="hidden" name="aktion" value="etikett_del_team">
+        <button class="btn btn-ghost btn-sm" type="submit">Entfernen</button>
+      </form>
+      <?php endif; ?>
+      <div class="muted" style="font-size:12px">Das Design gehört zum Produkt (Kundenetikett, neue Version bei Freigabe eines neuen Designs); die Freigabe gilt für diesen Auftrag.</div>
+    </div>
+  </dialog>
   <?php endif; ?>
+
+  <?php if (!empty($a['produkt_id']) && !empty($a['kunde_id'])): ?>
+  <dialog id="dlgName" class="bx-dialog" style="max-width:520px">
+    <?= $dlgKopf('Name beim Kunden', 'dlgName') ?>
+    <form method="post" style="margin:0">
+      <input type="hidden" name="aktion" value="kundenname_setzen">
+      <input type="text" name="kn_name" value="<?= h($knEff) ?>" placeholder="<?= h($produktName ?: 'wie intern') ?>" style="width:100%">
+      <div class="muted" style="font-size:12px;margin-top:6px">So heißt das Produkt bei diesem Kunden (Portal, Angebot, AB, Rechnung, Lieferschein, Etikett, PIB). Leer = interner Name.</div>
+      <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
+    </form>
+  </dialog>
+  <?php endif; ?>
+
+  <?php if (!in_array((string)$a['status'], ['versendet', 'storniert'], true)): ?>
+  <dialog id="dlgLiefer" class="bx-dialog" style="max-width:520px">
+    <?= $dlgKopf('Voraussichtliche Lieferung', 'dlgLiefer') ?>
+    <form method="post" style="margin:0">
+      <input type="hidden" name="aktion" value="liefertermin_setzen">
+      <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="date" name="liefertermin_von" value="<?= h((string)($a['liefertermin_von'] ?? '')) ?>"> <span class="muted">bis</span>
+        <input type="date" name="liefertermin_bis" value="<?= h((string)($a['liefertermin_bis'] ?? '')) ?>">
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Zeitraum, den der Kunde im Portal sieht. Leer = es gilt der geplante Produktionstermin.</div>
+      <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
+    </form>
+  </dialog>
+  <?php endif; ?>
+  <script>document.querySelectorAll('.bx-dialog').forEach(function(d){ d.addEventListener('click', function(e){ if (e.target === d) d.close(); }); });</script>
+  <?php endif; ?>
+  <?php if (!portal_liefertermin_aktiv() && !in_array((string)$a['status'], ['versendet', 'storniert'], true)): ?><div class="muted" style="font-size:12px;margin:-8px 0 12px">Lieferzeitraum ist im Kundenportal zentral ausgeblendet (Einstellungen) – nur intern.</div><?php endif; ?>
   <h2>Details</h2>
   <div class="bx-grid">
     <div><div class="k muted">Kunde</div><div><?= kunde_link($a['kunde_id'] ?? null, $a['kunde_firma'], true) ?></div></div>
     <div><div class="k muted">Produkt <span class="muted" style="font-size:11px">(intern)</span></div><div><?php if (!empty($a['produkt_id']) && $produktName): ?><a href="?p=produkt&id=<?= (int)$a['produkt_id'] ?>"><?= h($produktName) ?></a><?php elseif ($produktName): ?><?= h($produktName) ?> <span class="muted" style="font-size:12px">(aus v3)</span><?php else: ?>–<?php endif; ?><?php if ($artKey !== 'none'): ?> <span title="<?= h($artHint) ?>"><?= bx_badge($artLabel, $artStil) ?></span><?php endif; ?></div></div>
-    <?php // Kundenspezifischer Name: so sieht der Kunde das Produkt (Portal/Belege). Intern beide Namen sichtbar.
-          if (!empty($a['produkt_id']) && !empty($a['kunde_id'])): $effKn = trim((string)($a['produkt_kundenname'] ?? '')); ?>
-    <div><div class="k muted">Name beim Kunden <?= bx_hint('So heißt dieses Produkt bei DIESEM Kunden (Portal, Angebot, AB, Rechnung, Lieferschein, Etikett, PIB). Leer = Standard-/interner Name. Pflege auch am Produkt möglich.') ?></div>
-      <?php if (isset($_GET['knok'])): ?><span class="muted" style="font-size:11px;color:var(--gruen)">gespeichert</span><?php endif; ?>
-      <form method="post" class="bx-row" style="gap:6px;align-items:center;margin:2px 0 0">
-        <input type="hidden" name="aktion" value="kundenname_setzen">
-        <input type="text" name="kn_name" value="<?= h($effKn) ?>" placeholder="<?= h($produktName ?: 'wie intern') ?>" style="min-width:180px">
-        <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
-      </form>
-    </div>
-    <?php endif; ?>
     <div><div class="k muted">Rezeptur</div><div>
       <?php if ($rezeptur): ?>
         <a href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>"><?= h($rezeptur['nummer']) ?></a><?= $rezeptur['name'] ? ' · ' . h($rezeptur['name']) : '' ?>
@@ -1059,51 +1175,12 @@ if (auftrag_braucht_etikett($id) && (has_role('admin') || has_role('sales'))): $
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
     <span class="muted" style="font-size:13px">Der Auftrag ist gesetzt. Änderungen laufen über:</span>
     <?php if ($rezeptur): ?><a class="btn btn-ghost btn-sm" href="?p=rezeptur_detail&id=<?= (int)$rezeptur['id'] ?>">Rezeptur bearbeiten</a><?php endif; ?>
-    <?php if ($pa): // Pro-PA-Seite für Flaschen/Verpackung/Kapselgröße bleibt; die Freigabe läuft jetzt direkt am Auftrag (Reiter Produktion). ?>
-      <a class="btn <?= $paVorbereitung ? 'btn-primary' : 'btn-ghost' ?> btn-sm" href="?p=produktion_vorbereitung&id=<?= (int)$pa['id'] ?>">Flaschen, Verpackung &amp; Kapselgröße setzen</a>
-    <?php endif; ?>
-    <span class="muted" style="font-size:12px">Menge und Preis sind fixiert; die Freigabe läuft über den Reiter „Produktion", Flaschen/Verpackung/Kapselgröße hier.</span>
+    <span class="muted" style="font-size:12px">Menge und Preis sind fixiert. Verpackung, Füllmenge, Kapselgröße, Etikett, Name und Lieferung über den Stift an der Kachel oben.</span>
   </div>
   <?php endif; ?>
 </div>
 
-<?php // Etikett-Vorschau-Fenster im Reiter „Details": zeigt das hinterlegte Etikett-Design (eigenes oder aus
-      // einer Vorbestellung desselben Produkts/Kunden, via etikett_quelle()). Bild wird direkt angezeigt, PDF im
-      // Rahmen eingebettet. Verwaltet (hochladen/ersetzen/freigeben) wird das Etikett im Reiter „Verpackung".
-if (auftrag_braucht_etikett($id)):
-    $etPrev = etikett_quelle($id);
-    $etExt  = $etPrev ? strtolower(pathinfo((string)($etPrev['datei_orig'] ?: $etPrev['datei']), PATHINFO_EXTENSION)) : '';
-    $etIstBild = in_array($etExt, ['jpg','jpeg','png','gif','webp','avif','bmp','svg'], true);
-    $etIstPdf  = $etExt === 'pdf'; ?>
-<div class="bx-panel" data-panel="details">
-  <h2 style="margin-top:0">Etikett-Vorschau</h2>
-  <?php if ($etPrev): ?>
-    <div style="margin:0 0 10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <?= $etikettFrei ? bx_badge('freigegeben','ok') : bx_badge('nicht freigegeben','warn') ?>
-      <span class="muted" style="font-size:13px"><?= h((string)($etPrev['datei_orig'] ?: 'Etikett-Design')) ?></span>
-      <?php if (!empty($etPrev['alt'])): ?><span class="muted" style="font-size:12px">· aus einer Vorbestellung übernommen</span><?php endif; ?>
-    </div>
-    <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel-2,#f6f7f8);padding:12px;display:flex;align-items:center;justify-content:center;min-height:220px">
-      <?php if ($etIstBild): ?>
-        <img src="?p=dokument&id=<?= (int)$etPrev['id'] ?>" alt="Etikett-Vorschau" style="max-width:100%;max-height:440px;border-radius:6px;box-shadow:0 1px 6px rgba(0,0,0,.12)">
-      <?php elseif ($etIstPdf): ?>
-        <iframe src="?p=dokument&id=<?= (int)$etPrev['id'] ?>#toolbar=0&view=FitH" title="Etikett-Vorschau" style="width:100%;height:460px;border:0;border-radius:6px;background:#fff"></iframe>
-      <?php else: ?>
-        <div class="muted" style="text-align:center">Vorschau für <strong><?= h($etExt ?: 'diese Datei') ?></strong> nicht möglich.<br><a class="btn btn-ghost btn-sm" style="margin-top:8px" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" target="_blank" rel="noopener">Etikett öffnen</a></div>
-      <?php endif; ?>
-    </div>
-    <div class="bx-row" style="gap:10px;margin-top:10px;flex-wrap:wrap">
-      <a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" target="_blank" rel="noopener">In neuem Tab öffnen</a>
-      <?php if (has_role('admin') || has_role('sales')): ?><a class="btn btn-ghost btn-sm" href="#" onclick="var t=document.querySelector(String.fromCharCode(35)+'auftabs [data-tab=material]');if(t)t.click();return false;">Etikett verwalten (Reiter Material)</a><?php endif; ?>
-    </div>
-  <?php else: ?>
-    <div style="border:1px dashed var(--line);border-radius:10px;background:var(--panel-2,#f6f7f8);padding:28px 16px;text-align:center;color:var(--muted,#667085)">
-      Noch kein Etikett-Design hinterlegt.
-      <?php if (has_role('admin') || has_role('sales')): ?><br><a class="btn btn-ghost btn-sm" style="margin-top:10px" href="#" onclick="var t=document.querySelector(String.fromCharCode(35)+'auftabs [data-tab=material]');if(t)t.click();return false;">Etikett hochladen (Reiter Material)</a><?php endif; ?>
-    </div>
-  <?php endif; ?>
-</div>
-<?php endif; ?>
+
 
 <?php // Fortschritts-Kette: auftrag_fortschritt() direkt an der Leiste unten ?>
 <div class="bx-panel" data-panel="produktion">
@@ -1424,30 +1501,7 @@ if ($pa): $vc = pa_vorbereitung_checks((int)$pa['id']);
       </div>
     <?php endforeach; ?>
   </div>
-  <?php if (has_role('admin') && $vRez && in_array($vAttr, ['kapsel', 'tablette', 'gewicht'], true)): ?>
-  <form method="post" action="?p=produktion_vorbereitung" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
-    <input type="hidden" name="pa_id" value="<?= (int)$pa['id'] ?>"><input type="hidden" name="zurueck" value="<?= h($vZur) ?>">
-    <?php if ($vAttr === 'kapsel'): $vSet = (int)($vRez['kapselgroesse_id'] ?? 0); $vAuto = $vSet <= 0 ? rezeptur_kapselgroesse((int)$vRez['id']) : null; ?>
-      <input type="hidden" name="aktion" value="kapsel_setzen">
-      <div class="bx-field" style="margin:0;min-width:240px"><label>Kapselgröße</label>
-        <select name="kapselgroesse_id"><option value="">– automatisch<?= $vAuto ? ' (' . h((string)$vAuto['name']) . ')' : '' ?> –</option>
-          <?php foreach (all("SELECT id, name FROM kapselgroesse ORDER BY fuellmenge_mg") as $kg): ?><option value="<?= (int)$kg['id'] ?>" <?= $vSet === (int)$kg['id'] ? 'selected' : '' ?>><?= h($kg['name']) ?></option><?php endforeach; ?>
-        </select></div>
-    <?php elseif ($vAttr === 'tablette'): ?>
-      <input type="hidden" name="aktion" value="tablettenform_setzen">
-      <div class="bx-field" style="margin:0;min-width:240px"><label>Tablettenform</label>
-        <select name="tabletten_form"><option value="">– wählen –</option>
-          <?php foreach (tabletten_formen() as $tk => $tl): ?><option value="<?= h($tk) ?>" <?= (string)($vRez['tabletten_form'] ?? '') === $tk ? 'selected' : '' ?>><?= h($tl) ?></option><?php endforeach; ?>
-        </select></div>
-    <?php else: [$vGl, $vGe] = form_gewicht_feld($vDarr); $vGv = (float)($vRez['einheit_fuellmenge'] ?? 0); ?>
-      <input type="hidden" name="aktion" value="gewicht_setzen">
-      <div class="bx-field" style="margin:0;min-width:240px"><label><?= h($vGl) ?> (<?= h($vGe) ?>)</label>
-        <input type="text" inputmode="decimal" name="einheit_fuellmenge" value="<?= $vGv > 0 ? h(rtrim(rtrim(number_format($vGv, 3, ',', ''), '0'), ',')) : '' ?>" placeholder="z. B. 2,5"></div>
-    <?php endif; ?>
-    <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
-    <span class="muted" style="font-size:12px">gilt für die Rezeptur</span>
-  </form>
-  <?php endif; ?>
+  <?php if (has_role('admin') || has_role('sales')): ?><div class="muted" style="font-size:12px;margin-top:10px">Verpackung, Kapselgröße/Gewicht und Etikett ändern: Stift an der Kachel im Reiter Details.</div><?php endif; ?>
 </div>
 <?php endif; ?>
 <?php // H1 (Teil 3): Material-Übersicht – je Position benötigt / frei / unterwegs mit Deckungs-Ampel.

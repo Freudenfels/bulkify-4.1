@@ -288,3 +288,16 @@ Materialkosten in „Kalkulation (Marge)“ und „Lieferanten-Preise zu diesem 
 
 ## Kalkulation: VK je Packung (08.11.2026)
 „VK / Packung (gesamt, netto)“ = Umsatz netto / Menge (`auftrag_vk_gesamt`, wie die Details-Kachel, inkl. Glas/Etikett). Weicht `vk_stueck` ab, steht er klein als „davon Herstellung“. Umsatz und Marge rechnen mit demselben Wert.
+
+## Teil 1 „Auftragsseite entschlacken“ – Kacheln mit Stift (08.11.2026)
+Im Reiter Details sind die Kacheln die Stelle zum Ändern: Stift → kleines Fenster (`<dialog class="bx-dialog">`) mit genau diesem Feld.
+- **Verpackung (Glas):** Auswahl; Speichern schreibt ans Produkt (+ Auftrag), Haken „nur für diesen Auftrag“ nur `auftrag.verpackung_id`.
+  Darunter „Bedruckten, kundenspezifischen Behälter anlegen“ (bestehende Aktion).
+- **Stk / Füllmenge je Packung + Kapselgröße / Tablettenform / Gewicht je Einheit:** Menge ans Produkt (`einheiten_pro_packung`;
+  ohne Produkt bzw. ohne Produktwert `auftrag.stueck`), Kapselgröße usw. an die Rezeptur (Auftrags-Kopie = nur dieser Auftrag).
+- **Etikett / Beutel-Design:** Vorschau, Version, hochladen/ersetzen, Freigabe im Namen des Kunden, entfernen (bestehende Aktionen).
+- **Name beim Kunden**, **Lieferung** (Zeitraum): neue Kacheln mit Stift (bestehende Aktionen `kundenname_setzen`, `liefertermin_setzen`).
+- **Herstellung:** Stift springt in den Reiter Beschaffungsweg. Menge, VK, Netto ohne Stift.
+- Neuer Speichern-Weg `aktion=kachel_speichern` (feld verpackung|fuellmenge|kapsel|tablettenform|gewicht), protokolliert in aenderung_log.
+- Entfernt: Knopf „Flaschen, Verpackung & Kapselgröße setzen“, Formulare Lieferung/Name im Details-Reiter, Block „Etikett-Vorschau“,
+  im Reiter Material die Blöcke „Verpackung (Behälter)“, „Etikett“ und das Kapsel-/Gewicht-Formular unter „Bereitschaft“.
