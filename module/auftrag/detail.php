@@ -1226,20 +1226,8 @@ if (has_role('admin') || has_role('sales')):
   $nsBorder = $nsTon === 'err' ? '#b23b2f' : ($nsTon === 'warn' ? '#C9A227' : ($nsTon === 'ok' ? 'var(--gruen,#1D9E75)' : 'var(--line)'));
   ?>
   <div class="bx-panel" style="background:var(--panel-2);padding:12px 14px;margin:0 0 18px;border-left:3px solid <?= $nsBorder ?>">
-    <div style="font-size:14px"><strong>Nächster Schritt:</strong> <?= h($nsText) ?><?php if ($nsLager): ?> <a href="#" data-goto="lager" style="font-size:13px">zum Reiter Lager</a><?php endif; ?></div>
-    <?php if ($fehlDetail): ?>
-    <ul style="margin:10px 0 0;padding-left:18px;font-size:13px">
-      <?php foreach ($fehlDetail as $fd): ?>
-      <?php $fdQ = $fd['quar'] > 1e-6 && $fd['quar'] + 1e-6 >= $fd['fehlt']; ?>
-      <li style="margin:3px 0"><strong><?= h($fmtM($fd['fehlt'], $fd['einheit'])) ?></strong> <?= h($fd['name']) ?> <?= $fdQ ? 'in Quarantäne' : 'fehlt' ?> –
-        <?php if ($fdQ): ?><span style="color:#8a6d00">wartet auf die QM-Freigabe (<?= h($fmtM($fd['quar'], $fd['einheit'])) ?> in Quarantäne)</span> – <a href="<?= h(quarantaene_freigabe_url((int)$fd['iid'])) ?>">freigeben</a>
-        <?php elseif ($fd['best']): ?>bestellt mit <a href="?p=bestellung&id=<?= (int)$fd['best']['id'] ?>"><?= h((string)$fd['best']['nummer']) ?></a><?= !empty($fd['best']['eta_geplant']) ? ', erwartet ' . h(date('d.m.Y', strtotime((string)$fd['best']['eta_geplant']))) : '' ?>
-        <?php else: ?><span style="color:#8f231b">noch nicht bestellt</span> – <a href="?p=einkaufsliste">zum Einkauf</a><?php endif; ?>
-      </li>
-      <?php endforeach; ?>
-    </ul>
-    <div style="margin-top:8px"><a href="#" data-goto="material" class="btn btn-ghost btn-sm">Zum Reiter Material</a></div>
-    <?php endif; ?>
+    <div style="font-size:14px"><strong>Nächster Schritt:</strong> <?= h(rtrim($nsText, ':')) ?><?= $fehlDetail ? ' (' . count($fehlDetail) . ' ' . (count($fehlDetail) === 1 ? 'Position' : 'Positionen') . ')' : '' ?><?php if ($nsLager): ?> <a href="#" data-goto="lager" style="font-size:13px">zum Reiter Lager</a><?php endif; ?><?php if ($fehlDetail): ?> · <a href="#" data-goto="material" style="font-size:13px">zum Reiter Material</a><?php endif; ?></div>
+    <?php // Teil 4: die Liste steht im Reiter Material – hier nur eine Zeile. ?>
   </div>
   <?php
   // Mengen-Fortschritt (Teilproduktion/Teilversand) als segmentierte Leiste – macht sichtbar, WIE VIEL schon
@@ -1722,13 +1710,11 @@ if ($pa && in_array((string)($pa['status'] ?? ''), ['offen', 'laufend'], true) &
     </div></div>
     <?php if (has_role('admin') || has_role('production') || has_role('einkauf')): ?>
     <div><div class="k muted">Rohstoff/Bulk angekommen</div><div>
+      <?php // Teil 4: kein manueller Haken mehr – „angekommen" kommt aus dem Wareneingang (Charge/Bestellung). ?>
       <?php if ($rohAngDa): ?>
         <?= bx_badge('angekommen · ' . h(fmt_zeit((string)$rohAngDa, 'd.m.Y')), 'ok') ?>
       <?php else: ?>
-        <form method="post" style="margin:0" title="Nutze das, wenn Ware (Zukauf/Bulk) da ist, der Kunde es aber noch nicht sieht.">
-          <input type="hidden" name="aktion" value="rohstoff_angekommen"><input type="hidden" name="set" value="1">
-          <button class="btn btn-ghost btn-sm" type="submit">Als angekommen markieren</button>
-        </form>
+        <span class="muted" style="font-size:13px">noch nicht – kommt aus dem Wareneingang</span>
       <?php endif; ?>
     </div></div>
     <?php endif; ?>
@@ -1938,22 +1924,64 @@ if (kunde_zeigt_energetisierung((int)($a['kunde_id'] ?? 0))):
 </div>
 <?php endif; ?>
 
-<?php // Externer Labortest (Drittlabor) – nur fuer freigeschaltete Kunden. Status kommt automatisch aus dem
-      // freigegebenen Laborbericht (dokument typ='analyse', kunde_sichtbar=1) zum Auftrag/Produkt. Kein manuelles Setzen.
-if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
-    $lt = auftrag_labortest_status((int)$a['id'], isset($a['produkt_id']) ? (int)$a['produkt_id'] : null); ?>
-<div class="bx-panel" data-panel="produktion">
-  <h2 style="margin-top:0">Externer Labortest</h2>
-  <?php if ($lt['status'] === 'abgeschlossen'): ?>
-    <div style="margin-bottom:10px"><?= bx_badge('abgeschlossen', 'ok') ?> <span class="muted"><?= $lt['datum'] ? 'Bericht vom ' . h(date('d.m.Y', strtotime((string)$lt['datum']))) : 'Bericht liegt vor' ?></span>
-      <?php if (!empty($lt['dok_id'])): ?> · <a href="?p=dokument&id=<?= (int)$lt['dok_id'] ?>" target="_blank">Bericht ansehen</a><?php endif; ?></div>
-  <?php elseif (!empty($lt['versendet_am'])): ?>
-    <div style="margin-bottom:10px"><?= bx_badge('Probe beim Labor', 'warn') ?> <span class="muted">versendet am <?= h(date('d.m.Y', strtotime((string)$lt['versendet_am']))) ?> – wird automatisch „abgeschlossen", sobald ein freigegebener Laborbericht vorliegt.</span></div>
-  <?php else: ?>
-    <div style="margin-bottom:10px"><?= bx_badge('läuft', 'warn') ?> <span class="muted">Probe beim Drittlabor – wird automatisch „abgeschlossen", sobald ein freigegebener Laborbericht vorliegt.</span></div>
+<?php // Labor an EINEM Ort (Teil 4, 08.11.2026): Status des externen Labortests (für freigeschaltete Kunden bzw. dazugebuchte
+      // Laboranalyse), „Ans Labor senden", Laborberichte dieser Bestellung (freigeben/löschen) und Hochladen. Der Reiter
+      // Dokumente zeigt nur noch die Downloads. Status kommt automatisch aus dem freigegebenen Bericht (dokument typ='analyse').
+if (!empty($a['produkt_id']) || kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
+    $labFlag = kunde_will_labortest((int)($a['kunde_id'] ?? 0)) || !empty($a['laboranalyse_gebucht']);
+    $lt = auftrag_labortest_status((int)$a['id'], isset($a['produkt_id']) ? (int)$a['produkt_id'] : null);
+    $labDocs = all("SELECT id, titel, datei_orig, dok_datum, charge_nr, befund, kunde_sichtbar, angelegt FROM dokument
+                    WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' ORDER BY COALESCE(dok_datum, DATE(angelegt)) DESC, id DESC", [$id]);
+    $labBefund = fn($b) => $b === 'bestanden' ? bx_badge('bestanden','ok') : ($b === 'auffaellig' ? bx_badge('auffällig','err') : '<span class="muted">–</span>');
+    $labCharge = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
+                                  WHERE pa.auftrag_id=? AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1", [$id]); ?>
+<div class="bx-panel" data-panel="produktion" id="labor">
+  <h2 style="margin-top:0"><?= $labFlag ? 'Externer Labortest' : 'Laboranalyse' ?><?= $labCharge ? ' <span class="muted" style="font-weight:normal;font-size:13px">· Charge ' . h($labCharge) . '</span>' : '' ?></h2>
+  <?php if ($labFlag): ?>
+    <?php if ($lt['status'] === 'abgeschlossen'): ?>
+      <div style="margin-bottom:10px"><?= bx_badge('abgeschlossen', 'ok') ?> <span class="muted"><?= $lt['datum'] ? 'Bericht vom ' . h(date('d.m.Y', strtotime((string)$lt['datum']))) : 'Bericht liegt vor' ?></span></div>
+    <?php elseif (!empty($lt['versendet_am'])): ?>
+      <div style="margin-bottom:10px"><?= bx_badge('Probe beim Labor', 'warn') ?> <span class="muted">versendet am <?= h(date('d.m.Y', strtotime((string)$lt['versendet_am']))) ?> – „abgeschlossen", sobald ein freigegebener Bericht vorliegt.</span></div>
+    <?php else: ?>
+      <div style="margin-bottom:10px"><?= bx_badge('geplant', 'info') ?> <span class="muted">Probe nach der Produktion ans Labor – „abgeschlossen", sobald ein freigegebener Bericht vorliegt.</span></div>
+    <?php endif; ?>
+    <?php if ($lt['status'] !== 'abgeschlossen'): ?><div style="margin-bottom:12px"><a class="btn btn-ghost btn-sm" href="?p=labor_senden&auftrag=<?= (int)$a['id'] ?>">Ans Labor senden (Auftragsformular)</a></div><?php endif; ?>
   <?php endif; ?>
-  <?php if ($lt['status'] !== 'abgeschlossen'): ?><div style="margin-bottom:8px"><a class="btn btn-ghost btn-sm" href="?p=labor_senden&auftrag=<?= (int)$a['id'] ?>">Ans Labor senden (Auftragsformular)</a></div><?php endif; ?>
-  <div class="muted" style="font-size:12px">Laborbericht hochladen &amp; für den Kunden freigeben unter <a href="?p=laboranalysen">Labortests</a> (oder direkt an diesem Auftrag). Der Kunde sieht den Punkt „Externer Labortest" im Bestell-Verlauf.</div>
+  <?php if ($labDocs): ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Datum</th><th>Charge</th><th>Befund</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
+    <tbody>
+      <?php foreach ($labDocs as $d): ?>
+      <tr>
+        <td><?= $d['dok_datum'] ? h(fmt_zeit($d['dok_datum'] . ' 00:00:00', 'd.m.Y')) : h(fmt_zeit($d['angelegt'], 'd.m.Y')) ?></td>
+        <td><?= $d['charge_nr'] ? h($d['charge_nr']) : '<span class="muted">–</span>' ?></td>
+        <td><?= $labBefund($d['befund'] ?? null) ?></td>
+        <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Analyse')) ?></a></td>
+        <td><form method="post" style="margin:0"><input type="hidden" name="aktion" value="analyse_toggle"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= (int)$d['kunde_sichtbar'] === 1 ? bx_badge('freigegeben','ok') : bx_badge('intern') ?></button></form></td>
+        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Analyse löschen?');"><input type="hidden" name="aktion" value="analyse_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+  <details class="bx-sek"<?= ($labFlag && !$labDocs) ? ' open' : '' ?> style="margin-top:8px">
+    <summary>Laborbericht hochladen</summary>
+    <form method="post" enctype="multipart/form-data" style="margin-top:8px" data-busy="Lade hoch…">
+      <input type="hidden" name="aktion" value="analyse_upload">
+      <div class="bx-grid">
+        <div class="bx-field"><label>Datei (PDF/Bild)</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
+        <div class="bx-field"><label>Chargennummer</label><input type="text" name="charge_nr" value="<?= h($labCharge ?: '') ?>" placeholder="z. B. JN26P8"></div>
+        <div class="bx-field"><label>Befund</label>
+          <select name="befund"><option value="bestanden">bestanden</option><option value="auffaellig">auffällig</option><option value="unklar" selected>unklar / kein Befund</option></select></div>
+        <div class="bx-field"><label>Analysendatum</label><input type="date" name="datum"></div>
+        <div class="bx-field"><label>Titel (optional)</label><input type="text" name="titel" placeholder="z. B. Labortest"></div>
+      </div>
+      <div class="bx-row" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
+        <input type="checkbox" name="kunde_sichtbar" id="ak_sicht" value="1" checked><label for="ak_sicht" style="margin:0">im Kundenportal sichtbar (freigegeben)</label>
+      </div>
+      <div class="bx-row" style="margin-top:var(--sp-3)"><button class="btn btn-primary btn-sm" type="submit">Bericht hochladen</button></div>
+    </form>
+  </details>
 </div>
 <?php endif; ?>
 
@@ -2125,48 +2153,17 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   <?php if (!$pa): ?><p class="muted" style="font-size:12px;margin:10px 0 0">Laufzettel und Produktionsbericht erscheinen, sobald ein Produktionsauftrag existiert.</p><?php endif; ?>
 </div>
 
+<?php if ($analyseDocs): // Teil 4: nur Downloads – Hochladen/Freigeben im Reiter Produktion (Block Labor). ?>
 <div class="bx-panel" data-panel="dokumente">
-  <h2 style="margin-top:0">Laboranalyse / Labortest<?= $chargeNr ? ' <span class="muted" style="font-weight:normal;font-size:13px">· Charge ' . h($chargeNr) . '</span>' : '' ?></h2>
-  <p class="muted" style="margin-top:0">Labortest bzw. Analysenzertifikat (CoA) für <strong>diese Bestellung</strong>. Als „freigegeben" erscheint es im Kundenportal-Reiter „Labortest".</p>
-  <?php if ($analyseDocs): ?>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Datum</th><th>Charge</th><th>Befund</th><th>Datei</th><th>Kundenportal</th><th></th></tr></thead>
-    <tbody>
-      <?php foreach ($analyseDocs as $d): ?>
-      <tr>
-        <td><?= $d['dok_datum'] ? h(fmt_zeit($d['dok_datum'] . ' 00:00:00', 'd.m.Y')) : h(fmt_zeit($d['angelegt'], 'd.m.Y')) ?></td>
-        <td><?= $d['charge_nr'] ? h($d['charge_nr']) : '<span class="muted">–</span>' ?></td>
-        <td><?= $befundBadge($d['befund'] ?? null) ?></td>
-        <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Analyse')) ?></a></td>
-        <td><form method="post" style="margin:0"><input type="hidden" name="aktion" value="analyse_toggle"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= (int)$d['kunde_sichtbar'] === 1 ? bx_badge('freigegeben','ok') : bx_badge('intern') ?></button></form></td>
-        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Analyse löschen?');"><input type="hidden" name="aktion" value="analyse_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Löschen</button></form></td>
-      </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-  <?php endif; ?>
-  <form method="post" enctype="multipart/form-data" style="margin-top:12px" data-busy="Lade hoch…">
-    <input type="hidden" name="aktion" value="analyse_upload">
-    <div class="bx-grid">
-      <div class="bx-field"><label>Datei (PDF/Bild)</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
-      <div class="bx-field"><label>Chargennummer</label><input type="text" name="charge_nr" value="<?= h($chargeNr ?: '') ?>" placeholder="z. B. JN26P8"></div>
-      <div class="bx-field"><label>Befund</label>
-        <select name="befund">
-          <option value="bestanden">bestanden</option>
-          <option value="auffaellig">auffällig</option>
-          <option value="unklar" selected>unklar / kein Befund</option>
-        </select>
-      </div>
-      <div class="bx-field"><label>Analysendatum</label><input type="date" name="datum"></div>
-      <div class="bx-field"><label>Titel (optional)</label><input type="text" name="titel" placeholder="z. B. Labortest"></div>
-    </div>
-    <div class="bx-row" style="gap:8px;align-items:center;margin-top:var(--sp-3)">
-      <input type="checkbox" name="kunde_sichtbar" id="ak_sicht" value="1" checked>
-      <label for="ak_sicht" style="margin:0">im Kundenportal sichtbar</label>
-    </div>
-    <div class="bx-row" style="margin-top:var(--sp-3)"><button class="btn btn-primary" type="submit">Analyse hochladen</button></div>
-  </form>
+  <h2 style="margin-top:0">Laborberichte</h2>
+  <div class="bx-row" style="gap:10px;flex-wrap:wrap">
+    <?php foreach ($analyseDocs as $d): ?>
+      <a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Laborbericht')) ?><?= $d['charge_nr'] ? ' · ' . h($d['charge_nr']) : '' ?><?= (int)$d['kunde_sichtbar'] === 1 ? '' : ' (intern)' ?></a>
+    <?php endforeach; ?>
+  </div>
+  <div class="muted" style="font-size:12px;margin-top:8px">Hochladen und Freigeben im Reiter Produktion, Block Labor.</div>
 </div>
+<?php endif; ?>
 
 <?php // Der Auftrag ist gesetzt: Menge/Preis/Verpackung/Kapselgröße werden hier NICHT mehr bearbeitet.
       // Rezeptur -> Rezeptur-Modul, Flaschen/Verpackung/Kapsel -> Vor-Produktion (Links im Reiter „Details").

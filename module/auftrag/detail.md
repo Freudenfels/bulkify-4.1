@@ -320,3 +320,12 @@ Nur noch die Wahl: Karten (fertige Mischung/Kapsel, Premix, Einzelrohstoffe) mit
 „Bereits zugeordnet · im Lager frei · unterwegs · Rest“ mit Link in den Reiter Material (dort wird zugeordnet). Hinweis „Vollständig
 gedeckt“ und „Weg festlegen“ nach Zuordnung bleiben. Handelsware (ohne Produktionsauftrag) bekommt hier ihren Weg „Zukauf ·
 Handelsware“ mit den Zukaufpreisen und dem Link zum Einkauf.
+
+## Teil 4 „Auftragsseite entschlacken“ – Produktion (08.11.2026)
+- „Nächster Schritt“: eine Zeile („… es fehlt Material (N Positionen) · zum Reiter Material“), keine eigene Fehlliste mehr.
+- „Rohstoff/Bulk angekommen“: nur noch Anzeige aus dem Wareneingang (Charge/Bestellung). Der Knopf „Als angekommen markieren“ ist
+  weg; schon gesetzte Werte (`rohstoff_angekommen_am`) gelten bei Altaufträgen weiter.
+- „Rohstoff bestellt“ nur bei echter Bestellung (Teil 0.3). Manuelles Setzen der Stufen bleibt als Notfall (eingeklappt).
+- Labor an einem Ort: Block `#labor` im Reiter Produktion – „Externer Labortest“ (Kunde mit Drittlabor oder dazugebuchte
+  Laboranalyse; sonst „Laboranalyse“): Status, „Ans Labor senden“, Berichte dieser Bestellung (freigeben/intern, löschen) und
+  „Laborbericht hochladen“. Der Reiter Dokumente zeigt nur noch die Download-Knöpfe der Laborberichte.
