@@ -1,6 +1,6 @@
 # bulkify V4 - Soll-Handbuch (Ablauf ab Auftrag)
 
-**Stand:** 08.11.2026 · **Verantwortlich:** Nico Thomalla (Entscheidungen), QM: Tabea Albers
+**Stand:** 08.11.2026 (Schritt 2) · **Verantwortlich:** Nico Thomalla (Entscheidungen), QM: Tabea Albers
 **Repo:** github.com/Freudenfels/bulkify-4.1 · live app.bulkify.pro + beta.bulkify.pro
 
 ---
@@ -56,20 +56,21 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
 
 **Soll:** Ein Umschalter **Einfach / Ausführlich** pro Nutzer (gespeichert am Nutzer). Das Menü ist bereits datengetrieben (Menü-Editor vorhanden) - der Umschalter blendet nur aus, er löscht keine Seiten.
 
-**Einfach (Alltag) enthält:**
-- **Zu erledigen** (die zentrale Aufgabenliste, Abschnitt 6) - ganz oben, mit Zähler
-- **Anfragen** - **eine** Tabelle mit allen Anfragearten (Rezeptur-, Produkt-, Rohstoff-, Dienstleistungsanfragen), Spalte "Art", Markierung "neu"
+**Einfach (Alltag) enthält** (in dieser Reihenfolge; gebaut 08.11.2026):
+- **Zu erledigen** (die zentrale Aufgabenliste, Abschnitt 6) - ganz oben, mit Zähler *(kommt mit Schritt 4, bis dahin kein Platzhalter)*
+- **Anfragen** - **eine** Tabelle mit allen Anfragearten (Rezeptur-, Produkt-, Rohstoff-, Dienstleistungsanfragen), Spalte "Art", Filter nach Art, Markierung "neu"
 - **Angebote**
 - **Aufträge**
 - **Produkte**
 - **Rezepturen**
 - **Rohstoffe**
-- **Produktion** (Reihenfolge-Liste, Abschnitt 4.6)
-- *(offen, Abschnitt 12: ob **Bestellen/Einkauf** und **Lager** auch in "Einfach" gehören)*
+- **Produktion** (heute die Produktionsliste, später die Reihenfolge-Liste, Abschnitt 4.6)
+- **Einkauf** - ein Punkt auf die Einkaufsliste, von dort zu den Bestellungen (Entscheidung 12.1)
+- **Lager** - **ein** Punkt auf das Warenlager; Lager 1 / Lager 2 sind Filter-Reiter auf der Seite (Entscheidung 12.1)
 
-**Ausführlich:** alles Übrige (Kalender, Planung, Maschinen, Geführte Produktion, Easy Production, Kontingente, Dienstleistungen, Novel Food, Doppelte Rezepturen, Datenprüfung, Einstellungen …).
+**Ausführlich:** alles aus "Einfach" plus alles Übrige (Kunden, Partner, Kundenpreise, Kalender, Planung, Maschinen, Geführte Produktion, Easy Production, Kontingente, Dienstleistungen, Novel Food, Doppelte Rezepturen, Lager- und Einkauf-Unterpunkte, Datenprüfung, Einstellungen, Unterprogramme /produktion/, /lager/, /crm/, /buchhaltung/ …). Gruppen und Reihenfolge bestimmt weiter der Menü-Editor.
 
-**Einführung:** Das neue Menü wird **nach** dem Abgleich (Abschnitt 13, Schritt 1) gebaut. Vorhandene Seiten werden eingehängt; was doppelt ist, verschwindet aus dem Menü (Seite bleibt per Link erreichbar, bis sie bewusst entfernt wird).
+**Umsetzung (Schritt 2, live 08.11.2026):** Umschalter "Menü: Einfach | Ausführlich" unten in der Seitenleiste, gespeichert am Nutzer (`benutzer.menu_modus`, Standard "einfach"). Werk-Nutzer behalten ihr eigenes Werk-Menü ohne Umschalter. Das Logo führt zur Startseite. Anfragen und Lager sind in **beiden** Modi je ein Punkt. Keine Rechte geändert, jede ausgeblendete Seite bleibt per Link erreichbar. Was laut Abgleich überflüssig ist (`produktion_neu`, `produktion_run`, `produktion_vorbereitung`, `einkauf_mobil` usw.), steht vorerst unter "Ausführlich" und wird einzeln entschieden.
 
 ---
 
@@ -193,11 +194,12 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
 - Im Kundenportal sieht der Kunde an der Bestellung Charge(n), MHD, CoA, Produktionsbericht.
 
 ### 4.12 Labor (externe Analyse)
-- Laboranalysen bestellt der **Kunde** (Zusatzleistung). **Ein Labortest pro Auftrag** reicht; das System merkt sich, aus welcher Unter-Charge die Probe gezogen wurde. **Rückstellmuster** gibt es trotzdem von **jeder** Unter-Charge.
+- Laboranalysen bestellt der **Kunde** (Zusatzleistung). **Ein Labortest pro Auftrag** reicht. **Rückstellmuster** gibt es trotzdem von **jeder** Unter-Charge. *(Zurückgestellt 08.11.: ein eigenes Feld "Unter-Charge der Probe" kommt erst mit der Labor-Zusammenarbeit; bis dahin steht die Charge am hochgeladenen Bericht.)*
 - **Heute:** Laborberichte werden von uns **hochgeladen** (Reiter Produktion, Block "Externer Labortest": Bericht hochladen, Befund, Freigabe fürs Portal). Der Kunde sieht ihn im Portal. Das ist der aktive Weg.
 - **Später (noch keine Zusammenarbeit mit einem Labor):** "Ans Labor senden" mit ausgefülltem Auftragsformular (z. B. GBA). Kein Ausbau, keine Priorität, bis Nico die Zusammenarbeit startet.
-- Chargen-Abgleich beim Zuordnen des Berichts **tolerant** (wie 4.5), damit "2799.A" und "2799A" zusammenpassen.
-- Befund "auffällig" → Sperre vor Versand + Benachrichtigung Nico/Tabea.
+- Chargen-Abgleich beim Zuordnen des Berichts **tolerant** (wie 4.5), damit "2799.A" und "2799A" zusammenpassen. *(Gebaut 08.11.: zentrale Funktion `charge_norm()`, beim Upload am Auftrag nur Hinweis bei Abweichung.)*
+- Befund "auffällig" → Sperre vor Versand + Benachrichtigung Nico/Tabea. *(Stand 08.11.: "auffällig" gilt nicht als abgeschlossen, wichtige Benachrichtigung + roter Hinweis am Auftrag; die Sperre kommt mit der Prüfliste 4.13.)*
+- Als Laborbericht zählen nur Berichte **dieses Auftrags**, nie das automatisch erzeugte Übersichts-CoA (4.11) und nicht Berichte am Produkt.
 
 ### 4.13 Prüfliste vor Versand (automatisch)
 Bevor Ware das Haus verlässt **oder** in Lager 2 für das Fulfillment verkaufbar wird, prüft das System selbst:
@@ -306,10 +308,10 @@ Diese MDs/Rückmeldungen bleiben als Detail-Quelle gültig, soweit sie dem Handb
 ## 10. Bekannte Fehler / zu prüfen (Stand 08.11.2026)
 
 1. **Fehlende Etiketten blockieren die ganze Produktion** (AB-3289: "Produktion nicht möglich, es fehlt Material", eine Position ist das Etikett). Soll: nur Etikettieren sperren (4.7).
-2. **"Rohstoff bestellt" ohne Bestellung** auf Altaufträgen (z. B. AB-3289 seit 06.11.) - Datenprüfung `rohstoff_bestellt_ohne` von Nico abzuarbeiten; Code ist korrigiert.
-3. Produktion-Reiter: Hinweis "Etikett selbst hochladen → Reiter Material" zeigt auf den falschen Ort - richtig ist der **Stift an der Kachel Etikett** im Reiter Details.
-4. "Zu Kontingent machen" rechnet mit "3.000 × 9,71 €" (nur Herstellung) - Preisbasis klären (Abschnitt 12).
-5. 100 ml Weithalsglas: zweimal genau 5.376 Stk (15.10. und 05.11.) - echte zweite Lieferung oder Doppelbuchung? Prüfen.
+2. **"Rohstoff bestellt" ohne Bestellung** auf Altaufträgen (z. B. AB-3289 seit 06.11.) - Datenprüfung `rohstoff_bestellt_ohne` von Nico abzuarbeiten; Code ist korrigiert. *(08.11.: zusätzlicher Punkt für höher gesetzte Stufen, nur Anzeige.)*
+3. ~~Produktion-Reiter: Hinweis "Etikett selbst hochladen → Reiter Material"~~ - **erledigt 08.11.**: Link öffnet Reiter Details und das Pop-up der Kachel Etikett.
+4. ~~"Zu Kontingent machen" rechnet mit "3.000 × 9,71 €"~~ - **erledigt 08.11.**: Es gilt der volle Packungspreis (12.4); der Erklärtext zeigt jetzt diesen Preis.
+5. 100 ml Weithalsglas: zweimal genau 5.376 Stk (15.10. und 05.11.) - *geprüft 08.11. (live, nur lesend):* zwei freie Einbuchungen ohne Bestellung, Lieferant Packari, Notiz der zweiten mit Lieferanten-Art.-Nr.; 5.376 Stk ist bei Packari eine Preisstaffel (Palette). Spricht für eine echte zweite Lieferung - endgültig nur über Packari-Rechnungen/Lieferscheine zu klären (Nico).
 6. Altbestand mit falschen Einheiten/Zahlen (Abschnitt 7).
 7. Kartonetikett heute mit "Karton i von n" und einer Charge je Druckvorgang - umstellen auf Druck je vollem Karton, ohne "von n", je Unter-Charge (4.10).
 8. Eimerplanung nach Chargenwechsel, Sperre "falscher Eimer", Pflicht-Bestätigung beim Chargenwechsel (inkl. Foto), Gegenprobe Gläser/Kapseln mit Aufgabe ans Büro - gegen den heutigen Stand der Werk-App prüfen, vermutlich noch nicht (vollständig) vorhanden.
@@ -330,11 +332,11 @@ Diese MDs/Rückmeldungen bleiben als Detail-Quelle gültig, soweit sie dem Handb
 
 ## 12. Offene Entscheidungen (Nico)
 
-1. Gehören **Bestellen/Einkauf** und **Lager** ins Menü "Einfach"?
+1. ~~Gehören Bestellen/Einkauf und Lager ins Menü "Einfach"?~~ - **entschieden 08.11.:** ja, Lager dort nur als **ein** Punkt (Abschnitt 3).
 2. Reicht vor dem Versand die **grüne Prüfliste**, oder soll Tabea zusätzlich bewusst **"Freigabe"** klicken?
 3. **Lager-App:** Ansicht "je Artikel" und Verpackung (Gläser/Dosen/Deckel) ohne sichtbare Alltagschargen - umsetzen?
-4. **Kontingent-Preis:** 9,71 € (Herstellung) oder 10,17 € (gesamt)?
-5. ~~GBA-Formular: Berichtsempfänger~~ - **zurückgestellt** (08.11.): Labor läuft heute über unseren Upload, Zusammenarbeit mit einem Labor erst in Zukunft.
+4. ~~Kontingent-Preis~~ - **entschieden 08.11.:** voller Packungspreis (`gesamt_netto / menge`, bei AB-3289 10,17 €), wie die Funktion schon speichert; nur der Erklärtext wurde korrigiert.
+5. ~~GBA-Formular: Berichtsempfänger~~ - **zurückgestellt** (08.11.): Labor läuft heute über unseren Upload, Zusammenarbeit mit einem Labor erst in Zukunft. "Ans Labor senden"/GBA bleiben wie sie sind (kein Ausbau, nichts entfernt); das Feld "Unter-Charge der Probe" ist ebenfalls zurückgestellt.
 6. **Kundenpreise-Liste:** Mengen-Staffel je Bestellmenge nötig oder ein Preis je Verpackungsgröße genug?
 
 ---
@@ -363,3 +365,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 |---|---|---|
 | 08.11.2026 | Erstfassung: Kette ab Auftrag, Menü Einfach/Ausführlich, Zu erledigen, Eimer/Unter-Chargen, Chargen-Abgleich blind, Kartonetikett je vollem Karton, Lieferadresse bestätigen, Prüfliste vor Versand | Nico / Claude |
 | 08.11.2026 | 4.12: Labor heute nur per eigenem Upload; "Ans Labor senden"/GBA zurückgestellt (12.5) | Nico / Claude |
+| 08.11.2026 | Schritt 2: Menü Einfach/Ausführlich gebaut (3); Entscheidungen 12.1 (Einkauf + Lager in Einfach, Lager ein Punkt), 12.4 (voller Packungspreis), 12.5 inkl. Feld Unter-Charge der Probe zurückgestellt; Fixes 10.2/10.3/10.4, 4.9 Meldetexte, 4.11 Easy Production frei, 4.12 Labor-Befund/charge_norm, 4.5 Erwartete Lieferungen + Schnellmaske stillgelegt; 10.5 geprüft | Nico / Claude Code |
