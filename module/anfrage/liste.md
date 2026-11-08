@@ -1,21 +1,27 @@
-# anfrage/liste.php – Rezepturanfragen (Liste)
+# anfrage/liste.php – Anfragen (eine Liste für alle Arten)
 
-**Zweck:** Übersicht aller Rezepturanfragen (Kundenwünsche, die wir prüfen und in Rezepturen übersetzen).
+**Zweck:** EIN Eingangsfach für alle Anfragen (Soll-Handbuch Abschnitt 3, Schritt 2 vom 08.11.2026). Vorher gab es vier Menüpunkte
+(Rezeptur-, Produkt-, Rohstoff-, Dienstleistungsanfragen) auf zwei Seiten.
 
-**Aufbau wie die Portal-Anfragen** (Eingangsfach mit Archiv): **Ansicht-Tabs** (`.settabs`, `?ansicht=`) mit Zählern – **Offen** (Standard) · **Beantwortet** · **Abgelehnt** · **Alle**.
+**Quellen:**
+- **Rezepturanfragen** (`rezeptur_anfrage`) – Detail `?p=anfrage&id=…`.
+- **Portal-Anfragen** Produkt / Rohstoff / Dienstleistung (`portal_anfrage`) – Detail `?p=portal_anfrage&id=…`. Erscheinen nur, wenn der
+  Nutzer `?p=portal_anfragen` sehen darf (Rechte unverändert).
 
-**Bucket aus Anfrage + Rezeptur (wichtig):** Die Einordnung (`$bucketOf`) richtet sich NICHT nur nach `rezeptur_anfrage.status`, sondern auch nach dem Status der verknüpften Rezeptur. Hintergrund: der v3-Import hat viele Anfragen pauschal auf `beantwortet` gesetzt, obwohl gar kein Vorschlag draußen ist – die wären im Arbeitsfach „Offen" sonst unsichtbar, während der Kunde sie als „in Prüfung" sieht.
-- **Beantwortet** = es liegt WIRKLICH ein Vorschlag beim Kunden (verknüpfte Rezeptur `vorschlag`/`freigegeben`/`eingefroren`) und die Anfrage ist nicht `ueberarbeiten`.
-- **Abgelehnt** = `rezeptur_anfrage.status='abgelehnt'` (Archiv).
-- **Offen** = alles andere: kein Vorschlag, nur `entwurf`, `neu`/`in_bearbeitung`, oder `ueberarbeiten` (Kunde hat abgelehnt → zuoberst). Das ist das Arbeitsfach „wir müssen ran" und deckt sich mit der Kundensicht „in Prüfung".
+**Bedienung:**
+- **Art-Reiter** (`?art=`): Alle Arten · Rezeptur · Produkt · Rohstoff · Dienstleistung, mit Zähler (innerhalb der gewählten Ansicht).
+  Alte Links mit `?typ=produkt` usw. werden verstanden.
+- **Ansicht-Reiter** (`?ansicht=`): Offen (Standard) · Beantwortet · Abgelehnt · Alle, mit Zähler (innerhalb der gewählten Art).
+- **Suche** über Nummer, Kunde und Anfragetext – über alle Status.
+- Spalten: **Nummer** (mit Markierung „neu") · **Art** · **Kunde** (internes Kürzel über `kunde_link`) · **Anfrage** · **Status** · **Angefragt**.
+  Sortierbar über die Spaltenköpfe; „überarbeiten" und neue Anfragen stehen immer oben. Klick öffnet die jeweilige Detailseite.
 
-Der **Status-Badge** wird ebenfalls aus beiden Status abgeleitet (z. B. „offen – kein Vorschlag", „Entwurf – nicht gesendet", „Vorschlag gesendet", „angenommen").
+**Offen / Beantwortet (wie bisher je Seite):**
+- Rezeptur: beantwortet = verknüpfte Rezeptur ist `vorschlag`/`freigegeben`/`eingefroren` und die Anfrage nicht `ueberarbeiten`
+  (der v3-Import hat Anfragen pauschal auf `beantwortet` gesetzt – deshalb zählt der echte Rezeptur-Status).
+- Portal: beantwortet = es gibt ein sichtbares, preislich freigegebenes Angebot beim Kunden (wie im Kundenportal und im Menü-Zähler).
+- Abgelehnt = Status `abgelehnt` (Archiv). Alles andere ist offen.
+- „neu" = Status `neu` und noch offen.
 
-**Was passiert hier:**
-1. `seed_anfrage_if_empty()` – legt lokal eine Demo-Anfrage an.
-2. Liest alle Anfragen inkl. Kunde, Anzahl Wünsche und – falls schon bearbeitet – die erzeugte Rezeptur-Nummer. Zähler je Ansicht werden einmal über alle Zeilen gebildet.
-3. **Suche** (Nummer, Kunde, Wunsch-Produkt, Rezeptur) sucht über **alle** Status (die Ansicht zählt dann nicht). Ohne Suche wird nach Ansicht gefiltert. **Sortierung** über die Spaltenköpfe (`bx_table`), Standard = neueste zuerst; „überarbeiten"-Anfragen stehen immer zuoberst.
-4. Tabelle: **Nummer · Rezeptur/Wunsch-Produkt · Kunde · Form · Wünsche · Rezeptur · Status · Angefragt**.
-   - Klick öffnet die Anfrage-Bearbeitung (`?p=anfrage&id=...`).
-5. Button „Neue Anfrage".
-- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+**Menü:** Punkt „Anfragen" (`core/layout.php`). Zähler = offene Anfragen aller Arten, die der Nutzer sehen darf. Wer nur Portal-Anfragen
+sehen darf (Einkauf), wird vom Menüpunkt auf `?p=portal_anfragen` geführt. Die Seite `?p=portal_anfragen` bleibt erreichbar.
