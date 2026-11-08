@@ -675,6 +675,44 @@ UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftra
                         return aenderung_protokollieren('item', $iid, $vor, $nach, 'datenpruefung') > 0 ? 1 : 0;
                     }],
     ],
+    // Sofort-Fix Etikett-Format (08.11.2026): Maß laut Druckdatei (TrimBox, sonst ArtBox, sonst MediaBox) gegen das am
+    // Etikett-Artikel gespeicherte Maß. Nur zur Info – Nico passt die Maße mit der Zeit selbst an, kein automatisches Beheben.
+    'etikett_mass_trimbox' => [
+        'titel' => 'Etikett: Maß laut Druckdatei (TrimBox) anders als gespeichert (nur Info)',
+        'info'  => 'Aktive Etikett-Artikel mit hinterlegtem Design (PDF). Verglichen wird das gespeicherte Maß (breite_mm/hoehe_mm) mit dem Endformat der Datei: '
+                 . 'TrimBox, ohne TrimBox die ArtBox, sonst die MediaBox (Seite inkl. Beschnitt). Ausrichtung egal, Abweichung ab 1 mm. '
+                 . 'Neue Designs übernehmen das Maß seit 08.11.2026 bei der Freigabe automatisch; bestehende Etiketten werden nicht geändert. '
+                 . 'Abweichungen sperren nichts (Soll-Handbuch 4.5).',
+        'sql'   => "SELECT i.id AS _id, CONCAT('?p=verpackung&id=', i.id) AS _link, i.artikelnummer, i.name AS etikett, k.firma AS kunde,
+                           i.breite_mm AS _b, i.hoehe_mm AS _h, d.datei AS _datei
+                    FROM item i
+                    JOIN dokument d ON d.id = i.etikett_dokument_id
+                    LEFT JOIN kunden k ON k.id = i.kunde_id
+                    WHERE i.verpackung_rolle = 'etikett' AND COALESCE(i.gesperrt,0) = 0
+                    ORDER BY i.id DESC",
+        'zeilen' => function (array $rows): array {
+            $out = [];
+            $z = fn($x) => rtrim(rtrim(number_format((float)$x, 1, ',', ''), '0'), ',');
+            foreach ($rows as $r) {
+                $pfad = BX_UPLOADS . '/' . basename((string)$r['_datei']);
+                $em = is_file($pfad) ? pdf_etikett_mass($pfad) : null;
+                if (!$em) continue;                                   // kein PDF / keine Box lesbar
+                $pg = max($em['w'], $em['h']); $pk = min($em['w'], $em['h']);
+                $b = (float)($r['_b'] ?? 0); $h = (float)($r['_h'] ?? 0);
+                $abw = ($b > 0 && $h > 0) ? max(abs(max($b, $h) - $pg), abs(min($b, $h) - $pk)) : null;
+                if ($abw !== null && $abw < 1.0) continue;
+                $mb = pdf_boxen($pfad)['MediaBox'] ?? null;
+                $r['gespeichert']    = ($b > 0 && $h > 0) ? ($z($b) . ' x ' . $z($h) . ' mm') : 'kein Maß';
+                $r['laut_pdf']       = $z($pk) . ' x ' . $z($pg) . ' mm';
+                $r['quelle']         = $em['quelle'];
+                $r['druckdatei']     = $mb ? ($z(min($mb)) . ' x ' . $z(max($mb)) . ' mm') : '';
+                $r['abweichung_mm']  = $abw !== null ? round($abw, 1) : null;
+                $out[] = $r;
+            }
+            return $out;
+        },
+        'korrektur' => '– (nur anzeigen; Maß bei Bedarf am Etikett-Artikel unter Verpackung anpassen)',
+    ],
     // Gewicht & Bestand pro Gebinde (04.11.2026): Altbestand mit gleichmäßig verteiltem Gewicht je Karton.
     'gebinde_gleich_verteilt' => [
         'titel' => 'Lager: Gebinde mit gleichmäßig verteiltem Gewicht (nachwiegen)',
