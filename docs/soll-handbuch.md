@@ -102,6 +102,7 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
   3. **Direkt bestellt** (telefonisch/per Mail, z. B. VitaActives) - Bestellung steht sofort auf "bestellt", **keine** Mail an den Lieferanten, **keine** Bestätigung nötig. Der Lieferant sieht sie trotzdem in seinem Portal (Tracking, Rechnung möglich). Für schon übers Portal verschickte Bestellungen gibt es "Telefonisch bestätigt". (Eigene Anleitung "Bestellweg Direkt bestellt".)
 - **"Rohstoff bestellt"** (Kunden-Fortschritt) wird nur gesetzt, wenn es eine **echte** Bestellung zum Auftrag gibt (Status gesendet/bestellt/geliefert) - nicht durch "Weg festlegen", nicht durch Entwürfe, nicht durch Bestellungen anderer Aufträge.
 - Ist alles bestellt bzw. zugeordnet, verschwindet der Auftrag aus der Arbeitsliste, bis Ware ankommt.
+- **Netto auch für Kundenetiketten und bedruckte Beutel (08.11.2026):** Die Bestellliste rechnet **jede** Position netto - Bedarf minus freier Bestand minus Quarantäne minus unterwegs (Entwurf, gesendet, bestellt). Das gilt auch für Kundenetiketten und bedruckte Beutel; nur der Rest erscheint, Bedarf gedeckt = Zeile weg. Bestellliste, Reiter Material am Auftrag und der Etiketten-Stand im Kunden-Fortschritt nutzen **dieselbe Rechnung** ("Etiketten auf Lager", sobald der Bestand reicht - ohne Bestellung, nichts von Hand setzen).
 
 ### 4.4 CoA zur Lieferung (Eingangsunterlagen)
 - **Portal-Lieferanten** müssen beim Melden "versendet" die **Chargennummer** eintragen **und das CoA hochladen** - sonst können sie nicht abschließen.
@@ -369,3 +370,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | 4.12: Labor heute nur per eigenem Upload; "Ans Labor senden"/GBA zurückgestellt (12.5) | Nico / Claude |
 | 08.11.2026 | Schritt 2: Menü Einfach/Ausführlich gebaut (3); Entscheidungen 12.1 (Einkauf + Lager in Einfach, Lager ein Punkt), 12.4 (voller Packungspreis), 12.5 inkl. Feld Unter-Charge der Probe zurückgestellt; Fixes 10.2/10.3/10.4, 4.9 Meldetexte, 4.11 Easy Production frei, 4.12 Labor-Befund/charge_norm, 4.5 Erwartete Lieferungen + Schnellmaske stillgelegt; 10.5 geprüft | Nico / Claude Code |
 | 08.11.2026 | Sofort-Fix Etikett-Format: 4.5 Etikett-Maß vs. Glas nur Hinweis, nie Sperre; Maß neuer Etiketten aus der TrimBox; Menü Einfach zeigt Buchhaltung für Rolle finance (3) | Nico / Claude Code |
+| 08.11.2026 | Sofort-Fix Bestellliste: 4.3 Kundenetiketten/bedruckte Beutel netto gegen Lager und unterwegs, eine Rechnung mit Reiter Material und Fortschritt | Nico / Claude Code |
