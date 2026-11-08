@@ -678,9 +678,26 @@ $ekBedarf = []; $ekLieferanten = [];
 $zukaufPreise = []; $zukaufLief = []; $prodRezId = 0;
 if ($istAdmin && $pa) {
     foreach (produktion_materialbedarf((int)$pa['id']) as $bd) {
-        $angebote = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, COALESCE(l.firma, lp.lieferant_name, '') AS firma
-                         FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
-                         WHERE lp.item_id=? ORDER BY lp.preis", [(int)$bd['item_id']]);
+        // Staffel nach MENGE (Nico 08.11.2026, wie Beschaffungsweg/Einkaufsliste): je Lieferant die größte Staffel, deren
+        // Mindestmenge der Bedarf erreicht – liegt der Bedarf unter seiner kleinsten Staffel, gilt diese (Mindestmenge).
+        // Vorher: alle Zeilen nur nach Preis sortiert -> „ab 300 kg" wurde bei 225 kg Bedarf als günstigste gerechnet.
+        $rows = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, COALESCE(l.firma, lp.lieferant_name, '') AS firma
+                     FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
+                     WHERE lp.item_id=? AND lp.preis>0 ORDER BY lp.menge_ab ASC", [(int)$bd['item_id']]);
+        $jeLief = [];
+        foreach ($rows as $ao) {
+            $lk = (int)$ao['lieferant_id'] . '|' . $ao['firma'] . '|' . strtoupper((string)($ao['waehrung'] ?: 'EUR'));
+            if (!isset($jeLief[$lk]) || (float)$ao['menge_ab'] <= (float)$bd['benoetigt'] + 1e-9) $jeLief[$lk] = $ao;
+        }
+        $angebote = array_values($jeLief);
+        usort($angebote, fn($x, $y) => (float)$x['preis'] <=> (float)$y['preis']);
+        // Gibt es schon eine echte Bestellung zu diesem Auftrag für den Rohstoff, gilt deren Preis.
+        $echtB = one("SELECT bp.ek_preis AS preis, b.nummer, COALESCE(l.firma,'') AS firma FROM bestellung_position bp
+                      JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                      WHERE bp.auftrag_id=? AND bp.item_id=? AND bp.ek_preis>0 AND (b.status IN ('gesendet','bestellt','geliefert') OR b.angekommen_am IS NOT NULL)
+                      ORDER BY b.id DESC LIMIT 1", [$id, (int)$bd['item_id']]);
+        if ($echtB) array_unshift($angebote, ['lieferant_id' => 0, 'menge_ab' => 0, 'preis' => $echtB['preis'], 'waehrung' => 'EUR',
+                                              'firma' => trim($echtB['firma'] . ' (Bestellung ' . $echtB['nummer'] . ')'), 'bestellt' => true]);
         foreach ($angebote as $ao) if (!empty($ao['lieferant_id'])) $ekLieferanten[(int)$ao['lieferant_id']] = (string)$ao['firma'];
         $ekBedarf[] = $bd + ['angebote' => $angebote];
     }
@@ -1974,13 +1991,13 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
     <div><div class="k muted">Menge</div><div><?= number_format($mMenge,0,',','.') ?> Packungen</div></div>
     <div><div class="k muted">Umsatz netto</div><div><?= $eur($mNetto) ?></div></div>
     <?php if ($matVollstaendig): ?>
-    <div><div class="k muted">Materialkosten (EK, günstigste)</div><div><?= $eur($matKostenEur) ?> <span class="muted" style="font-size:12px">· <?= $eur($mEkProP) ?>/Packung</span></div></div>
+    <div><div class="k muted">Materialkosten (EK nach Bedarfsmenge)</div><div><?= $eur($matKostenEur) ?> <span class="muted" style="font-size:12px">· <?= $eur($mEkProP) ?>/Packung</span></div></div>
     <div><div class="k muted">Marge (nach Material)</div><div><strong><?= $eur($mMarge) ?></strong> <span class="muted" style="font-size:12px">· <?= number_format($mMargeProz,1,',','.') ?>%</span></div></div>
     <?php else: ?>
     <div style="grid-column:1/-1"><div class="k muted">Marge</div><div class="muted"><?= $matHatNichtEur ? 'Teils Fremdwährungs-EK hinterlegt – Materialkosten lassen sich nicht automatisch summieren.' : (!$ekBedarf ? 'Keine Rohstoff-EK-Preise (Zukauf oder Rezeptur ohne Zutaten) – Materialkosten nicht ermittelbar.' : 'Für nicht alle Rohstoffe ist ein EK-Preis hinterlegt – Marge unvollständig.') ?></div></div>
     <?php endif; ?>
   </div>
-  <p class="muted" style="font-size:12px;margin:10px 0 0">Richtwert auf Basis der günstigsten hinterlegten Rohstoff-EK-Preise – nur Material, ohne Lohn, Verpackung und Gemeinkosten.</p>
+  <p class="muted" style="font-size:12px;margin:10px 0 0">Richtwert: je Rohstoff der Preis einer echten Bestellung zum Auftrag, sonst der günstigste Lieferant in der Staffel, die der Bedarf erreicht – nur Material, ohne Lohn, Verpackung und Gemeinkosten.</p>
 </div>
 
 <div class="bx-panel" data-panel="preise">
@@ -1999,7 +2016,7 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
           <td class="bx-num"><?= $nz($bd['benoetigt']) ?> <?= h($bd['einheit']) ?><?php if (($bd['zu_bestellen'] ?? $bd['fehlt']) > 0.0001): ?><br><span style="color:#8f231b;font-size:12px">fehlt <?= $nz($bd['zu_bestellen'] ?? $bd['fehlt']) ?></span><?php elseif ($bd['fehlt'] > 0.0001): ?><br><span style="color:#8a6d00;font-size:12px">in Quarantäne – <a href="<?= h(quarantaene_freigabe_url((int)$bd['item_id'])) ?>">freigeben</a></span><?php else: ?><br><span class="bx-ok" style="font-size:12px">auf Lager</span><?php endif; ?></td>
           <td><?php if (!$bd['angebote']): ?><span class="muted">kein EK-Preis hinterlegt</span>
               <?php else: $bi = 0; foreach ($bd['angebote'] as $ao): ?>
-                <div style="<?= $bi === 0 ? 'font-weight:600' : '' ?>"><?= h($ao['firma'] ?: '–') ?>: <?= $nz($ao['preis'], 4) ?> <?= h($ao['waehrung'] ?: 'EUR') ?><?= (float)$ao['menge_ab'] > 0 ? ' <span class="muted">(ab ' . $nz($ao['menge_ab']) . ')</span>' : '' ?><?= $bi === 0 ? ' <span class="muted">· günstigste</span>' : '' ?></div>
+                <div style="<?= $bi === 0 ? 'font-weight:600' : '' ?>"><?= h($ao['firma'] ?: '–') ?>: <?= $nz($ao['preis'], 4) ?> <?= h($ao['waehrung'] ?: 'EUR') ?><?= (float)$ao['menge_ab'] > 0 ? ' <span class="muted">(ab ' . $nz($ao['menge_ab']) . ')</span>' : '' ?><?= $bi === 0 ? ' <span class="muted">· ' . (!empty($ao['bestellt']) ? 'bestellt' : 'günstigste für die Menge') . '</span>' : '' ?></div>
               <?php $bi++; endforeach; endif; ?></td>
         </tr>
       <?php endforeach; ?>

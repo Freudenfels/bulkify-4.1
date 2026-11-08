@@ -282,3 +282,6 @@ Die Fortschrittsleiste im Reiter Produktion nutzt `auftrag_fortschritt()` (core/
 
 ## Schritt-Karten neu (08.11.2026)
 Die Karten unter „Schritte“ (Reiter Produktion) kommen jetzt aus derselben neuen Kette wie die Leiste (`auftrag_fortschritt()`): gleiche Schritte, Etiketten-Stand („Etiketten nicht bestellt“ mit Link zum Einkauf, rot „Etiketten/Beutel Daten fehlen“ mit Link zum Reiter Material), Teilmengen („teilweise · X von Y Stk“), Material-Gate („blockiert“) nur am Produktions-Schritt. „Schritt abschließen“ am ersten offenen Schritt setzt die passende bisherige Stufe (`phase_setzen`, Zuordnung im 6. Feld der Schritte). Manuelles Setzen (eingeklappt) unverändert.
+
+## Kalkulation: Staffel nach Menge (08.11.2026)
+Materialkosten in „Kalkulation (Marge)“ und „Lieferanten-Preise zu diesem Auftrag“: je Lieferant die größte Staffel, deren Mindestmenge der Bedarf erreicht (liegt der Bedarf darunter, die kleinste Staffel = Mindestmenge) – wie Beschaffungsweg und Einkaufsliste. Gibt es eine echte Bestellung zum Auftrag für den Rohstoff (gesendet/bestellt/geliefert), gilt deren EK. Vorher wurde nur nach Preis sortiert („ab 300 kg“ bei 225 kg Bedarf).
