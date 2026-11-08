@@ -15,4 +15,4 @@ springt ins **Versand-Detail** (`?p=versand_detail`). Dort: **Lieferschein öffn
 **Lieferschein drucken** (Netzwerkdrucker über die Brücke, `drucker_lieferschein`), und später das
 **Versand-Label** über **DHL**/**Cargoboard** (vorhandene Infrastruktur, `versand_dhl.php`/`versand_cargoboard.php`).
 
-Erreichbar über Warenausgang → „+ Lieferschein erstellen".
+Erreichbar über den eigenen Menüpunkt **„Lieferschein erstellen“** (Lager 1, seit 08.11.2026) und über Warenausgang → „+ Lieferschein erstellen".

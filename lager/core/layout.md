@@ -7,3 +7,5 @@
 Navigation Lager 1: „Versandbereit“ vor „Warenausgang“ (Soll-Kette 7, 04.11.2026).
 
 Menüpunkt „Nach Lager 2“ (`umlagern`) in der Gruppe Lager 1 (04.11.2026).
+
+- 08.11.2026: Menüpunkt **„Lieferschein erstellen“** (`lieferschein_neu`) in der Gruppe Lager 1 nach „Warenausgang“.

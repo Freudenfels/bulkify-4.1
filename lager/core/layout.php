@@ -15,7 +15,7 @@ function lg_nav(): array {
     $nav = [
         ''            => ['uebersicht' => 'Übersicht', 'we' => 'Einbuchen'],
         'Lager 1'     => ['erwartet' => 'Erwartete Lieferungen', 'quarantaene' => 'Quarantäne', 'einlagern' => 'Einlagern',
-                          'finden' => 'Suche', 'versand_bereit' => 'Versandbereit', 'umlagern' => 'Nach Lager 2', 'versand' => 'Warenausgang', 'bestand' => 'Bestand'],
+                          'finden' => 'Suche', 'versand_bereit' => 'Versandbereit', 'umlagern' => 'Nach Lager 2', 'versand' => 'Warenausgang', 'lieferschein_neu' => 'Lieferschein erstellen', 'bestand' => 'Bestand'],
         'Lager 2 (Fremdlager)' => ['l2_eingang' => 'Kundenware einbuchen', 'l2_finden' => 'Suche',
                                    'l2_bestand' => 'Fremdlager-Bestand', 'l2_artikel' => 'Artikel'],
         'Verwaltung'  => ['bewegungen' => 'Bewegungen', 'kisten' => 'Kisten', 'leisten' => 'Blinker', 'papierkorb' => 'Mülleimer'],

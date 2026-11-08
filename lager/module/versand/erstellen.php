@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erste
 
 $kunden = erp_kunden_liste();
 
-kopf('Lieferschein erstellen', 'versand');
+kopf('Lieferschein erstellen', 'lieferschein_neu');
 seitenkopf('Lieferschein erstellen', 'Kunde und Produkte wählen – Versicherungswert und Gewicht rechnen sich automatisch.',
     '<a class="btn btn-ghost" href="?p=versand">Zur Sendungsliste</a>');
 flash_zeigen();
