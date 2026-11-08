@@ -52,7 +52,7 @@ Gilt vor den älteren Absätzen oben (Anfragen-Gruppe mit 4 Punkten und Lager-Gr
   In der Benutzer-Box unten steht `bx_menu_umschalter()` („Menü: Einfach | Ausführlich"); der Knopf postet auf die aktuelle Seite,
   `public/index.php` speichert am Nutzer und lädt dieselbe Seite neu. Werk-Nutzer (`bx_nav_werk()`) haben keinen Umschalter, ihr Menü ist unverändert.
 - **Einfach** = `bx_nav_einfach()` (Stand 08.11.2026): **eine flache Liste ohne Gruppen** (kein Auf-/Zuklappen), feste Reihenfolge
-  im Code: Anfragen · Angebote · Aufträge · Einkauf (Einkaufsliste) · Produktion · Lager (`?p=lager`) · Produkte · Rezepturen · Rohstoffe ·
+  im Code: Anfragen · Angebote · Aufträge · Einkauf (Einkaufsliste) · Bestellt (`?p=einkauf`, Liste der Bestellungen, Icon truck; bleibt auf einer geöffneten Bestellung markiert) · Produktion · Lager (`?p=lager`) · Produkte · Rezepturen · Rohstoffe ·
   Buchhaltung (`buchhaltung/`, nur mit Rolle `finance` ausdrücklich in `benutzer.rollen`). Hängt **nicht** am Menü-Editor (`menu_layout`).
   Rechte filtern wie immer über `route_erlaubt()` – was eine Rolle nicht darf, fehlt. Rückgabe `['' => [key => def]]`; `render_header()`
   gibt im Modus einfach statt Gruppenkopf ein `<div class="bx-navflat">` aus. Jeder Punkt hat links ein Linien-Icon aus `bx_nav_icon($key)`

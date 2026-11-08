@@ -63,6 +63,7 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
 2. **Angebote**
 3. **Aufträge**
 4. **Einkauf** - Einkaufsliste, von dort zu den Bestellungen (Entscheidung 12.1)
+   - **Bestellt** - Liste der Bestellungen: was bestellt ist und was noch unterwegs ist (Nico 08.11.2026, direkt unter Einkauf)
 5. **Produktion** (heute die Produktionsliste, später die Reihenfolge-Liste, Abschnitt 4.6)
 6. **Lager** - **ein** Punkt auf das Warenlager; Lager 1 / Lager 2 sind Filter-Reiter auf der Seite (Entscheidung 12.1)
 7. **Produkte**
@@ -377,3 +378,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | Sofort-Fix Bestellliste: 4.3 Kundenetiketten/bedruckte Beutel netto gegen Lager und unterwegs, eine Rechnung mit Reiter Material und Fortschritt | Nico / Claude Code |
 | 08.11.2026 | 3: Menü "Einfach" flache Liste ohne Gruppen, größer, feste Reihenfolge, Linien-Icons | Nico / Claude Code |
 | 08.11.2026 | 3: Benachrichtigungen als erster Punkt in "Einfach" (Glocke mit Zähler), Eintrag unten entfällt dort | Nico / Claude Code |
+| 08.11.2026 | 3: Menüpunkt "Bestellt" (Bestellungen) in "Einfach" unter Einkauf | Nico / Claude Code |
