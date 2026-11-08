@@ -194,7 +194,8 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
 
 ### 4.12 Labor (externe Analyse)
 - Laboranalysen bestellt der **Kunde** (Zusatzleistung). **Ein Labortest pro Auftrag** reicht; das System merkt sich, aus welcher Unter-Charge die Probe gezogen wurde. **Rückstellmuster** gibt es trotzdem von **jeder** Unter-Charge.
-- Im Reiter Produktion, Block "Externer Labortest": **"Ans Labor senden"** (Labor wählen, Auftragsformular z. B. GBA wird ausgefüllt und zur Probe gelegt), Bericht hochladen, Befund, Freigabe fürs Portal. Der Kunde sieht ihn im Portal.
+- **Heute:** Laborberichte werden von uns **hochgeladen** (Reiter Produktion, Block "Externer Labortest": Bericht hochladen, Befund, Freigabe fürs Portal). Der Kunde sieht ihn im Portal. Das ist der aktive Weg.
+- **Später (noch keine Zusammenarbeit mit einem Labor):** "Ans Labor senden" mit ausgefülltem Auftragsformular (z. B. GBA). Kein Ausbau, keine Priorität, bis Nico die Zusammenarbeit startet.
 - Chargen-Abgleich beim Zuordnen des Berichts **tolerant** (wie 4.5), damit "2799.A" und "2799A" zusammenpassen.
 - Befund "auffällig" → Sperre vor Versand + Benachrichtigung Nico/Tabea.
 
@@ -333,7 +334,7 @@ Diese MDs/Rückmeldungen bleiben als Detail-Quelle gültig, soweit sie dem Handb
 2. Reicht vor dem Versand die **grüne Prüfliste**, oder soll Tabea zusätzlich bewusst **"Freigabe"** klicken?
 3. **Lager-App:** Ansicht "je Artikel" und Verpackung (Gläser/Dosen/Deckel) ohne sichtbare Alltagschargen - umsetzen?
 4. **Kontingent-Preis:** 9,71 € (Herstellung) oder 10,17 € (gesamt)?
-5. **GBA-Formular:** Berichtsempfänger bulkify oder direkt der Kunde?
+5. ~~GBA-Formular: Berichtsempfänger~~ - **zurückgestellt** (08.11.): Labor läuft heute über unseren Upload, Zusammenarbeit mit einem Labor erst in Zukunft.
 6. **Kundenpreise-Liste:** Mengen-Staffel je Bestellmenge nötig oder ein Preis je Verpackungsgröße genug?
 
 ---
@@ -361,3 +362,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | Datum | Änderung | von |
 |---|---|---|
 | 08.11.2026 | Erstfassung: Kette ab Auftrag, Menü Einfach/Ausführlich, Zu erledigen, Eimer/Unter-Chargen, Chargen-Abgleich blind, Kartonetikett je vollem Karton, Lieferadresse bestätigen, Prüfliste vor Versand | Nico / Claude |
+| 08.11.2026 | 4.12: Labor heute nur per eigenem Upload; "Ans Labor senden"/GBA zurückgestellt (12.5) | Nico / Claude |
