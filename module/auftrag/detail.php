@@ -1510,7 +1510,7 @@ if ($pa): $vc = pa_vorbereitung_checks((int)$pa['id']);
 </div>
 <?php endif; ?>
 <?php // H1 (Teil 3): Material-Übersicht – je Position benötigt / frei / unterwegs mit Deckungs-Ampel.
-// Nutzt den vorhandenen auftrag_bedarf() + item_unterwegs(); nur Übersicht, keine Buchung.
+// Nutzt auftrag_bedarf_rest() + material_deckung() – dieselbe Rechnung wie die Bestellliste (Sofort-Fix 08.11.2026); nur Übersicht.
 if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
     // auftrag_bedarf_rest() liefert den Bedarf bereits auf den NOCH offenen Rest skaliert (schon produzierte
     // Packungen abgezogen) – EINE Quelle (core/schema.php), identisch zu produktion_bereitschaft() und der
@@ -1537,11 +1537,12 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
     foreach ($bedarfRows as $mzI => $r):
         $iid = (int)($r['item_id'] ?? 0);
         $ben = (float)($r['benoetigt'] ?? 0);   // schon auf den offenen Rest skaliert (auftrag_bedarf_rest)
-        $frei = (float)($r['verfuegbar'] ?? 0);
-        $unterwegs = $iid > 0 ? item_unterwegs($iid) : 0.0;
+        $mzDeck = $iid > 0 ? material_deckung($iid, $ben, (int)$a['id']) : null;   // eine Rechnung mit der Bestellliste
+        $frei = $mzDeck ? $mzDeck['frei'] : (float)($r['verfuegbar'] ?? 0);
+        $unterwegs = $mzDeck ? $mzDeck['unterwegs'] : 0.0;
         $einh = (string)($r['einheit'] ?? 'Stk');
         $deckt = $frei + 1e-6 >= $ben;
-        $quar = (float)($r['quarantaene'] ?? 0);
+        $quar = $mzDeck ? $mzDeck['quarantaene'] : (float)($r['quarantaene'] ?? 0);
         $decktMitQuar = !$deckt && $quar > 1e-6 && ($frei + $quar + 1e-6 >= $ben);
         $decktMitUnterwegs = !$deckt && !$decktMitQuar && ($frei + $quar + $unterwegs + 1e-6 >= $ben);
         $bestellungen = item_bestellungen($iid, (int)$a['id'], (string)($r['rolle'] ?? '') === 'Fertigware');
@@ -1565,7 +1566,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         <td class="bx-num"><?= $mng($frei, $einh) ?><?php if (isset($r['zugeordnet']) && $frei - (float)$r['zugeordnet'] > 1e-6): ?><br><span class="muted" style="font-size:11px"><?= (float)$r['zugeordnet'] > 1e-6 ? 'davon zugeordnet ' . $mng((float)$r['zugeordnet'], $einh) : 'noch nicht zugeordnet' ?></span><?php endif; ?></td>
         <td class="bx-num"><?= $quar > 1e-9 ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '">' . $mng($quar, $einh) . '</a>' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
-        <?php $mzRest = max(0.0, $ben - $frei - $quar - $unterwegs); ?>
+        <?php $mzRest = $mzDeck ? $mzDeck['rest'] : max(0.0, $ben - $frei - $quar - $unterwegs); ?>
         <td class="bx-num"><?= $mzRest > 1e-6 ? '<span style="color:var(--err)">' . $mng($mzRest, $einh) . '</span>' : '<span class="muted">–</span>' ?></td>
         <td><?= $deckt ? bx_badge('da','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>'
                  : ($nichtEingebucht ? '<span title="Die Bestellung ist als eingegangen markiert, im Lager ist aber keine Bulk-Charge für diesen Auftrag gebucht. Bitte in der Lager-App unter Wareneingang einbuchen oder unten bei „Bulkware binden“ eine vorhandene Charge zuweisen.">' . bx_badge('nicht eingebucht','err') . '</span>'
@@ -1669,7 +1670,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
   <?php if (isset($_GET['diagok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-top:10px"><?= h((string)$_GET['diagok']) ?></div><?php endif; ?>
   <?php if (isset($_GET['diagfehler'])): ?><div style="color:#8f231b;margin-top:10px"><?= h((string)$_GET['diagfehler']) ?></div><?php endif; ?>
   <?= auftrag_bulk_diagnose_block((int)$a['id'], '?p=auftrag&id=' . (int)$a['id']) ?>
-  <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„zugeordnet" = fest für diesen Auftrag (Charge oder Bestellung, über „Zuordnen") · „frei" = im Lager verfügbar (Bulkware: zugeordnet + freier Lagerbestand) · „Rest" = weder frei, in Quarantäne noch unterwegs · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
+  <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„zugeordnet" = fest für diesen Auftrag (Charge oder Bestellung, über „Zuordnen") · „frei" = im Lager verfügbar (Bulkware: zugeordnet + freier Lagerbestand) · „Rest" = weder frei, in Quarantäne noch unterwegs · „unterwegs" = bestellt (auch Entwurf/gesendet), noch nicht eingegangen – dieselbe Zahl, mit der die Bestellliste rechnet · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
 </div>
 <?php endif; endif; ?>
 <?php // Soll-Kette 4b: Anweisung „Teilmenge produzieren“ ans Werk (auch „Schritt vorziehen“: bis vor dem Etikettieren).

@@ -72,6 +72,10 @@ Zeilen aus `bedarf_bulk()` mit `art='fertig'` heißen „Fertigware: …", Menge
 
 **Vollbedruckter Beutel (03.11.2026):** wie Etiketten gesperrt („gesperrt“, kein Haken), bis der Kunde das Beutel-Design
 aller Aufträge mit diesem Beutel freigegeben hat (`druck` + `etikett_ok` aus `bedarf_aggregiert()`).
+
+## Kundenetiketten netto (Sofort-Fix 08.11.2026)
+Kundenetiketten (`rolle='Etikett'`, Zeile je Etikett + Auftrag) liefen bis 08.11.2026 **ohne Lagerbestand** (`stock=0`, nur die an den Auftrag gebundenen Bestellungen abgezogen) – die Zeile zeigte immer den vollen Auftragsbedarf („kundenspezifisch“), auch wenn die Etiketten im Lager lagen. Jetzt rechnet `bedarf_aggregiert()` sie **netto wie Gläser**: Bedarf minus freier Bestand des Etikett-Artikels (abzüglich Reservierungen anderer Aufträge) minus Quarantäne minus unterwegs (`item_unterwegs()`: Entwurf/gesendet/bestellt, noch nicht eingegangen). Bei genau einem Auftrag je Etikett-Artikel über `material_deckung()` – **dieselbe Funktion wie der Reiter Material am Auftrag**, also dieselbe Zahl. Teilen sich mehrere Aufträge einen Etikett-Artikel, wird der Bestand in Auftragsreihenfolge verteilt (eigene, gebundene Bestellungen zuerst). Rest 0 → Zeile verschwindet. Anzeige je Zeile: „Bedarf · Lager · (Quarantäne) · unterwegs · zu bestellen“ (+ „kundenspezifisch“). Gesperrte Etiketten (ohne Kunden-Freigabe) bleiben ohne Mengenfeld, zeigen aber dieselbe Netto-Zahl. Bedruckte Beutel liefen schon netto (Zweig wie Gläser).
+
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
 
 ## Dritter Bestellweg „Direkt bestellt (Telefon/Mail)“ (08.11.2026)

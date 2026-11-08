@@ -159,6 +159,9 @@ Das Dropdown „Lagerware zuweisen" bietet **alle** freien Fertigware-(Bulk-)Cha
 ## Vor-Produktion-Verweis (I3, Teil 3)
 Auf der Details-Seite verweist der Änderungs-Block nur noch **pro Produktionsauftrag** auf `?p=produktion_vorbereitung&id=<pa>` („Flaschen, Verpackung & Kapselgröße setzen"). Der frühere Link auf die generelle Vor-Produktions-**Liste** (ohne ID) ist entfernt, seit die Freigabe direkt am Auftrag läuft (Reiter Produktion) und der Nav-Eintrag weg ist. Ohne Produktionsauftrag erscheint kein Vor-Produktions-Link.
 
+## Material-Übersicht und Bestellliste = eine Rechnung (2026-11-08)
+Frei / Quarantäne / unterwegs / Rest je Zeile kommen aus `material_deckung($item, $benoetigt, $auftrag)` (core/schema.php) – dieselbe Funktion, mit der die Bestellliste Kundenetiketten rechnet. „unterwegs“ (`item_unterwegs()`) zählt seitdem jede nicht eingegangene, nicht stornierte Bestellung (Entwurf, gesendet, bestellt) – wie die Bestellliste schon immer; vorher nur Status `bestellt`.
+
 ## Material-Übersicht = eine Quelle (2026-11-02)
 Die Material-Übersicht bezieht die Zeilen jetzt aus `auftrag_bedarf_rest()` (core/schema.php) statt die
 Rest-Skalierung selbst zu rechnen. Damit zeigen Übersicht, PA-Material und Bereitschaft garantiert dieselbe

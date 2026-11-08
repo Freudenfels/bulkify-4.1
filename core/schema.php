@@ -9641,12 +9641,28 @@ function produktion_bericht_daten(int $pa_id): ?array {
 }
 // Kompletter Einkaufsbedarf eines Auftrags (Stückliste × Menge vs. freier Bestand).
 // Rückgabe je Komponente: ['rolle','item_id','name','benoetigt','verfuegbar','fehlt','einheit']
-// Offen bestellte, noch nicht eingegangene Menge eines Items ("unterwegs") – für die Material-Übersicht am Auftrag (H1).
-// Gleiche Logik wie die Bestandsliste: Summe der Bestellpositionen über Bestellungen mit Status 'bestellt' ohne Wareneingang.
+// Offen bestellte, noch nicht eingegangene Menge eines Items ("unterwegs"). EINE Definition für Bestellliste
+// (bedarf_aggregiert) und Material-Übersicht am Auftrag (Soll-Handbuch 1.2/4.3, 08.11.2026): jede Bestellung, die weder
+// geliefert/eingegangen noch storniert ist (Entwurf, gesendet, bestellt), offener Rest der Position (Teillieferung abgezogen).
+// Früher zählte der Material-Reiter nur Status 'bestellt' – dann schlug die Bestellliste etwas anderes vor als der Reiter.
 function item_unterwegs(int $item_id): float {
     if ($item_id <= 0) return 0.0;
-    return (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                           WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL", [$item_id]);
+    $ck = 'uw:' . $item_id;
+    if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
+    $v = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                         WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$item_id]);
+    if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
+    return $v;
+}
+// Netto-Deckung EINER Position eines Auftrags – die eine Rechnung für Material-Reiter, Bestellliste (Kundenetiketten) und
+// Etiketten-Stand im Fortschritt: frei = freier Bestand minus Reservierungen anderer Aufträge, dazu Quarantäne und unterwegs;
+// rest = was weder frei, in Quarantäne noch unterwegs ist (= zu bestellen).
+function material_deckung(int $item_id, float $benoetigt, int $auftrag_id): array {
+    if ($item_id <= 0) return ['frei'=>0.0, 'quarantaene'=>0.0, 'unterwegs'=>0.0, 'rest'=>max(0.0, $benoetigt)];
+    $frei = item_verfuegbar_fuer($item_id, $auftrag_id);
+    $quar = item_quarantaene($item_id);
+    $unt  = item_unterwegs($item_id);
+    return ['frei'=>$frei, 'quarantaene'=>$quar, 'unterwegs'=>$unt, 'rest'=>max(0.0, $benoetigt - $frei - $quar - $unt)];
 }
 
 // Bestellungen zu einem Artikel für die Material-Übersicht am Auftrag (Nico 03.11.2026: „sehen, ob ich das schon
@@ -11082,19 +11098,52 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
             $agg[$key]['orders'][] = ['pa_id'=>(int)$pa['id'],'auftrag_id'=>(int)$pa['auftrag_id'],'auftrag_nr'=>$pa['auftrag_nr'],'kunde'=>(string)($pa['kunde'] ?? ''),'kunde_id'=>(int)($pa['kunde_id'] ?? 0),'produkt'=>(string)($pa['produkt'] ?? ''),'need'=>(float)$r['benoetigt']];
         }
     }
+    // Kundenetiketten NETTO wie Gläser (Sofort-Fix 08.11.2026, Soll-Handbuch 4.3): Bedarf je Auftrag minus freier Bestand,
+    // Quarantäne und unterwegs DES ETIKETT-ARTIKELS. Vorher stand immer der volle Auftragsbedarf drin (stock=0), auch wenn
+    // die Etiketten längst im Lager lagen -> Doppelbestellung. Zeilen bleiben je (Etikett + Auftrag), weil die Design-Freigabe
+    // je Auftrag gilt. Teilen sich mehrere Aufträge einen Etikett-Artikel (gleiches Produkt + Kunde), wird der Bestand in
+    // Auftragsreihenfolge verteilt; eigene, an den Auftrag gebundene Bestellungen zählen zuerst für ihn.
+    $etGruppen = [];
+    foreach ($agg as $k => $a) if (!empty($a['etikett'])) $etGruppen[(int)$a['item_id']][] = $k;
+    foreach ($etGruppen as $iid => $keys) {
+        usort($keys, fn($x, $y) => (int)$agg[$x]['auftrag_id'] <=> (int)$agg[$y]['auftrag_id']);
+        if (count($keys) === 1) {                              // Normalfall: genau ein Auftrag -> identisch zum Material-Reiter
+            $k = $keys[0];
+            $m = material_deckung($iid, (float)$agg[$k]['need'], (int)$agg[$k]['auftrag_id']);
+            $agg[$k]['stock'] = $m['frei']; $agg[$k]['quarantaene'] = $m['quarantaene']; $agg[$k]['bestellt'] = $m['unterwegs'];
+            $agg[$k]['zu_bestellen'] = $m['rest'];
+            continue;
+        }
+        $aids = array_map(fn($k) => (int)$agg[$k]['auftrag_id'], $keys);
+        $in = implode(',', array_map('intval', $aids));
+        $resAndere = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND (auftrag_id IS NULL OR auftrag_id NOT IN ($in))", [$iid]);
+        $frei = max(0.0, item_bestand($iid, true) - $resAndere);
+        $quar = item_quarantaene($iid);
+        $unt  = item_unterwegs($iid);
+        $eigen = [];
+        foreach ($aids as $aid) $eigen[$aid] = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid, $aid]);
+        $pool = $frei + $quar + max(0.0, $unt - array_sum($eigen));
+        foreach ($keys as $k) {                                // Überschuss gebundener Bestellungen geht in den Topf
+            $aid = (int)$agg[$k]['auftrag_id'];
+            $pool += max(0.0, $eigen[$aid] - (float)$agg[$k]['need']);
+        }
+        foreach ($keys as $k) {
+            $aid = (int)$agg[$k]['auftrag_id'];
+            $defizit = max(0.0, (float)$agg[$k]['need'] - $eigen[$aid]);
+            $nimm = min($pool, $defizit); $pool -= $nimm;
+            $agg[$k]['stock'] = $frei; $agg[$k]['quarantaene'] = $quar; $agg[$k]['bestellt'] = $unt;
+            $agg[$k]['zu_bestellen'] = max(0.0, $defizit - $nimm);
+        }
+    }
     foreach ($agg as &$a) {
         $aid = (int)($a['auftrag_id'] ?? 0);
         if (!empty($a['etikett'])) {
-            // Kundenspezifisch: kein generischer Lagerbestand, Bestell-Sperre bis Design da ist.
-            $a['stock'] = 0.0; $a['quarantaene'] = 0.0;
-            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id'], $aid]);
-            $a['zu_bestellen'] = max(0.0, $a['need'] - $a['bestellt']);
-            // Etiketten erst bestellbar, wenn der Kunde das Etikett freigegeben hat (nicht nur hochgeladen).
+            // Netto-Mengen stehen oben; Etiketten erst bestellbar, wenn der Kunde das Etikett freigegeben hat (nicht nur hochgeladen).
             $a['etikett_ok'] = etikett_freigegeben($aid);
         } else {
             $a['stock'] = item_bestand($a['item_id'], true);
             $a['quarantaene'] = item_quarantaene((int)$a['item_id']);   // wartet auf Freigabe -> nicht nachbestellen (St-07)
-            $a['bestellt'] = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$a['item_id']]);
+            $a['bestellt'] = item_unterwegs((int)$a['item_id']);   // eine Definition „unterwegs" (wie Material-Reiter)
             $a['zu_bestellen'] = max(0.0, $a['need'] - $a['stock'] - $a['quarantaene'] - $a['bestellt']);
             $a['etikett_ok'] = true;
             // Bedruckter Behälter (vollbedruckter Beutel): wie das Etikett erst bestellbar, wenn der Kunde das Design
