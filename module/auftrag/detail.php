@@ -1331,7 +1331,7 @@ if (has_role('admin') || has_role('sales')):
         <?php if ($fBlock): ?>
         <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Wartet auf Material.</span> <a href="#" data-goto="material">Was fehlt? &rarr; Reiter Material</a></div>
         <?php elseif ($fState === 'err'): ?>
-        <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Der Kunde hat noch keine Druckdatei hochgeladen.</span> <a href="#" data-goto="material">Selbst hochladen &rarr; Reiter Material</a></div>
+        <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Der Kunde hat noch keine Druckdatei hochgeladen.</span> <a href="#" data-goto="details" data-dlg="dlgEtikett">Selbst hochladen &rarr; Kachel Etikett (Reiter Details)</a></div>
         <?php elseif (!$fDone && $fStatus === 'Etiketten nicht bestellt'): ?>
         <div style="margin-top:8px;font-size:12px"><a href="?p=einkaufsliste">Etiketten bestellen &rarr; Einkauf</a></div>
         <?php endif; ?>
@@ -2170,7 +2170,9 @@ $chargeNr = (string) scalar("SELECT c.charge_nr FROM charge c JOIN produktionsau
   }
   tabs.forEach(function(t){ t.addEventListener('click', function(e){ e.preventDefault(); activate(t.getAttribute('data-tab')); }); });
   // H0-Schrittleiste: ein Schritt mit data-goto öffnet den zugehörigen Reiter + scrollt nach oben.
-  document.querySelectorAll('[data-goto]').forEach(function(g){ g.addEventListener('click', function(e){ e.preventDefault(); activate(g.getAttribute('data-goto')); window.scrollTo({top:0,behavior:'smooth'}); }); });
+  // data-dlg (optional): danach direkt das Pop-up öffnen – z. B. Hinweis „Druckdatei fehlt" -> Kachel Etikett (Handbuch 10.3).
+  document.querySelectorAll('[data-goto]').forEach(function(g){ g.addEventListener('click', function(e){ e.preventDefault(); activate(g.getAttribute('data-goto')); window.scrollTo({top:0,behavior:'smooth'});
+    var d = g.getAttribute('data-dlg') && document.getElementById(g.getAttribute('data-dlg')); if (d && d.showModal) d.showModal(); }); });
   var start = 'details';
   try { var s = sessionStorage.getItem(KEY); if (s) start = s; } catch(e){}
   <?php if (isset($_GET['analyse'])): ?>start = 'dokumente';<?php endif; ?>
