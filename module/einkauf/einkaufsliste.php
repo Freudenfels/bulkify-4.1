@@ -278,9 +278,9 @@ render_header('einkaufsliste', 'Bestellen');
 bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von zwei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Beides landet unter „Bestellt".',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (mit Händler/Zahlart/Preis)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : 'Lieferant ohne aktiven Account/Preis. Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
-if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">„Online bestellt": bitte Händler/Quelle <strong>und</strong> den gezahlten Preis angeben.</div>';
+if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Online bestellt" fehlen Händler/Quelle oder der gezahlte Preis. Bitte die Positionen erneut anhaken und beides angeben.</div>';
 if (isset($_GET['vorsorgportal'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Dieser Lieferant hat keinen aktiven Account oder keinen Preis – über das Portal nicht bestellbar. Bitte „Direkt bestellt (Telefon/Mail)" oder „Online bestellt" nutzen.</div>';
-if (isset($_GET['direktfehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Für „Direkt bestellt" bitte einen Lieferanten wählen.</div>';
+if (isset($_GET['direktfehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Direkt bestellt" bitte einen Lieferanten wählen.</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
 if (isset($_GET['festgelegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ($_GET['festgelegt'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion') . ' festgelegt und freigegeben – der Bedarf steht jetzt im passenden Typ-Reiter.</div>';
 if (isset($_GET['festlegfehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Festlegung nicht möglich – für diesen Auftrag wurde evtl. schon bestellt oder ein Produktionsschritt ist erledigt.</div>';
@@ -461,20 +461,22 @@ if ($ohneFestlegung): ?>
       <div class="bx-field" style="margin:0;min-width:260px;flex:1"><label>Notiz (optional)</label><input type="text" name="di_notiz" placeholder="z. B. telefonisch mit Herrn X"></div>
       <button class="btn btn-primary" id="btnDirekt" type="submit" name="modus" value="direkt" disabled>Direkt bestellt erfassen</button>
     </div>
+    <div id="direktHinweis" class="bx-fehlhinweis" hidden></div>
     <p class="muted" style="font-size:12px;margin:10px 0 0">Je Position eine Bestellung beim gewählten Lieferanten (Preis aus dem Lieferantenpreis), Datum aus „Bestellt am“. Status sofort „bestellt“ und bestätigt; der Lieferant sieht sie im Portal (Tracking, Rechnung), muss aber nichts bestätigen.</p>
   </details>
   <details id="onlineBox" class="bx-panel" style="margin-top:12px;padding:12px 16px">
     <summary style="cursor:pointer;font-weight:600">Online bestellt <span class="muted" style="font-weight:400;font-size:12px">– selbst online gekauft (Amazon, Shop, Druckerei …): wo, wie und zu welchem Preis</span></summary>
     <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
-      <div class="bx-field" style="margin:0;min-width:220px"><label>Händler / Quelle</label><input type="text" name="on_haendler" placeholder="z. B. Amazon, Etikettendruckerei XY"></div>
+      <div class="bx-field" style="margin:0;min-width:220px"><label>Händler / Quelle (Pflicht)</label><input type="text" name="on_haendler" id="onHaendler" placeholder="z. B. Amazon, Etikettendruckerei XY"></div>
       <div class="bx-field" style="margin:0"><label>Zahlungsart</label>
         <select name="on_zahlart"><option value="">– wählen –</option><?php foreach (bestellung_zahlarten() as $zk => $zl): ?><option value="<?= h($zk) ?>"><?= h($zl) ?></option><?php endforeach; ?></select>
       </div>
-      <div class="bx-field" style="margin:0;max-width:150px"><label>Preis (gesamt)</label><input type="text" name="on_preis" inputmode="decimal" placeholder="z. B. 96,50"></div>
+      <div class="bx-field" style="margin:0;max-width:150px"><label>Preis gesamt (Pflicht)</label><input type="text" name="on_preis" id="onPreis" inputmode="decimal" placeholder="z. B. 96,50"></div>
       <div class="bx-field" style="margin:0;max-width:90px"><label>Währung</label><input type="text" name="on_waehrung" value="EUR" maxlength="8"></div>
       <div class="bx-field" style="margin:0;min-width:220px"><label>Rechnung (optional)</label><input type="file" name="on_rechnung" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"></div>
       <button class="btn btn-primary" id="btnOnline" type="submit" name="modus" value="online" disabled>Online bestellt erfassen</button>
     </div>
+    <div id="onlineHinweis" class="bx-fehlhinweis" hidden></div>
     <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen oben setzen; die <strong>Menge je Zeile</strong> steht passend zur Warenart (Pulver in kg, Verpackung/Leerkapseln in Stk). Händler + Preis (gesamt) angeben, optional die <strong>Rechnung</strong> hochladen. Legt EINE Bestellung ohne Lieferant an (Status „bestellt"); Händler, Zahlungsart, Preis und Rechnung werden für die spätere Abrechnung gespeichert.</p>
   </details>
   <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen setzen und einen Weg wählen. <strong>Über Lieferant (Portal)</strong> = je Position eine eigene Bestellung, geht in den Account des gewählten Lieferanten (nur mit aktivem Account und Preis). So kann er jede Position einzeln annehmen/ablehnen. <strong>Direkt bestellt</strong> = per Telefon/Mail beim Lieferanten bestellt, ohne Mail und Bestätigung. <strong>Online bestellt</strong> = du hast selbst online gekauft. In allen Fällen wandert die Position nach „Bestellt".</p>
@@ -543,6 +545,7 @@ if ($ohneFestlegung): ?>
       <button class="btn btn-ghost" type="submit" name="modus" value="direkt" title="Beim Lieferanten per Telefon/Mail bestellt – keine Mail, keine Bestätigung">Direkt bestellt (Telefon/Mail)</button>
       <button class="btn btn-ghost" type="submit" name="modus" value="online">Online bestellt</button>
     </div>
+    <div class="bx-fehlhinweis vs-hinweis" hidden></div>
     <div class="bx-row" style="margin-top:10px;gap:8px;flex-wrap:wrap;align-items:flex-end">
       <div class="bx-field" style="margin:0;max-width:170px"><label>Direkt: bestellt am</label><input type="date" name="di_datum" value="<?= date('Y-m-d') ?>"></div>
       <div class="bx-field" style="margin:0;max-width:170px"><label>Direkt: erwartet am</label><input type="date" name="di_eta"></div>
@@ -553,8 +556,30 @@ if ($ohneFestlegung): ?>
 </form>
 <script>(function(){
   var boxes=document.querySelectorAll('.bx-sel'), btn=document.getElementById('btnBestellen'), bex=document.getElementById('btnOnline'), bdi=document.getElementById('btnDirekt'), a=document.getElementById('selAll');
-  function upd(){ var any=false; boxes.forEach(function(c){if(c.checked)any=true;}); if(btn)btn.disabled=!any; if(bex)bex.disabled=!any; if(bdi)bdi.disabled=!any; }
+  var onH=document.getElementById('onHaendler'), onP=document.getElementById('onPreis'), onHw=document.getElementById('onlineHinweis'), diHw=document.getElementById('direktHinweis');
+  // Gleiche Regeln wie der Server (Nico 08.11.2026: Fehlendes gar nicht erst abschicken lassen, statt danach einen
+  // leicht zu übersehenden Hinweis zu zeigen). Online: Händler + Preis > 0. Direkt: jede angehakte Zeile braucht einen Lieferanten.
+  function preisOk(v){ var r=(v||'').replace(/[^0-9.,]/g,'').replace(/\./g,'').replace(',', '.'); var f=parseFloat(r); return isFinite(f) && f>0; }
+  function onlineFehlt(){ var f=[]; if(!onH || onH.value.trim()==='') f.push('Händler / Quelle'); if(!onP || !preisOk(onP.value)) f.push('Preis gesamt'); return f; }
+  function direktFehlt(){ var n=0; boxes.forEach(function(c){ if(!c.checked) return; var s=document.querySelector('select[name="lief['+c.value+']"]'); if(!s || !s.value) n++; }); return n; }
+  function hinweis(el, txt){ if(!el) return; el.hidden=!txt; el.textContent=txt||''; }
+  function upd(){
+    var any=false; boxes.forEach(function(c){if(c.checked)any=true;});
+    if(btn)btn.disabled=!any;
+    var of=onlineFehlt(); if(bex) bex.disabled=!any || of.length>0;
+    hinweis(onHw, any && of.length ? 'Noch nicht bestellbar – es fehlt: ' + of.join(' und ') + '.' : '');
+    var dn=direktFehlt(); if(bdi) bdi.disabled=!any || dn>0;
+    hinweis(diHw, any && dn ? 'Noch nicht bestellbar – bei ' + dn + ' angehakten Zeile(n) fehlt der Lieferant.' : '');
+  }
   boxes.forEach(function(c){c.addEventListener('change',upd);});
+  [onH,onP].forEach(function(el){ if(el){ el.addEventListener('input',upd); el.addEventListener('change',upd); } });
+  document.querySelectorAll('select[name^="lief["]').forEach(function(s){ s.addEventListener('change',upd); });
+  // Auch Enter im Feld oder ein anderer Weg darf nicht unvollständig absenden.
+  if(bex && bex.form) bex.form.addEventListener('submit', function(ev){
+    var m = ev.submitter ? ev.submitter.value : '';
+    if(m==='online' && onlineFehlt().length){ ev.preventDefault(); upd(); var d=document.getElementById('onlineBox'); if(d) d.open=true; if(onHw) onHw.scrollIntoView({block:'center'}); }
+    if(m==='direkt' && direktFehlt()){ ev.preventDefault(); upd(); if(diHw) diHw.scrollIntoView({block:'center'}); }
+  });
   if(a) a.addEventListener('change',function(){boxes.forEach(function(c){ if(c.closest('tr').style.display!=='none') c.checked=a.checked; });upd();});
   // Suche: Zeilen der "Zu bestellen"-Tabelle filtern; versteckte Zeilen werden abgewählt.
   var q=document.getElementById('bestSuche'), tb=document.getElementById('bestTbody');
@@ -592,6 +617,20 @@ if ($ohneFestlegung): ?>
     sel.addEventListener('change', upd);
     if (menge){ menge.addEventListener('input', upd); menge.addEventListener('change', upd); }
     upd();
+  });
+})();</script>
+<style>.bx-fehlhinweis{margin-top:8px;color:var(--err);font-size:13px;font-weight:600}.bx-fehlhinweis[hidden]{display:none}</style>
+<script>(function(){
+  // „Vorsorglich bestellen": Online braucht Händler + Preis, Direkt einen Lieferanten – sonst gar nicht absenden.
+  var f=document.querySelector('form input[name="aktion"][value="vorsorglich"]'); f=f?f.form:null; if(!f) return;
+  var hw=f.querySelector('.vs-hinweis');
+  function preisOk(v){ var r=(v||'').replace(/[^0-9.,]/g,'').replace(/\./g,'').replace(',', '.'); var x=parseFloat(r); return isFinite(x) && x>0; }
+  f.addEventListener('submit', function(ev){
+    var m = ev.submitter ? ev.submitter.value : '', fehlt=[];
+    if(m==='online'){ if(f.on_haendler.value.trim()==='') fehlt.push('Online-Händler / Quelle'); if(!preisOk(f.on_preis.value)) fehlt.push('Preis gesamt'); }
+    if(m==='direkt' && !f.lieferant_id.value) fehlt.push('Lieferant');
+    if(fehlt.length){ ev.preventDefault(); hw.hidden=false; hw.textContent='Nicht bestellt – es fehlt: ' + fehlt.join(' und ') + '.'; hw.scrollIntoView({block:'center'}); }
+    else hw.hidden=true;
   });
 })();</script>
 <?php render_footer(); ?>
