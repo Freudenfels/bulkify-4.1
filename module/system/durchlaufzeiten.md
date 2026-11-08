@@ -18,9 +18,9 @@ Anker ist die **Rezepturanfrage mit gesetzter `rezeptur_id`** (gesetzt beim Vers
 ## Anzeige
 - **Segmente** (Dauer bis zum nächsten Meilenstein): Reaktion (1→2), Kundenentscheid (2→3), bis Produktanfrage (3→4), Angebotszeit (4→5), Kundenbestätigung (5→6), Produktion (6→7). **Gesamt** = 1→7.
 - Oben **Ø-Kacheln** je Segment + Gesamt (zählt nur Vorgänge, bei denen der Schritt vorliegt).
-- Tabelle: ein Vorgang je Zeile (Rezeptur verlinkt), Start-Datum, Segment-Dauern, Gesamt, Stand (`fertig` bzw. „läuft seit …"). Fehlt ein Schritt (oder nicht sauber datierbar / negative Differenz) → „–".
+- Tabelle: ein Vorgang je Zeile (Rezeptur verlinkt), Start-Datum, Segment-Dauern, Gesamt, Stand (`fertig` bzw. die Tage seit dem letzten Meilenstein: „heute" / „1 Tag" / „N Tage", seit 08.11.2026 ohne „läuft seit" und ohne Stunden). Fehlt ein Schritt (oder nicht sauber datierbar / negative Differenz) → „–".
 - Filter: Kunde, Zeitraum (von/bis auf m1).
-- Dauer-Format lokal im Modul (T / Std / Min).
+- Dauer-Format lokal im Modul (T / Std / Min) für die Segment-Spalten und Gesamt; die Spalte Stand nur in Tagen.
 
 ## Hinweise
 - Zeiten gemischt: `*.angelegt` sind `DEFAULT CURRENT_TIMESTAMP` (Server-Zeit), `freigabe_am`/`erledigt_at` sind UTC (`gmdate`/`UTC_TIMESTAMP`). Solange die DB-Serverzeit UTC ist (Projektkonvention), sind die Differenzen konsistent.

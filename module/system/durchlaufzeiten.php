@@ -111,7 +111,7 @@ bx_head('Durchlaufzeiten', 'Wie lange von der Rezepturanfrage bis zur fertigen P
         <td style="white-space:nowrap" class="muted"><?= $r['ms']['m1'] ? h(fmt_zeit($r['ms']['m1'], 'd.m.Y')) : '–' ?></td>
         <?php foreach ($SEG as $j => $s): ?><td class="bx-num" style="white-space:nowrap"><?= $fmt($r['segVals'][$j]) ?></td><?php endforeach; ?>
         <td class="bx-num" style="white-space:nowrap"><strong><?= $fmt($r['gesamt']) ?></strong></td>
-        <td style="white-space:nowrap"><?php if ($r['fertig']): ?><?= bx_badge('fertig','ok') ?><?php elseif ($r['laeuft'] !== null): ?><span class="muted" style="font-size:12px">läuft seit <?= $fmt($r['laeuft']) ?></span><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+        <td style="white-space:nowrap"><?php if ($r['fertig']): ?><?= bx_badge('fertig','ok') ?><?php elseif ($r['laeuft'] !== null): ?><span class="muted" style="font-size:12px"><?php $ld = intdiv((int)$r['laeuft'], 86400); echo $ld < 1 ? 'heute' : ($ld === 1 ? '1 Tag' : $ld . ' Tage'); ?></span><?php else: ?><span class="muted">–</span><?php endif; ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

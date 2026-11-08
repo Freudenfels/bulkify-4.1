@@ -132,12 +132,13 @@ $standBadge = function($r) use ($phaseStil) {
 };
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
+// Dauer nur in ganzen Tagen (Nico 08.11.2026): „heute" unter 1 Tag, sonst „1 Tag" / „27 Tage". Sortiert wird weiter
+// nach der echten Dauer in Sekunden ($rr['dauer']), nicht nach dem Text.
 $dauerFmt = function (?string $a, ?string $b): string {
     if (!$a || !$b) return '';
     $s = strtotime($b) - strtotime($a); if ($s < 0) return '';
-    if ($s < 3600) return max(1, intdiv($s, 60)) . ' Min';
-    $d = intdiv($s, 86400); $h = intdiv($s % 86400, 3600);
-    return $d > 0 ? $d . ' T' . ($h ? ' ' . $h . ' Std' : '') : $h . ' Std';
+    $d = intdiv($s, 86400);
+    return $d < 1 ? 'heute' : ($d === 1 ? '1 Tag' : $d . ' Tage');
 };
 
 $cols = [
@@ -177,6 +178,7 @@ $cols = [
                         $fertig = $fertigMap[(int)$r['id']] ?? null;
                         if ($fertig) {
                             $t = $dauerFmt($start, $fertig);
+                            if ($t === 'heute') $t = 'unter 1 Tag';
                             return $t !== ''
                                 ? '<span title="bestellt → Produktion fertig am ' . h(fmt_zeit($fertig, 'd.m.Y H:i')) . '"><strong>' . h($t) . '</strong> <span class="muted">bis fertig</span></span>'
                                 : '<span class="muted">fertig</span>';
@@ -184,7 +186,7 @@ $cols = [
                         if (($r['status'] ?? '') === 'versendet') return '<span class="muted">abgeschlossen</span>';
                         if (($r['status'] ?? '') === 'storniert') return '<span class="muted">–</span>';
                         $t = $dauerFmt($start, $jetztUtc);
-                        return $t !== '' ? '<span class="muted">läuft seit ' . h($t) . '</span>' : '<span class="muted">–</span>';
+                        return $t !== '' ? '<span class="muted" title="bestellt am ' . h(fmt_zeit((string)$start, 'd.m.Y H:i')) . '">' . h($t) . '</span>' : '<span class="muted">–</span>';
                      }],
     'art'          => ['label' => 'Art', 'sort' => true, 'render' => function($r) use ($auftragArt) {
                         $k = $auftragArt($r);
