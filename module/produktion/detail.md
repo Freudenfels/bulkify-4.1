@@ -162,3 +162,6 @@ Das Kennzeichen heißt nur noch „alles vorhanden“, wenn wirklich nichts fehl
 - **Nebenzeile:** Kunde · Auftrag · erstellt (klein, grau).
 - **Fehler behoben:** Die God-Mode-Schleife überschrieb `$done` (Anzahl erledigter Schritte) – dadurch stand „Fortschritt / 6"
   ohne Zahl und „Jetzt dran – Schritt 1 von 6" falsch. Schleifenvariable heißt jetzt `$gsDone`.
+
+## Direkt bestellt (08.11.2026)
+Im Block Material neben „Bestellung(en) anlegen“ der Knopf „Direkt bestellt“: Entwürfe je Hauptlieferant werden sofort als bestellt + bestätigt abgeschlossen (ohne Lieferant bleibt Entwurf), keine Mail.

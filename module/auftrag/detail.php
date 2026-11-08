@@ -550,6 +550,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?
         header('Location: ' . $bwZ . '&bwok=' . urlencode('An die Bedarfsliste gemeldet.')); exit;
     }
     $bid = auftrag_beschaffung_bestellen($id, (string)($_POST['weg'] ?? ''), (int)($_POST['lieferant_id'] ?? 0));
+    // Dritter Weg „Direkt bestellt (Telefon/Mail)": Entwurf sofort als bestellt + bestätigt abschließen, ohne Mail.
+    if ($bid && ($_POST['modus'] ?? '') === 'direkt') bestellung_direkt_abschliessen($bid, null, null, 'aus dem Beschaffungsweg');
     header('Location: ' . ($bid ? '?p=bestellung&id=' . $bid : $bwZ . '&bwfehler=' . urlencode('Bestellung nicht möglich (Weg nicht festgelegt oder kein Angebot).'))); exit;
 }
 // Beschaffungsweg: vorhandenen Bestand / offene Bestellung dem Auftrag zuordnen bzw. lösen (Nico 05.11.2026, nur Admin).
@@ -1420,7 +1422,8 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
               <td style="text-align:right"><?php if ($ist && $bwAdmin && $w['menge'] > 0.0001): ?>
                 <form method="post" style="margin:0" onsubmit="return confirm('Bestellung bei <?= h(addslashes($ag['lieferant'])) ?> als Entwurf anlegen (<?= h($bwM($w['menge'], $w['einheit'])) ?>)?')">
                   <input type="hidden" name="aktion" value="beschaffung_bestellen"><input type="hidden" name="weg" value="<?= h($k) ?>"><input type="hidden" name="lieferant_id" value="<?= (int)$ag['lieferant_id'] ?>">
-                  <button class="btn btn-primary btn-sm" type="submit">Bestellen</button></form>
+                  <button class="btn btn-primary btn-sm" type="submit" title="Als Entwurf anlegen – auf der Bestellseite über das Portal senden">Bestellen</button>
+                  <button class="btn btn-ghost btn-sm" type="submit" name="modus" value="direkt" title="Schon per Telefon/Mail bestellt: sofort bestellt + bestätigt, keine Mail">Direkt bestellt</button></form>
               <?php endif; ?></td></tr>
           <?php endforeach; ?>
           </tbody></table>

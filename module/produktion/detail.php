@@ -82,6 +82,9 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 // 1-Klick: Bestellungen aus dem Fehlbedarf anlegen
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bedarf_bestellen') {
     $neu = bestellung_aus_bedarf($id);
+    // „Direkt bestellt (Telefon/Mail)": Entwürfe mit Lieferant sofort bestellt + bestätigt, keine Mail (ohne Lieferant bleibt Entwurf).
+    if (($_POST['modus'] ?? '') === 'direkt')
+        foreach ($neu as $nb) if ((int) scalar("SELECT COALESCE(lieferant_id,0) FROM bestellung WHERE id=?", [$nb]) > 0) bestellung_direkt_abschliessen((int)$nb, null, null, 'aus dem Produktionsauftrag');
     header('Location: ?p=produktionsauftrag&id=' . $id . '&bestellt=' . count($neu)); exit;
 }
 // Fehlende Rohstoffe direkt auf die Einkaufsliste setzen (Bedarf melden, ohne den Umweg über die Bedarf-Seite).
@@ -741,7 +744,8 @@ if ($bedarfListe):
       <?php if ($fehlListe): ?>
         <a class="btn btn-accent btn-sm" href="?p=einkaufsliste">Zur Bestellseite</a>
         <form method="post" style="margin:0"><input type="hidden" name="aktion" value="bedarf_bestellen">
-          <button class="btn btn-primary btn-sm" type="submit">Bestellung(en) anlegen</button></form>
+          <button class="btn btn-primary btn-sm" type="submit" title="Als Entwurf je Hauptlieferant anlegen">Bestellung(en) anlegen</button>
+          <button class="btn btn-ghost btn-sm" type="submit" name="modus" value="direkt" title="Schon per Telefon/Mail beim Hauptlieferanten bestellt: sofort bestellt + bestätigt, keine Mail">Direkt bestellt</button></form>
       <?php endif; ?>
     </div>
   </div>
