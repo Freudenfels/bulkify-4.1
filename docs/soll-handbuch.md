@@ -1,0 +1,363 @@
+# bulkify V4 - Soll-Handbuch (Ablauf ab Auftrag)
+
+**Stand:** 08.11.2026 · **Verantwortlich:** Nico Thomalla (Entscheidungen), QM: Tabea Albers
+**Repo:** github.com/Freudenfels/bulkify-4.1 · live app.bulkify.pro + beta.bulkify.pro
+
+---
+
+## 0. Wozu dieses Handbuch da ist und wie es benutzt wird
+
+Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreibt, **wie das Programm ab dem Auftrag laufen soll** - in Nicos Worten, mit den Entscheidungen, die in vielen Gesprächen getroffen wurden. Bisher war dieses Wissen über Dutzende Arbeitsanweisungen (MDs) und Rückmeldungen verstreut, und vieles stand nirgends. Das Ergebnis: Funktionen wurden nachträglich dazu-, um- und doppelt gebaut, und manches widerspricht sich.
+
+**Regeln für Claude Code:**
+1. **Ablage:** Dieses Dokument als `docs/soll-handbuch.md` ins Repo legen und in `CLAUDE.md` einen Verweis ergänzen: "Bei größeren Aufgaben (neue Abläufe, Umbauten über mehrere Seiten, Datenmodell, Menü) zuerst `docs/soll-handbuch.md` lesen." Eine Kopie bleibt im Drive-Ordner "bulkify v4 md".
+2. **Wann lesen:** Bei **größeren Aufgaben** immer vorher lesen - also bei allem, was einen Ablauf, mehrere Seiten, das Datenmodell, Rechte oder das Menü betrifft. Bei Kleinkram (Knopf umbenennen, Abstand, Tippfehler, einzelne Anzeige) nicht nötig.
+3. **Vorrang:** Das Handbuch hat **Vorrang vor älteren MDs**. Widerspricht eine ältere Anweisung dem Handbuch, gilt das Handbuch. Widerspricht eine **neue** Anweisung von Nico dem Handbuch, gilt die neue Anweisung - und das Handbuch wird danach angepasst (Abschnitt 14).
+4. **Unklar = fragen:** Ist etwas hier nicht geregelt oder offen markiert (Abschnitt 12), nicht raten, sondern kurz zurückmelden.
+5. **Nichts doppelt bauen:** Bevor etwas Neues entsteht, prüfen, ob es das schon gibt. Für jede Sache gibt es **genau eine Stelle** (Abschnitt 1).
+
+**Für Nico und Claude (Chat):** Neue Entscheidungen werden hier nachgetragen, nicht nur in einer einzelnen MD. Jede neue Arbeitsanweisung verweist auf den passenden Abschnitt dieses Handbuchs.
+
+---
+
+## 1. Grundprinzipien
+
+1. **Der Auftrag steuert alles.** Ab der Auftragsbestätigung hängt jede Bestellung, jede Charge, jeder Produktionsschritt, jedes Dokument und jeder Versand an einem Auftrag. Vom Auftrag aus muss man alles erreichen können.
+2. **Eine Stelle je Sache.** Ändern, Zuordnen, Freigeben, Prüfen - jeweils genau ein Ort. Keine zweiten Wege "der Vollständigkeit halber". Wenn heute zwei Wege existieren, wird zusammengeführt, nicht ergänzt.
+3. **Geführt statt suchen.** Das System fragt den Nutzer zur richtigen Zeit das Richtige ("Wie machen wir diesen Auftrag?", "Bei wem bestellen?") und schlägt Antworten vor (Lieferant, Preis, Menge). Der Nutzer bestätigt oder ändert.
+4. **Hintergrund koppelt automatisch.** Was das System selbst wissen kann (Bedarf, Abzug vorhandener Bestand, Zuordnung beim Wareneingang gegen Bestellung, Kapselzahl aus Gewicht, Chargenkette), rechnet es selbst. Der Nutzer sieht nur, was eine Entscheidung braucht.
+5. **Hinweis statt Blockade - Sperren nur an festen Punkten.** Fehlende Unterlagen oder Abweichungen erzeugen einen **Hinweis + eine Aufgabe** in der Liste "Zu erledigen" (Abschnitt 6). Harte Sperren gibt es nur dort, wo dieses Handbuch es ausdrücklich sagt (Etikettieren ohne Freigabe, Abfüllen beim Chargenwechsel ohne Bestätigung, falscher Eimer, Charge passt gar nicht, Versand/Lager-2-Freischaltung ohne grüne Prüfliste, fehlender Karton beim Versand).
+6. **Jeder Schritt braucht nur sein eigenes Material.** Ein Auftrag ist so weit produzierbar, wie das Material für den jeweiligen Schritt reicht (Abschnitt 4.7).
+7. **Rückverfolgbarkeit ohne Mehrarbeit.** Chargen, Unter-Chargen und Lieferungen werden lückenlos mitgeschrieben - durch Scannen und Vorbelegen, nicht durch Abtippen.
+8. **Die Daten bleiben.** Umbauten ändern Abläufe und Oberfläche, nicht die vorhandenen Daten. Bestehende Zuordnungen, Chargen, Belege müssen erhalten bleiben. Migrationen vorher melden.
+9. **Konventionen:** keine Emojis; "Stk" statt "Stück"; Tausenderpunkt in Anzeigen, deutsch-sicheres Zahlenparsing bei Eingaben (`erp_menge_parse()`/`zahl_lesen()`, nie `intval` auf Mengen, keine `type=number`-Felder für Mengen); Dropdowns mit mehr als 10 Einträgen als Suchfeld; Zeiten in UTC speichern, in Ortszeit zeigen; MySQL Strict-Mode; erst Testkopie, dann live; ein Fix = ein Commit.
+
+---
+
+## 2. Begriffe (damit alle dasselbe meinen)
+
+- **Rezeptur:** Wirkstoffe in mg + Darreichungsform (Kapsel, Pulver, Tablette …). **Je Kapselgröße eine eigene Rezeptur.** Rezepturen sind für alle Kunden sichtbar, außer sie sind ausdrücklich **exklusiv**.
+- **Produkt:** Rezeptur × Menge je Packung × **neutraler** Behälter (z. B. "Ashwagandha · 120 Kapseln · 150 ml Weithalsglas"). Ein Produkt ist kundenneutral und wird einmal angelegt.
+- **Kundenschicht:** Was einem Kunden gehört: Name beim Kunden, Kundenpreise, **Etikett-Design** (je Produkt + Kunde, mit Versionen v1, v2 …), bedruckter Beutel (je Produkt + Kunde). Beipackzettel und Umkarton sind **optionale Positionen am Angebot**, nicht am Produkt.
+- **Charge (Rohstoff/Bulk):** Lieferanten-Charge eines Rohstoffs oder zugekaufter Bulkware, mit MHD und CoA.
+- **Lieferung (Verpackung):** Ein Wareneingang von Gläsern, Dosen, Deckeln, Kartons, Etiketten. Wird für die Rückverfolgbarkeit festgehalten (siehe Abschnitt 4.5 und 8).
+- **Fertigware-Charge / Unter-Charge:** Die Charge des fertigen Produkts, z. B. **2799**. Werden Rohstoff- oder Bulk-Chargen gewechselt, entstehen **Unter-Chargen 2799.A, 2799.B …** (Abschnitt 4.8). Jede Unter-Charge wird getrennt gemischt, verkapselt, abgefüllt und verpackt.
+- **Eimer:** Eine Mischung als geschlossene Einheit, mit eigenem Etikett und Unter-Charge-Buchstaben.
+- **Gebinde:** Ein einzelner Karton, Sack, Eimer, Kanister im Lager, mit eigener ID hinter dem Barcode und eigenem Bestand (z. B. echtes Gewicht je Karton).
+- **Lager 1:** eigener Bestand. **Lager 2:** Kundenware für das Fulfillment (Besitzer = Kunde).
+- **Zu erledigen:** die eine zentrale Aufgabenliste im Dashboard (Abschnitt 6).
+- **Prüfliste vor Versand:** automatische Liste von Bedingungen, die erfüllt sein müssen, bevor Ware das Haus verlässt oder in Lager 2 verkaufbar wird (Abschnitt 4.12).
+
+---
+
+## 3. Menü: "Einfach" und "Ausführlich"
+
+**Problem heute:** Zu viele Menüpunkte und Knöpfe, vieles davon im Alltag unnötig oder noch nicht im Einsatz (Kalender, Planung, Maschinen).
+
+**Soll:** Ein Umschalter **Einfach / Ausführlich** pro Nutzer (gespeichert am Nutzer). Das Menü ist bereits datengetrieben (Menü-Editor vorhanden) - der Umschalter blendet nur aus, er löscht keine Seiten.
+
+**Einfach (Alltag) enthält:**
+- **Zu erledigen** (die zentrale Aufgabenliste, Abschnitt 6) - ganz oben, mit Zähler
+- **Anfragen** - **eine** Tabelle mit allen Anfragearten (Rezeptur-, Produkt-, Rohstoff-, Dienstleistungsanfragen), Spalte "Art", Markierung "neu"
+- **Angebote**
+- **Aufträge**
+- **Produkte**
+- **Rezepturen**
+- **Rohstoffe**
+- **Produktion** (Reihenfolge-Liste, Abschnitt 4.6)
+- *(offen, Abschnitt 12: ob **Bestellen/Einkauf** und **Lager** auch in "Einfach" gehören)*
+
+**Ausführlich:** alles Übrige (Kalender, Planung, Maschinen, Geführte Produktion, Easy Production, Kontingente, Dienstleistungen, Novel Food, Doppelte Rezepturen, Datenprüfung, Einstellungen …).
+
+**Einführung:** Das neue Menü wird **nach** dem Abgleich (Abschnitt 13, Schritt 1) gebaut. Vorhandene Seiten werden eingehängt; was doppelt ist, verschwindet aus dem Menü (Seite bleibt per Link erreichbar, bis sie bewusst entfernt wird).
+
+---
+
+## 4. Die Kette Schritt für Schritt
+
+### 4.1 Anfrage → Angebot → Auftrag
+- Anfragen kommen über das Portal oder werden angelegt. Aus der Anfrage wird ein Angebot; nimmt der Kunde an, entstehen **Auftrag, Produktionsauftrag und Rechnung**. Die Rechnung gibt es also ab Annahme (bei Vorkasse/Teilzahlung entsprechend teilbezahlt).
+- Der Auftrag enthält alle Informationen (Menge, Produkt, Verpackung, Füllmenge, Preis). Dieser Teil gilt als **fertig**; Änderungen an Stammdaten laufen über den **Stift an den Kacheln** im Reiter Details (Abschnitt 5).
+
+### 4.2 Weg festlegen - "Wie machen wir diesen Auftrag?"
+Sobald ein Auftrag neu ist, fragt das System aktiv (Auftrag erscheint in "Zu erledigen": "Weg festlegen"). Im Reiter **Beschaffungsweg** stehen die Wege **nebeneinander**, mit Kosten für **genau diesen Auftrag**:
+1. **Zukauf fertig** - fertige Kapseln/Tabletten (bei Pulver: fertige Mischung)
+2. **Premix** - fertige Mischung, die selbst verkapselt/abgefüllt wird
+3. **Einzelrohstoffe** - Eigenproduktion aus Rohstoffen
+4. **"Haben wir schon im Lager"** - eine **Suche über den gesamten Bestand** (nicht nur über das, was das System für passend hält). So findet man auch Ware, die unter anderem Namen eingebucht ist (z. B. loser "Bulk #0"). Gewählte Charge wird dem Auftrag fest zugeordnet; das System prüft nur noch, ob die Menge reicht, und fragt beim Rest, wie er beschafft wird.
+- Gilt für das **Hauptmaterial** (Bulk-Kapseln, Premix, Rohstoffe). Nebenmaterial (Gläser, Deckel, Etiketten, Kartons) wird über **"Zuordnen" in der Material-Tabelle** aus dem Lager genommen - ebenfalls mit Suche über den ganzen Bestand.
+- **Preise:** aus hinterlegten Lieferantenpreisen. **Staffel nach Menge:** es zählt nur eine Staffel, deren Mindestmenge der Bedarf erreicht (225 kg → Staffel "ab 200", nie "ab 300"). Ist eine echte Bestellung verknüpft, gilt deren Preis. Ohne Preis: nur die benötigte Menge zeigen, keinen Preis erfinden.
+- Vorhandenes zieht das System **automatisch ab**: was schon im Lager liegt oder schon bestellt/unterwegs ist und frei ist. Gerechnet und bestellt wird nur der **Rest**.
+- **Handelsware** (zugekauft, kein Produktionsauftrag) hat ebenfalls einen Weg ("Zukauf · Handelsware").
+
+### 4.3 Beschaffung - "Bei wem bestellen?"
+Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carnosin und 3.000 Etiketten - bei wem bestellen?" Lieferant und Preis sind vorgeschlagen.
+- **Kapsel und Premix:** direkter Knopf "Bestellen" je Lieferant (mit Gesamtkosten für den Auftrag).
+- **Einzelrohstoffe:** über die **Bedarfsliste** (oft mehrere Lieferanten).
+- **Drei Bestellwege** an jeder Bestellung:
+  1. **Über Portal** - Lieferant bekommt die Bestellung im Lieferantenportal + Mail und bestätigt dort.
+  2. **Online** - Bestellung im Shop des Lieferanten, Eingabe der Bestellnummer.
+  3. **Direkt bestellt** (telefonisch/per Mail, z. B. VitaActives) - Bestellung steht sofort auf "bestellt", **keine** Mail an den Lieferanten, **keine** Bestätigung nötig. Der Lieferant sieht sie trotzdem in seinem Portal (Tracking, Rechnung möglich). Für schon übers Portal verschickte Bestellungen gibt es "Telefonisch bestätigt". (Eigene Anleitung "Bestellweg Direkt bestellt".)
+- **"Rohstoff bestellt"** (Kunden-Fortschritt) wird nur gesetzt, wenn es eine **echte** Bestellung zum Auftrag gibt (Status gesendet/bestellt/geliefert) - nicht durch "Weg festlegen", nicht durch Entwürfe, nicht durch Bestellungen anderer Aufträge.
+- Ist alles bestellt bzw. zugeordnet, verschwindet der Auftrag aus der Arbeitsliste, bis Ware ankommt.
+
+### 4.4 CoA zur Lieferung (Eingangsunterlagen)
+- **Portal-Lieferanten** müssen beim Melden "versendet" die **Chargennummer** eintragen **und das CoA hochladen** - sonst können sie nicht abschließen.
+- **Direkt bestellt/telefonisch:** Nico (oder Einkauf) lädt das CoA aus der Mail an der Bestellung hoch und trägt die Charge ein.
+- **Bei jeder Preisabgabe** im Lieferantenportal ist mindestens **eine Spezifikation oder ein CoA** Pflicht.
+- **Prüfung durch QM (Tabea)** - geht schon **vor** der Lieferung, sobald das CoA da ist. "Geprüft" heißt:
+  1. Passt es zur Ware? (Chargennummer CoA = Charge der Lieferung)
+  2. Stimmen die Werte? (Gehalt, Schwermetalle, Mikrobiologie, je nach Rohstoff Pestizide/Allergene - innerhalb der Spezifikation)
+  3. Ist es gültig? (MHD passt, CoA ist für genau diese Lieferung ausgestellt)
+- **KI-Hilfe:** Das System liest das CoA aus, vergleicht Charge und Werte mit der Spezifikation und **markiert nur Abweichungen**. Tabea bestätigt mit einem Klick oder schaut sich die markierten Fälle an.
+- **Fehlendes oder ungeprüftes CoA blockiert NICHT** Wareneingang oder Produktion - es erzeugt einen Hinweis und die Aufgabe "CoA fehlt / CoA prüfen" für Tabea. **Gesperrt wird erst vor dem Versand** bzw. vor der Freischaltung in Lager 2 (Prüfliste, 4.12).
+
+### 4.5 Wareneingang
+- Dustin sieht in der Lager-App die Liste **"Erwartete Lieferungen"** (offene Bestellungen, "unterwegs"). Er tippt die Lieferung an; Artikel, Menge, Auftrag, Rezeptur, Kapselgröße sind übernommen. Freie Anlage ist möglich (bevorzugt aus vorhandenen Artikeln; "Neuer Artikel" nur über eigenen Knopf mit Pflichtangaben, jede Neuanlage meldet sich als Aufgabe zum Prüfen/Zusammenführen).
+- **Charge blind eintippen:** Dustin tippt die Charge **vom Gebinde ab, ohne Vorschlag**. Das System gleicht mit der Charge aus der Bestellung/dem CoA ab:
+  1. **Gleich** (tolerant: Punkte, Leerzeichen, Bindestriche, Groß-/Kleinschreibung egal - "2799.A" = "2799A" = "2799 a") → Ware ist sofort frei.
+  2. **Ähnlich** (z. B. Zahlendreher 69/96, ein Zeichen anders) → Rückfrage: "Bitte noch einmal aufs Gebinde schauen - auf dem CoA steht …". Dustin korrigiert.
+  3. **Passt gar nicht** → Ware geht in **Quarantäne**, Nico und Tabea bekommen sofort eine Benachrichtigung + Aufgabe.
+  - Liegt noch keine Charge aus CoA/Bestellung vor: Eingabe wird übernommen, Abgleich passiert, sobald das CoA kommt; bis dahin Aufgabe "CoA fehlt".
+- **Ware ist standardmäßig frei.** Quarantäne nur bei bewusst gewähltem "Problem" (Beschädigung, Abweichung) oder bei Chargen-Mismatch (oben).
+- **Gewicht je Karton** bei wiegbarer Ware (Rohstoffe, Bulk, Pulver): Zeile je Karton, gleichmäßig vorbelegt, jede änderbar, Summe/Differenz laufend, **bei Differenz gesperrt**. Echtes Gewicht am Gebinde hinter dem Barcode; Scan zeigt den echten Inhalt; Entnahme und Rückgabe (neu wiegen, "ordentlich verschlossen") je Gebinde. (Gebaut - Rückmeldung "Gewicht pro Gebinde".)
+- **Bulkware** wird nur auf den Bulk-Artikel der Rezeptur gebucht (keine losen "Bulk #0"-Artikel mehr); die **Kapselgröße** kommt automatisch aus Auftrag/Rezeptur.
+- **Zuordnung zum Auftrag:** Beim Wareneingang gegen eine verknüpfte Bestellung hängt die Ware automatisch am Auftrag, und der Auftrag springt auf "Material da".
+- **Verpackung (Gläser, Dosen, Deckel):** *Vorschlag, offen (Abschnitt 12):* im Lager **eine Menge je Artikel** statt sichtbarer Einzelchargen; die Lieferungen laufen im Hintergrund für die Rückverfolgbarkeit mit; die Produktion bucht die älteste Lieferung zuerst ab und der Produktionsbericht vermerkt die Lieferung. Etiketten/Kartons mit Design: maßgeblich ist die **Design-Version** (eigener Artikel je Version).
+
+### 4.6 Produktionsreihenfolge
+- **Nico oder Tabea** legen fest, was als Nächstes produziert wird: Liste unter **Produktion** im Dashboard, sortierbar per Ziehen.
+- Die **Werk-App** zeigt den Mitarbeitern genau diese Reihenfolge, oben der nächste Auftrag.
+- Aufträge, die gerade **nicht machbar** sind, sind **grau** mit Grund ("Etiketten fehlen", "Gläser fehlen"). **Teilweise machbare** zeigen, bis wohin ("machbar bis Verkapseln - Gläser fehlen"). Ist der oberste blockiert, rückt der nächste machbare nach vorne, mit Hinweis.
+- Zuordnungen (z. B. "diese Etiketten im Lager gehören zu diesem Auftrag") macht man weiterhin im **Material-Reiter des Auftrags**; sobald etwas zugeordnet ist, wird der Auftrag automatisch von grau auf machbar umgestellt.
+- Nico kann zusätzlich am Auftrag **"Teilmenge produzieren"** anweisen (Menge, Umfang, Priorität) → erscheint in der Werk-App als Aufgabe. Die Produktion darf Teilmengen auch selbst machen.
+
+### 4.7 Material je Schritt (was jeder Schritt braucht)
+| Schritt | braucht |
+|---|---|
+| Mischen | Rohstoffe (bzw. Premix) |
+| Verkapseln | Mischung + Leerkapseln |
+| Abfüllen | Kapseln + Gläser/Dosen + Deckel |
+| Etikettieren | **freigegebenes** Etikett **mit Bestand** |
+| Verpacken | Kartons |
+
+- Der Auftrag ist so weit produzierbar, wie das Material des jeweiligen Schritts reicht. **Fehlende Etiketten oder Gläser blockieren nicht das Mischen und Verkapseln.**
+- Zwischenstände (Kapselsäcke, "fertig, unetikettiert") gehen mit Etikett ins Lager 1 und werden für den nächsten Schritt wieder geholt.
+- **Bekannter Fehler (zu beheben):** Bei AB-3289 zählt "Etikett vorrätig: fehlt 3.000 Stk" als fehlendes Material, und der Auftrag gilt als "Produktion nicht möglich". Fehlende Etiketten dürfen nur den Schritt **Etikettieren** sperren.
+
+### 4.8 Produktion: Eimer, Unter-Chargen, Chargenwechsel
+*Grundlage bleibt das Produktionsmodul-Konzept vom Oktober 2026 (Rückstellmuster mind. 5 Stk und Proben je Gebinde, Kapselwiegungen, Pausen nur an sauberen Punkten, Maschinen-Scans, Etikett je Gebinde). Hier steht, was am 08.11. ergänzt bzw. klargestellt wurde.*
+
+**Eimerplanung (Mischen):**
+- Das System **gibt die Eimer genau vor** - Größe und Reihenfolge. Der Mitarbeiter entscheidet die Eimergrößen nicht selbst.
+- Regel: Bei jedem Rohstoff wird **zuerst die ältere Charge** verbraucht. **Jedes Mal, wenn bei irgendeinem Rohstoff eine Charge zu Ende geht, beginnt ein neuer Eimer** mit neuem Buchstaben. Beispiel: Rohstoff 1 hat noch 5 kg alt, Rohstoff 2 noch 30 kg alt → Eimer **A** bis die 5 kg verbraucht sind (kleiner Eimer), Eimer **B** bis die 30 kg verbraucht sind, danach normale 25-kg-Eimer mit den neuen Chargen (C …). Der Mitarbeiter bekommt die klare Anweisung "Zuerst Eimer A mit 5 kg - wegen Restcharge".
+- Jeder Eimer bekommt ein Etikett mit der Unter-Charge (z. B. 2799.A).
+- **Zugekaufte Bulkware** genauso: Reichen zwei Bulk-Chargen nur zusammen (z. B. 50.000 alt + 150.000 neu für 200.000), teilt das System den Auftrag automatisch in **zwei Läufe**: erst 50.000 als 2799.A, dann 150.000 als 2799.B - jeder mit eigener Nummer und genauer Menge.
+
+**Verkapseln:**
+- Eimer scannen, getrennt verkapseln; der Kapselsack bekommt ein Etikett mit **derselben Unter-Charge**.
+- **Kapselzahl:** Mitarbeiter wiegt laufend Stichproben (z. B. mehrmals je 10 Kapseln) → echtes Durchschnittsgewicht. **Kapseln = (Sackgewicht - Tara des Sacktyps) / Durchschnittsgewicht.** Tara je Sacktyp ist hinterlegt. Gezählt wird nicht von Hand.
+
+**Abfüllen:**
+- Eimer für Eimer bzw. Sack für Sack. **Nicht nachkippen** über eine Unter-Charge hinweg.
+- **Falscher Eimer/Sack:** Scannt der Mitarbeiter ein Gebinde einer anderen Unter-Charge, während die aktuelle nicht fertig ist → **Stopp:** "Falsche Charge - erst den angefangenen Eimer komplett abfüllen." Weiter erst mit dem richtigen Gebinde. Reihenfolge gibt das System vor (älteste Unter-Charge zuerst).
+- **Chargenwechsel** (neue Unter-Charge beginnt) - Pflicht-Bestätigung, ohne die es nicht weitergeht:
+  1. Linie ist **leergelaufen**,
+  2. Stempel/Drucker für Charge und MHD ist **auf die neue Nummer umgestellt**,
+  3. **Foto** vom ersten neuen Glas mit aufgedruckter Charge ist hochgeladen.
+  Alles landet im Herstellprotokoll (Chargenwechsel mit Linienräumung).
+
+**Rückmeldungen und Gegenprobe:**
+- Nach jedem Abschnitt meldet der Mitarbeiter, was tatsächlich herauskam: Mischen → Gewicht des Eimers; Verkapseln → Sackgewicht (Kapselzahl rechnet das System); Abfüllen/Verpacken → Gläser über die Kartons (4.10) + Ausschuss.
+- **Entscheidend ist die Zahl der fertigen Gläser.** Die Kapselzahl ist die **Gegenprobe**: Gläser × Kapseln je Glas muss zur Kapselzahl der Unter-Charge passen (Toleranz für üblichen Ausschuss). Passt es nicht ("1.000 Gläser à 120 = 120.000, aber nur 100.000 Kapseln") oder ist der Schwund über der Toleranz → **Hinweis an den Mitarbeiter** (kein Stopp) **und Aufgabe in "Zu erledigen"** für Nico/Tabea mit Auftrag, Unter-Charge, erwartet/gemeldet, wer, wann. Begründung: Der Mitarbeiter will schnell fertig werden; die Kontrolle liegt im Büro.
+- Ebenso als Aufgabe: Chargenwechsel ohne vollständige Bestätigung (falls je möglich), auffällige Wiegungen.
+- **Rückstellmuster je Unter-Charge** (A, B … jeweils eigene).
+- Daraus entsteht automatisch das **Herstellprotokoll**: welche Rohstoff-Charge in welchen Eimer, welcher Eimer in welchen Kapselsack, welcher Sack in welche Gläser - mit Mengen, Personen, Zeiten, Wiegungen, Fotos.
+
+### 4.9 Etikett
+- Die **Etikett-Freigabe** (Design-Version durch Kunde bzw. im Namen des Kunden) gehört **vor das Etikettieren**. Ohne Freigabe ist **nur der Schritt Etikettieren gesperrt**; Mischen, Verkapseln, Abfüllen bis vor das Etikett laufen.
+- Werk-App zeigt "Etikett nicht freigegeben - nur bis vor dem Etikettieren"; im Dashboard steht es am Auftrag und in "Zu erledigen" (freigeben oder beim Kunden nachhaken).
+- Etikett hochladen/freigeben geschieht am Auftrag über den **Stift an der Kachel "Etikett"** (Reiter Details). Design liegt am Produkt + Kunde; die Freigabe der Version am Auftrag.
+- Kein stiller Ersatz durch ein generisches Etikett: fehlt das Kundenetikett im Bestand, ist Etikettieren gesperrt (alte Etiketten per "Update-Etikett erzeugen" schrittweise umstellen).
+
+### 4.10 Kartons und Kartonetiketten (in der Produktion)
+- Nach dem Etikettieren wird verpackt. **Immer wenn ein Karton voll ist**, tippt der Mitarbeiter am Tablet "Karton drucken": Menge ist mit der Standard-Stückzahl je Karton vorbelegt (z. B. 68), er ändert sie nur beim Rest-Karton. Das Etikett kommt sofort.
+- **Kartonetikett:** Produkt, Kunde/Auftrag, **Unter-Charge**, MHD, **Menge in diesem Karton**, **Karton-Nummer**, Barcode. **Kein "von n"** (die Gesamtzahl steht erst am Ende fest).
+- **Sortenrein:** Ein Karton enthält nur eine Unter-Charge. Erst alle Kartons von A (inkl. Rest-Karton A), dann B.
+- **Die Summe der Kartons ist die produzierte Menge** je Unter-Charge - es muss am Ende nichts extra gemeldet werden. Beim Abschluss der Unter-Charge Abgleich mit der Kapselzahl (4.8), Abweichungen → "Zu erledigen".
+- Druck über die Lager-Druck-Brücke auf den Produktionsdrucker (100 × 150 mm).
+
+### 4.11 Fertigware
+- Eigene Fertigware ist nach der Produktion **sofort frei** (keine QM-Sperre beim Einbuchen) und liegt in Lager 1.
+- **Automatisch erzeugt:** das zusammenfassende **CoA** je Charge beim Einbuchen (Übersicht aus den Rohstoff-Analysen, ehrlich gekennzeichnet "nicht am Fertigprodukt gemessen", Mikrobiologie nur als Rohstoffwert, claims-neutral; ein echtes Fertigprodukt-Labor-CoA hat Vorrang) und der **Produktionsbericht** beim Produktionsabschluss.
+- Im Kundenportal sieht der Kunde an der Bestellung Charge(n), MHD, CoA, Produktionsbericht.
+
+### 4.12 Labor (externe Analyse)
+- Laboranalysen bestellt der **Kunde** (Zusatzleistung). **Ein Labortest pro Auftrag** reicht; das System merkt sich, aus welcher Unter-Charge die Probe gezogen wurde. **Rückstellmuster** gibt es trotzdem von **jeder** Unter-Charge.
+- Im Reiter Produktion, Block "Externer Labortest": **"Ans Labor senden"** (Labor wählen, Auftragsformular z. B. GBA wird ausgefüllt und zur Probe gelegt), Bericht hochladen, Befund, Freigabe fürs Portal. Der Kunde sieht ihn im Portal.
+- Chargen-Abgleich beim Zuordnen des Berichts **tolerant** (wie 4.5), damit "2799.A" und "2799A" zusammenpassen.
+- Befund "auffällig" → Sperre vor Versand + Benachrichtigung Nico/Tabea.
+
+### 4.13 Prüfliste vor Versand (automatisch)
+Bevor Ware das Haus verlässt **oder** in Lager 2 für das Fulfillment verkaufbar wird, prüft das System selbst:
+1. Alle Rohstoff-CoAs der verwendeten Chargen sind **vorhanden und geprüft**.
+2. Kapselwiegungen liegen in der Toleranz.
+3. **Keine offene Abweichung** aus der Produktion (4.8/4.10) mehr in "Zu erledigen".
+4. Falls ein Labortest bestellt ist: Bericht liegt vor und ist **bestanden**.
+
+- Alles grün → **versandbereit**. Fehlt etwas → Ware gesperrt, Grund steht am Auftrag und in "Zu erledigen".
+- Die Etikett-Freigabe steht **nicht** auf dieser Liste (wird schon vor dem Etikettieren erzwungen).
+- **Offener Rechnungsbetrag** (z. B. teilbezahlt) ist **nur ein Hinweis**, keine Sperre - das entscheidet Nico je Kunde.
+- *(offen, Abschnitt 12: ob Tabea zusätzlich bewusst "Freigabe" klicken soll oder grün reicht.)*
+- **Lager 2 / Fulfillment:** Dieselbe Prüfliste schaltet beim Umlagern in Lager 2 den Bestand für Fulfillment und Shopify frei. Vorher liegt die Ware fertig, ist aber nicht verkaufbar.
+
+### 4.14 Versand
+- Nach der Produktion bzw. sobald die Prüfliste grün ist: Status **versandbereit**.
+- **Lieferadresse bestätigen (neu):** Sobald versandbereit, bekommt der Kunde im Portal einen neuen Fortschrittspunkt **"Lieferadresse bestätigen"**. Er wählt eine gespeicherte Adresse oder legt eine neue an - mit **Zusatzfeldern für Referenzen** (z. B. Amazon-Sendungs-/Lieferungsnummer, Abteilung, Ansprechpartner, Anlieferzeiten). Grund: Kunden lassen oft an Dritte liefern (Amazon u. a.). Erst danach kann versendet werden. Nico kann im Notfall selbst bestätigen (z. B. nach Telefonat).
+  - Nicht bestätigt → Aufgabe "Lieferadresse noch nicht bestätigt" in "Zu erledigen" mit Knopf **"Kunden erinnern"** (keine automatische Erinnerung).
+  - Später: Cargoboard-Anbindung übernimmt diese Adresse samt Referenzen.
+- **In der Lager-App (Dustin), Reiter "Versandbereit":** Versandart wählen - **Paket, Palette, Selbstabholung, Lager 2 (Fulfillment)**. Mehrere Aufträge eines Kunden können eine Sendung bilden.
+- **Palettieren:** Dustin **scannt jeden Kartonaufkleber** auf die jeweilige Palette. Das System weiß damit, welche Kartons (mit welcher Charge) auf welcher Palette stehen - auch gemischte Chargen auf einer Palette sind erlaubt, solange jeder Karton sortenrein ist.
+- **Fehlender Karton:** Weil jeder Karton in der Produktion gezählt wurde, meldet das System: "Karton 17, Charge A, 25 Stk noch auf keiner Palette - bitte suchen." **Versand erst, wenn alle Kartons zugeordnet sind.**
+- **Dokumente:** Paletten-Etikett je Palette (Inhalt dieser Palette), **Gesamtlieferschein** gegliedert nach Paletten und darin je Artikel/Charge zusammengefasst ("Artikel X, Charge A: 3 Kartons à 25 + 1 Karton à 3"), mit Lieferadresse und Referenzen. Lieferschein-Kopie an jede Palette. Selbstabholung: Lieferschein "Selbstabholung".
+- Kunde sieht im Portal "versendet" (mit Lieferschein, Tracking/Spedition, Charge, MHD).
+
+---
+
+## 5. Die Auftragsseite (je Sache eine Stelle)
+
+Stand nach dem Umbau "Auftragsseite entschlacken" (live 08.11.2026):
+
+| Reiter | Wofür (einzige Stelle) |
+|---|---|
+| **Details** | Kacheln; **Ändern per Stift → Pop-up → Speichern** (Verpackung, Füllmenge/Stk je Packung, Kapselgröße/Form/Gewicht, Etikett inkl. Upload/Version/Freigabe, Name beim Kunden, Lieferung). Speichert standardmäßig ans Produkt, Haken "nur für diesen Auftrag". Menge/Preis fixiert. |
+| **Rezeptur** | Zusammensetzung, Unterlagen je Rohstoff |
+| **Material** | **Die eine Material-Tabelle:** benötigt · zugeordnet · frei · Quarantäne · unterwegs · Rest · Deckung · Bestellt bei · **Zuordnen** je Zeile ("Aus Lager zuordnen" / "Bestellung verknüpfen" / Lösen). Kurze Prüfliste "Bereitschaft". |
+| **Beschaffungsweg** | Nur die **Wahl** des Wegs (4.2) + Bestellen / An Bedarfsliste |
+| **Produktion** | Fortschritt, Teilmenge anweisen, Herstellung, Energetisierung, **Labor** komplett |
+| **Lager** | Fertigware-Chargen, Wareneingänge zum Auftrag |
+| **Preise & Rechnung** | Kalkulation (VK gesamt + davon Herstellung, Materialkosten nach Bedarfsmenge), Rechnung, Kontingent |
+| **Dokumente** | nur Downloads (AB, PIB, Laufzettel, Produktionsbericht, CoA, Laborbericht, Lieferschein) |
+
+- **Keine** weitere Übersicht oben über den Reitern. Die Ablauf-Leiste (Material prüfen · Beschaffungsweg · Bestellen · Wareneingang · Produktion & Versand) bleibt.
+- **Eine Verknüpfung:** Alle Zuordnungen Auftrag ↔ Charge/Bestellposition laufen über einen Schreibweg je Knopf (`reservierung` mit charge_id bzw. bestellung_position_id; Bulk/Fertigware weiter `charge.auftrag_id`). Neue Funktionen nutzen diesen Weg und erfinden keinen weiteren.
+
+---
+
+## 6. "Zu erledigen" - die eine Aufgabenliste
+
+Alles, was ein Mensch im Büro anschauen oder entscheiden muss, landet hier - statt in verstreuten Freigabe-Seiten, die sich gegenseitig blockieren. Jede Zeile: **was**, **welcher Auftrag/welche Charge**, **seit wann**, **wer zuständig** (Nico / Tabea / Einkauf / Lager), **ein Knopf**, der direkt zur Stelle führt oder es erledigt.
+
+Typische Einträge:
+- Weg festlegen (neuer Auftrag)
+- CoA fehlt / CoA prüfen (Tabea)
+- Charge passt nicht zum CoA - Ware in Quarantäne (Nico + Tabea)
+- Neuer Artikel beim Wareneingang angelegt - prüfen/zusammenführen
+- Etikett nicht freigegeben (beim Kunden nachhaken / im Namen des Kunden freigeben)
+- Produktionsabweichung: Gläser/Kapseln passen nicht, Schwund über Toleranz
+- Labor auffällig
+- Lieferadresse noch nicht bestätigt (Knopf "Kunden erinnern")
+- Prüfliste vor Versand nicht grün (mit Grund)
+- Überfällige Lieferung
+
+Regeln: Eine Aufgabe verschwindet, sobald die Ursache behoben ist (automatisch) oder jemand sie bewusst abhakt (mit Name/Zeit im Protokoll). Keine Aufgabe ohne Knopf zur Lösung.
+
+---
+
+## 7. Lager-Sicht
+
+- **Gesamtbestand je Artikel** gibt es heute nur im Dashboard (Warenlager `?p=lager`). Die Lager-App zeigt nur Einzelchargen. *Vorschlag, offen (Abschnitt 12):* In der Lager-App im Reiter Bestand Umschalter **"je Artikel / je Charge"** (Artikelzeile mit Summe, unterwegs, Anzahl Chargen, aufklappbar); auf der Charge-Seite "Gesamt im Lager: x in n Chargen" und alle Chargen gelistet. Gleiche Rechnung wie im Dashboard.
+- **Umlagern Lager 1 → Lager 2:** mobiler Reiter "Nach Lager 2", Menge + Haken, Charge/MHD nur zur Prüfung, Besitzer aus Auftrag (gebaut). Verkaufbar erst nach grüner Prüfliste (4.13).
+- **Altbestand bereinigen:** Einheiten-/Zahlenfehler aus den Oktober-Einbuchungen (Kapsel-Bulk in kg statt Stk, "13.000 kg" statt 13 kg, "6,254 Stk", gemischte Einheiten), doppelte Artikel, lose Bulk-Artikel - über Punkte in der Datenprüfung zum Korrigieren/Zusammenführen.
+
+---
+
+## 8. Rechtlicher Rahmen (Kurzfassung, Details bestätigt QM)
+
+- **Rückverfolgbarkeit Lebensmittel** (VO (EG) 178/2002, Art. 18): eine Stufe vor, eine Stufe zurück - welche Rohstoff-Charge von welchem Lieferanten in welche Fertig-Charge an welchen Kunden. → Chargenkette, Unter-Chargen, Kartonscan beim Versand.
+- **Lebensmittelkontaktmaterialien** (VO (EG) 1935/2004, Art. 17): Gläser, PET-Dosen, Deckel müssen rückverfolgbar sein → Lieferung je Produktionsauftrag festhalten (muss nicht als sichtbare Charge im Alltag geführt werden).
+- **Eingangskontrolle:** CoA/Spezifikation je Rohstoff-Charge, Abgleich mit Spezifikation (4.4). Stichprobenhafte Prüfung der eingehenden Rohstoffe ist bei bulkify die Grundlage; Fertigprodukt-Labortests sind Zusatzleistung für den Kunden.
+- **Herstellprotokoll / Chargendokumentation:** wer, was, wann, welche Mengen, Wiegungen, Chargenwechsel mit Linienräumung (4.8).
+- **Rückstellmuster** je (Unter-)Charge.
+- **Kennzeichnung:** Charge und MHD auf jeder Verkaufseinheit; Etikett-Version freigegeben vor dem Etikettieren.
+- **Sorgfaltspflicht vor Inverkehrbringen:** Prüfliste vor Versand (4.13).
+- Kundendokumente (CoA, PIB) sind **claims-neutral**, ohne werbliche oder gesundheitsbezogene Aussagen.
+
+---
+
+## 9. Querverweise auf bestehende Anweisungen
+
+Diese MDs/Rückmeldungen bleiben als Detail-Quelle gültig, soweit sie dem Handbuch nicht widersprechen:
+- Kette Auftrag bis Versand (Teile 1-8) + Rückmeldungen `rueckmeldung-kette-1` … `-7`
+- Gewicht & Bestand pro Gebinde (+ Rückmeldung)
+- Umlagern Lager 1 → Lager 2
+- Beschaffungsweg: Bestand & Bestellung koppeln
+- Auftragsseite entschlacken (+ Rückmeldung 08.11.)
+- Bestellweg "Direkt bestellt"
+- Kundenportal: Dokumente & Versand auffindbar
+- Lieferantenportal: Auffindbarkeit & Dokumente
+- Laborberichte: "Ans Labor senden" (GBA-Formular)
+- Etiketten: Update-Etikett erzeugen + Ersatz-Fallback raus
+- Produktionsmodul-Konzept (Oktober 2026) - Grundlage für 4.8
+
+---
+
+## 10. Bekannte Fehler / zu prüfen (Stand 08.11.2026)
+
+1. **Fehlende Etiketten blockieren die ganze Produktion** (AB-3289: "Produktion nicht möglich, es fehlt Material", eine Position ist das Etikett). Soll: nur Etikettieren sperren (4.7).
+2. **"Rohstoff bestellt" ohne Bestellung** auf Altaufträgen (z. B. AB-3289 seit 06.11.) - Datenprüfung `rohstoff_bestellt_ohne` von Nico abzuarbeiten; Code ist korrigiert.
+3. Produktion-Reiter: Hinweis "Etikett selbst hochladen → Reiter Material" zeigt auf den falschen Ort - richtig ist der **Stift an der Kachel Etikett** im Reiter Details.
+4. "Zu Kontingent machen" rechnet mit "3.000 × 9,71 €" (nur Herstellung) - Preisbasis klären (Abschnitt 12).
+5. 100 ml Weithalsglas: zweimal genau 5.376 Stk (15.10. und 05.11.) - echte zweite Lieferung oder Doppelbuchung? Prüfen.
+6. Altbestand mit falschen Einheiten/Zahlen (Abschnitt 7).
+7. Kartonetikett heute mit "Karton i von n" und einer Charge je Druckvorgang - umstellen auf Druck je vollem Karton, ohne "von n", je Unter-Charge (4.10).
+8. Eimerplanung nach Chargenwechsel, Sperre "falscher Eimer", Pflicht-Bestätigung beim Chargenwechsel (inkl. Foto), Gegenprobe Gläser/Kapseln mit Aufgabe ans Büro - gegen den heutigen Stand der Werk-App prüfen, vermutlich noch nicht (vollständig) vorhanden.
+
+---
+
+## 11. Was bewusst NICHT gilt
+
+- Kein PIB vor der Bestellung auf Produkt-/Rezepturseite (Schutz vor Weitergabe der Unterlagen an andere Hersteller).
+- Keine separate Produktionsfreigabe für ganze Aufträge (gesteuert über Material je Schritt + Reihenfolge).
+- Keine QM-Sperre beim Einbuchen eigener Fertigware.
+- Keine Druckerei im System (die Etikettendruckerei hat keinen Zugang; Druckdaten laufen außerhalb).
+- Keine automatische Erinnerungsmail an Kunden (Lieferadresse) - Erinnern per Knopf durch das Team.
+- Keine Versandsperre wegen offener Rechnung (nur Hinweis).
+- Keine weitere Übersicht oben über den Auftragsreitern.
+
+---
+
+## 12. Offene Entscheidungen (Nico)
+
+1. Gehören **Bestellen/Einkauf** und **Lager** ins Menü "Einfach"?
+2. Reicht vor dem Versand die **grüne Prüfliste**, oder soll Tabea zusätzlich bewusst **"Freigabe"** klicken?
+3. **Lager-App:** Ansicht "je Artikel" und Verpackung (Gläser/Dosen/Deckel) ohne sichtbare Alltagschargen - umsetzen?
+4. **Kontingent-Preis:** 9,71 € (Herstellung) oder 10,17 € (gesamt)?
+5. **GBA-Formular:** Berichtsempfänger bulkify oder direkt der Kunde?
+6. **Kundenpreise-Liste:** Mengen-Staffel je Bestellmenge nötig oder ein Preis je Verpackungsgröße genug?
+
+---
+
+## 13. Einführung: wie Claude Code mit diesem Handbuch startet
+
+**Schritt 1 - Abgleich (nur lesen, nichts bauen):**
+Das Handbuch Abschnitt für Abschnitt gegen das Programm prüfen. Rückmeldung als `rueckmeldung-handbuch-abgleich.md`, je Abschnitt eine Tabelle:
+
+| Soll-Punkt (Abschnitt) | Ist im Programm (Seite/Funktion) | Status: passt / fehlt / teilweise / doppelt / widerspricht | Vorschlag |
+
+Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt; Seiten und Menüpunkte, die nach dem Handbuch überflüssig sind; Abschnitt 10 (bekannte Fehler) mit Ursache.
+
+**Schritt 2 - Menü:** Nach Nicos Freigabe des Abgleichs das Menü "Einfach / Ausführlich" bauen (Abschnitt 3), vorhandene Seiten einhängen, Doppeltes aus dem Menü nehmen.
+
+**Schritt 3 - Lücken schließen:** Die fehlenden und widersprüchlichen Punkte einzeln abarbeiten, wie bisher: eine Anweisung pro Thema, erst Testkopie, dann live, ein Fix = ein Commit, Rückmeldung je Thema. Jede Anweisung nennt den Handbuch-Abschnitt.
+
+---
+
+## 14. Pflege und Änderungsprotokoll
+
+- Neue Entscheidungen werden **hier** eingetragen (im passenden Abschnitt) und unten protokolliert. Erledigte Punkte aus Abschnitt 10/12 werden dort gestrichen bzw. in den Ablauf übernommen.
+- Wer ändert: Nico entscheidet; Claude (Chat) oder Claude Code tragen ein und vermerken es hier.
+
+| Datum | Änderung | von |
+|---|---|---|
+| 08.11.2026 | Erstfassung: Kette ab Auftrag, Menü Einfach/Ausführlich, Zu erledigen, Eimer/Unter-Chargen, Chargen-Abgleich blind, Kartonetikett je vollem Karton, Lieferadresse bestätigen, Prüfliste vor Versand | Nico / Claude |

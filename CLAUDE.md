@@ -30,6 +30,10 @@ php -S 127.0.0.1:8741 -t public
 ```
 DB-Zugang: `core/config.php` (lokal `bulkify41`, User/Pass `bulkify`/`bulkify`). Schema baut sich per `init_schema()` bei jedem Aufruf selbst auf (CREATE IF NOT EXISTS + additive `ensure_column`). Erst-Admin: `seed_benutzer_if_empty()`.
 
+## Soll-Handbuch (Vorrang)
+Bei größeren Aufgaben (neue Abläufe, Umbauten über mehrere Seiten, Datenmodell, Menü) zuerst `docs/soll-handbuch.md` lesen.
+Es hat Vorrang vor älteren MDs; neue Anweisungen von Nico gehen vor und werden danach im Handbuch nachgetragen (Abschnitt 14).
+
 ## Wichtige Regeln (bitte einhalten)
 1. **Zu jeder .php-Datei eine co-located `.md`** in einfachem Deutsch (Doku). Bei Änderungen mitpflegen.
 2. **Nie committen:** `data/` (Uploads/DB/Logs), `secrets.php`, echte Zugangsdaten – ist per `.gitignore` ausgeschlossen und bleibt es.
