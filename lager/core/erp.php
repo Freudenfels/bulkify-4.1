@@ -2268,3 +2268,11 @@ function erp_scan_token(): string {
     $t = scalar("SELECT v FROM app_meta WHERE k='lager_scan_token'");
     return (string) ($t ?? '');
 }
+
+// Anzahl Chargen in Quarantäne (Lager 1) – Zähler am Menüpunkt „Lager 1" und an der Kachel „Quarantäne".
+function lg_quarantaene_zahl(): int {
+    static $n = null;
+    if ($n !== null) return $n;
+    if (!tabelle_da('charge')) return $n = 0;
+    return $n = (int) scalar("SELECT COUNT(*) FROM charge WHERE status='quarantaene' AND fremd_kunde_id IS NULL AND menge_verfuegbar>0");
+}

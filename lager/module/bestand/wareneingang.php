@@ -390,19 +390,15 @@ if ($gebucht):
   <!-- Start: 4 Kacheln – wie einbuchen? -->
   <div id="weStart" class="we-kacheln">
     <button type="button" class="we-kachel" data-weg="schein">
-      <div class="we-kachel-t">Lieferschein scannen / fotografieren</div>
+      <div class="we-kachel-t">Lieferschein scannen</div>
       <div class="we-kachel-s">Foto oder PDF – die KI liest alles aus</div>
     </button>
     <button type="button" class="we-kachel" data-weg="tracking">
       <div class="we-kachel-t">Sendungsnummer</div>
       <div class="we-kachel-s">Paketlabel scannen – Lieferung wird geladen</div>
     </button>
-    <button type="button" class="we-kachel" data-weg="regulaer">
-      <div class="we-kachel-t">Regulär</div>
-      <div class="we-kachel-s">Von Hand erfassen</div>
-    </button>
     <button type="button" class="we-kachel" data-weg="liste">
-      <div class="we-kachel-t">Aus Liste wählen</div>
+      <div class="we-kachel-t">Aus Liste wählen<?= count($erwartet) ? ' <span class="lg-kachel-z">' . count($erwartet) . '</span>' : '' ?></div>
       <div class="we-kachel-s"><?= count($erwartet) ?> ankommende Sendung(en)</div>
     </button>
     <button type="button" class="we-kachel" data-weg="rsticker">
@@ -411,7 +407,15 @@ if ($gebucht):
     </button>
     <button type="button" class="we-kachel" data-weg="etikett">
       <div class="we-kachel-t">Etiketten einbuchen</div>
-      <div class="we-kachel-s">Produkt wählen – Design und Maße prüfen, dann Rollen buchen</div>
+      <div class="we-kachel-s">Produkt wählen – Design prüfen, dann Rollen buchen</div>
+    </button>
+    <a class="we-kachel" href="?p=l2_eingang" style="text-decoration:none">
+      <div class="we-kachel-t">Kundenware (Lager 2)</div>
+      <div class="we-kachel-s">Ware, die einem Kunden gehört, ins Fremdlager buchen</div>
+    </a>
+    <button type="button" class="we-kachel" data-weg="regulaer">
+      <div class="we-kachel-t">Manuell</div>
+      <div class="we-kachel-s">Von Hand erfassen</div>
     </button>
   </div>
 
@@ -423,7 +427,7 @@ if ($gebucht):
 
     <!-- Methode: Lieferschein scannen/fotografieren -->
     <div class="bx-panel we-weg" data-w="schein" hidden>
-      <h2 style="margin-top:0">Lieferschein scannen / fotografieren</h2>
+      <h2 style="margin-top:0">Lieferschein scannen</h2>
       <?php if (!$ki): ?>
         <div class="bx-panel warn" style="margin:0 0 var(--sp-3)">KI-Scan ist nicht eingerichtet (kein Anthropic-Schlüssel). Du kannst Positionen von Hand erfassen.</div>
       <?php endif; ?>
@@ -614,7 +618,7 @@ if ($gebucht):
   .we-kachel{text-align:left;border:1px solid var(--line);border-radius:14px;padding:22px 20px;background:var(--panel);
     color:var(--text);cursor:pointer;min-height:120px;display:flex;flex-direction:column;gap:6px;justify-content:center}
   .we-kachel:hover{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen);text-decoration:none}
-  .we-kachel-t{font-size:var(--fs-lg);font-weight:600;line-height:1.2}
+  .we-kachel-t{font-size:var(--fs-lg);font-weight:600;line-height:1.2;display:flex;align-items:center;gap:10px}
   .we-kachel-s{color:var(--muted)}
   .we-seg{display:inline-flex;gap:8px;flex-wrap:wrap}
   /* Kompakte Liste (08.11.2026): eine Zeile je Lieferung, begrenzte Höhe mit eigenem Scroll, Suche darüber. */
@@ -1364,7 +1368,7 @@ if ($gebucht):
     if(w==='rsticker'){ var rs=document.getElementById('weRsticker'); if(rs) setTimeout(function(){rs.focus();},60); }
     arbeit.scrollIntoView({behavior:'smooth',block:'start'});
   }
-  document.querySelectorAll('.we-kachel').forEach(function(b){ b.addEventListener('click',function(){ zeigeWeg(b.getAttribute('data-weg')); }); });
+  document.querySelectorAll('.we-kachel[data-weg]').forEach(function(b){ b.addEventListener('click',function(){ zeigeWeg(b.getAttribute('data-weg')); }); });
   // Zurück-Knopf oben: Ist eine Lieferung aus der Liste gewählt, geht er „← Zurück zur Liste", sonst wie bisher zur Methodenwahl.
   var weBack=document.getElementById('weBack');
   weBack.addEventListener('click',function(){

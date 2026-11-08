@@ -16,6 +16,11 @@ lg_schema();
 $routen = [
     'login'          => 'auth/login.php',
     'uebersicht'     => 'start.php',   // Lager-Startseite (Dashboard/Überblick)
+    // Kachel-Seiten (Menü, 08.11.2026): führen nur auf vorhandene Seiten
+    'umbuchen'       => 'kacheln.php',
+    'versand_start'  => 'kacheln.php',
+    'lager1'         => 'kacheln.php',
+    'lager2'         => 'kacheln.php',
     // Grosses Lager
     'erwartet'       => 'bestand/erwartet.php',
     'quarantaene'    => 'bestand/quarantaene.php',    // Ware in Quarantäne freigeben (alle Chargen, optional je Artikel)

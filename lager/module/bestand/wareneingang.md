@@ -120,3 +120,6 @@ Nach dem Buchen gegen eine gewählte Lieferung setzt `erp_bestellung_lieferung_e
 
 ## „Aus Liste wählen“ kompakt (08.11.2026)
 Die ankommenden Sendungen stehen als **kompakte Liste** (eine Zeile je Lieferung: Artikel · Lieferant/Bestellnr. · Termin), mit **Suchfeld** und begrenzter Höhe (eigener Scroll, max. ca. halbe Bildschirmhöhe). Ein Klick **klappt die Liste auf die gewählte Lieferung zusammen** – Lieferant und Positionen stehen direkt darunter, kein Scrollen ans Seitenende. Der Knopf oben heißt dann **„← Zurück zur Liste“** und öffnet die ganze Liste wieder (geladene Positionen werden geleert); ohne gewählte Lieferung bleibt er „← Andere Methode“. Auch der Direkteinstieg `?p=we&lieferung=ID` (aus „Erwartete Lieferungen“) zeigt nur die gewählte Lieferung. Termine am Bestelltag oder davor werden nicht angezeigt.
+
+## Kacheln (08.11.2026)
+Reihenfolge: Lieferschein scannen · Sendungsnummer · Aus Liste wählen (Zähler ankommende Sendungen) · Rezepturnummer-Aufkleber · Etiketten einbuchen · **Kundenware (Lager 2)** (Link auf `l2_eingang`) · **Manuell** (bisher „Regulär“, als Ausweichweg zuletzt). Nur Kacheln mit `data-weg` öffnen einen Weg auf dieser Seite.
