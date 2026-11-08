@@ -8,7 +8,12 @@ $out = [];
 $zeile = function (array $c): array {
     $b = blinker_fuer_charge((int)$c['id']);
     $l = $b['leiste'];
+    // Wo liegt die Ware? Lager 1 (unser Bestand) oder Lager 2 (Fremdlager, gehört einem Kunden) – eine Suche für beide (08.11.2026).
+    $f = one("SELECT c.fremd_kunde_id, k.firma FROM charge c LEFT JOIN kunden k ON k.id=c.fremd_kunde_id WHERE c.id=?", [(int)$c['id']]) ?: [];
+    $l2 = !empty($f['fremd_kunde_id']);
     return [
+        'lager'        => $l2 ? 'L2' : 'L1',
+        'kunde'        => $l2 ? (string)($f['firma'] ?? '') : '',
         'charge_id'    => (int)$c['id'],
         'name'         => (string)$c['item_name'],
         'artikelnummer'=> (string)($c['artikelnummer'] ?? ''),
@@ -69,6 +74,8 @@ if (!$out && function_exists('erp_inventar_norm')) {
 }
 
 if (!$out) {
-    foreach (erp_chargen_suche($q, 12) as $c) { $out[] = $zeile($c); }
+    foreach (erp_chargen_suche($q, 12) as $c) { $out[] = $zeile($c); }                       // Lager 1 zuerst (Sprachsuche nimmt den ersten)
+    if (function_exists('erp_chargen_suche_fremd'))
+        foreach (erp_chargen_suche_fremd($q, 0, 12) as $c) { $out[] = $zeile($c); }          // dann Lager 2 (Kundenware)
 }
 json_antwort(['q' => $q, 'treffer' => $out]);

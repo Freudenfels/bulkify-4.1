@@ -2,3 +2,6 @@
 
 Kundenware im Fremdlager suchen (`erp_chargen_suche_fremd($q,$kunde_id)`), optional nach Kunde gefiltert.
 Je Treffer ein **Finden**-Knopf (`data-klingeln=<leiste_id>`, blau) → der Blinker an der Charge blinkt.
+
+## 08.11.2026
+Nicht mehr im Menü. `?p=l2_finden` leitet auf die gemeinsame Suche `?p=finden&lager=2` um (Suchbegriff wird mitgenommen). Die Datei bleibt liegen.

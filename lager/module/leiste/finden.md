@@ -13,3 +13,6 @@ Lager 2 hat sein eigenes Finden ([../bestand/l2_finden.md](../bestand/l2_finden.
 
 Scannt/tippt man einen **8-stelligen Inventaraufkleber** einer Etikettenrolle, liefert `?p=suche` einen Treffer
 mit `href` – der wird als Link gerendert und öffnet die Rolle (`?p=gebinde&inv=<nr>`) statt einen Blinker klingeln zu lassen.
+
+## Eine Suche für Lager 1 und Lager 2 (08.11.2026)
+Die Suche findet Ware in **Lager 1 und Lager 2** (Artikel, Charge, Barcode-Scan, Blinker-Code wie bisher). Jeder Treffer zeigt, wo die Ware liegt: „Lager 1“ bzw. „Lager 2 · Kunde“. Reiter **Alle / Lager 1 / Lager 2** filtern die Treffer (im Browser, ohne neue Suche); `?lager=2` öffnet direkt den Reiter Lager 2. Blinker für Lager-2-Ware blinkt blau, Lager 1 grün. Der Weg zum Blinker bleibt unverändert.

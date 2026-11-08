@@ -3,9 +3,10 @@
 // Antippen eines Treffers lässt den Blinker an der Palette sofort klingeln.
 // Suche läuft über ?p=suche (JSON), Klingeln über ?p=klingeln (assets/lager.js, data-klingeln).
 $q = trim((string)($_GET['q'] ?? ''));
+$lagerFilter = in_array((string)($_GET['lager'] ?? ''), ['1', '2'], true) ? (string)$_GET['lager'] : '';   // l2_finden leitet mit lager=2 hierher
 
 kopf('Suche', 'finden');
-seitenkopf('Suche', 'Tippen, sprechen oder Blinker-Code scannen – Treffer antippen, der Blinker blinkt.');
+seitenkopf('Suche', 'Lager 1 und Lager 2 – tippen, sprechen oder Blinker-Code scannen. Treffer antippen, der Blinker blinkt.');
 flash_zeigen();
 
 if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vorhanden.', 'warn'); fuss(); return; }
@@ -17,6 +18,11 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="22"></line></svg>
     <span>Sprechen</span>
   </button>
+</div>
+<div class="settabs fnd-reiter" id="fndReiter" style="margin:var(--sp-3) 0 0">
+  <a href="#" data-l="" class="<?= $lagerFilter === '' ? 'on' : '' ?>">Alle</a>
+  <a href="#" data-l="1" class="<?= $lagerFilter === '1' ? 'on' : '' ?>">Lager 1</a>
+  <a href="#" data-l="2" class="<?= $lagerFilter === '2' ? 'on' : '' ?>">Lager 2</a>
 </div>
 <div id="fndStatus" class="muted" style="margin:var(--sp-3) 0"></div>
 <div id="fndListe" class="fnd-liste"></div>
@@ -42,14 +48,20 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
 <script>
 (function(){
   var q=document.getElementById('fndQ'), liste=document.getElementById('fndListe'),
-      status=document.getElementById('fndStatus'), mic=document.getElementById('fndMic'), timer;
+      status=document.getElementById('fndStatus'), mic=document.getElementById('fndMic'), timer,
+      filt=<?= json_encode($lagerFilter) ?>, letzte=[];
+  document.querySelectorAll('#fndReiter a').forEach(function(a){ a.addEventListener('click', function(e){ e.preventDefault();
+    filt=a.getAttribute('data-l'); document.querySelectorAll('#fndReiter a').forEach(function(x){ x.classList.toggle('on', x===a); }); render(letzte); }); });
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
-  function render(treffer){
-    if(!treffer.length){ liste.innerHTML=''; status.textContent='Nichts gefunden.'; return; }
-    status.textContent=treffer.length+' Treffer – zum Finden antippen.';
+  function render(alle){
+    letzte=alle||[];
+    var n1=letzte.filter(function(t){return t.lager!=='L2';}).length, n2=letzte.length-n1;
+    var treffer=letzte.filter(function(t){ return filt==='' || (filt==='2' ? t.lager==='L2' : t.lager!=='L2'); });
+    if(!treffer.length){ liste.innerHTML=''; status.textContent=letzte.length ? ('Nichts in '+(filt==='2'?'Lager 2':'Lager 1')+' – '+letzte.length+' Treffer unter „Alle".') : 'Nichts gefunden.'; return; }
+    status.textContent=treffer.length+' Treffer'+(filt===''&&n2?' ('+n1+' Lager 1 · '+n2+' Lager 2)':'')+' – zum Finden antippen.';
     liste.innerHTML = treffer.map(function(t){
-      var teile=[]; if(t.charge_nr) teile.push('Charge '+t.charge_nr);
+      var teile=[(t.lager==='L2' ? 'Lager 2'+(t.kunde?' · '+t.kunde:'') : 'Lager 1')]; if(t.charge_nr) teile.push('Charge '+t.charge_nr);
       if(t.menge) teile.push(t.menge+(t.einheit?(' '+t.einheit):''));
       if(t.ort) teile.push(t.ort); else if(t.leiste) teile.push('Blinker '+t.leiste);
       var sub=teile.join(' · ');
@@ -58,7 +70,7 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
              + '<span class="n">'+esc(t.name)+'</span><span class="s">'+esc(sub)+'</span></a>';
       }
       if(t.leiste_id){
-        return '<button type="button" class="fnd-item" data-klingeln="'+t.leiste_id+'" data-farbe="gruen" data-sek="40">'
+        return '<button type="button" class="fnd-item" data-klingeln="'+t.leiste_id+'" data-farbe="'+(t.lager==='L2'?'blau':'gruen')+'" data-sek="40">'
              + '<span class="n">'+esc(t.name)+'</span><span class="s">'+esc(sub)+'</span></button>';
       }
       return '<div class="fnd-item kein"><span class="n">'+esc(t.name)+'</span>'

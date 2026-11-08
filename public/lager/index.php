@@ -74,6 +74,8 @@ $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 
 // Alte Schnellmaske ?p=eingang stillgelegt (Soll-Handbuch 4.5, 08.11.2026): sie umging Gewicht je Karton, die Bulk-Regel und den
 // Knopf „Neuer Artikel". Jeder Aufruf (alte Lesezeichen/Links) landet im vollwertigen Wareneingang ?p=we. Datei bleibt liegen.
 if ($p === 'eingang') { header('Location: ?p=we'); exit; }
+// Eine Suche über Lager 1 und Lager 2 (08.11.2026): die alte Lager-2-Suche öffnet die gemeinsame Suche mit Filter Lager 2.
+if ($p === 'l2_finden') { header('Location: ?p=finden&lager=2' . (trim((string)($_GET['q'] ?? '')) !== '' ? '&q=' . rawurlencode(trim((string)$_GET['q'])) : '')); exit; }
 
 if ($p === 'logout') { lg_logout(); weiter('?p=login'); }
 
