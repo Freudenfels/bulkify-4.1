@@ -1979,7 +1979,9 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
       if (strtoupper((string)($ao['waehrung'] ?: 'EUR')) !== 'EUR') { $matHatNichtEur = true; $matVollstaendig = false; continue; }
       $matKostenEur += (float)$ao['preis'] * (float)$bd['benoetigt'];
   }
-  $mMenge = (int)$a['menge']; $mNetto = (float)$a['gesamt_netto']; $mVk = (float)$a['vk_stueck'];
+  // VK je Packung wie die Details-Kachel: GESAMT (Umsatz netto / Menge, inkl. Glas/Etikett) – Umsatz und Marge rechnen
+  // mit demselben Wert. vk_stueck ist nur der Herstellungs-Anteil und steht klein darunter, wenn er abweicht.
+  $mMenge = (int)$a['menge']; $mNetto = (float)$a['gesamt_netto']; $mVk = auftrag_vk_gesamt($a); $mVkHerst = (float)$a['vk_stueck'];
   $mEkProP = $mMenge > 0 ? $matKostenEur / $mMenge : 0.0;
   $mMarge  = $mNetto - $matKostenEur; $mMargeProz = $mNetto > 0 ? ($mMarge / $mNetto) * 100 : 0.0;
 ?>
@@ -1987,7 +1989,7 @@ if (kunde_will_labortest((int)($a['kunde_id'] ?? 0))):
 <div class="bx-panel" data-panel="preise">
   <h2 style="margin-top:0">Kalkulation (Marge) <span class="muted" style="font-weight:normal;font-size:13px">· nur intern (Admin)</span></h2>
   <div class="bx-grid">
-    <div><div class="k muted">VK je Packung (netto)</div><div><?= $eur($mVk) ?></div></div>
+    <div><div class="k muted">VK / Packung (gesamt, netto)</div><div><?= $eur($mVk) ?><?php if ($mVkHerst > 0 && abs($mVkHerst - $mVk) > 0.005): ?> <span class="muted" style="font-size:12px">· davon Herstellung <?= $eur($mVkHerst) ?></span><?php endif; ?></div></div>
     <div><div class="k muted">Menge</div><div><?= number_format($mMenge,0,',','.') ?> Packungen</div></div>
     <div><div class="k muted">Umsatz netto</div><div><?= $eur($mNetto) ?></div></div>
     <?php if ($matVollstaendig): ?>

@@ -285,3 +285,6 @@ Die Karten unter „Schritte“ (Reiter Produktion) kommen jetzt aus derselben n
 
 ## Kalkulation: Staffel nach Menge (08.11.2026)
 Materialkosten in „Kalkulation (Marge)“ und „Lieferanten-Preise zu diesem Auftrag“: je Lieferant die größte Staffel, deren Mindestmenge der Bedarf erreicht (liegt der Bedarf darunter, die kleinste Staffel = Mindestmenge) – wie Beschaffungsweg und Einkaufsliste. Gibt es eine echte Bestellung zum Auftrag für den Rohstoff (gesendet/bestellt/geliefert), gilt deren EK. Vorher wurde nur nach Preis sortiert („ab 300 kg“ bei 225 kg Bedarf).
+
+## Kalkulation: VK je Packung (08.11.2026)
+„VK / Packung (gesamt, netto)“ = Umsatz netto / Menge (`auftrag_vk_gesamt`, wie die Details-Kachel, inkl. Glas/Etikett). Weicht `vk_stueck` ab, steht er klein als „davon Herstellung“. Umsatz und Marge rechnen mit demselben Wert.
