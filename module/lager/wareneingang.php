@@ -23,14 +23,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cid = wareneingang_buchen($item_id, $menge, trim($_POST['charge_nr'] ?? ''), trim($_POST['mhd'] ?? '') ?: null, $lief, trim($_POST['notiz'] ?? ''), $aid, null, !empty($_POST['problem']));
         // Bestellbezug wie im Lager-Wareneingang: gehört die Ware zu einer Bestellung, wird diese geschlossen (kein „unterwegs" + eingebucht).
         // Teillieferung (Nacht 1c): nur die gelieferte Menge quittieren; geschlossen wird erst, wenn alle Positionen da sind.
-        if ($cid && (int)($_POST['bestellung_id'] ?? 0) > 0) bestellung_lieferung_erfassen((int)$_POST['bestellung_id'], [(int)$cid]);
+        $coaFehlt = false;
+        if ($cid && (int)($_POST['bestellung_id'] ?? 0) > 0) {
+            bestellung_lieferung_erfassen((int)$_POST['bestellung_id'], [(int)$cid]);
+            // CoA/Spezifikation hängen über die Bestellposition an der Charge. Fehlt das CoA noch: nur Hinweis (Handbuch 4.4).
+            require_once BX_ROOT . '/core/bestellung_chargen.php';
+            $coaFehlt = charge_coa_fehlt((int)$cid);
+        }
         // Tracking-Code(s) der eingegangenen Pakete/Palette an die Charge haengen (je Zeile ein Code, gescannt).
         if ($cid) {
             $codes = array_values(array_unique(array_filter(array_map('trim', preg_split('/[\r\n]+/', (string)($_POST['tracking'] ?? ''))))));
             q("UPDATE charge SET tracking=? WHERE id=?", [$codes ? implode("\n", $codes) : null, $cid]);
         }
         if ($cid) nach_antwort(fn() => material_komplett_pruefen(true));   // Team: „Material komplett" für wartende Aufträge
-        header('Location: ?p=wareneingang' . ($cid ? '&ok=1' : '&fehler=1')); exit;
+        header('Location: ?p=wareneingang' . ($cid ? '&ok=1' . ($coaFehlt ? '&coafehlt=' . (int)$_POST['bestellung_id'] : '') : '&fehler=1')); exit;
     }
     if ($aktion === 'freigeben') {
         if (!darf_qm_freigeben()) { header('Location: ?p=wareneingang&quarantaene=1&nurqm=1'); exit; }   // QM-Gate (St-11)
@@ -145,6 +151,7 @@ $artikelUrl = function (array $c): string {
 render_header('wareneingang', 'Wareneingang');
 bx_head('Wareneingang', 'Charge buchen', bx_btn('Zum Bestand', '?p=lager', 'ghost'));
 if (isset($_GET['ok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Wareneingang gebucht.</div>';
+if (isset($_GET['coafehlt'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Hinweis: Zu dieser Lieferung liegt noch kein CoA an der Bestellung. Das blockiert nichts – wird es später an der <a href="?p=bestellung&id=' . (int)$_GET['coafehlt'] . '#chargen">Bestellung</a> hochgeladen, hängt es automatisch an der Charge.</div>';
 if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Charge freigegeben.</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Menge oder Artikel fehlt.</div>';
 if (isset($_GET['bulkfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Nicht gebucht: Bulkware nur auf den Bulk-Artikel einer Rezeptur. Bitte den Auftrag angeben oder über „Zukauf zu Auftrag“ buchen.</div>';

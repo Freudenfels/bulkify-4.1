@@ -59,3 +59,6 @@ Kachel **Kapselgröße** (Soll-Kette 2d, 04.11.2026), wenn an der Charge gespeic
 Kachel **Für Auftrag** (Auftrag + Kunde, darunter Reservierungen), Soll-Kette 3 (04.11.2026).
 
 - 08.11.2026: „Nächstes Einbuchen" zeigt auf `?p=we` (Schnellmaske stillgelegt).
+
+## Dokumente aus der Bestellung (08.11.2026)
+Unter „Dokumente“ stehen zuerst CoA und Spezifikation aus der Bestellposition der Charge (`erp_charge_bestell_dokumente`, Zusatz „aus der Bestellung“), danach die des Artikels/Produkts.

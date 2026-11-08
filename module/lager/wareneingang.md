@@ -57,3 +57,6 @@ Freigeben aus der Quarantäne läuft über `charge_quarantaene_freigeben()` (04.
 Soll-Kette 2a (04.11.2026): Haken **„Problem (Beschädigung, Abweichung) – in Quarantäne buchen“** im Formular, gilt für Wareneingang und Zukauf. Ohne Haken ist die Ware frei.
 
 Soll-Kette 2c (04.11.2026): Buchen auf einen losen Bulk-Artikel (kategorie fertig ohne Rezeptur) nur mit Auftrag – dann auf dessen Rezeptur-Bulk-Artikel; sonst Meldung `bulkfehler`.
+
+## CoA aus der Bestellung (08.11.2026)
+Beim Buchen mit „Zur Bestellung“ setzt `bestellung_lieferung_erfassen()` an der Charge die `bestellung_position_id`; CoA und Spezifikation der Position hängen damit an der Charge (`charge_bestell_dokumente`). Fehlt das CoA noch, kommt nur ein Hinweis (`&coafehlt=`), nichts wird blockiert.

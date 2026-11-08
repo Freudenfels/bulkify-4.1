@@ -157,7 +157,9 @@ $item = erp_item_voll((int)$c['item_id']);
 $produkt_id = $item['produkt_id'] ?? null;
 $produkt = $produkt_id ? erp_produkt((int)$produkt_id) : null;
 $wirkstoffe = erp_item_wirkstoffe((int)$c['item_id']);
-$dokumente = erp_item_dokumente((int)$c['item_id'], $produkt_id ? (int)$produkt_id : null);
+// Unterlagen aus der Bestellung (CoA/Spezifikation an der Bestellposition, Handbuch 4.4) zuerst, dann die des Artikels/Produkts.
+$bestDoks  = erp_charge_bestell_dokumente((int)$c['id']);
+$dokumente = array_merge(array_map(fn($d) => $d + ['aus_bestellung' => 1], $bestDoks), erp_item_dokumente((int)$c['item_id'], $produkt_id ? (int)$produkt_id : null));
 $andere = erp_item_chargen((int)$c['item_id'], $id);
 
 kopf('Charge ' . (string)$c['charge_nr'], 'bestand');
@@ -563,7 +565,7 @@ if ($rollen): ?>
   <div class="bx-row" style="gap:8px;flex-wrap:wrap">
     <?php foreach ($dokumente as $d): ?>
       <a class="btn btn-ghost btn-sm" href="?p=dok&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener">
-        <?= h(ucfirst((string)$d['typ'])) ?><?= $d['charge_nr'] ? ' · ' . h((string)$d['charge_nr']) : '' ?>
+        <?= h(ucfirst((string)$d['typ'])) ?><?= $d['charge_nr'] ? ' · ' . h((string)$d['charge_nr']) : '' ?><?= !empty($d['aus_bestellung']) ? ' · aus der Bestellung' : '' ?>
         <?= $d['datei_orig'] ? ' <span class="muted">' . h((string)$d['datei_orig']) . '</span>' : '' ?>
       </a>
     <?php endforeach; ?>

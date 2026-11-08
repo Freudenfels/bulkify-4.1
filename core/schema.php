@@ -4564,6 +4564,7 @@ function bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids): a
         $c = one("SELECT item_id, menge, einheit FROM charge WHERE id=?", [$cid]);
         if (!$c) continue;
         $rest = (float)$c['menge'];
+        $bpKand = [];                                            // Positionen, auf die diese Charge gebucht wurde
         foreach ([true, false] as $exakt) {                      // erst gleicher Artikel, dann Freitext-Position
             foreach ($pos as &$p) {
                 if ($rest <= 1e-9) break;
@@ -4573,9 +4574,18 @@ function bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids): a
                 if ($offen <= 1e-9) continue;
                 $nimm = min($offen, $rest * $fak);
                 $p['gel'] = (float)$p['gel'] + $nimm; $rest -= $nimm / $fak;
+                $bpKand[] = (int)$p['id'];
                 q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]);
             }
             unset($p);
+        }
+        // Verbindung Bestellung <-> Charge (Handbuch 4.4): charge.bestellung_position_id setzen. Daraus ergeben sich CoA und
+        // Spezifikation der Charge (charge_bestell_dokumente) – auch wenn das CoA erst später an der Bestellung hochgeladen wird.
+        if (!$bpKand) foreach ($pos as $p) if ((int)$p['item_id'] === (int)$c['item_id']) { $bpKand[] = (int)$p['id']; break; }
+        if ($bpKand) {
+            require_once __DIR__ . '/bestellung_chargen.php';
+            $bpId = bch_position_fuer_charge($cid, $bpKand);
+            if ($bpId) q("UPDATE charge SET bestellung_position_id=COALESCE(bestellung_position_id, ?) WHERE id=?", [$bpId, $cid]);
         }
         // Mehrlieferung auf die erste passende Position schreiben (Rest > 0): zählt als geliefert, nie negativ „unterwegs".
         if ($rest > 1e-9) foreach ($pos as &$p) if ((int)$p['item_id'] === (int)$c['item_id']) {

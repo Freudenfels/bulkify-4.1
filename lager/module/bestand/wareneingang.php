@@ -318,6 +318,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     // Teillieferung (Nacht 1c): nur Gelieferte quittieren, Bestellung bleibt für den Rest offen.
     $beRes = ($gebucht && $beId > 0) ? erp_bestellung_lieferung_erfassen($beId, $gebucht) : null;
     if ($beRes && !$beRes['komplett']) flash('Teillieferung: ' . (int)$beRes['offen'] . ' Position(en) der Bestellung sind noch offen und bleiben unterwegs.', 'warn');
+    // CoA kommt über die Bestellung an die Charge (Handbuch 4.4). Fehlt es noch: nur Hinweis, blockiert nichts.
+    if ($beRes) {
+        $ohneCoa = 0;
+        foreach ($gebucht as $gcid) { $hat = false; foreach (erp_charge_bestell_dokumente((int)$gcid) as $dd) if ((string)$dd['typ'] === 'coa') { $hat = true; break; } if (!$hat) $ohneCoa++; }
+        if ($ohneCoa) flash('Hinweis: Für ' . $ohneCoa . ' Charge(n) liegt noch kein CoA an der Bestellung. Wird es später dort hochgeladen, hängt es automatisch an der Charge.', 'warn');
+    }
 
     if ($gebucht) flash(count($gebucht) . ' Position(en) eingebucht' . ($kisteId > 0 ? ' (in Kiste gelegt).' : '.') . ($fehler ? ' ' . count($fehler) . ' Hinweis(e).' : ''));
     if ($fehler)  flash(implode(' · ', $fehler), $gebucht ? 'warn' : 'warn');

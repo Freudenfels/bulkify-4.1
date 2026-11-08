@@ -1140,6 +1140,7 @@ function erp_bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids
         $c = one("SELECT item_id, menge, einheit FROM charge WHERE id=?", [$cid]);
         if (!$c) continue;
         $rest = (float)$c['menge'];
+        $bpKand = [];
         foreach ([true, false] as $exakt) {
             foreach ($pos as &$p) {
                 if ($rest <= 1e-9) break;
@@ -1149,9 +1150,17 @@ function erp_bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids
                 if ($offen <= 1e-9) continue;
                 $nimm = min($offen, $rest * $fak);
                 $p['gel'] = (float)$p['gel'] + $nimm; $rest -= $nimm / $fak;
+                $bpKand[] = (int)$p['id'];
                 q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]);
             }
             unset($p);
+        }
+        // Spiegel von bestellung_lieferung_erfassen() (Dashboard): charge.bestellung_position_id setzen -> CoA/Spezifikation der
+        // Bestellposition hängen an der Charge (Handbuch 4.4). Bevorzugt die Position mit derselben gemeldeten Chargennummer.
+        if (!$bpKand) foreach ($pos as $p) if ((int)$p['item_id'] === (int)$c['item_id']) { $bpKand[] = (int)$p['id']; break; }
+        if ($bpKand && erp_spalte_da('charge', 'bestellung_position_id')) {
+            $bpId = erp_position_fuer_charge($cid, $bpKand);
+            if ($bpId) q("UPDATE charge SET bestellung_position_id=COALESCE(bestellung_position_id, ?) WHERE id=?", [$bpId, $cid]);
         }
         if ($rest > 1e-9) foreach ($pos as &$p) if ((int)$p['item_id'] === (int)$c['item_id']) {
             $p['gel'] = (float)$p['gel'] + $rest * erp_einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
@@ -1176,6 +1185,33 @@ function erp_bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids
         }
     }
     return ['komplett' => $offen === 0, 'offen' => $offen];
+}
+// Welche Bestellposition gehört zu dieser Charge? Die mit derselben (tolerant verglichenen) Chargennummer aus
+// bestellung_charge, sonst die erste, auf die gebucht wurde. Spiegel von bch_position_fuer_charge() (core/bestellung_chargen.php).
+function erp_position_fuer_charge(int $charge_id, array $kandidaten): int {
+    require_once __DIR__ . '/../../core/charge_norm.php';
+    $kandidaten = array_values(array_unique(array_filter(array_map('intval', $kandidaten))));
+    if (!$kandidaten) return 0;
+    $nr = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [$charge_id]);
+    if ($nr !== '' && tabelle_da('bestellung_charge')) {
+        $in = implode(',', $kandidaten);
+        foreach (all("SELECT bestellung_position_id, charge_nr FROM bestellung_charge WHERE bestellung_position_id IN ($in) ORDER BY id") as $z)
+            if (charge_gleich((string)$z['charge_nr'], $nr)) return (int)$z['bestellung_position_id'];
+    }
+    return $kandidaten[0];
+}
+// Dokumente einer Charge aus ihrer Bestellposition (CoA mit gleicher Chargennummer bzw. ohne Nummer, Spezifikation).
+// Spiegel von charge_bestell_dokumente() im Dashboard – nur lesen.
+function erp_charge_bestell_dokumente(int $charge_id): array {
+    if (!erp_spalte_da('charge', 'bestellung_position_id') || !erp_spalte_da('dokument', 'bestellung_position_id')) return [];
+    require_once __DIR__ . '/../../core/charge_norm.php';
+    $c = one("SELECT charge_nr, bestellung_position_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c || empty($c['bestellung_position_id'])) return [];
+    $docs = all("SELECT d.id, d.typ, d.titel, d.datei_orig, d.dok_datum, d.charge_nr FROM dokument d JOIN bestellung_position bp ON bp.id=d.bestellung_position_id
+                 WHERE d.objekt_typ='bestellung' AND d.objekt_id=bp.bestellung_id AND d.bestellung_position_id=? ORDER BY d.id DESC",
+                [(int)$c['bestellung_position_id']]);
+    return array_values(array_filter($docs, fn($d) => (string)$d['typ'] !== 'coa' || trim((string)($d['charge_nr'] ?? '')) === ''
+        || charge_gleich((string)$d['charge_nr'], (string)($c['charge_nr'] ?? ''))));
 }
 function erp_bestellung_angekommen(int $bestellung_id): void {
     if ($bestellung_id <= 0 || !tabelle_da('bestellung')) return;

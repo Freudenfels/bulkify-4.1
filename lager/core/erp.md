@@ -127,3 +127,6 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `erp_charge_gebinde_mit_mengen($cid,
 
 Umlagern Lager 1 -> Lager 2 (04.11.2026): `erp_umlagern_kandidaten()` (freie Fertigware in Lager 1 mit Besitzer aus Auftrag/PA/Produkt, Anzeigename kundenspezifisch), `erp_umlagern_lager2($charge_id, $menge, $kunde_id)` (prüft frei/verfügbar/Fulfillment-Kunde, bucht über `erp_charge_umbuchen`, Bewegung Ausgang + Eingang). `erp_charge_umbuchen()` setzt jetzt auch `standort` passend zum Besitzer (lager2 bzw. lager1) – vorher blieb umgebuchte Ware auf Standort lager1.
 - 08.11.2026 (Handbuch 4.5): `erp_erwartete_lieferungen()` zeigt auch Bestellungen mit Status `gesendet` (Portal, vom Lieferanten noch nicht bestätigt), nicht nur `bestellt`.
+
+## Bestellung ↔ Charge (08.11.2026)
+`erp_bestellung_lieferung_erfassen()` setzt `charge.bestellung_position_id` (über `erp_position_fuer_charge()`, Chargennummer tolerant über `core/charge_norm.php`). `erp_charge_bestell_dokumente($charge_id)` liest CoA/Spezifikation der Bestellposition – Spiegel von `charge_bestell_dokumente()` im Dashboard.
