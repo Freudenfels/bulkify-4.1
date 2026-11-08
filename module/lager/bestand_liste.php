@@ -12,13 +12,15 @@ $BM_KAT     = betriebsmittel_kategorien();
 $ALLE_KAT   = $CHARGE_KAT + $BM_KAT;
 
 // Reiter (Reihenfolge)
-$TABS = ['alle'=>'Alle', 'rohstoff'=>'Rohstoffe', 'verpackung'=>'Verpackung', 'karton'=>'Kartons',
+// „Etiketten" ist kein eigener item.kategorie-Wert, sondern Verpackung mit verpackung_rolle='etikett' (Nico 08.11.2026:
+// eigener Reiter, damit die vielen Kundenetiketten die Verpackungsliste nicht zumüllen – dort stehen sie nicht mehr).
+$TABS = ['alle'=>'Alle', 'rohstoff'=>'Rohstoffe', 'verpackung'=>'Verpackung', 'etikett'=>'Etiketten', 'karton'=>'Kartons',
          'verbrauch'=>'Verbrauchsgüter', 'inventar'=>'Inventar', 'maschine'=>'Maschinen', 'sonstiges'=>'Sonstiges',
          'fertig'=>'Bulkware', 'verkaufsfertig'=>'Fertigprodukte'];
 
 $q    = trim($_GET['q'] ?? '');
 $kat  = $_GET['kat'] ?? 'alle';
-if ($kat !== 'alle' && !array_key_exists($kat, $ALLE_KAT)) $kat = 'alle';
+if ($kat !== 'alle' && $kat !== 'etikett' && !array_key_exists($kat, $ALLE_KAT)) $kat = 'alle';
 $sort = $_GET['sort'] ?? 'name';
 $dir  = $_GET['dir']  ?? 'asc';
 $istBM = ist_betriebsmittel_kat($kat);
@@ -33,8 +35,10 @@ if (!array_key_exists($ort, $ORTE)) $ort = 'alle';
 $ortSql = $ort === 'lager1' ? " AND c.fremd_kunde_id IS NULL"
         : ($ort === 'lager2' ? " AND c.fremd_kunde_id IS NOT NULL" : "");
 
-if ($kat === 'alle') { $where = "i.kategorie IN ('" . implode("','", array_keys($ALLE_KAT)) . "')"; $params = []; }
-else                 { $where = "i.kategorie=?"; $params = [$kat]; }
+if ($kat === 'alle')           { $where = "i.kategorie IN ('" . implode("','", array_keys($ALLE_KAT)) . "')"; $params = []; }
+elseif ($kat === 'etikett')    { $where = "i.kategorie='verpackung' AND COALESCE(i.verpackung_rolle,'')='etikett'"; $params = []; }
+elseif ($kat === 'verpackung') { $where = "i.kategorie='verpackung' AND COALESCE(i.verpackung_rolle,'')<>'etikett'"; $params = []; }
+else                           { $where = "i.kategorie=?"; $params = [$kat]; }
 
 $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_menge,i.mindestbestand,
              i.elektrisch,i.pruef_intervall_monate,i.letzte_pruefung,i.fremdprodukt,

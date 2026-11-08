@@ -30,3 +30,6 @@ In der Lager-2-Sicht zeigt eine Spalte **Besitzer** die Zuordnung (wem die Kunde
 
 ## Mengen lesbar (kg/t) – Pulver-Bulk (2026-11-01)
 Der Mengen-Helfer `$mng($x,$e)` zeigt Bestände mit Charge-Einheit `g`/`ml` jetzt lesbar als **kg/t** bzw. **L** (via `gewicht_lesbar()`), z. B. „650 kg" statt „650.000 g". Rohstoffe in `kg` und Stück-Artikel (`Stk`) bleiben unverändert. Lager 2 (Fulfillment) zählt Fertigware in Stück (Beutel/Dosen) – dort ist „Stk" korrekt und wird NICHT in Gewicht gewandelt.
+
+## Reiter Etiketten (08.11.2026)
+Eigener Reiter „Etiketten“ (`?p=lager&kat=etikett`): Verpackungs-Artikel mit `verpackung_rolle=etikett`. Der Reiter „Verpackung“ zeigt Etiketten nicht mehr (nur noch Behälter, Deckel, Beutel usw.). „Alle“ unverändert.
