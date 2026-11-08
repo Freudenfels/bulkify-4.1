@@ -750,10 +750,10 @@ function erp_etikett_sperre(int $pa_id): string {
     $braucht = (int)($r['etikett_id'] ?? 0) > 0 || ((int)($r['a_vp'] ?? 0) ?: (int)($r['p_vp'] ?? 0)) > 0;
     if (!$braucht || (int)($r['etikett_freigegeben'] ?? 0) === 1) return '';
     if (erp_vollbedruckt($pa_id))   // vollbedruckter Beutel: Design-Freigabe wie beim Etikett (Nico 03.11.2026)
-        return erp_etikett_datei($pa_id) !== null ? 'Das Beutel-Design (vollbedruckt) ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
-                                                 : 'Es fehlt noch das Beutel-Design (vollbedruckt) bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
-    return erp_etikett_datei($pa_id) !== null ? 'Das Etikett ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
-                                             : 'Es fehlt noch das Etikett-Design bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
+        return erp_etikett_datei($pa_id) !== null ? 'Beutel-Design (vollbedruckt) nicht freigegeben – Produktion nur bis vor dem Etikettieren.'
+                                                 : 'Beutel-Design (vollbedruckt) fehlt bzw. nicht freigegeben – Produktion nur bis vor dem Etikettieren.';
+    return erp_etikett_datei($pa_id) !== null ? 'Etikett nicht freigegeben – Produktion nur bis vor dem Etikettieren.'
+                                             : 'Etikett-Design fehlt bzw. nicht freigegeben – Produktion nur bis vor dem Etikettieren.';
 }
 
 // Einen Produktionsschritt abschließen. Erzwingt die Reihenfolge (nur der erste offene Schritt),

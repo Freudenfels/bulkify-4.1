@@ -11642,16 +11642,17 @@ function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?i
     return $bid;
 }
 
-// Etikett-Sperre (S-12): braucht der Auftrag ein Etikett und hat der Kunde es noch nicht freigegeben, ist die Produktion gesperrt.
+// Etikett-Sperre (S-12): braucht der Auftrag ein Etikett und hat der Kunde es noch nicht freigegeben, ist der Schritt ETIKETTIEREN
+// gesperrt (Handbuch 4.9) – bis vor dem Etikett darf produziert werden.
 // Rückgabe: '' = frei, sonst der Grund (Meldungstext). Gilt für Produktionsschritte UND Teilmengen.
 function produktion_etikett_sperre(int $pa_id): string {
     $aid = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if ($aid <= 0 || !auftrag_braucht_etikett($aid) || etikett_freigegeben($aid)) return '';
     if (auftrag_vollbedruckt($aid))
-        return etikett_vorhanden($aid) ? 'Das Beutel-Design (vollbedruckt) ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
-                                       : 'Es fehlt noch das Beutel-Design (vollbedruckt) bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
-    return etikett_vorhanden($aid) ? 'Das Etikett ist noch nicht vom Kunden freigegeben – ohne Freigabe kann nicht produziert werden.'
-                                   : 'Es fehlt noch das Etikett-Design bzw. die Kundenfreigabe – ohne Freigabe kann nicht produziert werden.';
+        return etikett_vorhanden($aid) ? 'Beutel-Design (vollbedruckt) nicht freigegeben – Produktion nur bis vor dem Etikettieren.'
+                                       : 'Beutel-Design (vollbedruckt) fehlt bzw. nicht freigegeben – Produktion nur bis vor dem Etikettieren.';
+    return etikett_vorhanden($aid) ? 'Etikett nicht freigegeben – Produktion nur bis vor dem Etikettieren.'
+                                   : 'Etikett-Design fehlt bzw. nicht freigegeben – Produktion nur bis vor dem Etikettieren.';
 }
 // Material-Entnahme einer Station (Verkapselung, Verpacken, Etikettieren …). $bis = bis zu wie vielen Packungen kumuliert
 // verbraucht sein soll (null = ganzer Auftrag); $trocken = nur prüfen. Stationen ohne Material: ok.

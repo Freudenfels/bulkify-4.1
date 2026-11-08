@@ -541,3 +541,4 @@ Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohs
 
 ## Direkt bestellt (08.11.2026)
 `bestellung_direkt_abschliessen($bid, $datum, $eta, $notiz)` – dritter Bestellweg (bestellt + bestätigt, bestellart=direkt, keine Mail); `bestellung_telefonisch_bestaetigen($bid)` – gesendet → bestellt ohne Mail. Statustext „direkt bestellt“.
+- 08.11.2026 (Handbuch 4.9): Meldetexte der Etikett-Sperre (`produktion_etikett_sperre`) heißen jetzt „Etikett nicht freigegeben – Produktion nur bis vor dem Etikettieren" (Beutel entsprechend). Die Sperre selbst gilt unverändert nur für den Schritt Etikettieren. `kontingent_preis_aus_auftrag()`: voller Packungspreis fürs Kontingent (gesamt_netto / Menge), gemeinsam für Erklärtext und `kontingent_aus_auftrag()`.
