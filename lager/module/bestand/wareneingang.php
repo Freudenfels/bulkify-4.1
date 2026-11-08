@@ -534,16 +534,22 @@ if ($gebucht):
       <?php if (!$erwartet): ?>
         <p class="muted" style="margin:var(--sp-2) 0 0">Aktuell keine Lieferungen unterwegs.</p>
       <?php else: ?>
-      <div class="we-liste">
+      <div class="bx-row" id="weListeSuchZeile" style="gap:8px;align-items:center;margin-top:var(--sp-2)">
+        <input type="search" id="weListeSuche" placeholder="Suchen: Lieferant, Bestellnr., Artikel …" autocomplete="off" style="flex:1;min-width:0">
+        <button type="button" class="btn btn-ghost btn-sm" id="weListeAndere" hidden>Andere Lieferung wählen</button>
+      </div>
+      <div class="we-liste" id="weListe">
         <?php foreach ($erwartet as $l): $eta = (string)($l['eta_geplant'] ?? ''); $posis = $l['positionen'] ?? []; $anz = count($posis);
           // Produkt-/Rezepturnamen der Lieferung – damit nicht nur "Wellgreen BE-2867" dasteht.
           $namen = array_values(array_filter(array_map(fn($p) => trim((string)($p['name'] ?? '')), $posis), fn($s) => $s !== ''));
           $namenKurz = implode(' · ', array_slice($namen, 0, 4)) . (count($namen) > 4 ? ' +' . (count($namen) - 4) : '');
         ?>
-        <button type="button" class="we-listitem" data-id="<?= (int)$l['id'] ?>">
-          <div><strong><?= h((string)($l['lieferant'] ?: 'Ohne Lieferant')) ?></strong><?= !empty($l['nummer']) ? ' <span class="muted">· ' . h((string)$l['nummer']) . '</span>' : '' ?></div>
-          <?php if ($namenKurz !== ''): ?><div class="we-listnamen"><?= h($namenKurz) ?></div><?php endif; ?>
-          <div class="muted"><?= $eta !== '' ? 'erwartet ' . h(date('d.m.Y', strtotime($eta))) : '' ?><?= $anz ? ' · ' . $anz . ' Position(en)' : '' ?></div>
+        <?php // Termin am Bestelltag oder davor = Eingabefehler -> nicht als Termin zeigen (wie „Erwartete Lieferungen")
+              if ($eta !== '' && !empty($l['bestelldatum']) && $eta <= (string)$l['bestelldatum']) $eta = ''; ?>
+        <button type="button" class="we-listitem" data-id="<?= (int)$l['id'] ?>" data-such="<?= h(mb_strtolower(trim(($l['lieferant'] ?? '') . ' ' . ($l['nummer'] ?? '') . ' ' . implode(' ', $namen)))) ?>">
+          <span class="we-li-art"><?= $namenKurz !== '' ? h($namenKurz) : '<span class="muted">ohne Artikel</span>' ?></span>
+          <span class="we-li-lief"><?= h((string)($l['lieferant'] ?: 'Ohne Lieferant')) ?><?= !empty($l['nummer']) ? ' · ' . h((string)$l['nummer']) : '' ?></span>
+          <span class="we-li-eta"><?= $eta !== '' ? h(date('d.m.', strtotime($eta))) : '' ?><?= $anz > 1 ? ' · ' . $anz . ' Pos.' : '' ?></span>
         </button>
         <?php endforeach; ?>
       </div>
@@ -611,9 +617,17 @@ if ($gebucht):
   .we-kachel-t{font-size:var(--fs-lg);font-weight:600;line-height:1.2}
   .we-kachel-s{color:var(--muted)}
   .we-seg{display:inline-flex;gap:8px;flex-wrap:wrap}
-  .we-liste{display:flex;flex-direction:column;gap:8px;margin-top:var(--sp-3)}
-  .we-listitem{text-align:left;border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--panel-2);color:var(--text);cursor:pointer;line-height:1.35}
+  /* Kompakte Liste (08.11.2026): eine Zeile je Lieferung, begrenzte Höhe mit eigenem Scroll, Suche darüber. */
+  .we-liste{display:flex;flex-direction:column;gap:4px;margin-top:var(--sp-2);max-height:46vh;overflow:auto;padding-right:2px}
+  .we-listitem{display:flex;gap:10px;align-items:baseline;text-align:left;border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--panel-2);color:var(--text);cursor:pointer;line-height:1.3;font-size:14px}
   .we-listitem:hover{border-color:var(--gruen);text-decoration:none}
+  .we-listitem.gewaehlt{border-color:var(--gruen);background:rgba(29,158,117,.10)}
+  .we-li-art{flex:1 1 auto;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .we-li-lief{flex:0 1 auto;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+  .we-li-eta{flex:0 0 auto;color:var(--muted);font-size:12px;white-space:nowrap}
+  .we-liste.zu{max-height:none;overflow:visible}
+  .we-listitem[hidden],#weListeAndere[hidden],#weListeSuche[hidden]{display:none}
+  @media (max-width:640px){.we-listitem{flex-wrap:wrap}.we-li-lief{max-width:none}}
   .we-listnamen{font-size:13px;margin-top:2px}
   .we-ziel{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 14px;cursor:pointer;line-height:1.3}
   .we-ziel.on{border-color:var(--gruen);box-shadow:inset 0 0 0 1px var(--gruen)}
@@ -1337,6 +1351,7 @@ if ($gebucht):
   // --- Kacheln: Methode wählen -> passender Weg öffnet sich ---
   var startBox=document.getElementById('weStart'), arbeit=document.getElementById('weArbeit');
   function zeigeWeg(w){
+    if(w==='liste' && typeof liAndere!=='undefined' && liAndere && !liAndere.hidden) liAndere.click();   // frisch: ganze Liste zeigen
     startBox.hidden=true; arbeit.hidden=false;
     document.querySelectorAll('.we-weg').forEach(function(p){ p.hidden = p.getAttribute('data-w')!==w; });
     // Etiketten einbuchen: Ziel/Positionen erst nach der Sichtprüfung (Design + Größe) zeigen.
@@ -1353,8 +1368,18 @@ if ($gebucht):
   document.getElementById('weBack').addEventListener('click',function(){ arbeit.hidden=true; startBox.hidden=false; window.scrollTo({top:0,behavior:'smooth'}); });
 
   // Liste: ankommende Sendung wählen -> Positionen laden
+  var liSuche=document.getElementById('weListeSuche'), liAndere=document.getElementById('weListeAndere'), liListe=document.getElementById('weListe');
+  function liFilter(){ var q=(liSuche&&liSuche.value||'').trim().toLowerCase(); document.querySelectorAll('.we-listitem').forEach(function(x){ x.hidden = q!=='' && (x.getAttribute('data-such')||'').indexOf(q)<0; }); }
+  if(liSuche) liSuche.addEventListener('input', liFilter);
+  function liZuklappen(gew){ document.querySelectorAll('.we-listitem').forEach(function(x){ x.hidden = x!==gew; x.classList.toggle('gewaehlt', x===gew); });
+    if(liSuche) liSuche.hidden=true; if(liAndere) liAndere.hidden=false; if(liListe) liListe.classList.add('zu'); }
+  if(liAndere) liAndere.addEventListener('click', function(){ document.querySelectorAll('.we-listitem').forEach(function(x){ x.classList.remove('gewaehlt'); });
+    liAndere.hidden=true; if(liSuche){ liSuche.hidden=false; liFilter(); liSuche.focus(); } if(liListe) liListe.classList.remove('zu');
+    var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value=''; rows.innerHTML=''; addRow(); var li=document.getElementById('weListeInfo'); if(li) li.textContent=''; });
   document.querySelectorAll('.we-listitem').forEach(function(b){
     b.addEventListener('click',function(){
+      liZuklappen(b);
+      var pz=document.querySelector('.we-weg[data-w="liste"]'); if(pz) pz.scrollIntoView({behavior:'smooth',block:'start'});
       var id=b.getAttribute('data-id'), linfo=document.getElementById('weListeInfo');
       if(linfo) linfo.textContent='Lade Lieferung …';
       var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value=id;   // Lieferung merken -> beim Buchen als angekommen markieren
