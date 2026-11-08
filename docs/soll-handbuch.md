@@ -67,6 +67,7 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
 - **Produktion** (heute die Produktionsliste, später die Reihenfolge-Liste, Abschnitt 4.6)
 - **Einkauf** - ein Punkt auf die Einkaufsliste, von dort zu den Bestellungen (Entscheidung 12.1)
 - **Lager** - **ein** Punkt auf das Warenlager; Lager 1 / Lager 2 sind Filter-Reiter auf der Seite (Entscheidung 12.1)
+- **Buchhaltung** - nur für Nutzer mit der Rolle Finanz (finance), als eigener Punkt "Finanzen → Buchhaltung" (08.11.2026)
 
 **Ausführlich:** alles aus "Einfach" plus alles Übrige (Kunden, Partner, Kundenpreise, Kalender, Planung, Maschinen, Geführte Produktion, Easy Production, Kontingente, Dienstleistungen, Novel Food, Doppelte Rezepturen, Lager- und Einkauf-Unterpunkte, Datenprüfung, Einstellungen, Unterprogramme /produktion/, /lager/, /crm/, /buchhaltung/ …). Gruppen und Reihenfolge bestimmt weiter der Menü-Editor.
 
@@ -124,6 +125,7 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
 - **Gewicht je Karton** bei wiegbarer Ware (Rohstoffe, Bulk, Pulver): Zeile je Karton, gleichmäßig vorbelegt, jede änderbar, Summe/Differenz laufend, **bei Differenz gesperrt**. Echtes Gewicht am Gebinde hinter dem Barcode; Scan zeigt den echten Inhalt; Entnahme und Rückgabe (neu wiegen, "ordentlich verschlossen") je Gebinde. (Gebaut - Rückmeldung "Gewicht pro Gebinde".)
 - **Bulkware** wird nur auf den Bulk-Artikel der Rezeptur gebucht (keine losen "Bulk #0"-Artikel mehr); die **Kapselgröße** kommt automatisch aus Auftrag/Rezeptur.
 - **Zuordnung zum Auftrag:** Beim Wareneingang gegen eine verknüpfte Bestellung hängt die Ware automatisch am Auftrag, und der Auftrag springt auf "Material da".
+- **Etiketten - Maß nur zur Info (Nico 08.11.2026):** Beim Einbuchen (Lager-App "Etiketten einbuchen", Dashboard-Wareneingang) werden Etikett-Maß und Glas-Format nur **zur Info** verglichen. Etiketten sind oft **2-5 mm größer** als das Glas-Endformat (Sicherheitsmaß) - das ist **kein Fehler und sperrt nie**: keine Sperre, keine Rückfrage, keine Quarantäne, keine Aufgabe, nur ein neutraler Hinweis; der Knopf heißt "Menge erfassen". Das Etikett-Maß kommt bei neuen Designs aus der Druckdatei (**TrimBox** = Endformat, sonst ArtBox, sonst MediaBox); bestehende Etiketten passt Nico mit der Zeit selbst an (Liste: Datenprüfung "Maß laut Druckdatei").
 - **Verpackung (Gläser, Dosen, Deckel):** *Vorschlag, offen (Abschnitt 12):* im Lager **eine Menge je Artikel** statt sichtbarer Einzelchargen; die Lieferungen laufen im Hintergrund für die Rückverfolgbarkeit mit; die Produktion bucht die älteste Lieferung zuerst ab und der Produktionsbericht vermerkt die Lieferung. Etiketten/Kartons mit Design: maßgeblich ist die **Design-Version** (eigener Artikel je Version).
 
 ### 4.6 Produktionsreihenfolge
@@ -366,3 +368,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | Erstfassung: Kette ab Auftrag, Menü Einfach/Ausführlich, Zu erledigen, Eimer/Unter-Chargen, Chargen-Abgleich blind, Kartonetikett je vollem Karton, Lieferadresse bestätigen, Prüfliste vor Versand | Nico / Claude |
 | 08.11.2026 | 4.12: Labor heute nur per eigenem Upload; "Ans Labor senden"/GBA zurückgestellt (12.5) | Nico / Claude |
 | 08.11.2026 | Schritt 2: Menü Einfach/Ausführlich gebaut (3); Entscheidungen 12.1 (Einkauf + Lager in Einfach, Lager ein Punkt), 12.4 (voller Packungspreis), 12.5 inkl. Feld Unter-Charge der Probe zurückgestellt; Fixes 10.2/10.3/10.4, 4.9 Meldetexte, 4.11 Easy Production frei, 4.12 Labor-Befund/charge_norm, 4.5 Erwartete Lieferungen + Schnellmaske stillgelegt; 10.5 geprüft | Nico / Claude Code |
+| 08.11.2026 | Sofort-Fix Etikett-Format: 4.5 Etikett-Maß vs. Glas nur Hinweis, nie Sperre; Maß neuer Etiketten aus der TrimBox; Menü Einfach zeigt Buchhaltung für Rolle finance (3) | Nico / Claude Code |
