@@ -2071,49 +2071,8 @@ if (!empty($a['produkt_id']) || kunde_will_labortest((int)($a['kunde_id'] ?? 0))
   <p class="muted" style="font-size:12px;margin:10px 0 0">Richtwert: je Rohstoff der Preis einer echten Bestellung zum Auftrag, sonst der günstigste Lieferant in der Staffel, die der Bedarf erreicht – nur Material, ohne Lohn, Verpackung und Gemeinkosten.</p>
 </div>
 
-<div class="bx-panel" data-panel="preise">
-  <h2 style="margin-top:0">Lieferanten-Preise zu diesem Auftrag <span class="muted" style="font-weight:normal;font-size:13px">· nur intern (Admin)</span></h2>
-  <?php if (!$pa): ?>
-    <div class="muted">Kein Produktionsauftrag – Rohstoffbedarf nicht berechenbar.</div>
-  <?php elseif (!$ekBedarf): ?>
-    <div class="muted">Keine Rohstoffe im Bedarf (Zukauf oder Rezeptur ohne Zutaten).</div>
-  <?php else: ?>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Rohstoff</th><th class="bx-num">benötigt</th><th>Lieferant – EK je Einheit (günstigste zuerst)</th></tr></thead>
-      <tbody>
-      <?php foreach ($ekBedarf as $bd): $nz = fn($x,$n=3)=>rtrim(rtrim(number_format((float)$x,$n,',','.'),'0'),','); ?>
-        <tr>
-          <td><a class="kundenlink" href="?p=rohstoff&id=<?= (int)$bd['item_id'] ?>&tab=ek"><?= h($bd['name']) ?></a></td>
-          <td class="bx-num"><?= $nz($bd['benoetigt']) ?> <?= h($bd['einheit']) ?><?php if (($bd['zu_bestellen'] ?? $bd['fehlt']) > 0.0001): ?><br><span style="color:#8f231b;font-size:12px">fehlt <?= $nz($bd['zu_bestellen'] ?? $bd['fehlt']) ?></span><?php elseif ($bd['fehlt'] > 0.0001): ?><br><span style="color:#8a6d00;font-size:12px">in Quarantäne – <a href="<?= h(quarantaene_freigabe_url((int)$bd['item_id'])) ?>">freigeben</a></span><?php else: ?><br><span class="bx-ok" style="font-size:12px">auf Lager</span><?php endif; ?></td>
-          <td><?php if (!$bd['angebote']): ?><span class="muted">kein EK-Preis hinterlegt</span>
-              <?php else: $bi = 0; foreach ($bd['angebote'] as $ao): ?>
-                <div style="<?= $bi === 0 ? 'font-weight:600' : '' ?>"><?= h($ao['firma'] ?: '–') ?>: <?= $nz($ao['preis'], 4) ?> <?= h($ao['waehrung'] ?: 'EUR') ?><?= (float)$ao['menge_ab'] > 0 ? ' <span class="muted">(ab ' . $nz($ao['menge_ab']) . ')</span>' : '' ?><?= $bi === 0 ? ' <span class="muted">· ' . (!empty($ao['bestellt']) ? 'bestellt' : 'günstigste für die Menge') . '</span>' : '' ?></div>
-              <?php $bi++; endforeach; endif; ?></td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table></div>
-  <?php endif; ?>
-
-  <?php if ($zukaufPreise): $nz = fn($x,$n=3)=>rtrim(rtrim(number_format((float)$x,$n,',','.'),'0'),','); $VZ = versandart_liste(); ?>
-  <h3 style="margin:20px 0 8px;font-size:14px;font-weight:600">Fertigprodukt (Bulk) – Zukaufpreise</h3>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Lieferant</th><th>Größe</th><th class="bx-num">ab Menge</th><th class="bx-num">EK je Einheit</th><th>Lieferbedingung</th></tr></thead>
-      <tbody>
-      <?php $bi = 0; foreach ($zukaufPreise as $z): $terms = array_filter([(string)$z['incoterm'], $z['versandart'] ? ($VZ[$z['versandart']] ?? $z['versandart']) : '']); ?>
-        <tr<?= $bi === 0 ? ' style="font-weight:600"' : '' ?>>
-          <td><?= h($z['firma'] ?: '–') ?><?= $bi === 0 ? ' <span class="muted" style="font-weight:normal">· günstigste</span>' : '' ?></td>
-          <td><?= $z['groesse'] ? h($z['groesse']) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= (float)$z['menge_ab'] > 0 ? $nz($z['menge_ab']) : '–' ?></td>
-          <td class="bx-num"><?= $nz($z['preis'], 4) ?> <?= h($z['waehrung'] ?: 'EUR') ?><?= $z['einheit'] ? ' / ' . h($z['einheit']) : '' ?></td>
-          <td class="muted"><?= $terms ? h(implode(' · ', $terms)) : '–' ?></td>
-        </tr>
-      <?php $bi++; endforeach; ?>
-      </tbody>
-    </table></div>
-  <?php endif; ?>
-  <p class="muted" style="font-size:12px;margin:10px 0 0">Reine Preisübersicht (intern). Bestellungen laufen über den Einkauf, nicht von hier.</p>
-</div>
+<?php // Teil 5 (08.11.2026): „Lieferanten-Preise zu diesem Auftrag" entfernt – die Preise je Weg stehen im Reiter Beschaffungsweg,
+      // die Kalkulation oben nutzt sie (Staffel nach Menge, echte Bestellung zuerst). ?>
 <?php endif; ?>
 
 <?php if (has_role('admin') && empty($a['kontingent_id']) && (string)$a['status'] !== 'storniert' && (int)$a['menge'] > 0 && (float)$a['vk_stueck'] > 0): ?>

@@ -329,3 +329,6 @@ Handelsware“ mit den Zukaufpreisen und dem Link zum Einkauf.
 - Labor an einem Ort: Block `#labor` im Reiter Produktion – „Externer Labortest“ (Kunde mit Drittlabor oder dazugebuchte
   Laboranalyse; sonst „Laboranalyse“): Status, „Ans Labor senden“, Berichte dieser Bestellung (freigeben/intern, löschen) und
   „Laborbericht hochladen“. Der Reiter Dokumente zeigt nur noch die Download-Knöpfe der Laborberichte.
+
+## Teil 5 „Auftragsseite entschlacken“ – Preise & Rechnung (08.11.2026)
+Block „Lieferanten-Preise zu diesem Auftrag“ (Rohstoff-EK-Liste + Zukaufpreise) entfernt – die Preise je Weg stehen im Reiter Beschaffungsweg. Die Kalkulation rechnet weiter mit den Lieferantenpreisen (Staffel nach Menge, echte Bestellung zuerst; VK gesamt wie die Kachel, siehe Teil 0).
