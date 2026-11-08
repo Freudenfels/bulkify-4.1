@@ -54,6 +54,7 @@ Gilt vor den älteren Absätzen oben (Anfragen-Gruppe mit 4 Punkten und Lager-Gr
 - **Einfach** = `bx_nav_einfach()`: feste Reihenfolge Vertrieb (Anfragen, Angebote, Aufträge) · Produkt (Produkte, Rezepturen, Rohstoffe)
   · Produktion (Produktion, Einkauf = Einkaufsliste, Lager). Definitionen aus der Registry; im Menü-Editor ausgeblendete Punkte bleiben weg;
   Rechte filtern wie immer über `route_erlaubt()`. Keine Unterprogramme (/produktion/, /lager/, /crm/, /buchhaltung/) – die stehen unter „Ausführlich".
+  Ausnahme (08.11.2026): Nutzer mit der Rolle `finance` (ausdrücklich in `benutzer.rollen`) sehen in „Einfach" zusätzlich die Gruppe **Finanzen → Buchhaltung** (`buchhaltung/`).
   Oben ist Platz für „Zu erledigen" (kommt mit Schritt 4). Das Logo links oben führt zur Startseite (`?p=dashboard`, Werk `?p=werk`).
 - **Ausführlich** = `bx_nav()` wie bisher (Menü-Editor bestimmt Gruppen und Reihenfolge) plus Unterprogramme.
 - **Anfragen = ein Punkt** (`anfragen`, Seite `module/anfrage/liste.php` mit allen Arten). Felder `alt_route`/`alt_href`: darf der Nutzer

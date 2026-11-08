@@ -326,6 +326,11 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         echo "<div class=\"bx-navgroup\" data-g=\"g_subpages\" role=\"button\" tabindex=\"0\"><span>Unterseiten</span><span class=\"bx-navchev\">▼</span></div>";
         echo "<div class=\"bx-navitems\" data-g=\"g_subpages\">" . $sub . "</div>";
     }
+    // Menü „Einfach": Nutzer mit der Rolle finance sehen zusätzlich die Buchhaltung (Nico 08.11.2026, Zusatz zu Schritt 2).
+    if ($menuModus === 'einfach' && function_exists('user_rollen') && in_array('finance', user_rollen(), true)) {
+        echo "<div class=\"bx-navgroup\" data-g=\"g_finanzen\" role=\"button\" tabindex=\"0\"><span>Finanzen</span><span class=\"bx-navchev\">▼</span></div>";
+        echo "<div class=\"bx-navitems\" data-g=\"g_finanzen\"><a href=\"buchhaltung/\"><span>Buchhaltung</span></a></div>";
+    }
     // Benutzer-Fuß: Name + Rollen + Abmelden
     if (function_exists('current_user') && ($u = current_user())) {
         $rollen = function_exists('rollen_liste') ? rollen_liste() : [];
