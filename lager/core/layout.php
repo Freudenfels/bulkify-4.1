@@ -46,6 +46,13 @@ function lg_nav_icon(string $key): string {
     return isset($i[$key]) ? '<svg class="lg-navico" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $i[$key] . '</svg>' : '';
 }
 
+// Versions-Anhang für Stil-/Skriptdateien (Änderungszeit): Nach jedem Deploy lädt der Browser die neue Datei,
+// statt eine alte aus dem Zwischenspeicher zu nehmen (08.11.2026: neues Menü sah mit alter lager.css schief aus).
+function lg_asset_v(string $datei): string {
+    $f = __DIR__ . '/../../public/lager/assets/' . basename($datei);
+    return is_file($f) ? (string) filemtime($f) : '1';
+}
+
 function kopf(string $titel, string $aktiv = ''): void {
     $GLOBALS['lg_aktiv'] = $aktiv;   // fuer seitenkopf(): auf welcher Seite sind wir (Einbuchen-Knopf)
     $u = lg_benutzer();
@@ -61,7 +68,7 @@ function kopf(string $titel, string $aktiv = ''): void {
        . '<meta name="mobile-web-app-capable" content="yes">'
        . '<meta name="apple-mobile-web-app-capable" content="yes">'
        . '<meta name="apple-mobile-web-app-title" content="Lager">'
-       . '<link rel="stylesheet" href="assets/lager.css">'
+       . '<link rel="stylesheet" href="assets/lager.css?v=' . lg_asset_v('lager.css') . '">'
        . '<meta name="theme-color" content="#10210F">'
        . '<script>(function(){try{var t=localStorage.getItem("bx-theme");'
        . 'if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);'
@@ -80,8 +87,8 @@ function kopf(string $titel, string $aktiv = ''): void {
         echo '<div class="lg-navflat">';
         foreach (lg_nav() as $route => $label) {
             $badge = ($route === 'lager1' && $quarN > 0) ? '<span class="bx-navbadge lg-navbadge" title="' . $quarN . ' Charge(n) in Quarantäne">' . $quarN . '</span>' : '';
-            echo '<a href="?p=' . h($route) . '"' . ($navAktiv === $route ? ' class="on"' : '') . '>'
-               . lg_nav_icon($route) . '<span class="lg-navlbl">' . h($label) . '</span>' . $badge . '</a>';
+            echo '<a href="?p=' . h($route) . '"' . ($navAktiv === $route ? ' class="on"' : '') . ' style="justify-content:flex-start">'
+               . lg_nav_icon($route) . '<span class="lg-navlbl" style="flex:1 1 auto;text-align:left">' . h($label) . '</span>' . $badge . '</a>';
         }
         echo '</div><div class="lg-navklein">';
         foreach (lg_nav_klein() as $route => $label)
@@ -140,9 +147,9 @@ function fuss(): void {
        . 'document.querySelectorAll(".bx-side nav a").forEach(function(a){a.addEventListener("click",zu);});'
        . 'addEventListener("resize",function(){if(innerWidth>860)zu();});})();</script>';
     // Lade-Rueckmeldung fuer Formulare (Spinner + Ladebalken) und die Leucht-Knoepfe.
-    echo '<script src="assets/busy.js" defer></script>';
-    echo '<script src="assets/lager.js" defer></script>';
-    echo '<script src="assets/voice.js" defer></script>';
+    echo '<script src="assets/busy.js?v=' . lg_asset_v('busy.js') . '" defer></script>';
+    echo '<script src="assets/lager.js?v=' . lg_asset_v('lager.js') . '" defer></script>';
+    echo '<script src="assets/voice.js?v=' . lg_asset_v('voice.js') . '" defer></script>';
     // Service Worker nur fuer die Installierbarkeit als App (Handscanner). Cacht keine Seiten.
     echo '<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){'
        . 'navigator.serviceWorker.register("sw.js").catch(function(){});});}</script>';

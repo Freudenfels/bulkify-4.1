@@ -17,4 +17,4 @@ Darunter klein und abgesetzt (`lg_nav_klein`): Bewegungen · Mülleimer · Einst
 - `lg_nav()` = Hauptpunkte, `lg_nav_icon()` = Linien-Icons (Inline-SVG, currentColor; truck/warehouse wie im Dashboard), `lg_nav_aktiv()` ordnet Unterseiten ihrem Menüpunkt zu (z. B. `kisten` → Umbuchen, `quarantaene` → Lager 1, `erwartet`/`l2_eingang` → Einbuchen, `l2_finden`/`leisten` → Suchen).
 - Nicht mehr im Menü, aber erreichbar: Blinker (`leisten`), Erwartete Lieferungen (`erwartet`), Kundenware einbuchen (`l2_eingang`), Lager-2-Suche (`l2_finden`).
 - CSS in `public/lager/assets/lager.css` (`.lg-navflat`, `.lg-navklein`): 16 px am PC, am Handy 18 px für die Hauptpunkte, kleine Punkte 13–14 px.
-
+- 08.11.2026: Stil- und Skriptdateien bekommen einen Versions-Anhang (`lg_asset_v()`, Änderungszeit), damit Browser nach einem Deploy die neue `lager.css` laden (sonst stand im neuen Menü der Text rechts). Die Ausrichtung der Menüpunkte steht zusätzlich direkt am Element.
