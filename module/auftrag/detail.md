@@ -301,3 +301,15 @@ Im Reiter Details sind die Kacheln die Stelle zum Ändern: Stift → kleines Fen
 - Neuer Speichern-Weg `aktion=kachel_speichern` (feld verpackung|fuellmenge|kapsel|tablettenform|gewicht), protokolliert in aenderung_log.
 - Entfernt: Knopf „Flaschen, Verpackung & Kapselgröße setzen“, Formulare Lieferung/Name im Details-Reiter, Block „Etikett-Vorschau“,
   im Reiter Material die Blöcke „Verpackung (Behälter)“, „Etikett“ und das Kapsel-/Gewicht-Formular unter „Bereitschaft“.
+
+## Teil 2 „Auftragsseite entschlacken“ – Material-Reiter (08.11.2026)
+Die Material-Übersicht ist die eine Tabelle für „was brauche ich, was ist da, was ist bestellt“: Spalten benötigt · **zugeordnet**
+(Charge/Bestellung fest für diesen Auftrag) · frei · Quarantäne · unterwegs · **Rest** · Deckung · Bestellt bei (echte Bestellungen) ·
+Knopf **Zuordnen** je Zeile (bis Produktionsstart). Das Fenster je Zeile: bestehende Zuordnungen lösen, „Aus Lager zuordnen“
+(freie Charge), „Bestellung verknüpfen“ (offene Bestellposition desselben Artikels).
+- Rohstoff, Glas, Deckel, Etikett, Leerkapsel, Premix: `auftrag_material_zuordnen()` → Reservierung (bestehende Tabelle) mit charge_id
+  bzw. bestellung_position_id; ganze Bestellposition setzt zusätzlich `bestellung_position.auftrag_id` (wie Koppeln). Lösen:
+  `auftrag_material_loesen()`. Aktionen `material_zuordnen` / `material_loesen` (Admin, Produktion).
+- Bulk/Fertigware (Zeile ohne Artikel): bisherige Bindung (`material_binden`, `bulk_res_storno`, `charge_loesen`) im selben Fenster (Admin).
+- Entfernt: Block „Material beschaffen & zuweisen“ (Bulkware binden + Bestellungen zu diesem Auftrag). „Bereitschaft“ bleibt als
+  kurze Prüfliste (Verpackung/Etikett/Material) – Material-Details stehen nur in der Tabelle.

@@ -535,3 +535,6 @@ Abgeschlossen · Versenden (Versendet) bzw. Einlagern (Eingelagert) bei Fulfillm
 (Position mit auftrag_id oder Verlaufseintrag ref_typ=bestellung). Entwürfe (status offen), stornierte Bestellungen, „Weg festlegen“
 und „An Bedarfsliste senden“ zählen nicht. Die artikelweite Ableitung `auftrag_rohstoffe_beschafft()` wird dafür nicht mehr genutzt.
 Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohstoff_bestellt_ohne`.
+
+## Zuordnen je Materialzeile (08.11.2026)
+`auftrag_material_quellen($item)` (freie Chargen abzgl. Charge-Reservierungen, offene Bestellpositionen abzgl. Reservierungen), `auftrag_material_zugeordnet($aid)`, `auftrag_material_zuordnen()`, `auftrag_material_loesen()` – Reservierung als einzige Schreibstelle für Nicht-Bulk-Material.

@@ -7991,6 +7991,70 @@ function bestellposition_reserviert(int $bp_id): float {
 function charge_bulk_reserviert(int $charge_id): float {
     return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE charge_id=? AND status='aktiv'", [$charge_id]);
 }
+// ---- Zuordnen je Materialzeile (Auftragsseite entschlacken, Teil 2, 08.11.2026) ----------------------------------
+// EINE Schreibstelle für Rohstoff, Glas, Deckel, Etikett, Leerkapsel, Premix …: eine Reservierung (bestehende Tabelle)
+// auf eine konkrete Lagercharge ODER eine offene Bestellposition desselben Artikels. Bulk/Fertigware (item_id 0 in der
+// Bedarfsliste) läuft weiter über material_binden (charge.auftrag_id bzw. Bulk-Reservierung), weil die Produktion daraus bucht.
+// Quellen je Artikel: freie Chargen (abzgl. aktiver Reservierungen auf genau diese Charge) und offene Bestellpositionen
+// (Restmenge abzgl. Reservierungen). Rückgabe ['lager'=>[...], 'bestellt'=>[...]].
+function auftrag_material_quellen(int $item_id): array {
+    $out = ['lager' => [], 'bestellt' => []];
+    if ($item_id <= 0) return $out;
+    foreach (all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, COALESCE(NULLIF(c.einheit,''), i.einheit, 'Stk') AS einheit
+                  FROM charge c JOIN item i ON i.id=c.item_id
+                  WHERE c.item_id=? AND c.status='frei' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0
+                  ORDER BY (c.mhd IS NULL), c.mhd, c.id", [$item_id]) as $c) {
+        $frei = (float)$c['menge_verfuegbar'] - charge_bulk_reserviert((int)$c['id']);
+        if ($frei > 1e-6) $out['lager'][] = $c + ['frei' => $frei];
+    }
+    foreach (all("SELECT bp.id, bp.menge, COALESCE(bp.geliefert_menge,0) AS geliefert, COALESCE(bp.einheit,'') AS einheit, b.nummer, b.status,
+                         b.eta_geplant, COALESCE(b.bestelldatum, DATE(b.angelegt)) AS datum, COALESCE(l.firma,'') AS lieferant
+                  FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                  WHERE bp.item_id=? AND b.status NOT IN ('storniert','geliefert') AND b.angekommen_am IS NULL
+                  ORDER BY b.id DESC", [$item_id]) as $bp) {
+        $frei = max(0.0, (float)$bp['menge'] - (float)$bp['geliefert']) - bestellposition_reserviert((int)$bp['id']);
+        if ($frei > 1e-6) $out['bestellt'][] = $bp + ['frei' => $frei];
+    }
+    return $out;
+}
+// Dem Auftrag zugeordnet (aktive Reservierungen mit Quelle) – je Artikel, für die Spalte „zugeordnet".
+function auftrag_material_zugeordnet(int $auftrag_id): array {
+    $out = [];
+    foreach (all("SELECT r.id, r.item_id, r.menge, r.charge_id, r.bestellung_position_id, c.charge_nr, b.nummer AS bestellung_nr, b.angekommen_am
+                  FROM reservierung r LEFT JOIN charge c ON c.id=r.charge_id
+                  LEFT JOIN bestellung_position bp ON bp.id=r.bestellung_position_id LEFT JOIN bestellung b ON b.id=bp.bestellung_id
+                  WHERE r.auftrag_id=? AND r.status='aktiv' AND r.item_id IS NOT NULL", [$auftrag_id]) as $r) $out[(int)$r['item_id']][] = $r;
+    return $out;
+}
+// Zuordnen: $quelle 'charge' | 'bestellung'. Menge wird auf die freie Menge der Quelle begrenzt. Rückgabe ['ok','meldung'|'fehler'].
+function auftrag_material_zuordnen(int $auftrag_id, int $item_id, string $quelle, int $quelle_id, float $menge, string $wer = ''): array {
+    $pa = auftrag_aktiver_pa($auftrag_id);
+    if (!$pa) return ['ok' => false, 'fehler' => 'Kein Produktionsauftrag.'];
+    $src = null; foreach (auftrag_material_quellen($item_id)[$quelle === 'charge' ? 'lager' : 'bestellt'] as $q) if ((int)$q['id'] === $quelle_id) $src = $q;
+    if (!$src) return ['ok' => false, 'fehler' => 'Quelle ist nicht mehr frei.'];
+    $menge = min($menge > 0 ? $menge : (float)$src['frei'], (float)$src['frei']);
+    if ($menge <= 1e-6) return ['ok' => false, 'fehler' => 'Menge fehlt.'];
+    q("INSERT INTO reservierung (pa_id, auftrag_id, item_id, menge, status, bestellung_position_id, charge_id, angelegt) VALUES (?,?,?,?, 'aktiv', ?, ?, ?)",
+      [(int)$pa['id'], $auftrag_id, $item_id, $menge, $quelle === 'bestellung' ? $quelle_id : null, $quelle === 'charge' ? $quelle_id : null, gmdate('Y-m-d H:i:s')]);
+    // Ganze Bestellposition für diesen Auftrag -> auch als „für diesen Auftrag bestellt" kennzeichnen (wie Koppeln im Beschaffungsweg).
+    if ($quelle === 'bestellung' && $menge >= (float)$src['frei'] - 1e-6)
+        q("UPDATE bestellung_position SET auftrag_id=? WHERE id=? AND auftrag_id IS NULL", [$auftrag_id, $quelle_id]);
+    $nf = rtrim(rtrim(number_format($menge, 3, ',', '.'), '0'), ',');
+    $txt = $quelle === 'charge' ? 'Charge ' . ($src['charge_nr'] ?: '#' . $quelle_id) : 'Bestellung ' . $src['nummer'];
+    $name = (string) scalar("SELECT name FROM item WHERE id=?", [$item_id]);
+    log_aktivitaet('auftrag', $auftrag_id, 'team', 'Material zugeordnet: ' . $nf . ' ' . $src['einheit'] . ' ' . $name . ' aus ' . $txt . '.', 'notiz');
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return ['ok' => true, 'meldung' => $nf . ' ' . $src['einheit'] . ' aus ' . $txt . ' zugeordnet.'];
+}
+// Zuordnung (Reservierung) aufheben – nur Reservierungen DIESES Auftrags.
+function auftrag_material_loesen(int $auftrag_id, int $res_id): bool {
+    $r = one("SELECT id, item_id FROM reservierung WHERE id=? AND auftrag_id=? AND status='aktiv'", [$res_id, $auftrag_id]);
+    if (!$r) return false;
+    q("UPDATE reservierung SET status='storniert' WHERE id=?", [$res_id]);
+    log_aktivitaet('auftrag', $auftrag_id, 'team', 'Material-Zuordnung aufgehoben (' . (string) scalar("SELECT name FROM item WHERE id=?", [(int)$r['item_id']]) . ').', 'notiz');
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return true;
+}
 // Mögliche Bulk-Quellen für einen Auftrag: offene Bestellpositionen (auch noch nicht geliefert) und freie
 // vorhandene Chargen des Bulk-Artikels. Je Quelle: Gesamtmenge, schon reserviert, noch frei.
 function bulk_quellen_fuer_auftrag(int $auftrag_id): array {

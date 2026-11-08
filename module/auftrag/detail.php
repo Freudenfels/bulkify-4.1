@@ -594,6 +594,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Keine Quelle gewählt.')); exit;
 }
 
+// Teil 2 „Auftragsseite entschlacken": Zuordnen je Materialzeile (Rohstoff, Glas, Deckel, Etikett, Leerkapsel, Premix) –
+// Reservierung auf eine Lagercharge oder offene Bestellposition. Bulk/Fertigware weiter über material_binden.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['material_zuordnen', 'material_loesen'], true)) {
+    if (!(has_role('admin') || has_role('production'))) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Keine Berechtigung.')); exit; }
+    if ($_POST['aktion'] === 'material_loesen') {
+        auftrag_material_loesen($id, (int)($_POST['res_id'] ?? 0));
+        header('Location: ?p=auftrag&id=' . $id . '&mzok=' . rawurlencode('Zuordnung aufgehoben.')); exit;
+    }
+    [$qTyp, $qId] = array_pad(explode(':', (string)($_POST['quelle'] ?? ''), 2), 2, '');
+    $r = auftrag_material_zuordnen($id, (int)($_POST['item_id'] ?? 0), $qTyp === 'charge' ? 'charge' : 'bestellung', (int)$qId,
+                                   (float) zahl_lesen((string)($_POST['menge'] ?? '0')), (string)(current_user()['name'] ?? ''));
+    header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&mzok=' . rawurlencode((string)$r['meldung']) : '&expressfehler=' . urlencode((string)($r['fehler'] ?? 'Zuordnen nicht möglich.')))); exit;
+}
+
 $a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, pkn.name AS produkt_kundenname, ang.nummer AS angebot_nr
                 FROM auftrag a
                 LEFT JOIN kunden k ON k.id=a.kunde_id
@@ -1525,9 +1539,11 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
   <h2 style="margin:0 0 4px;font-size:16px">Material-Übersicht</h2>
   <div class="muted" style="font-size:12px;margin-bottom:10px">Was dieser Auftrag braucht, was frei im Lager liegt, was bestellt ist und bei wem.</div>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num"><?= $ueProd > 0 ? 'noch benötigt' : 'benötigt' ?></th><th class="bx-num">frei</th><th class="bx-num">in Quarantäne</th><th class="bx-num">unterwegs</th><th>Deckung</th><th>Bestellt bei</th></tr></thead>
+    <thead><tr><th>Position</th><th>Rolle</th><th class="bx-num"><?= $ueProd > 0 ? 'noch benötigt' : 'benötigt' ?></th><th>zugeordnet</th><th class="bx-num">frei</th><th class="bx-num">in Quarantäne</th><th class="bx-num">unterwegs</th><th class="bx-num">Rest</th><th>Deckung</th><th>Bestellt bei</th><th></th></tr></thead>
     <tbody>
-    <?php foreach ($bedarfRows as $r):
+    <?php $mzZu = auftrag_material_zugeordnet((int)$a['id']); $mzDlg = []; $mzDarf = has_role('admin') || has_role('production');
+          $mzStart = $pa && (int) scalar("SELECT COUNT(*) FROM produktion_schritt WHERE pa_id=? AND erledigt=1", [(int)$pa['id']]) === 0;
+    foreach ($bedarfRows as $mzI => $r):
         $iid = (int)($r['item_id'] ?? 0);
         $ben = (float)($r['benoetigt'] ?? 0);   // schon auf den offenen Rest skaliert (auftrag_bedarf_rest)
         $frei = (float)($r['verfuegbar'] ?? 0);
@@ -1546,9 +1562,20 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
         <td style="white-space:normal;min-width:200px;max-width:320px"><?= h((string)($r['name'] ?? '–')) ?></td>
         <td class="muted"><?= h((string)($r['rolle'] ?? '–')) ?></td>
         <td class="bx-num"><?= $mng($ben, $einh) ?></td>
+        <td style="font-size:12px;white-space:normal;min-width:130px"><?php
+          $mzListe = $iid > 0 ? ($mzZu[$iid] ?? []) : [];
+          if ($iid === 0 && (string)($r['rolle'] ?? '') === 'Fertigware') {   // Bulk: Bindungen aus Bulk-Reservierung + fest zugewiesenen Chargen
+              foreach ($bulkRes as $rv) echo '<div>' . ($rv['bestellung_nr'] ? 'Bestellung ' . h((string)$rv['bestellung_nr']) : 'Charge ' . h((string)$rv['charge_nr'])) . ' · ' . h(rtrim(rtrim(number_format((float)$rv['menge'], 3, ',', '.'), '0'), ',')) . '</div>';
+              foreach ($lwZu as $lz) echo '<div>Charge ' . h((string)($lz['charge_nr'] ?: $lz['id'])) . ' (fest)</div>';
+              if (!$bulkRes && !$lwZu) echo '<span class="muted">–</span>';
+          } elseif ($mzListe) {
+              foreach ($mzListe as $zr) echo '<div>' . ($zr['charge_nr'] ? 'Charge ' . h((string)$zr['charge_nr']) : ($zr['bestellung_nr'] ? 'Bestellung ' . h((string)$zr['bestellung_nr']) : 'Lager')) . ' · ' . $mng((float)$zr['menge'], $einh) . '</div>';
+          } else echo '<span class="muted">–</span>'; ?></td>
         <td class="bx-num"><?= $mng($frei, $einh) ?><?php if (isset($r['zugeordnet']) && $frei - (float)$r['zugeordnet'] > 1e-6): ?><br><span class="muted" style="font-size:11px"><?= (float)$r['zugeordnet'] > 1e-6 ? 'davon zugeordnet ' . $mng((float)$r['zugeordnet'], $einh) : 'noch nicht zugeordnet' ?></span><?php endif; ?></td>
         <td class="bx-num"><?= $quar > 1e-9 ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '">' . $mng($quar, $einh) . '</a>' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>
+        <?php $mzRest = max(0.0, $ben - $frei - $quar - $unterwegs); ?>
+        <td class="bx-num"><?= $mzRest > 1e-6 ? '<span style="color:var(--err)">' . $mng($mzRest, $einh) . '</span>' : '<span class="muted">–</span>' ?></td>
         <td><?= $deckt ? bx_badge('da','ok') : ($decktMitQuar ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '" style="text-decoration:none">' . bx_badge('in Quarantäne – freigeben','warn') . '</a>'
                  : ($nichtEingebucht ? '<span title="Die Bestellung ist als eingegangen markiert, im Lager ist aber keine Bulk-Charge für diesen Auftrag gebucht. Bitte in der Lager-App unter Wareneingang einbuchen oder unten bei „Bulkware binden“ eine vorhandene Charge zuweisen.">' . bx_badge('nicht eingebucht','err') . '</span>'
                  : ($decktMitUnterwegs ? bx_badge('mit Lieferung','info') : bx_badge('fehlt','err')))) ?></td>
@@ -1563,14 +1590,95 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
             </div>
           <?php endforeach; if (count($bestellungen) > 4): ?><div class="muted">+<?= count($bestellungen) - 4 ?> weitere</div><?php endif; endif; ?>
         </td>
+        <td style="text-align:right;white-space:nowrap"><?php if ($mzDarf && $mzStart && ($iid > 0 || ((string)($r['rolle'] ?? '') === 'Fertigware' && has_role('admin')))): $mzDlg[] = [$mzI, $r]; ?><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('mzDlg<?= $mzI ?>').showModal()">Zuordnen</button><?php endif; ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
   </table></div>
+  <?php if (isset($_GET['mzok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-top:10px"><?= h((string)$_GET['mzok']) ?></div><?php endif; ?>
+  <?php if (isset($_GET['bulkres']) || isset($_GET['lwzu'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-top:10px">Bindung aktualisiert.</div><?php endif; ?>
+  <?php if (isset($_GET['bulkwarn'])): ?><div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:10px 14px;margin-top:10px"><?= h((string)$_GET['bulkwarn']) ?></div><?php endif; ?>
+  <?php foreach ($mzDlg as [$mzI, $r]): $iid = (int)($r['item_id'] ?? 0); $einh = (string)($r['einheit'] ?? 'Stk');
+        $mzBedarf = max(0.0, (float)($r['benoetigt'] ?? 0) - (float)($r['verfuegbar'] ?? 0)); ?>
+  <dialog id="mzDlg<?= $mzI ?>" class="bx-dialog">
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px"><h2 style="margin:0;font-size:17px">Zuordnen: <?= h((string)($r['name'] ?? '')) ?></h2><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('dialog').close()" aria-label="schließen">&#10005;</button></div>
+    <div class="muted" style="font-size:12px;margin-bottom:12px">Benötigt <?= $mng((float)$r['benoetigt'], $einh) ?> · frei <?= $mng((float)($r['verfuegbar'] ?? 0), $einh) ?>. Zugeordnete Ware/Bestellung gilt fest für diesen Auftrag (andere Aufträge rechnen sie nicht mehr ein).</div>
+    <?php if ($iid > 0): $mzQ = auftrag_material_quellen($iid); ?>
+      <?php foreach (($mzZu[$iid] ?? []) as $zr): ?>
+      <form method="post" class="bx-row" style="justify-content:space-between;gap:8px;align-items:center;margin:0 0 6px">
+        <input type="hidden" name="aktion" value="material_loesen"><input type="hidden" name="res_id" value="<?= (int)$zr['id'] ?>">
+        <span><?= $zr['charge_nr'] ? 'Charge ' . h((string)$zr['charge_nr']) : 'Bestellung ' . h((string)$zr['bestellung_nr']) ?> · <?= $mng((float)$zr['menge'], $einh) ?></span>
+        <button class="btn btn-ghost btn-sm" type="submit">Lösen</button>
+      </form>
+      <?php endforeach; ?>
+      <?php foreach (['lager' => 'Aus Lager zuordnen', 'bestellt' => 'Bestellung verknüpfen'] as $mzArt => $mzTitel): ?>
+      <form method="post" style="margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)">
+        <input type="hidden" name="aktion" value="material_zuordnen"><input type="hidden" name="item_id" value="<?= $iid ?>">
+        <div style="font-weight:600;margin-bottom:6px"><?= $mzTitel ?></div>
+        <?php if (!$mzQ[$mzArt]): ?><div class="muted" style="font-size:12px"><?= $mzArt === 'lager' ? 'Keine freie Charge im Lager.' : 'Keine offene Bestellung zu diesem Artikel.' ?></div>
+        <?php else: ?>
+        <div class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <select name="quelle" required style="min-width:280px;flex:1">
+            <?php foreach ($mzQ[$mzArt] as $q): ?>
+            <option value="<?= $mzArt === 'lager' ? 'charge' : 'bestellung' ?>:<?= (int)$q['id'] ?>"><?= $mzArt === 'lager'
+                ? 'Charge ' . h((string)($q['charge_nr'] ?: $q['id'])) . ($q['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$q['mhd']))) : '')
+                : h((string)$q['nummer']) . ($q['lieferant'] !== '' ? ' · ' . h((string)$q['lieferant']) : '') . ' · ' . h(status_text((string)$q['status'])) . (!empty($q['eta_geplant']) ? ' · Termin ' . h(date('d.m.Y', strtotime((string)$q['eta_geplant']))) : '') ?> · frei <?= $mng((float)$q['frei'], $einh) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <input type="text" inputmode="decimal" name="menge" value="<?= h(rtrim(rtrim(number_format(min($mzBedarf > 0 ? $mzBedarf : (float)$r['benoetigt'], (float)$mzQ[$mzArt][0]['frei']), 3, ',', ''), '0'), ',')) ?>" style="width:120px" title="Menge in <?= h($einh) ?>">
+          <button class="btn btn-primary btn-sm" type="submit">Zuordnen</button>
+        </div>
+        <?php endif; ?>
+      </form>
+      <?php endforeach; ?>
+    <?php else: /* Bulk / Fertigware: bestehende Bindung (Reservierung aus Bestellung bzw. feste Charge) */ ?>
+      <?php foreach ($bulkRes as $rv): ?>
+      <form method="post" class="bx-row" style="justify-content:space-between;gap:8px;align-items:center;margin:0 0 6px" onsubmit="return confirm('Reservierung aufheben?');">
+        <input type="hidden" name="aktion" value="bulk_res_storno"><input type="hidden" name="res_id" value="<?= (int)$rv['id'] ?>">
+        <span><?= $rv['bestellung_nr'] ? 'Bestellung ' . h((string)$rv['bestellung_nr']) . ($rv['lieferant'] ? ' · ' . h((string)$rv['lieferant']) : '') : 'Charge ' . h((string)$rv['charge_nr']) ?> · <?= h(rtrim(rtrim(number_format((float)$rv['menge'], 3, ',', '.'), '0'), ',')) ?> <?= h((string)($rv['einheit'] ?: '')) ?></span>
+        <button class="btn btn-ghost btn-sm" type="submit">Aufheben</button>
+      </form>
+      <?php endforeach; ?>
+      <?php foreach ($lwZu as $lz): ?>
+      <form method="post" class="bx-row" style="justify-content:space-between;gap:8px;align-items:center;margin:0 0 6px" onsubmit="return confirm('Zuweisung dieser Charge aufheben? Die Ware wird wieder freie Lagerware.');">
+        <input type="hidden" name="aktion" value="charge_loesen"><input type="hidden" name="charge_id" value="<?= (int)$lz['id'] ?>">
+        <span>Charge <?= h((string)($lz['charge_nr'] ?: $lz['id'])) ?> (fest) · <?= h(rtrim(rtrim(number_format((float)$lz['menge_verfuegbar'], 3, ',', '.'), '0'), ',')) ?> <?= h((string)($lz['einheit'] ?? '')) ?></span>
+        <button class="btn btn-ghost btn-sm" type="submit">Lösen</button>
+      </form>
+      <?php endforeach; ?>
+      <?php $mzHatQ = ($bulkQ['bestellungen'] ?? []) || ($lwQ['chargen'] ?? []) || ($lwQ['weitere'] ?? []); if ($mzHatQ):
+            $mzGeb = 0.0; foreach ($bulkRes as $rv) $mzGeb += (float)$rv['menge']; foreach ($lwZu as $lz) $mzGeb += (float)$lz['menge_verfuegbar'];
+            $mbOffen = max(0, (int)$restStk - (int)round($mzGeb)); ?>
+      <form method="post" style="margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)">
+        <input type="hidden" name="aktion" value="material_binden">
+        <div style="font-weight:600;margin-bottom:6px">Aus Lager zuordnen oder Bestellung verknüpfen</div>
+        <div class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <select name="quelle" required style="min-width:280px;flex:1">
+            <option value="">– wählen –</option>
+            <?php if ($bulkQ['bestellungen']): ?><optgroup label="Bestellung (auch unterwegs) – wird reserviert">
+              <?php foreach ($bulkQ['bestellungen'] as $bq): if ($bq['frei'] <= 0.0001) continue; ?>
+                <option value="bestellung:<?= (int)$bq['bp_id'] ?>">Bestellung <?= h((string)$bq['nummer']) ?><?= $bq['lieferant'] ? ' · ' . h((string)$bq['lieferant']) : '' ?> · <?= !empty($bq['angekommen_am']) ? 'geliefert' : 'unterwegs' ?> · frei <?= h(rtrim(rtrim(number_format((float)$bq['frei'], 3, ',', '.'), '0'), ',')) ?></option>
+              <?php endforeach; ?>
+            </optgroup><?php endif; ?>
+            <?php foreach (['chargen' => 'Passende Charge im Lager – wird fest zugewiesen', 'weitere' => 'Andere Fertigware im Lager – wird fest zugewiesen'] as $lwK => $lwL): if (empty($lwQ[$lwK])) continue; ?><optgroup label="<?= h($lwL) ?>">
+              <?php foreach ($lwQ[$lwK] as $cq): ?>
+              <option value="charge:<?= (int)$cq['id'] ?>"><?= $cq['passt'] === false ? 'ANDERE GRÖSSE · ' : '' ?><?= $lwK === 'weitere' ? h((string)$cq['item_name']) . ' · ' : '' ?>Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['kapselgroesse'] !== '' ? ' · ' . h($cq['kapselgroesse']) : '' ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= h(rtrim(rtrim(number_format((float)$cq['menge_verfuegbar'], 3, ',', '.'), '0'), ',')) ?></option>
+              <?php endforeach; ?>
+            </optgroup><?php endforeach; ?>
+          </select>
+          <input type="text" inputmode="<?= $bulkInM ?>" name="menge" <?= $bulkTaus ?> value="<?= $bulkInput($mbOffen) ?>" style="width:120px" title="Menge (<?= $bulkEinh ?>)">
+          <button class="btn btn-primary btn-sm" type="submit">Binden</button>
+        </div>
+      </form>
+      <?php else: ?><div class="muted" style="font-size:12px;margin-top:8px">Keine Bulkware verfügbar: weder eine Bulk-Bestellung des Produkts noch eine freie Fertigware-Charge im Lager.</div><?php endif; ?>
+    <?php endif; ?>
+  </dialog>
+  <?php endforeach; ?>
+  <script>document.querySelectorAll('dialog[id^=mzDlg]').forEach(function(d){ d.addEventListener('click', function(e){ if (e.target === d) d.close(); }); });</script>
   <?php if (isset($_GET['diagok'])): ?><div class="badge-ok" style="padding:8px 12px;border-radius:8px;margin-top:10px"><?= h((string)$_GET['diagok']) ?></div><?php endif; ?>
   <?php if (isset($_GET['diagfehler'])): ?><div style="color:#8f231b;margin-top:10px"><?= h((string)$_GET['diagfehler']) ?></div><?php endif; ?>
   <?= auftrag_bulk_diagnose_block((int)$a['id'], '?p=auftrag&id=' . (int)$a['id']) ?>
-  <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„frei" = im Lager verfügbar (Bulkware: zugeordnet + freier Lagerbestand; zuordnen unten bei „Bulkware binden“) · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
+  <p class="muted" style="font-size:12px;margin:6px 0 0"><?php if ($ueProd > 0): ?>„noch benötigt" = Restbedarf, die bereits <strong><?= number_format($ueProd, 0, ',', '.') ?></strong> produzierten Packungen sind anteilig abgezogen · <?php endif; ?>„zugeordnet" = fest für diesen Auftrag (Charge oder Bestellung, über „Zuordnen") · „frei" = im Lager verfügbar (Bulkware: zugeordnet + freier Lagerbestand) · „Rest" = weder frei, in Quarantäne noch unterwegs · „unterwegs" = bestellt, noch nicht eingegangen · „mit Lieferung" = frei + unterwegs reicht aus · „Bestellt bei" = laufende Bestellungen (auch Entwürfe) und schon eingegangene für diesen Auftrag.</p>
 </div>
 <?php endif; endif; ?>
 <?php // Soll-Kette 4b: Anweisung „Teilmenge produzieren“ ans Werk (auch „Schritt vorziehen“: bis vor dem Etikettieren).
@@ -1743,108 +1851,6 @@ if ($pa && in_array((string)($pa['status'] ?? ''), ['offen', 'laufend'], true) &
     <?php endif; // Handelsware-Beschaffung ?>
     <?php endif; ?>
   </div>
-</div>
-
-<?php // Reiter „Material": Beschaffung – fertige Bulkware aus Bestellung/Charge an den Auftrag binden
-      // (Reservieren + Lagerware zuweisen in EINEM Schritt) sowie die Bestellungen zu diesem Auftrag. ?>
-<div class="bx-panel" data-panel="material">
-  <h2 style="margin-top:0">Material beschaffen &amp; zuweisen</h2>
-  <div class="muted" style="font-size:12px;margin:-4px 0 14px">Fertige Bulkware aus einer Bestellung (auch noch unterwegs) oder einer vorhandenen Charge an diesen Auftrag binden – in einem Schritt. Rohstoffe und Verpackung werden über die Material-Übersicht oben und den Einkauf beschafft.</div>
-
-  <?php if ($istAdmin):
-        $nzB = fn($x)=>rtrim(rtrim(number_format((float)$x,3,',','.'),'0'),',');
-        // Charge-/Bulk-Menge lesbar: bei Gewicht/Volumen (g/ml) ab 1.000 kg/L, ab 1.000.000 t (via gewicht_lesbar),
-        // sonst Zahl + Einheit. $einh = Einheit der Charge/Bestellung (null = aus Form).
-        $mengeLes = function($x, $einh = null) use ($nzB, $istFuellG) {
-            $e = $einh !== null ? (string)$einh : ($istFuellG ? 'g' : '');
-            if (function_exists('gewicht_lesbar') && in_array($e, ['g','ml'], true)) return gewicht_lesbar((float)$x, $e);
-            return $nzB($x) . ($e !== '' ? ' ' . $e : '');
-        };
-        $bulkResSumme = 0.0; foreach ($bulkRes as $rv) $bulkResSumme += (float)$rv['menge'];
-        $lwSumme = 0.0; foreach ($lwZu as $lz) $lwSumme += (float)$lz['menge_verfuegbar'];
-        $gebundenSumme = $bulkResSumme + $lwSumme;
-        $mbOffen = max(0, (int)$restStk - (int)round($gebundenSumme));
-        $hatQuellen = ($bulkQ['bestellungen'] ?? []) || ($lwQ['chargen'] ?? []) || ($lwQ['weitere'] ?? []); ?>
-  <h3 id="bulkreserve" style="margin:4px 0 6px;font-size:14px;font-weight:600;scroll-margin-top:80px">Bulkware binden <span class="muted" style="font-weight:normal">· reservieren oder feste Charge zuweisen</span></h3>
-  <?php if (isset($_GET['bulkres']) || isset($_GET['lwzu'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Bindung aktualisiert.</div><?php endif; ?>
-  <?php if (isset($_GET['bulkwarn'])): ?><div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:10px 14px;margin-bottom:10px"><?= h((string)$_GET['bulkwarn']) ?></div><?php endif; ?>
-  <?php // Aktuell gebunden: Reservierungen (aus Bestellung/Charge) + fest zugewiesene Chargen in EINER Tabelle. ?>
-  <?php if ($bulkRes || $lwZu): ?>
-  <div class="bx-tablewrap" style="margin-bottom:10px"><table class="bx-table">
-    <thead><tr><th>Quelle</th><th class="bx-num">Menge</th><th>Art</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      <?php foreach ($bulkRes as $rv): ?>
-      <tr>
-        <td><?php if ($rv['bestellung_nr']): ?>Bestellung <?= h((string)$rv['bestellung_nr']) ?><?= $rv['lieferant'] ? ' · ' . h((string)$rv['lieferant']) : '' ?><?php elseif ($rv['charge_nr']): ?>Charge <?= h((string)$rv['charge_nr']) ?><?php else: ?>–<?php endif; ?></td>
-        <td class="bx-num"><?= $nzB($rv['menge']) ?> <?= h((string)($rv['einheit'] ?: '')) ?></td>
-        <td><?= bx_badge('reserviert','info') ?></td>
-        <td><?php if ($rv['charge_nr']): ?><?= bx_badge('aus Bestand','ok') ?><?php elseif (!empty($rv['angekommen_am'])): ?><?= bx_badge('geliefert','ok') ?><?php else: ?><?= bx_badge('unterwegs','warn') ?><?php endif; ?></td>
-        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Reservierung aufheben?');"><input type="hidden" name="aktion" value="bulk_res_storno"><input type="hidden" name="res_id" value="<?= (int)$rv['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Aufheben</button></form></td>
-      </tr>
-      <?php endforeach; ?>
-      <?php foreach ($lwZu as $lz): ?>
-      <tr>
-        <td><?= $lz['item_name'] ? h((string)$lz['item_name']) . ' · ' : '' ?>Charge <?= h((string)($lz['charge_nr'] ?: $lz['id'])) ?><?= !empty($lz['kapselgroesse']) ? ' · ' . h((string)$lz['kapselgroesse']) : '' ?><?= $lz['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$lz['mhd']))) : '' ?></td>
-        <td class="bx-num"><?= $mengeLes($lz['menge_verfuegbar'], ($lz['einheit'] ?? '') !== '' ? $lz['einheit'] : null) ?></td>
-        <td><?= bx_badge('fest zugewiesen','ok') ?></td>
-        <td><?= ($lz['status'] ?? '') === 'frei' ? bx_badge('im Lager','ok') : bx_badge((string)$lz['status'],'warn') ?></td>
-        <td style="text-align:right"><form method="post" style="margin:0" onsubmit="return confirm('Zuweisung dieser Charge aufheben? Die Ware wird wieder freie Lagerware.');"><input type="hidden" name="aktion" value="charge_loesen"><input type="hidden" name="charge_id" value="<?= (int)$lz['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Lösen</button></form></td>
-      </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-  <?php endif; ?>
-  <?php if ($hatQuellen): ?>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="material_binden">
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Quelle (Bestellung oder Charge aus dem Lager)
-      <select name="quelle" class="rscombo" style="min-width:360px" required>
-        <option value="">– wählen –</option>
-        <?php if ($bulkQ['bestellungen']): ?><optgroup label="Bestellung (auch unterwegs) – wird reserviert">
-          <?php foreach ($bulkQ['bestellungen'] as $bq): if ($bq['frei'] <= 0.0001) continue; ?>
-            <option value="bestellung:<?= (int)$bq['bp_id'] ?>">Bestellung <?= h((string)$bq['nummer']) ?><?= $bq['lieferant'] ? ' · ' . h((string)$bq['lieferant']) : '' ?> · <?= !empty($bq['angekommen_am']) ? 'geliefert' : 'unterwegs' ?> · frei <?= $mengeLes($bq['frei'], $bq['einheit'] ?? null) ?></option>
-          <?php endforeach; ?>
-        </optgroup><?php endif; ?>
-        <?php if ($lwQ['chargen']): ?><optgroup label="Passende Charge im Lager – wird fest zugewiesen">
-          <?php foreach ($lwQ['chargen'] as $cq): ?>
-          <option value="charge:<?= (int)$cq['id'] ?>"><?= $cq['passt'] === false ? 'ANDERE GRÖSSE · ' : '' ?>Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['kapselgroesse'] !== '' ? ' · ' . h($cq['kapselgroesse']) : '' ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['menge_verfuegbar'], ($cq['einheit'] ?? '') !== '' ? $cq['einheit'] : null) ?></option>
-          <?php endforeach; ?>
-        </optgroup><?php endif; ?>
-        <?php if ($lwQ['weitere']): ?><optgroup label="Andere Fertigware im Lager – wird fest zugewiesen">
-          <?php foreach ($lwQ['weitere'] as $cq): ?>
-          <option value="charge:<?= (int)$cq['id'] ?>"><?= $cq['passt'] === false ? 'ANDERE GRÖSSE · ' : '' ?><?= h((string)$cq['item_name']) ?><?= $cq['kapselgroesse'] !== '' ? ' · ' . h($cq['kapselgroesse']) : '' ?><?= $cq['artikelnummer'] ? ' (' . h((string)$cq['artikelnummer']) . ')' : '' ?> · Charge <?= h((string)($cq['charge_nr'] ?: $cq['id'])) ?><?= $cq['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$cq['mhd']))) : '' ?> · frei <?= $mengeLes($cq['menge_verfuegbar'], ($cq['einheit'] ?? '') !== '' ? $cq['einheit'] : null) ?></option>
-          <?php endforeach; ?>
-        </optgroup><?php endif; ?>
-      </select>
-    </label>
-    <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Menge (<?= $bulkEinh ?> Bulk)<?= $bulkLes($mbOffen) ?>
-      <input type="text" inputmode="<?= $bulkInM ?>" name="menge" <?= $bulkTaus ?> value="<?= $bulkInput($mbOffen) ?>" style="min-width:130px">
-    </label>
-    <button class="btn btn-primary btn-sm" type="submit" data-busy="Binde…">Binden</button>
-  </form>
-  <div class="muted" style="font-size:12px;margin-top:6px"><strong>Bestellung</strong> = reserviert die Menge aus einer (auch noch unterwegs) Bulk-Bestellung · <strong>Charge</strong> = weist eine konkrete Lagercharge fest zu (der Kunde bekommt genau diese). Teilmengen werden abgespalten, der freie Rest bleibt verfügbar und kann weiteren Aufträgen dienen. <?= $produziertPkg>0 ? 'Noch benötigt (Rest)' : 'Benötigt' ?>: <strong><?= $bulkMng($restStk) ?></strong><?= $gebundenSumme>0 ? ', bereits gebunden ' . $bulkMng($gebundenSumme) : '' ?>.</div>
-  <?php else: ?>
-  <div class="muted" style="font-size:12px">Keine Bulkware verfügbar: weder eine (auch unterwegs) Bulk-Bestellung des Produkts noch eine freie Fertigware-Charge im Lager. Erst eine Lieferantenbestellung anlegen oder Bestand einbuchen, dann hier binden.</div>
-  <?php endif; ?>
-  <?php endif; /* Material binden (Admin) */ ?>
-
-  <h3 style="margin:18px 0 6px;font-size:14px;font-weight:600">Bestellungen zu diesem Auftrag</h3>
-  <?php if (!$best): ?>
-    <div class="muted"><?= $istFremd ? 'Noch keine Bestellung erfasst – fertige Bulkware ist noch nicht bestellt.' : 'Noch keine Bestellung erfasst – Rohstoffe sind noch offen.' ?>
-      <?php if ($pa): ?> <a href="?p=bedarf" style="font-size:12px">zum Einkaufsbedarf</a><?php endif; ?></div>
-  <?php else: ?>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Bestellung</th><th>Lieferant</th><th>Status</th></tr></thead>
-      <tbody>
-      <?php foreach ($best as $b): ?>
-        <tr><td><a href="?p=bestellung&id=<?= (int)$b['id'] ?>"><?= h($b['nummer']) ?></a></td>
-            <td><?= $b['lieferant'] ? h($b['lieferant']) : '<span class="muted">–</span>' ?></td>
-            <td><?= $bStatus($b) ?></td></tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table></div>
-  <?php endif; ?>
-
 </div>
 
 <?php // Reiter „Lager": Fertigware-Chargen (physischer Bestand), Einlagern (an Lager 1 übergeben) und die
