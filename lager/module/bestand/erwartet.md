@@ -28,3 +28,4 @@ Leerzustand: Hinweis, dass nichts unterwegs ist (erscheint, sobald im Dashboard 
 **Einbuchen -> Wareneingang mit vorgewählter Lieferung (S-06):** Der Knopf „Einbuchen" führt auf `?p=we&lieferung=<Bestellung>` (nicht mehr in die Schnell-Maske `?p=eingang`, die keine Bestellung kennt). Der Wareneingang öffnet „Aus Liste wählen", lädt die Lieferung und schließt die Bestellung beim Buchen.
 
 Je Position „für AB-… · Kunde“, wenn die Bestellung für einen Auftrag ist (Soll-Kette 3, 04.11.2026).
+- 08.11.2026 (Handbuch 4.5): Auch Portal-Bestellungen mit Status `gesendet` erscheinen; unter der Bestellnummer steht dann „noch nicht bestätigt". Einbuchen wie gewohnt.

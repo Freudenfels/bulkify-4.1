@@ -30,6 +30,7 @@ foreach ($lieferungen as $l) {
         'ueberfaellig'   => $eta !== '' && $eta < $heute,
         'tracking'       => (string)($l['tracking'] ?? ''),
         'versandanbieter'=> (string)($l['versandanbieter'] ?? ''),
+        'unbestaetigt'   => (string)($l['status'] ?? '') === 'gesendet',   // Portal-Bestellung, Lieferant hat noch nicht bestätigt
     ];
     $pos = $l['positionen'] ?? [];
     if (!$pos) $pos = [[]];   // Lieferung ohne Positionen: trotzdem als eine Zeile zeigen (freies Einbuchen)
@@ -90,7 +91,7 @@ if ($hatRest) $reiter['rest'] = 'Sonstiges';
       <td data-label="Kategorie" class="muted"><?= h($katLabel) ?></td>
       <td data-label="Lieferant">
         <?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span class="muted">Ohne Lieferant</span>' ?>
-        <?php if ($z['nummer'] !== ''): ?><br><span class="muted" style="font-size:12px"><?= h($z['nummer']) ?></span><?php endif; ?>
+        <?php if ($z['nummer'] !== ''): ?><br><span class="muted" style="font-size:12px"><?= h($z['nummer']) ?><?= !empty($z['unbestaetigt']) ? ' · noch nicht bestätigt' : '' ?></span><?php endif; ?>
       </td>
       <td data-label="Erwartet">
         <?php if ($z['eta'] !== ''): ?><?= h(date('d.m.Y', strtotime($z['eta']))) ?>

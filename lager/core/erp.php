@@ -380,8 +380,10 @@ function erp_umlagern_lager2(int $charge_id, float $menge, int $kunde_id): array
     }
     erp_bedarf_bump();
     return ['ok' => true, 'meldung' => $fmt($menge) . ' ' . (string)($c['einheit'] ?: 'Stk') . ' ' . (string)$c['charge_nr'] . ' ins Lager 2 von ' . (string)$k['firma'] . ' umgelagert.'];
-}
-
+}
+
+
+
 // Wahrscheinlicher Kunde einer (Fertigwaren-)Charge: aus Auftrag, sonst Produktionsauftrag, sonst Produkt.
 function erp_charge_kunde_vorschlag(int $charge_id): ?int {
     if (!tabelle_da('charge')) return null;
@@ -1047,7 +1049,8 @@ function erp_item_anlegen(string $name, string $kategorie, string $einheit, stri
     return $id;
 }
 
-// „Waren, auf die wir warten" – beim Lieferanten bestellt, aber noch nicht angekommen (status='bestellt',
+// „Waren, auf die wir warten" – beim Lieferanten bestellt, aber noch nicht angekommen (status 'bestellt' oder – seit 08.11.2026,
+// Handbuch 4.5 – auch 'gesendet' = übers Portal geschickt, Lieferant hat noch nicht bestätigt; die Ware kann trotzdem kommen),
 // kein Wareneingang). Mit erwartetem Termin (eta_geplant), Sendungsnummer (tracking) und Positionen,
 // damit der Mitarbeiter sie bei Ankunft direkt einbuchen kann.
 // Kapselgröße (z. B. "Größe 0") zu einer Position bestimmen – wenn es Kapseln sind.
@@ -1528,9 +1531,9 @@ function erp_warenart_raten(string $name): string {
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,
-                        b.notiz, b.lieferant_id, lf.firma AS lieferant
+                        b.notiz, b.lieferant_id, b.status, lf.firma AS lieferant
                  FROM bestellung b LEFT JOIN lieferanten lf ON lf.id = b.lieferant_id
-                 WHERE b.status = 'bestellt' AND b.angekommen_am IS NULL
+                 WHERE b.status IN ('bestellt','gesendet') AND b.angekommen_am IS NULL
                  ORDER BY (b.eta_geplant IS NULL), b.eta_geplant, b.bestelldatum DESC, b.id DESC");
     foreach ($rows as &$r) {
         $pos = tabelle_da('bestellung_position')
