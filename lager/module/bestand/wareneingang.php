@@ -1251,8 +1251,9 @@ if ($gebucht):
     // Abweichung Etikett-Maß vs. Glas-Endformat (Toleranz 2 mm): NUR neutraler Hinweis, nie Sperre
     // (Soll-Handbuch 4.5, Entscheidung Nico 08.11.2026: Etiketten sind oft 2-5 mm größer = Sicherheitsmaß).
     var mh=document.getElementById('weEtMassHinweis'), mhTxt='';
-    if(etGlas && etGlas.breite && etGlas.hoehe && e.breite && e.hoehe
-       && (Math.abs(e.breite-etGlas.breite)>2 || Math.abs(e.hoehe-etGlas.hoehe)>2)){
+    var eG=Math.max(+e.breite||0,+e.hoehe||0), eK=Math.min(+e.breite||0,+e.hoehe||0),   // Ausrichtung egal (60 x 172 = 172 x 60)
+        gG=etGlas?Math.max(+etGlas.breite||0,+etGlas.hoehe||0):0, gK=etGlas?Math.min(+etGlas.breite||0,+etGlas.hoehe||0):0;
+    if(eK>0 && gK>0 && (Math.abs(eG-gG)>2 || Math.abs(eK-gK)>2)){
       mhTxt='Hinweis: Etikett '+em+', Glas-Endformat '+gm+(etGlas.name?' ('+etGlas.name+')':'')+' – Maße weichen ab. Etiketten sind oft etwas größer, einbuchen ist möglich.';
     }
     if(mh){ mh.hidden=!mhTxt; mh.textContent=mhTxt; }
