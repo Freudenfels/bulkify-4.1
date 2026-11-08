@@ -41,3 +41,8 @@ Die Felder der Vorschau nutzen explizite Indizes (`mat_item[<i>]`, `mat_menge[<i
 
 ## QM-Gate Fertigware (St-11d)
 Eigene Fertigware (Einlagern aus der Produktion: `produktion_teilmenge_einbuchen()`, Produktions-App `erp_teilmenge_einbuchen()`, Easy Production außer „schon geliefert") kommt in **Quarantäne** statt frei. Versand, Fremdlager-Übergabe und Weiterverarbeitung nehmen nur freie Chargen, also erst nach der QM-Freigabe (Lager-App „Quarantäne" / Dashboard-Wareneingang, nur QM/Admin). Die Versand-/Fremdlager-Meldung nennt die wartende Menge (`fertigware_qm_hinweis()`), die Bulk-Reservierung einer nicht freien Charge warnt nur, und die Lager-App lässt Fertigware in Quarantäne nicht entnehmen. Zukauf „fertig" behält den Status vom Wareneingang.
+
+## Fertigware sofort frei (08.11.2026, Handbuch 4.11 / 11)
+Gilt vor dem Absatz „QM-Gate Fertigware" oben: Easy Production bucht die Kundenmenge jetzt als **frei** ein (wie Werk-App und
+Dashboard, die schon seit der Soll-Kette frei buchen). Keine Quarantäne mehr beim Einbuchen eigener Fertigware. Rückstellmuster
+bleiben als eigene Charge `…-RM` gesperrt. Die Kontrolle vor dem Versand kommt mit der Prüfliste (Handbuch 4.13).
