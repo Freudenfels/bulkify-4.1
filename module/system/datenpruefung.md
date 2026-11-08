@@ -75,3 +75,4 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `gebinde_gleich_verteilt` listet Geb
 Prüfung `rohstoff_bestellt_ohne`: Aufträge mit manuell gesetzter Stufe `phase_override=1` („Rohstoff bestellt“), offen, ohne echte
 Bestellung zum Auftrag (Position mit auftrag_id oder Verlaufseintrag ref_typ=bestellung; Bestellstatus gesendet/bestellt/geliefert
 oder angekommen). Beheben setzt `phase_override` auf NULL (protokolliert). Hintergrund: Arbeitsanweisung „Auftragsseite entschlacken“ Teil 0.3.
+- 08.11.2026 (Handbuch 10.2): neuer Punkt `rohstoff_bestellt_ohne_hoeher` – Aufträge mit von Hand gesetzter Stufe ab 2 (phase_override >= 2) ohne echte Bestellung, **nur Anzeige** (kein Beheben). Der bisherige Punkt `rohstoff_bestellt_ohne` (= 1) behebt wie gehabt.

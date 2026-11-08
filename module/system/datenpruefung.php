@@ -56,6 +56,24 @@ $CHECKS = [
         'fix'   => ['tabelle' => 'auftrag', 'typ' => 'auftrag',
                     'update' => "UPDATE auftrag SET phase_override=NULL WHERE phase_override=1 AND status NOT IN ('storniert','versendet','erledigt') AND id IN ({IDS})"],
     ],
+    // Handbuch 10.2 (08.11.2026): von Hand eine HÖHERE Stufe gesetzt (phase_override >= 2) – dann gilt „Rohstoff bestellt" ebenfalls als
+    // erledigt, ohne echte Bestellung. Nur ANZEIGEN, nicht automatisch zurücksetzen (Ware kann z. B. aus dem Lager gekommen sein).
+    'rohstoff_bestellt_ohne_hoeher' => [
+        'titel' => 'Fortschritt von Hand höher gesetzt, ohne echte Bestellung (nur prüfen)',
+        'info'  => 'Aufträge, deren Fortschritt von Hand auf eine Stufe ab „Rohstoff angekommen" gesetzt ist (phase_override ab 2), ohne dass es eine echte Bestellung '
+                 . 'zum Auftrag gibt. Damit sieht der Kunde auch „Rohstoff bestellt" als erledigt. Kein automatisches Beheben: bitte je Auftrag prüfen '
+                 . '(z. B. Ware aus dem Lager genommen = in Ordnung) und die Stufe bei Bedarf am Auftrag zurücksetzen.',
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, k.firma AS kunde, a.status, a.phase_override, a.status_datum
+                    FROM auftrag a LEFT JOIN kunden k ON k.id = a.kunde_id
+                    WHERE a.phase_override >= 2 AND a.status NOT IN ('storniert','versendet','erledigt')
+                      AND NOT EXISTS (SELECT 1 FROM bestellung_position bp JOIN bestellung b ON b.id = bp.bestellung_id
+                                      WHERE bp.auftrag_id = a.id AND (b.status IN ('gesendet','bestellt','geliefert') OR b.angekommen_am IS NOT NULL))
+                      AND NOT EXISTS (SELECT 1 FROM aktivitaet ak JOIN bestellung b ON b.id = ak.ref_id
+                                      WHERE ak.objekt_typ = 'auftrag' AND ak.objekt_id = a.id AND ak.ref_typ = 'bestellung'
+                                        AND (b.status IN ('gesendet','bestellt','geliefert') OR b.angekommen_am IS NOT NULL))
+                    ORDER BY a.id DESC",
+        'korrektur' => '– (nur anzeigen; Stufe am Auftrag unter „Fortschritt manuell auf eine Stufe setzen" anpassen)',
+    ],
     's10_bulk' => [
         'titel' => 'S-10: Bulk-Bestellungen in g/ml mit €/kg-Preis',
         'info'  => 'Bulk-Positionen in g oder ml mit einem Preis, der nach €/kg aussieht (Summe dadurch 1.000-fach). Korrektur: Menge in kg bzw. l umrechnen'
