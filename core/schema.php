@@ -13057,6 +13057,14 @@ function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = '', ?st
 // (der Kunde ruft in Teilmengen zum Festpreis ab, statt einer einzigen Riesen-Produktion).
 // Der Ursprungsauftrag wird storniert (die Produktion laeuft dann ueber die Abrufe). Idempotent.
 // Rueckgabe: ['ok'=>true,'kontingent_id'=>…] oder ['ok'=>false,'fehler'=>…].
+// Festpreis je Packung fürs Kontingent = VOLLER Packungspreis (Handbuch 12.4, Nico 08.11.2026): gesamt_netto / menge
+// (alle Positionen: Herstellung + Glas + Etikett …). Fallback vk_stueck, wenn gesamt_netto fehlt. EINE Stelle – der
+// Erklärtext am Auftrag (Reiter Preise) und kontingent_aus_auftrag() nutzen beide diese Funktion.
+function kontingent_preis_aus_auftrag(array $a): float {
+    $menge = (int)($a['menge'] ?? 0);
+    return ($menge > 0 && (float)($a['gesamt_netto'] ?? 0) > 0) ? round((float)$a['gesamt_netto'] / $menge, 4) : (float)($a['vk_stueck'] ?? 0);
+}
+
 function kontingent_aus_auftrag(int $auftrag_id, int $monate = 12): array {
     $a = one("SELECT * FROM auftrag WHERE id=?", [$auftrag_id]);
     if (!$a) return ['ok' => false, 'fehler' => 'Auftrag nicht gefunden.'];
@@ -13066,7 +13074,7 @@ function kontingent_aus_auftrag(int $auftrag_id, int $monate = 12): array {
     // Festpreis je Packung = VOLLER Packungspreis (alle Positionen: Herstellung + Glas + Etikett …) aus
     // gesamt_netto/menge – NICHT nur auftrag.vk_stueck (das ist bei Mehrpositions-Angeboten nur die
     // Herstellungszeile; Glas/Etikett fehlten sonst im JV-Preis). Fallback: vk_stueck.
-    $vk = ($menge > 0 && (float)($a['gesamt_netto'] ?? 0) > 0) ? round((float)$a['gesamt_netto'] / $menge, 4) : (float)($a['vk_stueck'] ?? 0);
+    $vk = kontingent_preis_aus_auftrag($a);
     if ($menge < 1 || $vk <= 0) return ['ok' => false, 'fehler' => 'Menge und Stückpreis müssen gesetzt sein.'];
     if ((string)($a['status'] ?? '') === 'storniert') return ['ok' => false, 'fehler' => 'Auftrag ist bereits storniert.'];
     // Bereits eine bezahlte Rechnung? Dann nicht umwandeln (Buchhaltung).

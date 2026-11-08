@@ -336,3 +336,4 @@ Block „Lieferanten-Preise zu diesem Auftrag“ (Rohstoff-EK-Liste + Zukaufprei
 ## Direkt bestellt im Beschaffungsweg (08.11.2026)
 Neben „Bestellen“ (Entwurf) je Lieferant der Knopf „Direkt bestellt“: legt die Bestellung an und schließt sie sofort als bestellt + bestätigt ab (`bestellung_direkt_abschliessen`), ohne Mail.
 - 08.11.2026 (Handbuch 10.3): Hinweis „Druckdatei fehlt" im Reiter Produktion führt jetzt zum Reiter Details und öffnet direkt das Pop-up der Kachel Etikett (`data-goto="details" data-dlg="dlgEtikett"`; `data-dlg` öffnet nach dem Reiterwechsel ein Pop-up).
+- 08.11.2026 (Handbuch 10.4/12.4): Erklärtext „Zu Kontingent machen" zeigt den Preis, den das Kontingent wirklich bekommt – voller Packungspreis aus `kontingent_preis_aus_auftrag()` (gesamt_netto / Menge), nicht mehr `vk_stueck` (nur Herstellung).
