@@ -439,19 +439,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
             q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,dok_datum,charge_nr,befund,kunde_sichtbar,hochgeladen_von)
                VALUES ('auftrag',?,'analyse',?,?,?,?,?,?,?,'team')",
               [$id, trim((string)($_POST['titel'] ?? '')) ?: null, $fn, $orig, $datum, $charge, $befund, isset($_POST['kunde_sichtbar']) ? 1 : 0]);
+            $dokNeu = (int) insert_id();
             log_aktivitaet('auftrag', $id, 'team', 'Laboranalyse/CoA hochgeladen' . ($charge ? ' (Charge ' . $charge . ')' : '') . ': ' . mb_substr($orig, 0, 100), 'coa', 'auftrag', $id);
+            labor_befund_melden($dokNeu);   // „auffällig" -> wichtige Benachrichtigung (Handbuch 4.12)
+            // Charge tolerant gegen die Chargen dieses Auftrags prüfen – nur Hinweis, keine Sperre.
+            if ($charge) {
+                $eigene = array_values(array_unique(array_filter(array_map('strval', array_column(all("SELECT c.charge_nr FROM charge c
+                    WHERE (c.auftrag_id=? OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=?)) AND COALESCE(c.charge_nr,'')<>''", [$id, $id]), 'charge_nr')))));
+                $passt = false; foreach ($eigene as $cn) if (charge_gleich($cn, $charge)) { $passt = true; break; }
+                if ($eigene && !$passt) { header('Location: ?p=auftrag&id=' . $id . '&analyse=1&tab=produktion&labcharge=' . urlencode($charge) . '#labor'); exit; }
+            }
         }
     }
-    header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;
+    header('Location: ?p=auftrag&id=' . $id . '&analyse=1&tab=produktion#labor'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'analyse_del' && ($did = (int)($_POST['dok_id'] ?? 0))) {
     $d = one("SELECT datei FROM dokument WHERE id=? AND objekt_typ='auftrag' AND objekt_id=? AND typ='analyse'", [$did, $id]);
     if ($d) { @unlink(BX_UPLOADS . '/' . basename((string)$d['datei'])); q("DELETE FROM dokument WHERE id=?", [$did]); }
-    header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;
+    header('Location: ?p=auftrag&id=' . $id . '&analyse=1&tab=produktion#labor'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'analyse_toggle' && ($did = (int)($_POST['dok_id'] ?? 0))) {
     q("UPDATE dokument SET kunde_sichtbar = 1 - kunde_sichtbar WHERE id=? AND objekt_typ='auftrag' AND objekt_id=? AND typ='analyse'", [$did, $id]);
-    header('Location: ?p=auftrag&id=' . $id . '&analyse=1'); exit;
+    header('Location: ?p=auftrag&id=' . $id . '&analyse=1&tab=produktion#labor'); exit;
 }
 
 // Auftrag stornieren: Der Auftrag ist „gesetzt" – Menge/Preis/Verpackung werden hier NICHT mehr bearbeitet
@@ -871,6 +880,14 @@ $jvSchwelle = (int) meta_get('jahresmenge_warnschwelle', 10000);
 $jvWarnung  = has_role('admin') && empty($a['kontingent_id']) && (string)$a['status'] !== 'storniert'
            && $jvSchwelle > 0 && (int)$a['menge'] >= $jvSchwelle && (float)$a['vk_stueck'] > 0;
 ?>
+<?php // Labor auffällig (Handbuch 4.12): deutlicher Hinweis am Auftrag, bis „Zu erledigen" kommt. Neuester Bericht zählt.
+$labAuff = auftrag_labortest_status((int)$a['id']);
+if ($labAuff['status'] === 'auffaellig'): ?>
+<div class="bx-panel" style="border-color:#b23b2f;border-left:3px solid #b23b2f;padding:12px 16px;margin-bottom:16px">
+  <strong style="color:#b23b2f">Laborbefund auffällig</strong><?= $labAuff['datum'] ? ' <span class="muted">(Bericht vom ' . h(date('d.m.Y', strtotime((string)$labAuff['datum']))) . ')</span>' : '' ?>
+  <div class="muted" style="font-size:13px;margin-top:4px">Ware vor dem Versand klären. Nico und Tabea sind benachrichtigt. <a href="#" data-goto="produktion">Zum Labor im Reiter Produktion</a></div>
+</div>
+<?php endif; ?>
 <?php if ($jvWarnung): ?>
 <div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:16px">
   <strong>Große Menge als Einzelauftrag: <?= number_format((int)$a['menge'],0,',','.') ?> Stk.</strong>
@@ -1330,6 +1347,8 @@ if (has_role('admin') || has_role('sales')):
         </div>
         <?php if ($fBlock): ?>
         <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Wartet auf Material.</span> <a href="#" data-goto="material">Was fehlt? &rarr; Reiter Material</a></div>
+        <?php elseif ($fState === 'err' && $fStatus === 'Laboranalyse'): ?>
+        <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Laborbefund auffällig – vor dem Versand klären.</span> <a href="#labor">Zum Labor</a></div>
         <?php elseif ($fState === 'err'): ?>
         <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Der Kunde hat noch keine Druckdatei hochgeladen.</span> <a href="#" data-goto="details" data-dlg="dlgEtikett">Selbst hochladen &rarr; Kachel Etikett (Reiter Details)</a></div>
         <?php elseif (!$fDone && $fStatus === 'Etiketten nicht bestellt'): ?>
@@ -1941,14 +1960,19 @@ if (!empty($a['produkt_id']) || kunde_will_labortest((int)($a['kunde_id'] ?? 0))
 <div class="bx-panel" data-panel="produktion" id="labor">
   <h2 style="margin-top:0"><?= $labFlag ? 'Externer Labortest' : 'Laboranalyse' ?><?= $labCharge ? ' <span class="muted" style="font-weight:normal;font-size:13px">· Charge ' . h($labCharge) . '</span>' : '' ?></h2>
   <?php if ($labFlag): ?>
-    <?php if ($lt['status'] === 'abgeschlossen'): ?>
+    <?php if ($lt['status'] === 'auffaellig'): ?>
+      <div style="margin-bottom:10px"><?= bx_badge('Befund auffällig', 'err') ?> <span class="muted">Neuester Bericht<?= $lt['datum'] ? ' vom ' . h(date('d.m.Y', strtotime((string)$lt['datum']))) : '' ?> ist auffällig – gilt nicht als abgeschlossen. Vor dem Versand klären; ein neuer Bericht mit „bestanden" schließt ab.</span></div>
+    <?php elseif ($lt['status'] === 'abgeschlossen'): ?>
       <div style="margin-bottom:10px"><?= bx_badge('abgeschlossen', 'ok') ?> <span class="muted"><?= $lt['datum'] ? 'Bericht vom ' . h(date('d.m.Y', strtotime((string)$lt['datum']))) : 'Bericht liegt vor' ?></span></div>
     <?php elseif (!empty($lt['versendet_am'])): ?>
       <div style="margin-bottom:10px"><?= bx_badge('Probe beim Labor', 'warn') ?> <span class="muted">versendet am <?= h(date('d.m.Y', strtotime((string)$lt['versendet_am']))) ?> – „abgeschlossen", sobald ein freigegebener Bericht vorliegt.</span></div>
     <?php else: ?>
       <div style="margin-bottom:10px"><?= bx_badge('geplant', 'info') ?> <span class="muted">Probe nach der Produktion ans Labor – „abgeschlossen", sobald ein freigegebener Bericht vorliegt.</span></div>
     <?php endif; ?>
-    <?php if ($lt['status'] !== 'abgeschlossen'): ?><div style="margin-bottom:12px"><a class="btn btn-ghost btn-sm" href="?p=labor_senden&auftrag=<?= (int)$a['id'] ?>">Ans Labor senden (Auftragsformular)</a></div><?php endif; ?>
+    <?php if (!in_array($lt['status'], ['abgeschlossen', 'auffaellig'], true)): ?><div style="margin-bottom:12px"><a class="btn btn-ghost btn-sm" href="?p=labor_senden&auftrag=<?= (int)$a['id'] ?>">Ans Labor senden (Auftragsformular)</a></div><?php endif; ?>
+  <?php endif; ?>
+  <?php if (isset($_GET['labcharge'])): ?>
+  <div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:10px 14px;margin:0 0 12px;font-size:13px">Hinweis: Die Charge „<?= h((string)$_GET['labcharge']) ?>" passt zu keiner Charge dieses Auftrags (Vergleich ohne Punkte, Leerzeichen, Bindestriche, Groß-/Kleinschreibung). Bitte prüfen – gespeichert ist der Bericht trotzdem.</div>
   <?php endif; ?>
   <?php if ($labDocs): ?>
   <div class="bx-tablewrap"><table class="bx-table">

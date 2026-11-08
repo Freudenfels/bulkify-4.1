@@ -23,3 +23,4 @@ Dort `objekt_typ='auftrag'`.
 ## Ans Labor senden (05.11.2026)
 Knopf „Ans Labor senden“ im Kopf → `?p=labor_senden` ([labor_senden.md](labor_senden.md)): füllt das Auftragsformular des Labors (z. B. GBA) mit Kunde, bulkify, Produkt/Charge/MHD und legt es am Auftrag ab.
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+- 08.11.2026: Befund „auffällig" an einer Bestellung löst `labor_befund_melden()` aus (wichtige Benachrichtigung).

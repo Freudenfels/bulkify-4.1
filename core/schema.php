@@ -3,6 +3,7 @@
 // Regel: erst CREATE (frisch installierbar), dann additive Migrationen via ensure_column().
 // Nie Spalten loeschen. Alles UTF-8 (utf8mb4).
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/charge_norm.php';   // toleranter Chargen-Vergleich (Handbuch 4.5/4.12) – eine Stelle für alle Programme
 
 // Master-/Test-Scan: in der Produktion überspringt dieser Code Charge-Prüfung und Bestandsabbuchung
 // und lässt zum nächsten Schritt durch (Durchklicken/Testen ohne echte Chargen).
@@ -6069,14 +6070,17 @@ function kunde_will_labortest(int $kunde_id): bool {
 // Ablauf: Probe geht ERST nach der Produktion (mit fertiger Verpackung) ans Labor. Vorher 'geplant' (dunkel),
 // ab dem Versand ans Labor 'laeuft' (mit Versanddatum), nach Bericht-Upload 'abgeschlossen' (mit Berichtsdatum).
 function auftrag_labortest_status(int $auftrag_id, ?int $produkt_id = null): array {
+    // Handbuch 4.12 (08.11.2026): zählt NUR Laborberichte DIESES Auftrags (nicht mehr Berichte am Produkt), nie das automatisch
+    // erzeugte Übersichts-CoA (hochgeladen_von='coa_ueb' – das ist kein Laborbericht), und ein Befund „auffällig" gilt NICHT als
+    // abgeschlossen: Ist der neueste Bericht auffällig, lautet der Status 'auffaellig' (vor Versand klären). $produkt_id bleibt
+    // nur aus Kompatibilität in der Signatur.
     if ($auftrag_id <= 0) return ['status' => 'geplant', 'datum' => null, 'dok_id' => null, 'versendet_am' => null];
-    if ($produkt_id === null) $produkt_id = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$auftrag_id]);
-    $pid = (int)$produkt_id;
-    // Laborbericht zu genau diesem Auftrag ODER (falls vorhanden) zum Produkt des Auftrags, nur wenn freigegeben.
-    $d = one("SELECT id, COALESCE(dok_datum, DATE(angelegt)) AS datum FROM dokument
-              WHERE typ='analyse' AND kunde_sichtbar=1
-                AND ((objekt_typ='auftrag' AND objekt_id=?) OR (objekt_typ='produkt' AND objekt_id=? AND ?>0))
-              ORDER BY datum DESC, id DESC LIMIT 1", [$auftrag_id, $pid, $pid]);
+    $basis = "FROM dokument WHERE typ='analyse' AND objekt_typ='auftrag' AND objekt_id=? AND COALESCE(hochgeladen_von,'')<>'coa_ueb'";
+    $neu = one("SELECT id, befund, COALESCE(dok_datum, DATE(angelegt)) AS datum $basis ORDER BY datum DESC, id DESC LIMIT 1", [$auftrag_id]);
+    if ($neu && (string)($neu['befund'] ?? '') === 'auffaellig')
+        return ['status' => 'auffaellig', 'datum' => $neu['datum'], 'dok_id' => null, 'auffaellig_dok_id' => (int)$neu['id'], 'versendet_am' => null];
+    $d = one("SELECT id, COALESCE(dok_datum, DATE(angelegt)) AS datum $basis AND kunde_sichtbar=1 AND COALESCE(befund,'')<>'auffaellig'
+              ORDER BY datum DESC, id DESC LIMIT 1", [$auftrag_id]);
     if ($d) return ['status' => 'abgeschlossen', 'datum' => $d['datum'], 'dok_id' => (int)$d['id'], 'versendet_am' => null];
     // Probe ans Labor gesendet (labor_versendet_am) -> läuft; vorher geplant (dunkel, noch nicht beim Labor).
     $vers = scalar("SELECT labor_versendet_am FROM auftrag WHERE id=?", [$auftrag_id]) ?: null;
@@ -6095,6 +6099,7 @@ function kunde_auftrag_parallel(array $a): array {
     // Labor-Punkt zeigen, wenn der Kunde generell Drittlabor will ODER für DIESEN Auftrag eine Analyse dazugebucht wurde.
     if (kunde_will_labortest($kid) || !empty($a['laboranalyse_gebucht'])) {
         $lt = auftrag_labortest_status((int)($a['id'] ?? 0), isset($a['produkt_id']) ? (int)$a['produkt_id'] : null);
+        if ($lt['status'] === 'auffaellig') $lt = ['status' => 'laeuft', 'datum' => null, 'dok_id' => null, 'versendet_am' => null];   // Kunde sieht „in Prüfung"
         $out[] = ['label' => 'Laboranalyse',
                   'status' => $lt['status'],   // geplant | laeuft | abgeschlossen
                   'sub'    => $lt['status'] === 'abgeschlossen'
@@ -6388,9 +6393,9 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
     }
     if ($mitUmv)            $steps[] = ['Verpacken', 'Verpackt', $umvDone ? 'done' : ($etikDone ? 'current' : ''), $umvDone ? $datum($g['umv']) : null, null];
     if ($labor) {
-        $sub = $lt['status'] === 'laeuft' ? 'beim Labor' . (!empty($lt['versendet_am']) ? ' seit ' . date('d.m.Y', strtotime((string)$lt['versendet_am'])) : '') : null;
+        $sub = $lt['status'] === 'auffaellig' ? 'Befund auffällig – vor Versand klären' : ($lt['status'] === 'laeuft' ? 'beim Labor' . (!empty($lt['versendet_am']) ? ' seit ' . date('d.m.Y', strtotime((string)$lt['versendet_am'])) : '') : null);
         // Labor läuft parallel: ist der Bericht noch nicht da, bleibt der Punkt offen/aktiv – auch wenn danach schon fertig ist.
-        $steps[] = ['Laboranalyse', 'Laboranalyse abgeschlossen', $qcDone ? 'done' : ($umvDone && $etikDone && $prodDone || $lt['status'] === 'laeuft' ? 'current' : ''), $qcDone ? $lt['datum'] : null, $sub];
+        $steps[] = ['Laboranalyse', 'Laboranalyse abgeschlossen', $qcDone ? 'done' : ($lt['status'] === 'auffaellig' ? 'err' : ($umvDone && $etikDone && $prodDone || $lt['status'] === 'laeuft' ? 'current' : '')), $qcDone ? $lt['datum'] : null, $sub];
     } else {
         $steps[] = ['Qualitätsprüfung', 'Qualitätsprüfung abgeschlossen', $qcDone ? 'done' : ($umvDone && $etikDone && $prodDone ? 'current' : ''), $qcDone ? $d[5] : null, null];
     }
@@ -6443,6 +6448,8 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
 // nur als „Etikettierung"; „Etiketten Daten fehlen" sieht er rot mit Upload-Link. Interne Untertexte (Liefertermin, abgefüllt) entfallen.
 function auftrag_fortschritt_kunde(array $steps): array {
     foreach ($steps as &$s) {
+        // Auffälliger Laborbefund ist intern rot; der Kunde sieht nur „Laboranalyse" in Prüfung (kein Upload-Link).
+        if ($s[2] === 'err' && $s[0] === 'Laboranalyse') { $s[2] = 'current'; $s[4] = null; continue; }
         if ($s[2] === 'err') { $s[4] = 'upload'; continue; }
         if ($s[1] === 'Etikettiert' && !in_array($s[2], ['done', 'teil'], true)) { $s[0] = 'Etikettierung'; $s[4] = null; }
         if (is_string($s[4]) && preg_match('/abgefüllt|erwartet|Kunde hat/u', $s[4])) $s[4] = null;
@@ -13608,6 +13615,19 @@ function benachrichtigung_add(string $betreff, string $text = '', string $link =
     }
     return (int) insert_id();
 }
+// Laborbefund „auffällig" an einem Auftrag melden (Handbuch 4.12): wichtige Benachrichtigung für das Team (Nico/Tabea), einmal je
+// Bericht. Bis es „Zu erledigen" gibt (Schritt 4), ist das die Meldung; am Auftrag steht zusätzlich ein roter Hinweis.
+function labor_befund_melden(int $dok_id): void {
+    $d = one("SELECT objekt_typ, objekt_id, befund, charge_nr FROM dokument WHERE id=? AND typ='analyse'", [$dok_id]);
+    if (!$d || (string)$d['befund'] !== 'auffaellig' || (string)$d['objekt_typ'] !== 'auftrag') return;
+    $a = one("SELECT a.id, a.nummer, k.firma FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id WHERE a.id=?", [(int)$d['objekt_id']]);
+    if (!$a) return;
+    benachrichtigung_add_once('labor_auffaellig:' . $dok_id,
+        'Laborbefund auffällig: ' . $a['nummer'] . ($a['firma'] ? ' (' . $a['firma'] . ')' : ''),
+        'Der Laborbericht' . (!empty($d['charge_nr']) ? ' zu Charge ' . $d['charge_nr'] : '') . ' ist als „auffällig" markiert. Ware vor dem Versand klären (Nico/Tabea).',
+        '?p=auftrag&id=' . (int)$a['id'] . '&tab=produktion#labor', 'auftrag', true);
+}
+
 // Wie benachrichtigung_add, aber nur EINMAL je Schlüssel (z. B. „mhd:<charge_id>"): verhindert Doppel-Hinweise.
 // Nutzt den UNIQUE-Index auf schluessel; ein schon vorhandener Schlüssel wird still übersprungen (return 0).
 function benachrichtigung_add_once(string $schluessel, string $betreff, string $text = '', string $link = '', string $art = 'sonstiges', bool $wichtig = false): int {

@@ -85,8 +85,8 @@ function laboranalyse_auftraege_zu_charge(string $charge): array {
                 JOIN auftrag a ON a.id=pa.auftrag_id
                 LEFT JOIN produkt p ON p.id=a.produkt_id
                 LEFT JOIN kunden k ON k.id=a.kunde_id
-               WHERE REPLACE(REPLACE(LOWER(c.charge_nr),'-',''),' ','') = REPLACE(REPLACE(LOWER(?),'-',''),' ','')
-               ORDER BY a.id DESC", [$charge]);
+               WHERE " . charge_norm_sql('c.charge_nr') . " = ?
+               ORDER BY a.id DESC", [charge_norm($charge)]);
 }
 
 // Abgleich der vom Bericht gelesenen Daten mit dem System – gibt Hinweise (kein Blocker) zurueck.
@@ -111,10 +111,10 @@ function laboranalyse_hinweise(array $ki, int $pid_gewaehlt = 0): array {
     }
 
     if ($charge !== '') {
-        // Charge kompakt vergleichen (Bindestrich/Leerzeichen egal).
+        // Charge tolerant vergleichen (charge_norm: Punkte/Leerzeichen/Bindestriche/Groß-klein egal, Handbuch 4.12).
         $treffer = all("SELECT DISTINCT COALESCE(pa.produkt_id, a.produkt_id) AS produkt_id
                         FROM charge c LEFT JOIN produktionsauftrag pa ON pa.id=c.pa_id LEFT JOIN auftrag a ON a.id=pa.auftrag_id
-                        WHERE REPLACE(REPLACE(LOWER(c.charge_nr),'-',''),' ','') = REPLACE(REPLACE(LOWER(?),'-',''),' ','')", [$charge]);
+                        WHERE " . charge_norm_sql('c.charge_nr') . " = ?", [charge_norm($charge)]);
         $cPids = array_values(array_filter(array_map(fn($r) => (int)$r['produkt_id'], $treffer)));
         if (!$treffer) {
             $h[] = 'Charge „' . $charge . '" wurde im System nicht gefunden – bitte prüfen.';

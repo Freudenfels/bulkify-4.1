@@ -77,3 +77,4 @@ Der Admin-Upload kennt jetzt zusätzlich:
 `laboranalysen_fuer_kunde()` liefert zusätzlich `quelle` (= hochgeladen_von). Die berechnete CoA-Übersicht (`coa_ueb`) entfällt,
 sobald ein gemessenes CoA (Laboranalyse) derselben Bestellung/Charge sichtbar ist.
 - laboranalysen_alle() liefert zusätzlich kunde_id (nur bei Produkt/Auftrag, nicht beim Lieferanten), damit die Liste das interne Kunden-Kürzel zeigen kann, 08.11.2026
+- 08.11.2026: Chargen-Abgleich über `charge_norm()`/`charge_norm_sql()` (core/charge_norm.php) – jetzt auch Punkte egal („2799.A" = „2799A").
