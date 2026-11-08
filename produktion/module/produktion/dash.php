@@ -70,17 +70,15 @@ $liste = function (string $titel, array $rows, string $alleTab, string $art) {
     echo '</div>';
     if (!$rows) { echo '<div class="muted" style="margin-top:10px">Nichts.</div></div>'; return; }
     echo '<div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table"><thead><tr>'
-       . '<th>Nr.</th><th>Produkt</th><th>Kunde</th>'
+       . '<th>Produkt</th>'
        . ($art === 'planung' ? '<th>Geplant am</th>' : '')
-       . ($art === 'laufend' ? '<th>Fortschritt</th>' : '<th>Produzierbar?</th>')
+       . ($art === 'laufend' ? '<th>Fortschritt</th>' : '<th>Stand</th>')
        . '</tr></thead><tbody>';
     foreach (array_slice($rows, 0, 8) as $pa) {
         $g = (int)$pa['schritte_gesamt']; $f = (int)$pa['schritte_fertig'];
         $ziel = $art === 'laufend' ? 'run' : 'pa';
         echo '<tr onclick="location.href=\'?p=' . $ziel . '&id=' . (int)$pa['id'] . '\'" style="cursor:pointer">';
-        echo '<td><strong>' . h((string)$pa['nummer']) . '</strong></td>';
-        echo '<td>' . h((string)($pa['produkt_name'] ?: '–')) . '</td>';
-        echo '<td>' . h((string)($pa['kunde'] ?: '–')) . '</td>';
+        echo '<td>' . pr_produkt_zelle($pa) . '</td>';
         if ($art === 'planung') {
             echo '<td>' . ($pa['geplant_am'] ? h(date('d.m.Y', strtotime((string)$pa['geplant_am']))) : '–') . '</td>';
         }

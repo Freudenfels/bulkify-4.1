@@ -94,6 +94,16 @@ function pr_station_felder(string $station): array {
 }
 
 // Produktionsbereitschaft als Badge: ist der Auftrag produzierbar? (aus erp_pa_bereitschaft()['status']).
+// Produkt-Zelle der schmalen Tabellen (Nico 08.11.2026): Produkt groß, darunter klein PA-Nr · Auftrag · Kunde.
+// Spart die Spalten Nr. und Kunde – die Tabellen passen so ohne Querscrollen auf Tablet und Handy.
+function pr_produkt_zelle(array $pa): string {
+    $name = (string)($pa['produkt_name'] ?? '') ?: '–';
+    $form = !empty($pa['form']) ? ' <span class="muted" style="font-size:12px;font-weight:400">· ' . h((string)$pa['form']) . '</span>' : '';
+    $unter = array_filter([(string)($pa['nummer'] ?? ''), (string)($pa['auftrag_nr'] ?? ''), (string)($pa['kunde'] ?? '')]);
+    return '<div class="pr-prod"><strong>' . h($name) . '</strong>' . $form
+         . ($unter ? '<div class="muted pr-sub">' . h(implode(' · ', $unter)) . '</div>' : '') . '</div>';
+}
+
 function bereit_badge(string $s): string {
     return match ($s) {
         'bereit' => '<span class="badge badge-ok">produzierbar</span>',

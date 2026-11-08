@@ -133,7 +133,7 @@ foreach (pr_maschine_reinigung_log_pa($id) as $rr) if (!empty($rr['gereinigt']))
 $cur = null;
 foreach ($schritte as $s) if ((int)$s['id'] === $erster_offen) { $cur = $s; break; }
 
-kopf($pa['nummer'] . ' – Produktionsmodus', 'liste');
+kopf($pa['nummer'] . ' – Produktionsmodus', 'modus');
 seitenkopf('Produktionsmodus · ' . (string)$pa['nummer'], (string)($pa['produkt_name'] ?? ''),
     '<a class="btn btn-ghost btn-sm" href="?p=pa&id=' . $id . '">Zur Übersicht</a>');
 if (($pa['status'] ?? '') === 'vorbereitung') {

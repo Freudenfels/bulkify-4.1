@@ -26,20 +26,19 @@ seitenkopf('Produktionsmodus', count($rows) . ' ' . (count($rows) === 1 ? 'Auftr
   <div class="bx-panel"><div class="muted">Aktuell ist kein Auftrag produzierbar oder in Produktion. Sobald Material da und freigegeben ist, erscheint er hier.</div></div>
 <?php else: ?>
 <div class="bx-tablewrap"><table class="bx-table">
-  <thead><tr><th>Nr.</th><th>Produkt</th><th>Kunde</th><th class="bx-num">Menge</th><th>Wann dran</th><th>Status</th><th>Fortschritt</th></tr></thead>
+  <thead><tr><th>Produkt</th><th class="bx-num">Menge</th><th class="pr-wann">Wann dran</th><th>Stand</th></tr></thead>
   <tbody>
     <?php foreach ($rows as $pa):
         $g = (int)$pa['schritte_gesamt']; $f = (int)$pa['schritte_fertig']; ?>
     <tr onclick="location.href='?p=run&id=<?= (int)$pa['id'] ?>'" style="cursor:pointer">
-      <td><strong><?= h((string)$pa['nummer']) ?></strong></td>
-      <td><?= h((string)($pa['produkt_name'] ?: '–')) ?></td>
-      <td><?= h((string)($pa['kunde'] ?: '–')) ?></td>
-      <td class="bx-num"><?= menge_txt($pa['menge']) ?></td>
-      <td><?= !empty($pa['geplant_am']) ? h(date('d.m.Y', strtotime((string)$pa['geplant_am']))) : '<span class="muted">ohne Termin</span>' ?></td>
+      <td><?= pr_produkt_zelle($pa) ?></td>
+      <td class="bx-num" style="white-space:nowrap"><?= menge_txt($pa['menge']) ?></td>
+      <td class="pr-wann" style="white-space:nowrap"><?= !empty($pa['geplant_am']) ? h(date('d.m.Y', strtotime((string)$pa['geplant_am']))) : '<span class="muted">ohne Termin</span>' ?></td>
       <td><?php if ((string)$pa['status'] === 'laufend'): ?><span class="badge badge-info">in Produktion</span>
           <?php elseif (($pa['_ber'] ?? '') === 'teil'): $tmM = $pa['_tm']; ?><span class="badge badge-warn">Teilmenge machbar: <?= menge_txt($tmM['komplett'] > 0 ? $tmM['komplett'] : $tmM['vor_etikett']) ?> Pkg<?= $tmM['komplett'] > 0 ? '' : ' bis vor Etikett' ?></span>
-          <?php else: ?><span class="badge badge-ok">produzierbar</span><?php endif; ?></td>
-      <td><?= $g > 0 ? ('Schritt ' . $f . '/' . $g) : '<span class="muted">–</span>' ?></td>
+          <?php else: ?><span class="badge badge-ok">produzierbar</span><?php endif; ?>
+          <?php if (!empty($pa['geplant_am'])): ?><div class="muted pr-sub pr-nur-handy">dran <?= h(date('d.m.', strtotime((string)$pa['geplant_am']))) ?></div><?php endif; ?>
+          <?php if ($g > 0 && $f > 0): ?><div class="muted pr-sub">Schritt <?= $f ?>/<?= $g ?></div><?php endif; ?></td>
     </tr>
     <?php endforeach; ?>
   </tbody>

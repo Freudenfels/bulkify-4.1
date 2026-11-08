@@ -1,7 +1,8 @@
 <?php
 // Produktionsaufträge – nur AKTIVE (Vorbereitung + offen + laufend). Abgeschlossene stehen im Archiv (?p=archiv).
 // Reiter trennen nach Produzierbarkeit: Bereit / Laufend / Gesperrt (+ Alle). Dazu Textsuche und
-// Spaltensortierung (Auftragseingang alt→neu als Standard, Status). Nur lesend über erp.php.
+// Spaltensortierung (Wann dran, Stand). Schmale Tabelle (08.11.2026): Produkt (darunter PA-Nr · Auftrag · Kunde),
+// Menge, Wann dran, Stand (Badge + Schritt). Auftragseingang bleibt die Standard-Reihenfolge innerhalb der Gruppe. Nur lesend über erp.php.
 
 // --- Daten + Einteilung in Reiter-Eimer ---------------------------------------------------------
 $alle = erp_produktionsauftraege('');   // vorbereitung + offen + laufend
@@ -80,11 +81,9 @@ seitenkopf('Produktionsaufträge', count($alle) . ' aktive ' . (count($alle) ===
 <?php else: ?>
 <div class="bx-tablewrap"><table class="bx-table" id="pa-tabelle">
   <thead><tr>
-    <th>Nr.</th><th>Produkt</th><th>Kunde</th><th class="bx-num">Menge</th>
-    <th class="bx-sort" data-sort="geplant">Wann dran<span class="arr"></span></th>
-    <th class="bx-sort" data-sort="eingang">Auftragseingang<span class="arr"></span></th>
-    <th class="bx-sort on" data-sort="prio" data-dir="1">Produzierbar?<span class="arr">▲</span></th><th>Fortschritt</th>
-    <th class="bx-sort" data-sort="statusrank">Status<span class="arr"></span></th>
+    <th>Produkt</th><th class="bx-num">Menge</th>
+    <th class="bx-sort pr-wann" data-sort="geplant">Wann dran<span class="arr"></span></th>
+    <th class="bx-sort on" data-sort="prio" data-dir="1">Stand<span class="arr">▲</span></th>
   </tr></thead>
   <tbody id="pa-rows">
   <?php foreach ($pas as $pa):
@@ -102,15 +101,10 @@ seitenkopf('Produktionsaufträge', count($alle) . ' aktive ' . (count($alle) ===
         data-statusrank="<?= (int)$statusRang((string)$pa['status']) ?>"
         data-prio="<?= (int)$prioRang($pa) ?>"
         data-search="<?= h($suche) ?>">
-      <td><strong><?= h((string)$pa['nummer']) ?></strong><?php if (!empty($pa['auftrag_nr'])): ?><br><span class="muted" style="font-size:12px"><?= h((string)$pa['auftrag_nr']) ?></span><?php endif; ?></td>
-      <td><?= h((string)($pa['produkt_name'] ?: '–')) ?><?php if (!empty($pa['form'])): ?> <span class="muted" style="font-size:12px">· <?= h((string)$pa['form']) ?></span><?php endif; ?></td>
-      <td><?= h((string)($pa['kunde'] ?: '–')) ?></td>
-      <td class="bx-num"><?= menge_txt($pa['menge']) ?></td>
-      <td><?= !empty($pa['geplant_am']) ? h(date('d.m.Y', strtotime((string)$pa['geplant_am']))) : '<span class="muted">—</span>' ?></td>
-      <td class="muted"><?= $eingang ? h(fmt_zeit($eingang, 'd.m.Y')) : '–' ?></td>
-      <td><?= bereit_badge($ber) ?></td>
-      <td style="min-width:120px"><?= $g > 0 ? ('Schritt ' . $f . '/' . $g . ' · ' . $proz . '%') : '<span class="muted">–</span>' ?></td>
-      <td><?= pa_badge((string)$pa['status']) ?></td>
+      <td><?= pr_produkt_zelle($pa) ?></td>
+      <td class="bx-num" style="white-space:nowrap"><?= menge_txt($pa['menge']) ?></td>
+      <td class="pr-wann" style="white-space:nowrap"><?= !empty($pa['geplant_am']) ? h(date('d.m.Y', strtotime((string)$pa['geplant_am']))) : '<span class="muted">—</span>' ?></td>
+      <td><?= bereit_badge($ber) ?><?php if (!empty($pa['geplant_am'])): ?><div class="muted pr-sub pr-nur-handy">dran <?= h(date('d.m.', strtotime((string)$pa['geplant_am']))) ?></div><?php endif; ?><?php if ($g > 0 && $f > 0): ?><div class="muted pr-sub">Schritt <?= $f ?>/<?= $g ?> · <?= $proz ?> %</div><?php endif; ?></td>
     </tr>
   <?php endforeach; ?>
   </tbody>

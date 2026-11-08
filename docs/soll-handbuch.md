@@ -290,6 +290,7 @@ Regeln: Eine Aufgabe verschwindet, sobald die Ursache behoben ist (automatisch) 
   7. **Lager 2** - Kacheln: Fremdlager-Bestand · Artikel
 
   Darunter klein: Bewegungen · Mülleimer · Einstellungen (Admin) · Zum Dashboard. Nicht mehr im Menü, aber erreichbar: Blinker (über die Suche), Erwartete Lieferungen (Kachel "Aus Liste wählen"), Kundenware einbuchen (Kachel), die frühere Lager-2-Suche (leitet auf die gemeinsame Suche).
+- **Menü der Produktions-App (`/produktion/`, gebaut 08.11.2026):** genauso flach und groß mit Icons: **Übersicht · Produzieren · Aufträge · Kalender · Reinigung · Anleitungen**; darunter klein Archiv · Einstellungen · Werk-App (Mitarbeiter) · Zum Dashboard. Tabellen schmal: **Produkt** (darunter klein PA-Nr · Auftrag · Kunde) · **Menge** · **Wann dran** · **Stand** (produzierbar / wartet auf Material / gesperrt / in Produktion, darunter Schritt x/y). Auf dem Handy wandert "Wann dran" unter den Stand.
 - **Gesamtbestand je Artikel** gibt es heute nur im Dashboard (Warenlager `?p=lager`). Die Lager-App zeigt nur Einzelchargen. *Vorschlag, offen (Abschnitt 12):* In der Lager-App im Reiter Bestand Umschalter **"je Artikel / je Charge"** (Artikelzeile mit Summe, unterwegs, Anzahl Chargen, aufklappbar); auf der Charge-Seite "Gesamt im Lager: x in n Chargen" und alle Chargen gelistet. Gleiche Rechnung wie im Dashboard.
 - **Umlagern Lager 1 → Lager 2:** mobiler Reiter "Nach Lager 2", Menge + Haken, Charge/MHD nur zur Prüfung, Besitzer aus Auftrag (gebaut). Verkaufbar erst nach grüner Prüfliste (4.13).
 - **Altbestand bereinigen:** Einheiten-/Zahlenfehler aus den Oktober-Einbuchungen (Kapsel-Bulk in kg statt Stk, "13.000 kg" statt 13 kg, "6,254 Stk", gemischte Einheiten), doppelte Artikel, lose Bulk-Artikel - über Punkte in der Datenprüfung zum Korrigieren/Zusammenführen.
@@ -393,6 +394,7 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | 4.4: Chargen & Dokumente (Charge, MHD, CoA, Spezifikation) an der Bestellposition, Team + Lieferant, Weitergabe an die Charge beim Wareneingang; Lieferantenrechnung auch durch das Team | Nico / Claude Code |
 | 08.11.2026 | 4.4: CoA an der Bestellung wird automatisch ausgelesen, Prüf-Popup mit markierten Abweichungen | Nico / Claude Code |
 | 08.11.2026 | 7: Menü der Lager-App flach mit Icons, Kachel-Seiten Einbuchen/Umbuchen/Versand/Lager 1/Lager 2, eine Suche für Lager 1 + 2 | Nico / Claude Code |
+| 08.11.2026 | 7: Produktions-App aufgeräumt - Menü flach mit Icons, schmale Tabellen (Produkt · Menge · Wann dran · Stand) | Nico / Claude Code |
 | 08.11.2026 | 3: Menü "Einfach" flache Liste ohne Gruppen, größer, feste Reihenfolge, Linien-Icons | Nico / Claude Code |
 | 08.11.2026 | 3: Benachrichtigungen als erster Punkt in "Einfach" (Glocke mit Zähler), Eintrag unten entfällt dort | Nico / Claude Code |
 | 08.11.2026 | 3: Menüpunkt "Bestellt" (Bestellungen) in "Einfach" unter Einkauf | Nico / Claude Code |

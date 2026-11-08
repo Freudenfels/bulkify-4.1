@@ -61,14 +61,12 @@ $heute = date('Y-m-d');
     <div class="muted">Alle aktiven Aufträge sind terminiert.</div>
   <?php else: ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Nr.</th><th>Produkt</th><th>Kunde</th><th class="bx-num">Menge</th><th>Status</th></tr></thead>
+      <thead><tr><th>Produkt</th><th class="bx-num">Menge</th><th>Status</th></tr></thead>
       <tbody>
         <?php foreach ($ohneTermin as $pa): ?>
           <tr onclick="location.href='?p=pa&id=<?= (int)$pa['id'] ?>'" style="cursor:pointer">
-            <td><strong><?= h((string)$pa['nummer']) ?></strong></td>
-            <td><?= h((string)($pa['produkt_name'] ?: '–')) ?></td>
-            <td><?= h((string)($pa['kunde'] ?: '–')) ?></td>
-            <td class="bx-num"><?= menge_txt($pa['menge']) ?></td>
+            <td><?= pr_produkt_zelle($pa) ?></td>
+            <td class="bx-num" style="white-space:nowrap"><?= menge_txt($pa['menge']) ?></td>
             <td><?= pa_badge((string)$pa['status']) ?></td>
           </tr>
         <?php endforeach; ?>
