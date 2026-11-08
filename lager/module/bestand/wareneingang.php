@@ -1351,7 +1351,7 @@ if ($gebucht):
   // --- Kacheln: Methode wählen -> passender Weg öffnet sich ---
   var startBox=document.getElementById('weStart'), arbeit=document.getElementById('weArbeit');
   function zeigeWeg(w){
-    if(w==='liste' && typeof liAndere!=='undefined' && liAndere && !liAndere.hidden) liAndere.click();   // frisch: ganze Liste zeigen
+    if(w==='liste' && typeof liAndere!=='undefined' && liAndere && liAndere.dataset.gewaehlt==='1') liAndere.click();   // frisch: ganze Liste zeigen
     startBox.hidden=true; arbeit.hidden=false;
     document.querySelectorAll('.we-weg').forEach(function(p){ p.hidden = p.getAttribute('data-w')!==w; });
     // Etiketten einbuchen: Ziel/Positionen erst nach der Sichtprüfung (Design + Größe) zeigen.
@@ -1365,16 +1365,22 @@ if ($gebucht):
     arbeit.scrollIntoView({behavior:'smooth',block:'start'});
   }
   document.querySelectorAll('.we-kachel').forEach(function(b){ b.addEventListener('click',function(){ zeigeWeg(b.getAttribute('data-weg')); }); });
-  document.getElementById('weBack').addEventListener('click',function(){ arbeit.hidden=true; startBox.hidden=false; window.scrollTo({top:0,behavior:'smooth'}); });
+  // Zurück-Knopf oben: Ist eine Lieferung aus der Liste gewählt, geht er „← Zurück zur Liste", sonst wie bisher zur Methodenwahl.
+  var weBack=document.getElementById('weBack');
+  weBack.addEventListener('click',function(){
+    if(typeof liAndere!=='undefined' && liAndere && liAndere.dataset.gewaehlt==='1'){ liAndere.click(); window.scrollTo({top:0,behavior:'smooth'}); return; }
+    arbeit.hidden=true; startBox.hidden=false; window.scrollTo({top:0,behavior:'smooth'}); });
 
   // Liste: ankommende Sendung wählen -> Positionen laden
   var liSuche=document.getElementById('weListeSuche'), liAndere=document.getElementById('weListeAndere'), liListe=document.getElementById('weListe');
   function liFilter(){ var q=(liSuche&&liSuche.value||'').trim().toLowerCase(); document.querySelectorAll('.we-listitem').forEach(function(x){ x.hidden = q!=='' && (x.getAttribute('data-such')||'').indexOf(q)<0; }); }
   if(liSuche) liSuche.addEventListener('input', liFilter);
   function liZuklappen(gew){ document.querySelectorAll('.we-listitem').forEach(function(x){ x.hidden = x!==gew; x.classList.toggle('gewaehlt', x===gew); });
-    if(liSuche) liSuche.hidden=true; if(liAndere) liAndere.hidden=false; if(liListe) liListe.classList.add('zu'); }
+    if(liSuche) liSuche.hidden=true; if(liAndere) liAndere.dataset.gewaehlt='1'; if(liListe) liListe.classList.add('zu');
+    var wb=document.getElementById('weBack'); if(wb) wb.textContent='← Zurück zur Liste'; }
   if(liAndere) liAndere.addEventListener('click', function(){ document.querySelectorAll('.we-listitem').forEach(function(x){ x.classList.remove('gewaehlt'); });
-    liAndere.hidden=true; if(liSuche){ liSuche.hidden=false; liFilter(); liSuche.focus(); } if(liListe) liListe.classList.remove('zu');
+    liAndere.dataset.gewaehlt='0'; var wb=document.getElementById('weBack'); if(wb) wb.textContent='← Andere Methode';
+    if(liSuche){ liSuche.hidden=false; liFilter(); liSuche.focus(); } if(liListe) liListe.classList.remove('zu');
     var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value=''; rows.innerHTML=''; addRow(); var li=document.getElementById('weListeInfo'); if(li) li.textContent=''; });
   document.querySelectorAll('.we-listitem').forEach(function(b){
     b.addEventListener('click',function(){
