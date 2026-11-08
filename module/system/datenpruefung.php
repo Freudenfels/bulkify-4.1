@@ -819,7 +819,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
       <tr>
         <td><a href="#<?= h($k) ?>"><?= h($c['titel']) ?></a></td>
         <td><?= $ERG[$k]['fehler'] !== '' ? bx_badge('Fehler', 'err') : bx_badge(number_format($n, 0, ',', '.'), $kind) ?></td>
-        <td class="muted"><?= $c['fix'] ? 'Beheben-Knopf' : 'nur Anzeige' ?></td>
+        <td class="muted"><?= !empty($c['fix']) ? 'Beheben-Knopf' : 'nur Anzeige' ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
