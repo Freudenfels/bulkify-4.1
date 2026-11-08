@@ -301,6 +301,14 @@ if (in_array($p, $FINANZ_ROUTEN, true)) {
 
 if (!isset($routes[$p])) $p = is_logged_in() ? ($istLieferant ? 'lieferant_portal' : ($istWerk ? 'werk' : 'dashboard')) : 'login';
 
+// Menü-Umschalter „Einfach / Ausführlich" (Soll-Handbuch Abschnitt 3): Knopf unten in der Seitenleiste postet auf die
+// aktuelle Seite; hier speichern wir am Nutzer und laden dieselbe Seite neu (GET). Ändert keine Rechte, nur die Anzeige.
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['bx_menu_modus']) && is_logged_in()) {
+    $mm = $_POST['bx_menu_modus'] === 'ausfuehrlich' ? 'ausfuehrlich' : 'einfach';
+    q("UPDATE benutzer SET menu_modus=? WHERE id=?", [$mm, (int) current_user()['id']]);
+    header('Location: ' . ((string)($_SERVER['REQUEST_URI'] ?? '') ?: '?p=dashboard')); exit;
+}
+
 // Werk-Mitarbeiter: Verkaufs-Dashboard -> Werk-Cockpit
 if ($istWerk && $p === 'dashboard') { header('Location: ?p=werk'); exit; }
 

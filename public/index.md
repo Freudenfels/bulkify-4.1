@@ -27,3 +27,7 @@ Tabelle `aenderung_log` (objekt_typ, objekt_id, feld, alt, neu, benutzer, route,
 
 ## produktion_neu (08.11.2026)
 Route `produktion_neu` → `module/produktion/neu.php` (Produktion (neu), im Aufbau), nur Admin.
+
+## Menü-Umschalter (08.11.2026)
+Nach dem Login-Check und der Routen-Auflösung: POST mit `bx_menu_modus` (`einfach`/`ausfuehrlich`) speichert `benutzer.menu_modus` des
+angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Rechte. Details: `core/layout.md`.

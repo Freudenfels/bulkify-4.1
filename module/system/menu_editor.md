@@ -17,3 +17,8 @@ Menü „System → Menü". Rolle: **nur Admin**.
 Neue Seiten einfach wie bisher in `bx_nav_default()` eintragen – sie erscheinen automatisch (ggf. unter
 „Weitere"), bis der Admin sie einsortiert. Achtung: Existiert eine Admin-Anpassung, bestimmt **nicht** mehr
 die Reihenfolge in `bx_nav_default()` die Anzeige, sondern `menu_layout`. Siehe [[bulkify-menue-umbau]].
+
+## Einfach / Ausführlich (08.11.2026)
+Der Menü-Editor bleibt die Grundlage für Gruppen und Reihenfolge des **ausführlichen** Menüs. Das Menü „Einfach" (`bx_nav_einfach()`)
+hat eine feste Liste; was hier ausgeblendet ist, fehlt auch dort. Die früheren Punkte Produkt-/Rohstoff-/Dienstleistungsanfragen
+(`paf_*`) und Lager 1 / Fremdlager (`lager_l1`/`lager_fremd`) gibt es nicht mehr – gespeicherte Layouts überspringen sie still.

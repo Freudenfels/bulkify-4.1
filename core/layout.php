@@ -21,13 +21,12 @@ function bx_nav_default(): array {
     return [
         'Start'        => ['dashboard' => 'Dashboard'],
         'Vertrieb'     => ['kunden' => 'Kunden', 'partner' => 'Partner', 'angebote' => 'Angebote', 'auftraege' => 'Aufträge', 'kundenpreise' => 'Kundenpreise', 'nachbestellungen' => 'Nachbestellungen', 'dienstleistungen' => 'Dienstleistungen', 'rechnungen_ansicht' => 'Rechnungen (Ansicht)', 'fasttrack' => 'Fast Track', 'kontingente' => 'Kontingente'],
+        // Schritt 2 Soll-Handbuch (08.11.2026): EIN Punkt „Anfragen" – die Seite zeigt alle Arten (Rezeptur/Produkt/Rohstoff/
+        // Dienstleistung) in einer Tabelle. Wer nur Portal-Anfragen sehen darf (Einkauf), landet über alt_route dort.
         'Anfragen'     => [
-            'anfragen'           => 'Rezepturanfragen',
-            'paf_produkt'        => ['label'=>'Produktanfragen',        'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=produkt',        'typ'=>'produkt'],
-            'paf_rohstoff'       => ['label'=>'Rohstoffanfragen',       'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=rohstoff',       'typ'=>'rohstoff'],
-            'paf_dienstleistung' => ['label'=>'Dienstleistungsanfragen', 'route'=>'portal_anfragen', 'href'=>'?p=portal_anfragen&typ=dienstleistung', 'typ'=>'dienstleistung'],
+            'anfragen' => ['label'=>'Anfragen', 'route'=>'anfragen', 'href'=>'?p=anfragen', 'alt_route'=>'portal_anfragen', 'alt_href'=>'?p=portal_anfragen', 'auch_aktiv'=>['portal_anfragen']],
         ],
-        'Produkt'      => ['rezeptur' => 'Rezepturen', 'rezeptur_dubletten' => 'Doppelte Rezepturen', 'produkte' => 'Produkte', 'novelfood' => 'Novel Food', 'novelfood_verlauf' => 'Novel-Food News'],
+        'Produkt'      => ['rezeptur' => 'Rezepturen', 'rezeptur_dubletten' => 'Doppelte Rezepturen', 'produkte' => 'Produkte', 'rohstoffe' => 'Rohstoffe', 'novelfood' => 'Novel Food', 'novelfood_verlauf' => 'Novel-Food News'],
         // Vor-Produktion als eigener Menüpunkt entfernt (Block I): Quelle festlegen + Freigeben laufen jetzt
         // am Auftrag; „Wartet auf Freigabe" ist ein Reiter in der Auftragsliste (?p=auftraege&tab=freigabe).
         // Die Route produktion_vorbereitung&id=… (Glas/Verpackung je PA) bleibt bestehen, nur ohne Nav-Eintrag.
@@ -36,14 +35,12 @@ function bx_nav_default(): array {
         // Soll-Kette 4c (04.11.2026): heißt jetzt „Beschaffungsweg offen“ – es gibt keine eigene Freigabe mehr, nur den Weg.
         'Produktion'   => ['produktionsfreigabe' => ['label'=>'Beschaffungsweg offen', 'route'=>'produktion_vorbereitung', 'href'=>'?p=produktion_vorbereitung'],
                            'produktion' => 'Produktion', 'produktion_neu' => 'Produktion (neu)', 'easy_production' => 'Easy Production', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
-        // Warenlager = Gesamtsystem (alle Lager), darunter die Einzel-Sichten Lager 1 und Fremdlager (Lager 2).
-        // Alle drei nutzen dieselbe Seite (?p=lager) mit dem Filter ?ort=…; der aktive Punkt entscheidet sich über 'ort'.
+        // Lager = EIN Punkt (Schritt 2 Soll-Handbuch): Lager 1 / Lager 2 sind Filter-Reiter auf der Seite (?ort=…), keine Menüpunkte.
+        // Rohstoffe stehen seit Schritt 2 in der Gruppe Produkt.
         'Lager'        => [
-            'lager'        => ['label'=>'Warenlager', 'route'=>'lager', 'href'=>'?p=lager',             'ort'=>'alle'],
-            'lager_l1'     => ['label'=>'Lager 1',    'route'=>'lager', 'href'=>'?p=lager&ort=lager1', 'ort'=>'lager1'],
-            'lager_fremd'  => ['label'=>'Fremdlager', 'route'=>'lager', 'href'=>'?p=lager&ort=lager2', 'ort'=>'lager2'],
+            'lager'        => ['label'=>'Lager', 'route'=>'lager', 'href'=>'?p=lager'],
             'wareneingang' => 'Wareneingang',
-            'rohstoffe' => 'Rohstoffe', 'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
+            'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'lief_nachrichten' => 'Nachrichten', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
         'Import'       => ['angebot_import' => 'Angebots-Import', 'lager2_import' => 'Lager-2 Bestände'],
         'System'       => ['benachrichtigungen' => 'Benachrichtigungen', 'einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'datenpruefung' => 'Datenprüfung', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
@@ -113,6 +110,36 @@ function bx_nav(): array {
     return $nav;
 }
 
+// Menü-Modus des angemeldeten Nutzers: „einfach" (Standard, auch wenn noch nichts gespeichert ist) oder „ausfuehrlich".
+function bx_menu_modus(): string {
+    $u = function_exists('current_user') ? current_user() : null;
+    return ($u && (string)($u['menu_modus'] ?? '') === 'ausfuehrlich') ? 'ausfuehrlich' : 'einfach';
+}
+
+// Menü „Einfach" (Soll-Handbuch Abschnitt 3): feste Liste in fester Reihenfolge. Die Definition je Punkt kommt aus der
+// Registry (dieselben Ziele wie im ausführlichen Menü); was der Admin im Menü-Editor ausgeblendet hat, bleibt auch hier
+// weg. Ganz oben kommt später „Zu erledigen" (Schritt 4) – bis dahin kein Platzhalter. Blendet nur aus, löscht nichts.
+function bx_nav_einfach(): array {
+    $reg = bx_nav_registry();
+    $layout = menu_layout_get();
+    $hidden = array_flip(array_map('strval', $layout['hidden'] ?? []));
+    $plan = [
+        'Vertrieb'   => ['anfragen' => null, 'angebote' => null, 'auftraege' => null],
+        'Produkt'    => ['produkte' => null, 'rezeptur' => null, 'rohstoffe' => null],
+        'Produktion' => ['produktion' => null, 'einkaufsliste' => 'Einkauf', 'lager' => 'Lager'],
+    ];
+    $nav = [];
+    foreach ($plan as $grp => $keys) {
+        foreach ($keys as $key => $label) {
+            if (!isset($reg[$key]) || isset($hidden[$key])) continue;
+            $def = $reg[$key]['def'];
+            if ($label !== null) $def = is_array($def) ? array_merge($def, ['label' => $label]) : $label;
+            $nav[$grp][$key] = $def;
+        }
+    }
+    return $nav;
+}
+
 // Zähler offener Anfragen je Nav-Punkt (offen = noch nicht beantwortet/abgelehnt), wie ungelesene Mails
 function bx_anfrage_counts(): array {
     $c = ['anfragen'=>0,'paf_produkt'=>0,'paf_rohstoff'=>0,'paf_dienstleistung'=>0];
@@ -176,9 +203,12 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     // Werk-Bereich (Produktionsmitarbeiter): eigenes Menü + eigene Marke.
     $istWerk = function_exists('ist_produktionsbereich') && ist_produktionsbereich();
     $verLabel = $istWerk ? 'Werk' : $ver;
-    $navdef   = $istWerk ? bx_nav_werk() : bx_nav();
+    $menuModus = $istWerk ? 'werk' : bx_menu_modus();
+    $navdef   = $istWerk ? bx_nav_werk() : ($menuModus === 'einfach' ? bx_nav_einfach() : bx_nav());
     // Sidebar
-    echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
+    // Logo führt zur Startseite (im Menü „Einfach" gibt es keinen eigenen Punkt „Dashboard").
+    $startHref = $istWerk ? '?p=werk' : '?p=dashboard';
+    echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><a href=\"$startHref\" title=\"Zur Startseite\" style=\"display:contents\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"></a><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
     // Einklappbare Menü-Gruppen: Kopf = Umschalter, Items im Wrapper; Zustand je Gruppe in localStorage.
     echo "<style>.bx-navgroup{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}"
        . ".bx-navchev{font-size:12px;line-height:1;opacity:.85;transition:transform .15s;margin-left:8px;display:inline-block}"
@@ -196,6 +226,10 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     $curTyp = $_GET['typ'] ?? null;
     $curOrt = $_GET['ort'] ?? 'alle';   // Lager-Sicht (Warenlager=alle / Lager 1 / Fremdlager) für die Aktiv-Erkennung
     $anfCount = bx_anfrage_counts();
+    // Ein Punkt „Anfragen": Zähler über alle Arten, die der Nutzer sehen darf (Rezepturanfragen nur mit Zugriff darauf).
+    $anfPortal = $anfCount['paf_produkt'] + $anfCount['paf_rohstoff'] + $anfCount['paf_dienstleistung'];
+    $anfCount['anfragen'] = ((!$darf || route_erlaubt('anfragen')) ? $anfCount['anfragen'] : 0)
+                          + ((!$darf || route_erlaubt('portal_anfragen')) ? $anfPortal : 0);
     if (function_exists('aufgabe_offen_zahl') && function_exists('current_user') && ($cu = current_user()))
         $anfCount['aufgaben'] = aufgabe_offen_zahl((int)$cu['id']);
     if (function_exists('benachrichtigungen_ungelesen_count') && function_exists('current_user') && ($cu = current_user()))
@@ -240,7 +274,10 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         $sichtbar = [];
         foreach ($seiten as $key => $val) {
             $route = is_array($val) ? $val['route'] : $key;
-            if (!$darf || route_erlaubt($route)) $sichtbar[$key] = $val;
+            if (!$darf || route_erlaubt($route)) { $sichtbar[$key] = $val; continue; }
+            // Ersatzziel (z. B. „Anfragen" -> Portal-Anfragen für den Einkauf): gleicher Punkt, anderes Ziel, keine neuen Rechte.
+            if (is_array($val) && !empty($val['alt_route']) && route_erlaubt($val['alt_route']))
+                $sichtbar[$key] = array_merge($val, ['route' => $val['alt_route'], 'href' => $val['alt_href']]);
         }
         if (!$sichtbar) continue;   // leere Gruppe überspringen
         $gid = 'g_' . substr(md5($gruppe), 0, 8);
@@ -248,7 +285,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         foreach ($sichtbar as $key => $val) {
             if (is_array($val)) { $route = $val['route']; $label = $val['label']; $href = $val['href']; $typ = $val['typ'] ?? null; $ort = $val['ort'] ?? null; }
             else               { $route = $key; $label = $val; $href = '?p=' . $key; $typ = null; $ort = null; }
-            $on = ($route === $aktiv) && ($typ === null || $curTyp === $typ) && ($ort === null || $curOrt === $ort);
+            $on = ($route === $aktiv || (is_array($val) && in_array($aktiv, (array)($val['auch_aktiv'] ?? []), true)))
+                  && ($typ === null || $curTyp === $typ) && ($ort === null || $curOrt === $ort);
             if ($on) $grpOn = true;
             $cls = $on ? ' class="on"' : '';
             $n = $anfCount[$key] ?? 0;
@@ -278,7 +316,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     $lager = $crm || (function_exists('user_rollen') && array_intersect(user_rollen(), ['production', 'fulfillment', 'einkauf', 'labor']));
     $produktion = $crm || (function_exists('user_rollen') && array_intersect(user_rollen(), ['production']));
     $buchhaltung = $crm || (function_exists('has_role') && has_role('finance'));
-    if ($crm || $lager || $produktion || $buchhaltung) {
+    // Menü „Einfach": Unterprogramme stehen unter „Ausführlich" (Soll-Handbuch Abschnitt 3, Schritt 2). Werk-Menü unverändert.
+    if (($crm || $lager || $produktion || $buchhaltung) && $menuModus !== 'einfach') {
         $sub = '';
         if ($buchhaltung) $sub .= "<a href=\"buchhaltung/\"><span>Buchhaltung</span></a>";
         if ($produktion) $sub .= "<a href=\"produktion/\"><span>Produktion</span></a>";
@@ -297,6 +336,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
            . "<span>Benachrichtigungen</span>" . ($nBenach > 0 ? "<span class=\"bx-navbadge\">" . (int)$nBenach . "</span>" : "<span class=\"muted\" style=\"font-size:12px\">keine neuen</span>") . "</a>"
            . "<div class=\"bx-username\">" . h($u['name']) . "</div>"
            . "<div class=\"bx-userroles\">" . h(implode(' · ', $meine) ?: 'keine Rolle') . "</div>"
+           . ($menuModus !== 'werk' ? bx_menu_umschalter($menuModus) : '')
            . "<a class=\"bx-logout\" href=\"?p=logout\">Abmelden</a>"
            . "<button type=\"button\" class=\"bx-themebtn\">Dunkler Modus</button>"
            . "<button type=\"button\" class=\"bx-sidebtn\">Menü einklappen</button></div>";
@@ -320,6 +360,20 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     // Hauptbereich
     echo bx_menue_scrim();
     echo "<main class=\"bx-main\">" . bx_mobilbar();
+}
+
+// Umschalter „Menü: Einfach | Ausführlich" in der Benutzer-Box. Postet auf die aktuelle Seite; public/index.php speichert
+// am Nutzer (benutzer.menu_modus) und lädt die Seite neu. Der aktive Modus ist hervorgehoben.
+function bx_menu_umschalter(string $modus): string {
+    $btn = function (string $wert, string $label) use ($modus): string {
+        $on = $modus === $wert;
+        return "<button type=\"submit\" name=\"bx_menu_modus\" value=\"$wert\"" . ($on ? ' aria-pressed="true" disabled' : '')
+             . " style=\"flex:1;padding:5px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.25);font-size:12px;cursor:" . ($on ? 'default' : 'pointer') . ";"
+             . ($on ? 'background:#C0F24E;color:#10210f;border-color:#C0F24E' : 'background:transparent;color:inherit') . "\">" . $label . "</button>";
+    };
+    return "<form method=\"post\" class=\"bx-menumodus\" style=\"margin:8px 0 4px\">"
+         . "<div style=\"font-size:12px;opacity:.8;margin-bottom:4px\">Menü</div>"
+         . "<div style=\"display:flex;gap:6px\">" . $btn('einfach', 'Einfach') . $btn('ausfuehrlich', 'Ausführlich') . "</div></form>";
 }
 
 // ---------- Menue auf schmalen Bildschirmen ----------

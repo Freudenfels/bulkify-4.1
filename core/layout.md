@@ -45,3 +45,20 @@ Menüpunkt `produktionsfreigabe` heißt seit 04.11.2026 **Beschaffungsweg offen*
 Hat der Admin das Menü im Menü-Editor gespeichert (`app_meta menu_layout`), landen neue, dort noch nicht
 einsortierte Punkte in ihrer Standardgruppe **direkt hinter ihrem Vorgänger aus `bx_nav_default()`** (falls der in
 der Gruppe steht), sonst am Gruppenende. Beispiel: „Produktion (neu)" (`produktion_neu`) erscheint direkt unter „Produktion".
+
+## Menü „Einfach / Ausführlich" (Schritt 2 Soll-Handbuch, 08.11.2026)
+Gilt vor den älteren Absätzen oben (Anfragen-Gruppe mit 4 Punkten und Lager-Gruppe mit 3 Punkten sind damit überholt).
+- **Umschalter je Nutzer:** Spalte `benutzer.menu_modus` (`einfach` / `ausfuehrlich`; leer = `einfach`). `bx_menu_modus()` liest ihn.
+  In der Benutzer-Box unten steht `bx_menu_umschalter()` („Menü: Einfach | Ausführlich"); der Knopf postet auf die aktuelle Seite,
+  `public/index.php` speichert am Nutzer und lädt dieselbe Seite neu. Werk-Nutzer (`bx_nav_werk()`) haben keinen Umschalter, ihr Menü ist unverändert.
+- **Einfach** = `bx_nav_einfach()`: feste Reihenfolge Vertrieb (Anfragen, Angebote, Aufträge) · Produkt (Produkte, Rezepturen, Rohstoffe)
+  · Produktion (Produktion, Einkauf = Einkaufsliste, Lager). Definitionen aus der Registry; im Menü-Editor ausgeblendete Punkte bleiben weg;
+  Rechte filtern wie immer über `route_erlaubt()`. Keine Unterprogramme (/produktion/, /lager/, /crm/, /buchhaltung/) – die stehen unter „Ausführlich".
+  Oben ist Platz für „Zu erledigen" (kommt mit Schritt 4). Das Logo links oben führt zur Startseite (`?p=dashboard`, Werk `?p=werk`).
+- **Ausführlich** = `bx_nav()` wie bisher (Menü-Editor bestimmt Gruppen und Reihenfolge) plus Unterprogramme.
+- **Anfragen = ein Punkt** (`anfragen`, Seite `module/anfrage/liste.php` mit allen Arten). Felder `alt_route`/`alt_href`: darf der Nutzer
+  `anfragen` nicht, aber `portal_anfragen` (Einkauf), zeigt derselbe Punkt auf `?p=portal_anfragen`. `auch_aktiv` markiert den Punkt auch auf
+  `portal_anfragen`. Zähler = offene Rezeptur- + Portal-Anfragen, soweit sichtbar. Die Keys `paf_*` gibt es im Menü nicht mehr (Zähler intern weiter).
+- **Lager = ein Punkt** (`lager` → `?p=lager`); Lager 1 / Lager 2 sind Filter-Reiter auf der Seite. `lager_l1`/`lager_fremd` sind aus dem
+  Hauptmenü raus (nur noch im Werk-Menü). **Rohstoffe** stehen in der Gruppe Produkt (bei gespeichertem Menü gilt weiter der Menü-Editor).
+- Alte Bedarfsliste `?p=bedarf` war schon nicht im Menü; die Seite bleibt bis Schritt 5 unverändert. Jede ausgeblendete Seite bleibt per Link erreichbar.
