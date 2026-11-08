@@ -380,21 +380,20 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
         }
         // Zwei getrennte Wege (Nico 08.11.2026): ENTWEDER das CoA hochladen – Charge, MHD, Menge und Werte werden ausgelesen und
         // im Popup bestätigt – ODER die Charge ohne CoA eintippen. Kein gemischtes Formular mehr.
-        $o .= '<div class="bx-row" style="gap:12px;align-items:stretch;flex-wrap:wrap;margin-top:10px">';
-        $o .= '<form method="post" enctype="multipart/form-data" style="flex:1 1 300px;min-width:0;margin:0;border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
-            . '<input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '"><input type="hidden" name="dok_typ" value="coa">'
-            . '<div style="font-weight:600;margin-bottom:2px">' . $t('CoA hochladen', 'Upload CoA', '上传 COA') . '</div>'
-            . '<div class="muted" style="font-size:12px;margin-bottom:8px">' . $t('Charge, MHD, Menge und Analysewerte werden ausgelesen – danach kurz prüfen.', 'Batch, best-before date, quantity and analysis values are read automatically.', '批号、保质期、数量和检测值将自动读取。') . '</div>'
-            . '<div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap"><input type="file" name="bch_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp" style="max-width:240px">'
-            . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Hochladen', 'Upload', '上传') . '</button></div></form>';
-        $o .= '<form method="post" style="flex:1 1 420px;min-width:0;margin:0;border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
+        // Links: Charge, MHD, Menge eintippen – „oder" – rechts: CoA hochladen, die KI liest es aus (Nico 08.11.2026).
+        $o .= '<div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px">';
+        $o .= '<form method="post" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin:0;flex:1 1 420px;min-width:0">'
             . '<input type="hidden" name="aktion" value="bch_add"><input type="hidden" name="bp_id" value="' . $bp . '">'
-            . '<div style="font-weight:600;margin-bottom:8px">' . $t('Ohne CoA eintragen', 'Enter without CoA', '不上传 COA 直接填写') . '</div>'
-            . '<div class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">'
             . '<div class="bx-field" style="margin:0;min-width:140px;flex:1"><label>' . $t('Charge des Lieferanten', 'Batch number', '批号') . '</label><input type="text" name="charge_nr" required maxlength="80"></div>'
             . '<div class="bx-field" style="margin:0;max-width:160px"><label>' . $t('MHD', 'Best before', '保质期') . '</label><input type="date" name="mhd"></div>'
             . '<div class="bx-field" style="margin:0;max-width:110px"><label>' . $t('Menge', 'Quantity', '数量') . '</label><input type="text" name="menge" inputmode="decimal" placeholder="' . $h($p['einheit']) . '"></div>'
-            . '<button class="btn btn-ghost btn-sm" type="submit">' . $t('Eintragen', 'Save', '保存') . '</button></div></form>';
+            . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Eintragen', 'Save', '保存') . '</button></form>';
+        $o .= '<div class="muted" style="font-weight:600;padding:0 6px">' . $t('oder', 'or', '或') . '</div>';
+        $o .= '<form method="post" enctype="multipart/form-data" style="margin:0;flex:1 1 300px;min-width:0">'
+            . '<input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '"><input type="hidden" name="dok_typ" value="coa">'
+            . '<div class="bx-field" style="margin:0"><label>' . $t('CoA mit KI auslesen', 'Read CoA automatically', '自动读取 COA') . '</label>'
+            . '<div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap"><input type="file" name="bch_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp" style="max-width:240px">'
+            . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Hochladen', 'Upload', '上传') . '</button></div></div></form>';
         $o .= '</div>';
         // CoA ohne Charge-Zeile (z. B. erst die Datei, Charge später / per KI) + Spezifikation
         $lose = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'coa' && trim((string)($d['charge_nr'] ?? '')) === ''));

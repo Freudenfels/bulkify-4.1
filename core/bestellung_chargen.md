@@ -30,3 +30,5 @@ Am CoA steht ein Status: wird ausgelesen / ausgelesen – bitte prüfen / bitte 
 - **CoA hochladen** (`bch_doc`, dok_typ coa): nur die Datei – Charge, MHD, Menge und Werte werden ausgelesen, bestätigt im Prüf-Popup (legt dort die Charge-Zeile an bzw. ordnet das CoA einer schon eingetippten Zeile zu).
 - **Ohne CoA eintragen** (`bch_add`): Charge (Pflicht), MHD, Menge – ohne Datei.
 - In der Chargen-Tabelle steht bei Zeilen ohne CoA nur „kein CoA“ (kein eigenes Upload-Feld mehr). Spezifikation hat einen eigenen kleinen Upload, nur solange keine vorliegt.
+
+**Anordnung (08.11.2026):** In einer Zeile links „Charge des Lieferanten · MHD · Menge · Eintragen“, dann „oder“, rechts „CoA mit KI auslesen“ (Datei + Hochladen). Keine Kästen/Überschriften mehr.
