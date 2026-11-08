@@ -66,6 +66,9 @@ $routen = [
 $nur_admin = ['einstellungen', 'sender', 'bruecke_skript'];
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'uebersicht';
+// Alte Schnellmaske ?p=eingang stillgelegt (Soll-Handbuch 4.5, 08.11.2026): sie umging Gewicht je Karton, die Bulk-Regel und den
+// Knopf „Neuer Artikel". Jeder Aufruf (alte Lesezeichen/Links) landet im vollwertigen Wareneingang ?p=we. Datei bleibt liegen.
+if ($p === 'eingang') { header('Location: ?p=we'); exit; }
 
 if ($p === 'logout') { lg_logout(); weiter('?p=login'); }
 

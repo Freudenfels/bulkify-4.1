@@ -57,3 +57,5 @@ Leere Rollen sind gesperrt. Rollen, die nicht 8-stellig sind, tragen den Hinweis
 Kachel **Kapselgröße** (Soll-Kette 2d, 04.11.2026), wenn an der Charge gespeichert.
 
 Kachel **Für Auftrag** (Auftrag + Kunde, darunter Reservierungen), Soll-Kette 3 (04.11.2026).
+
+- 08.11.2026: „Nächstes Einbuchen" zeigt auf `?p=we` (Schnellmaske stillgelegt).

@@ -30,3 +30,6 @@ Nach dem Buchen legt `erp_charge_gebinde_anlegen($cid, $pakete)` je Karton/Sack 
 Soll-Kette 2a (04.11.2026): Schnellmaske bucht frei; Haken **„Problem“** bucht in Quarantäne (`erp_wareneingang_buchen(..., 'quarantaene')`).
 
 Soll-Kette 2b (04.11.2026): Neu angelegter Artikel (Name ohne Treffer) → Hinweis ans Team (`erp_hinweis_neuer_artikel`).
+
+## Stillgelegt (08.11.2026, Soll-Handbuch 4.5)
+Die Schnellmaske ist stillgelegt: `?p=eingang` leitet in `public/lager/index.php` auf den vollwertigen Wareneingang `?p=we` um (Gewicht je Karton, Bulk-Regel, Knopf „Neuer Artikel"). Im Menü stand sie schon nicht mehr; der Link „Nächstes Einbuchen" auf der Charge-Seite zeigt jetzt auf `?p=we`. Die Datei bleibt vorerst liegen.
