@@ -51,11 +51,15 @@ Gilt vor den älteren Absätzen oben (Anfragen-Gruppe mit 4 Punkten und Lager-Gr
 - **Umschalter je Nutzer:** Spalte `benutzer.menu_modus` (`einfach` / `ausfuehrlich`; leer = `einfach`). `bx_menu_modus()` liest ihn.
   In der Benutzer-Box unten steht `bx_menu_umschalter()` („Menü: Einfach | Ausführlich"); der Knopf postet auf die aktuelle Seite,
   `public/index.php` speichert am Nutzer und lädt dieselbe Seite neu. Werk-Nutzer (`bx_nav_werk()`) haben keinen Umschalter, ihr Menü ist unverändert.
-- **Einfach** = `bx_nav_einfach()`: feste Reihenfolge Vertrieb (Anfragen, Angebote, Aufträge) · Produkt (Produkte, Rezepturen, Rohstoffe)
-  · Produktion (Produktion, Einkauf = Einkaufsliste, Lager). Definitionen aus der Registry; im Menü-Editor ausgeblendete Punkte bleiben weg;
-  Rechte filtern wie immer über `route_erlaubt()`. Keine Unterprogramme (/produktion/, /lager/, /crm/, /buchhaltung/) – die stehen unter „Ausführlich".
-  Ausnahme (08.11.2026): Nutzer mit der Rolle `finance` (ausdrücklich in `benutzer.rollen`) sehen in „Einfach" zusätzlich die Gruppe **Finanzen → Buchhaltung** (`buchhaltung/`).
-  Oben ist Platz für „Zu erledigen" (kommt mit Schritt 4). Das Logo links oben führt zur Startseite (`?p=dashboard`, Werk `?p=werk`).
+- **Einfach** = `bx_nav_einfach()` (Stand 08.11.2026): **eine flache Liste ohne Gruppen** (kein Auf-/Zuklappen), feste Reihenfolge
+  im Code: Anfragen · Angebote · Aufträge · Einkauf (Einkaufsliste) · Produktion · Lager (`?p=lager`) · Produkte · Rezepturen · Rohstoffe ·
+  Buchhaltung (`buchhaltung/`, nur mit Rolle `finance` ausdrücklich in `benutzer.rollen`). Hängt **nicht** am Menü-Editor (`menu_layout`).
+  Rechte filtern wie immer über `route_erlaubt()` – was eine Rolle nicht darf, fehlt. Rückgabe `['' => [key => def]]`; `render_header()`
+  gibt im Modus einfach statt Gruppenkopf ein `<div class="bx-navflat">` aus. Jeder Punkt hat links ein Linien-Icon aus `bx_nav_icon($key)`
+  (Inline-SVG im Lucide-Stil, `currentColor`, 19 px; inbox, file-text, clipboard-check, shopping-cart, factory, warehouse, package,
+  flask-conical, leaf, calculator; `aufgaben` = list-checks für „Zu erledigen"). Größer: 15 px Schrift, 10 px Innenabstand, Zähler 22 px;
+  am Handy 16 px. Seitenleiste bleibt 224 px. Platz für „Zu erledigen" ganz oben (kommt mit Schritt 4).
+  Das Logo links oben führt zur Startseite (`?p=dashboard`, Werk `?p=werk`).
 - **Ausführlich** = `bx_nav()` wie bisher (Menü-Editor bestimmt Gruppen und Reihenfolge) plus Unterprogramme.
 - **Anfragen = ein Punkt** (`anfragen`, Seite `module/anfrage/liste.php` mit allen Arten). Felder `alt_route`/`alt_href`: darf der Nutzer
   `anfragen` nicht, aber `portal_anfragen` (Einkauf), zeigt derselbe Punkt auf `?p=portal_anfragen`. `auch_aktiv` markiert den Punkt auch auf

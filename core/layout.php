@@ -120,24 +120,40 @@ function bx_menu_modus(): string {
 // Registry (dieselben Ziele wie im ausführlichen Menü); was der Admin im Menü-Editor ausgeblendet hat, bleibt auch hier
 // weg. Ganz oben kommt später „Zu erledigen" (Schritt 4) – bis dahin kein Platzhalter. Blendet nur aus, löscht nichts.
 function bx_nav_einfach(): array {
+    // Menü „Einfach" (Nico 08.11.2026): EINE flache Liste ohne Gruppen, feste Reihenfolge im Code – hängt NICHT am
+    // Menü-Editor (der steuert nur „Ausführlich"). Ziele und Rechte wie in der Registry; Buchhaltung nur mit Rolle finance.
+    // Platz für „Zu erledigen" (Schritt 4) ist ganz oben reserviert und wird bis dahin nicht angezeigt.
     $reg = bx_nav_registry();
-    $layout = menu_layout_get();
-    $hidden = array_flip(array_map('strval', $layout['hidden'] ?? []));
-    $plan = [
-        'Vertrieb'   => ['anfragen' => null, 'angebote' => null, 'auftraege' => null],
-        'Produkt'    => ['produkte' => null, 'rezeptur' => null, 'rohstoffe' => null],
-        'Produktion' => ['produktion' => null, 'einkaufsliste' => 'Einkauf', 'lager' => 'Lager'],
-    ];
+    $plan = ['anfragen' => null, 'angebote' => null, 'auftraege' => null, 'einkaufsliste' => 'Einkauf', 'produktion' => null,
+             'lager' => 'Lager', 'produkte' => null, 'rezeptur' => null, 'rohstoffe' => null];
     $nav = [];
-    foreach ($plan as $grp => $keys) {
-        foreach ($keys as $key => $label) {
-            if (!isset($reg[$key]) || isset($hidden[$key])) continue;
-            $def = $reg[$key]['def'];
-            if ($label !== null) $def = is_array($def) ? array_merge($def, ['label' => $label]) : $label;
-            $nav[$grp][$key] = $def;
-        }
+    foreach ($plan as $key => $label) {
+        if (!isset($reg[$key])) continue;
+        $def = $reg[$key]['def'];
+        if ($label !== null) $def = is_array($def) ? array_merge($def, ['label' => $label]) : $label;
+        $nav[$key] = $def;
     }
-    return $nav;
+    if (function_exists('user_rollen') && in_array('finance', user_rollen(), true))
+        $nav['buchhaltung'] = ['label' => 'Buchhaltung', 'route' => '', 'href' => 'buchhaltung/', 'extern' => true];
+    return ['' => $nav];
+}
+// Linien-Icons fürs Menü „Einfach" (Stil Lucide/Feather, Inline-SVG in currentColor – keine Emojis, kein CDN).
+function bx_nav_icon(string $key): string {
+    static $p = [
+        'aufgaben'      => '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
+        'anfragen'      => '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+        'angebote'      => '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+        'auftraege'     => '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+        'einkaufsliste' => '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+        'produktion'    => '<path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/>',
+        'lager'         => '<path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/>',
+        'produkte'      => '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+        'rezeptur'      => '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>',
+        'rohstoffe'     => '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
+        'buchhaltung'   => '<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/>',
+    ];
+    if (!isset($p[$key])) return '';
+    return '<svg class="bx-navico" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $p[$key] . '</svg>';
 }
 
 // Zähler offener Anfragen je Nav-Punkt (offen = noch nicht beantwortet/abgelehnt), wie ungelesene Mails
@@ -213,7 +229,15 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     echo "<style>.bx-navgroup{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}"
        . ".bx-navchev{font-size:12px;line-height:1;opacity:.85;transition:transform .15s;margin-left:8px;display:inline-block}"
        . ".bx-navgroup.collapsed .bx-navchev{transform:rotate(-90deg)}"
-       . ".bx-navitems.collapsed{display:none}</style>";
+       . ".bx-navitems.collapsed{display:none}"
+       // Menü „Einfach": flache Liste, etwas größer, Icon links in Textfarbe, Texte bündig.
+       . ".bx-navflat{padding-top:4px}"
+       . ".bx-side nav .bx-navflat a{justify-content:flex-start;gap:12px;font-size:15px;padding:10px var(--sp-5);line-height:1.25}"
+       . ".bx-navflat .bx-navico{flex:0 0 19px;width:19px;height:19px;opacity:.9}"
+       . ".bx-navflat a.on .bx-navico{opacity:1}"
+       . ".bx-navflat .bx-navlbl{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}"
+       . ".bx-navflat .bx-navbadge{min-width:22px;height:22px;line-height:22px;font-size:12px;padding:0 6px}"
+       . "@media (max-width:860px){.bx-side nav .bx-navflat a{font-size:16px;padding:12px var(--sp-5)}}</style>";
     $darf = function_exists('route_erlaubt');   // Auth aktiv?
     // Globale Suche (nur Admin): ein Feld ganz oben, sucht über alle Bereiche.
     if (function_exists('has_role') && has_role('admin')) {
@@ -274,6 +298,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         $sichtbar = [];
         foreach ($seiten as $key => $val) {
             $route = is_array($val) ? $val['route'] : $key;
+            if (is_array($val) && !empty($val['extern'])) { $sichtbar[$key] = $val; continue; }   // Unterprogramm (Rolle schon geprüft)
             if (!$darf || route_erlaubt($route)) { $sichtbar[$key] = $val; continue; }
             // Ersatzziel (z. B. „Anfragen" -> Portal-Anfragen für den Einkauf): gleicher Punkt, anderes Ziel, keine neuen Rechte.
             if (is_array($val) && !empty($val['alt_route']) && route_erlaubt($val['alt_route']))
@@ -304,8 +329,10 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
                 default         => "$n offene Anfragen",
             };
             $badge = $n > 0 ? "<span class=\"bx-navbadge\" title=\"$badgeTitel\">$n</span>" : '';
-            $grpHtml .= "<a href=\"" . h($href) . "\"$cls><span>" . h($label) . "</span>$badge</a>";
+            $ico = $menuModus === 'einfach' ? bx_nav_icon((string)$key) : '';
+            $grpHtml .= "<a href=\"" . h($href) . "\"$cls>" . $ico . "<span class=\"bx-navlbl\">" . h($label) . "</span>$badge</a>";
         }
+        if ($menuModus === 'einfach') { echo "<div class=\"bx-navflat\">" . $grpHtml . "</div>"; continue; }   // flach, ohne Gruppen
         echo "<div class=\"bx-navgroup\" data-g=\"$gid\" role=\"button\" tabindex=\"0\"><span>" . h($gruppe) . "</span><span class=\"bx-navchev\">▼</span></div>";
         echo "<div class=\"bx-navitems" . ($grpOn ? ' open-forced' : '') . "\" data-g=\"$gid\">" . $grpHtml . "</div>";
     }
@@ -326,11 +353,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         echo "<div class=\"bx-navgroup\" data-g=\"g_subpages\" role=\"button\" tabindex=\"0\"><span>Unterseiten</span><span class=\"bx-navchev\">▼</span></div>";
         echo "<div class=\"bx-navitems\" data-g=\"g_subpages\">" . $sub . "</div>";
     }
-    // Menü „Einfach": Nutzer mit der Rolle finance sehen zusätzlich die Buchhaltung (Nico 08.11.2026, Zusatz zu Schritt 2).
-    if ($menuModus === 'einfach' && function_exists('user_rollen') && in_array('finance', user_rollen(), true)) {
-        echo "<div class=\"bx-navgroup\" data-g=\"g_finanzen\" role=\"button\" tabindex=\"0\"><span>Finanzen</span><span class=\"bx-navchev\">▼</span></div>";
-        echo "<div class=\"bx-navitems\" data-g=\"g_finanzen\"><a href=\"buchhaltung/\"><span>Buchhaltung</span></a></div>";
-    }
+    // Menü „Einfach": Buchhaltung (Rolle finance) steht als letzter Punkt in der flachen Liste (bx_nav_einfach).
     // Benutzer-Fuß: Name + Rollen + Abmelden
     if (function_exists('current_user') && ($u = current_user())) {
         $rollen = function_exists('rollen_liste') ? rollen_liste() : [];

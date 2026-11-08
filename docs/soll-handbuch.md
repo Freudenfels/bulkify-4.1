@@ -56,18 +56,20 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
 
 **Soll:** Ein Umschalter **Einfach / Ausführlich** pro Nutzer (gespeichert am Nutzer). Das Menü ist bereits datengetrieben (Menü-Editor vorhanden) - der Umschalter blendet nur aus, er löscht keine Seiten.
 
-**Einfach (Alltag) enthält** (in dieser Reihenfolge; gebaut 08.11.2026):
-- **Zu erledigen** (die zentrale Aufgabenliste, Abschnitt 6) - ganz oben, mit Zähler *(kommt mit Schritt 4, bis dahin kein Platzhalter)*
-- **Anfragen** - **eine** Tabelle mit allen Anfragearten (Rezeptur-, Produkt-, Rohstoff-, Dienstleistungsanfragen), Spalte "Art", Filter nach Art, Markierung "neu"
-- **Angebote**
-- **Aufträge**
-- **Produkte**
-- **Rezepturen**
-- **Rohstoffe**
-- **Produktion** (heute die Produktionsliste, später die Reihenfolge-Liste, Abschnitt 4.6)
-- **Einkauf** - ein Punkt auf die Einkaufsliste, von dort zu den Bestellungen (Entscheidung 12.1)
-- **Lager** - **ein** Punkt auf das Warenlager; Lager 1 / Lager 2 sind Filter-Reiter auf der Seite (Entscheidung 12.1)
-- **Buchhaltung** - nur für Nutzer mit der Rolle Finanz (finance), als eigener Punkt "Finanzen → Buchhaltung" (08.11.2026)
+**Einfach (Alltag)** ist **eine flache Liste ohne Gruppen** (keine Zwischenüberschriften, kein Auf-/Zuklappen), etwas größer, jeder Punkt mit Linien-Icon, in dieser festen Reihenfolge (Nico 08.11.2026):
+- **Zu erledigen** (die zentrale Aufgabenliste, Abschnitt 6) - ganz oben, mit Zähler *(kommt mit Schritt 4, bis dahin nicht angezeigt)*
+1. **Anfragen** - **eine** Tabelle mit allen Anfragearten (Rezeptur-, Produkt-, Rohstoff-, Dienstleistungsanfragen), Spalte "Art", Filter nach Art, Markierung "neu"
+2. **Angebote**
+3. **Aufträge**
+4. **Einkauf** - Einkaufsliste, von dort zu den Bestellungen (Entscheidung 12.1)
+5. **Produktion** (heute die Produktionsliste, später die Reihenfolge-Liste, Abschnitt 4.6)
+6. **Lager** - **ein** Punkt auf das Warenlager; Lager 1 / Lager 2 sind Filter-Reiter auf der Seite (Entscheidung 12.1)
+7. **Produkte**
+8. **Rezepturen**
+9. **Rohstoffe**
+10. **Buchhaltung** - nur für Nutzer mit der Rolle Finanz (finance)
+
+Die Reihenfolge ist fest im Programm und hängt nicht am Menü-Editor (der steuert nur "Ausführlich"). Was eine Rolle nicht darf, fehlt einfach.
 
 **Ausführlich:** alles aus "Einfach" plus alles Übrige (Kunden, Partner, Kundenpreise, Kalender, Planung, Maschinen, Geführte Produktion, Easy Production, Kontingente, Dienstleistungen, Novel Food, Doppelte Rezepturen, Lager- und Einkauf-Unterpunkte, Datenprüfung, Einstellungen, Unterprogramme /produktion/, /lager/, /crm/, /buchhaltung/ …). Gruppen und Reihenfolge bestimmt weiter der Menü-Editor.
 
@@ -371,3 +373,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | Schritt 2: Menü Einfach/Ausführlich gebaut (3); Entscheidungen 12.1 (Einkauf + Lager in Einfach, Lager ein Punkt), 12.4 (voller Packungspreis), 12.5 inkl. Feld Unter-Charge der Probe zurückgestellt; Fixes 10.2/10.3/10.4, 4.9 Meldetexte, 4.11 Easy Production frei, 4.12 Labor-Befund/charge_norm, 4.5 Erwartete Lieferungen + Schnellmaske stillgelegt; 10.5 geprüft | Nico / Claude Code |
 | 08.11.2026 | Sofort-Fix Etikett-Format: 4.5 Etikett-Maß vs. Glas nur Hinweis, nie Sperre; Maß neuer Etiketten aus der TrimBox; Menü Einfach zeigt Buchhaltung für Rolle finance (3) | Nico / Claude Code |
 | 08.11.2026 | Sofort-Fix Bestellliste: 4.3 Kundenetiketten/bedruckte Beutel netto gegen Lager und unterwegs, eine Rechnung mit Reiter Material und Fortschritt | Nico / Claude Code |
+| 08.11.2026 | 3: Menü "Einfach" flache Liste ohne Gruppen, größer, feste Reihenfolge, Linien-Icons | Nico / Claude Code |
