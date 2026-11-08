@@ -211,7 +211,13 @@ function bestellung_chargen_post(array $b, string $von, string $sprache = 'de'):
     if ($akt === 'bch_add') {                         // Charge (+ MHD, Menge, optional CoA) an einer Position eintragen
         if (!$posOk($bp)) return $t('Position nicht gefunden.', 'Item not found.', '未找到该项目。');
         $nr = mb_substr(trim((string)($_POST['charge_nr'] ?? '')), 0, 80);
-        if ($nr === '') return $t('Bitte die Chargennummer des Lieferanten eintragen.', 'Please enter the batch number.', '请输入批号。');
+        $mitDatei = !empty($_FILES['bch_coa']['name']) && ($_FILES['bch_coa']['error'] ?? 1) === UPLOAD_ERR_OK;
+        if ($nr === '') {
+            // Nur das CoA hochgeladen (Nico 08.11.2026): Charge, MHD und Menge liest die KI aus, bestätigt wird im Prüf-Popup.
+            if (!$mitDatei) return $t('Bitte die Chargennummer eintragen oder ein CoA hochladen.', 'Please enter the batch number or upload a CoA.', '请输入批号或上传 COA。');
+            [, $f] = bch_datei_speichern('bch_coa', $b, 'coa', $bp, null, $von, $t);
+            return $f;
+        }
         $mhd = trim((string)($_POST['mhd'] ?? ''));
         $mhd = preg_match('/^\d{4}-\d{2}-\d{2}$/', $mhd) ? $mhd : null;
         q("INSERT INTO bestellung_charge (bestellung_position_id, charge_nr, mhd, menge, von, angelegt) VALUES (?,?,?,?,?,?)",
@@ -376,11 +382,11 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
         // Neue Charge eintragen
         $o .= '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">'
             . '<input type="hidden" name="aktion" value="bch_add"><input type="hidden" name="bp_id" value="' . $bp . '">'
-            . '<div class="bx-field" style="margin:0;min-width:150px"><label>' . $t('Charge des Lieferanten', 'Batch number', '批号') . '</label><input type="text" name="charge_nr" required maxlength="80"></div>'
+            . '<div class="bx-field" style="margin:0;min-width:150px"><label>' . $t('Charge des Lieferanten', 'Batch number', '批号') . '</label><input type="text" name="charge_nr" maxlength="80" placeholder="' . $h($t('leer = aus dem CoA lesen', 'empty = read from CoA', '留空 = 从 COA 读取')) . '"></div>'
             . '<div class="bx-field" style="margin:0;max-width:160px"><label>' . $t('MHD', 'Best before', '保质期') . '</label><input type="date" name="mhd"></div>'
             . '<div class="bx-field" style="margin:0;max-width:130px"><label>' . $t('Menge (optional)', 'Quantity (optional)', '数量（可选）') . '</label><input type="text" name="menge" inputmode="decimal" placeholder="' . $h($p['einheit']) . '"></div>'
-            . '<div class="bx-field" style="margin:0;min-width:200px"><label>' . $t('CoA (optional)', 'CoA (optional)', 'COA（可选）') . '</label><input type="file" name="bch_coa" accept=".pdf,.png,.jpg,.jpeg,.webp"></div>'
-            . '<button class="btn btn-primary btn-sm" type="submit">' . ($zeilen ? $t('Weitere Charge eintragen', 'Add another batch', '添加批次') : $t('Charge eintragen', 'Add batch', '添加批次')) . '</button></form>';
+            . '<div class="bx-field" style="margin:0;min-width:200px"><label>CoA</label><input type="file" name="bch_coa" accept=".pdf,.png,.jpg,.jpeg,.webp"></div>'
+            . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Charge / CoA speichern', 'Save batch / CoA', '保存批次 / COA') . '</button></form>';
         // CoA ohne Charge-Zeile (z. B. erst die Datei, Charge später / per KI) + Spezifikation
         $lose = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'coa' && trim((string)($d['charge_nr'] ?? '')) === ''));
         $specs = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'spec'));
