@@ -231,12 +231,6 @@ $chargeGeb = (bool)$fCharge;
 $chargeNr  = $fCharge ? $fCharge['charge_nr'] : charge_naechste_nr($id);
 $chargeMhd = ($fCharge && $fCharge['mhd']) ? $fCharge['mhd'] : mhd_standard();
 
-$statusBadge = match ($pa['status']) {
-    'offen'    => bx_badge('offen','info'),
-    'laufend'  => bx_badge('läuft','warn'),
-    'erledigt' => bx_badge('fertig','ok'),
-    default    => bx_badge(status_text($pa['status'])),
-};
 
 render_header('produktion', $pa['nummer']);
 // Fehlen wirklich Rohstoffe (nach Bestand + bereits Bestelltem)? Dann Knopf: direkt auf die Einkaufsliste.
@@ -317,10 +311,10 @@ if (has_role('admin')):
     <div class="bx-row" style="gap:6px;flex-wrap:wrap;align-items:center">
       <form method="post" style="margin:0" onsubmit="return confirm('Alle Schritte wieder auf OFFEN setzen?');"><input type="hidden" name="aktion" value="godmode_stufe"><input type="hidden" name="schritt" value="0"><button class="btn btn-ghost btn-sm" type="submit">Anfang (alles offen)</button></form>
       <span class="muted" style="font-size:12px">→</span>
-      <?php foreach ($godSchritte as $gs): $done = (int)$gs['erledigt'] === 1; ?>
+      <?php foreach ($godSchritte as $gs): $gsDone = (int)$gs['erledigt'] === 1; ?>
         <form method="post" style="margin:0" onsubmit="return confirm('Produktion auf diese Stufe setzen (ohne Bestandsbuchung)?');">
           <input type="hidden" name="aktion" value="godmode_stufe"><input type="hidden" name="schritt" value="<?= (int)$gs['id'] ?>">
-          <button class="btn btn-sm <?= $done ? 'btn-primary' : 'btn-ghost' ?>" type="submit" title="Produktion auf diese Stufe setzen (Gate überspringen, ohne Buchung)"><?= h((string)$gs['station']) ?></button>
+          <button class="btn btn-sm <?= $gsDone ? 'btn-primary' : 'btn-ghost' ?>" type="submit" title="Produktion auf diese Stufe setzen (Gate überspringen, ohne Buchung)"><?= h((string)$gs['station']) ?></button>
         </form>
       <?php endforeach; ?>
     </div>
@@ -369,44 +363,58 @@ $prioSel .= '</select></form>';
 $geplantForm = '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="geplant"><input type="date" name="geplant_am" value="' . h((string)($pa['geplant_am'] ?? '')) . '" onchange="this.form.submit()"></form>';
 $groesseLbl = produktion_groesse_label((int)$pa['produkt_id']);
 $artBadge = ($pa['produktionsart'] ?? 'eigen') === 'fremd' ? bx_badge('Fremdproduktion','info') : bx_badge('Eigenproduktion','ok');
-echo '<div class="bx-cards">';
-// 1) Zustand
-echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $statusBadge . '</div></div>';
-echo '<div class="bx-card"><div class="k">Bereitschaft</div><div class="v">' . bereitschaft_badge($ber['status']) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Fortschritt</div><div class="v">' . $done . ' / ' . $total . '</div></div>';
-echo '<div class="bx-card"><div class="k">Priorität</div><div class="v">' . $prioSel . '</div></div>';
-// 2) Kunde (prominent) + Produkt (bei Bulk: Rezeptur)
-$kundeIdEff = (int)($pa['kunde_id_eff'] ?? 0);
-echo '<div class="bx-card"><div class="k">Kunde</div><div class="v">' . ($pa['kunde_firma'] ? kunde_link($kundeIdEff ?: null, $pa['kunde_firma'], true) : '<span class="muted">–</span>') . '</div></div>';
-if (!empty($pa['auftrag_id'])) echo '<div class="bx-card"><div class="k">Auftrag</div><div class="v"><a href="?p=auftrag&id=' . (int)$pa['auftrag_id'] . '">' . h((string)$pa['auftrag_nr']) . '</a></div></div>';
+// Kacheln (Nico 08.11.2026): zuerst WAS produziert wird (Produkt, Größe, Mengen), dann der Stand der Produktion
+// (ein „Stand" statt Status/Bereitschaft/Fortschritt einzeln), Planung/Charge; Kunde/Auftrag nur als Nebenzeile.
 $istBulkPa = pa_ist_bulk($pa);
 $prodKarteLabel = $istBulkPa ? 'Rezeptur (Bulk)' : 'Produkt';
 $prodKarteZusatz = (!$istBulkPa && $produktName && empty($pa['produkt_id'])) ? ' <span class="muted" style="font-size:12px">(aus v3)</span>' : '';
-echo '<div class="bx-card"><div class="k">' . $prodKarteLabel . '</div><div class="v">' . h($produktName ?: '–') . $prodKarteZusatz . '</div></div>';
-if ($groesseLbl !== '') echo '<div class="bx-card"><div class="k">Kapsel/Tablette</div><div class="v">' . h($groesseLbl) . '</div></div>';
-echo '<div class="bx-card"><div class="k">Art</div><div class="v">' . $artBadge . '</div></div>';
-// 3) Menge
-echo '<div class="bx-card"><div class="k">Packungen gesamt</div><div class="v">' . number_format((int)$pa['menge'], 0, ',', '.') . '</div></div>';
+$prodName = h($produktName ?: '–');
+if (!$istBulkPa && !empty($pa['produkt_id'])) $prodName = '<a href="?p=produkt&id=' . (int)$pa['produkt_id'] . '">' . $prodName . '</a>';
+// Stand: fertig / Beschaffungsweg offen / Material fehlt / X von N Schritten + nächster Schritt.
+$naechsteStation = '';
+foreach ($schritte as $sx) if ((int)$sx['erledigt'] !== 1) { $naechsteStation = (string)$sx['station']; break; }
+if ($pa['status'] === 'erledigt')            $standHtml = bx_badge('fertig', 'ok');
+elseif ($pa['status'] === 'vorbereitung')    $standHtml = bx_badge('Beschaffungsweg offen', 'warn');
+elseif ($done === 0 && ($ber['status'] ?? '') === 'wartet') $standHtml = bx_badge('Material fehlt', 'err');
+else $standHtml = ($total > 0 ? '<strong>' . $done . ' von ' . $total . '</strong> Schritten' : '<span class="muted">keine Schritte</span>')
+    . ($naechsteStation !== '' ? '<div class="muted" style="font-size:12px">als Nächstes: ' . h($naechsteStation) . '</div>' : '');
+$karte = fn(string $k, string $v, string $stil = '') => '<div class="bx-card"' . ($stil !== '' ? ' style="' . $stil . '"' : '') . '><div class="k">' . $k . '</div><div class="v">' . $v . '</div></div>';
+// 1) Was wird produziert
+echo '<div class="bx-cards">';
+echo $karte($prodKarteLabel, '<span style="font-size:17px;font-weight:600">' . $prodName . '</span>' . $prodKarteZusatz, 'flex:2 1 280px');
+if ($groesseLbl !== '') echo $karte('Kapsel/Tablette', h($groesseLbl));
+echo $karte('Packungen', number_format((int)$pa['menge'], 0, ',', '.'));
 if ($istFuellGewicht) {
     // Füllgewicht je Packung (g) und Gesamt-Füllgewicht (als kg, wenn >= 1 kg).
-    if ($einhProP > 0)  echo '<div class="bx-card"><div class="k">Füllmenge je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . ' g</div></div>';
-    if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">Gesamt-Füllmenge</div><div class="v">' . ($gesamtStk >= 1000 ? rtrim(rtrim(number_format($gesamtStk / 1000, 3, ',', '.'), '0'), ',') . ' kg' : number_format($gesamtStk, 0, ',', '.') . ' g') . '</div></div>';
+    if ($einhProP > 0)  echo $karte('Füllmenge je Packung', number_format($einhProP, 0, ',', '.') . ' g');
+    if ($gesamtStk > 0) echo $karte('Gesamt-Füllmenge', $gesamtStk >= 1000 ? rtrim(rtrim(number_format($gesamtStk / 1000, 3, ',', '.'), '0'), ',') . ' kg' : number_format($gesamtStk, 0, ',', '.') . ' g');
 } else {
-    if ($einhProP > 0)  echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' je Packung</div><div class="v">' . number_format($einhProP, 0, ',', '.') . '</div></div>';
-    if ($gesamtStk > 0) echo '<div class="bx-card"><div class="k">' . h($stkWort) . ' gesamt</div><div class="v">' . number_format($gesamtStk, 0, ',', '.') . '</div></div>';
+    if ($einhProP > 0)  echo $karte(h($stkWort) . ' je Packung', number_format($einhProP, 0, ',', '.'));
+    if ($gesamtStk > 0) echo $karte(h($stkWort) . ' gesamt', number_format($gesamtStk, 0, ',', '.'));
 }
 // Überproduktion (aus der Vor-Produktion-Freigabe): geplante Produktionsmenge in Einheiten + Überschuss -> Rezeptur-Bulk.
 if (!empty($pa['menge_produktion']) && (int)$pa['menge_produktion'] > $gesamtStk) {
     $ueber = (int)$pa['menge_produktion'] - $gesamtStk;
-    echo '<div class="bx-card"><div class="k">Produktionsmenge (geplant)</div><div class="v">' . number_format((int)$pa['menge_produktion'], 0, ',', '.')
-       . ' <span class="muted" style="font-size:12px">+' . number_format($ueber, 0, ',', '.') . ' &rarr; Bulk</span></div></div>';
+    echo $karte('Produktionsmenge (geplant)', number_format((int)$pa['menge_produktion'], 0, ',', '.')
+       . ' <span class="muted" style="font-size:12px">+' . number_format($ueber, 0, ',', '.') . ' &rarr; Bulk</span>');
 }
-// 4) Planung / Charge
-echo '<div class="bx-card"><div class="k">Geplant am</div><div class="v">' . $geplantForm . '</div></div>';
-echo '<div class="bx-card"><div class="k">Charge' . ($chargeGeb ? (count($fwChargen) > 1 ? 'n' : '') : ' (geplant)') . '</div><div class="v">' . h($chargeNr) . (count($fwChargen) > 1 ? ' <span class="muted" style="font-size:13px">+' . (count($fwChargen) - 1) . '</span>' : '') . '</div></div>';
-echo '<div class="bx-card"><div class="k">MHD' . ($chargeGeb ? '' : ' (+18 Mon.)') . '</div><div class="v">' . h(date('d.m.Y', strtotime($chargeMhd))) . '</div></div>';
-if (!empty($pa['angelegt'])) echo '<div class="bx-card"><div class="k">Erstellt</div><div class="v">' . h(fmt_zeit($pa['angelegt'], 'd.m.Y H:i')) . '</div></div>';
 echo '</div>';
+// 2) Stand + Planung + Charge
+echo '<div class="bx-cards">';
+echo $karte('Stand', $standHtml);
+echo $karte('Art', $artBadge);
+echo $karte('Priorität', $prioSel);
+echo $karte('Geplant am', $geplantForm);
+echo $karte('Charge · MHD' . ($chargeGeb ? '' : ' (geplant)'), h($chargeNr) . (count($fwChargen) > 1 ? ' <span class="muted" style="font-size:13px">+' . (count($fwChargen) - 1) . '</span>' : '')
+    . ' <span class="muted">&middot;</span> ' . h(date('d.m.Y', strtotime($chargeMhd))));
+echo '</div>';
+// 3) Nebenzeile: Kunde, Auftrag, erstellt
+$kundeIdEff = (int)($pa['kunde_id_eff'] ?? 0);
+$neben = [];
+$neben[] = 'Kunde: ' . ($pa['kunde_firma'] ? kunde_link($kundeIdEff ?: null, $pa['kunde_firma'], true) : 'Lager');
+if (!empty($pa['auftrag_id'])) $neben[] = 'Auftrag <a href="?p=auftrag&id=' . (int)$pa['auftrag_id'] . '">' . h((string)$pa['auftrag_nr']) . '</a>';
+if (!empty($pa['angelegt'])) $neben[] = 'erstellt ' . h(fmt_zeit($pa['angelegt'], 'd.m.Y H:i'));
+echo '<div class="muted" style="font-size:13px;margin:-4px 0 16px">' . implode(' &middot; ', $neben) . '</div>';
 if (!$chargeGeb) echo '<div class="bx-panel" style="padding:10px 14px;font-size:13px;color:var(--muted)">Chargennummer <strong>' . h($chargeNr) . '</strong> und MHD <strong>' . h(date('d.m.Y', strtotime($chargeMhd))) . '</strong> in die Produktionsgeräte eintragen. Teilproduktionen an weiteren Tagen erhalten dieselbe Basis mit <strong>.B</strong>, <strong>.C</strong> …</div>';
 
 // Pulver/Granulat: Füllmenge je Packung (g) setzen/korrigieren (nur Admin). Wichtig für Alt-/v3-Aufträge, bei
