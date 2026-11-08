@@ -1390,43 +1390,10 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
       $dkM = fn($x) => $dkE === 'Stk' ? $bwM($x, 'Stk') : $bwM((float)$x / 1000, $dkE === 'g' ? 'kg' : 'L');   // Bedarfs-Einheiten lesbar (g -> kg)
       $dkFrei = $bwAdmin && (int)$dk['schritte_erledigt'] === 0;
       $gedeckt = $dk['rest'] <= 0.0001; ?>
-  <?php // Schon vorhanden / unterwegs: Bedarf gegen Lager + offene Bestellungen; zuordnen = Weg festgelegt, nur der Rest wird beschafft. ?>
-  <div style="border:1px solid <?= $gedeckt ? 'var(--gruen,#1D9E75)' : 'var(--line)' ?>;border-radius:10px;padding:14px 16px;margin-bottom:14px">
-    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
-      <div style="font-weight:600">Schon vorhanden / unterwegs</div>
-      <div><?= $gedeckt ? bx_badge('vollständig gedeckt', 'ok') : '' ?></div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px">
-      <div><div class="muted" style="font-size:12px">Bedarf gesamt</div><div style="font-size:16px"><?= h($dkM($dk['bedarf'])) ?></div></div>
-      <div><div class="muted" style="font-size:12px">Dem Auftrag zugeordnet</div><div style="font-size:16px"><?= h($dkM($dk['summe_gekoppelt'])) ?></div></div>
-      <div><div class="muted" style="font-size:12px">Im Lager frei</div><div style="font-size:16px"><?= h($dkM($dk['summe_lager'])) ?></div></div>
-      <div><div class="muted" style="font-size:12px">Unterwegs / bestellt, frei</div><div style="font-size:16px"><?= h($dkM($dk['summe_bestellt'])) ?></div></div>
-      <div><div class="muted" style="font-size:12px">Noch zu beschaffen</div><div style="font-size:16px;font-weight:600;color:<?= $gedeckt ? 'var(--gruen,#1D9E75)' : 'inherit' ?>"><?= h($dkM($dk['rest'])) ?></div>
-        <?php if (!$gedeckt && $dk['rest_offen'] < $dk['rest'] - 0.0001): ?><div class="muted" style="font-size:12px">nach Zuordnen der freien Quellen: <?= h($dkM($dk['rest_offen'])) ?></div><?php endif; ?></div>
-    </div>
-    <?php if ($dk['gekoppelt'] || $dk['lager'] || $dk['bestellt']): ?>
-    <table class="bx-table" style="font-size:13px"><tbody>
-    <?php foreach ($dk['gekoppelt'] as $z): ?>
-      <tr><td style="white-space:normal"><?= h($z['text']) ?></td><td class="bx-num"><?= h($bwM($z['menge'], $z['einheit'])) ?></td><td><?= bx_badge('zugeordnet', 'ok') ?></td>
-        <td style="text-align:right"><?php if ($dkFrei && $z['loesbar']): ?><form method="post" style="margin:0" onsubmit="return confirm('Zuordnung lösen? Die Ware/Bestellung ist dann wieder frei.')">
-          <input type="hidden" name="aktion" value="deckung_loesen"><input type="hidden" name="typ" value="<?= h($z['typ']) ?>"><input type="hidden" name="zid" value="<?= (int)$z['id'] ?>">
-          <button class="btn btn-ghost btn-sm" type="submit">Lösen</button></form><?php endif; ?></td></tr>
-    <?php endforeach; ?>
-    <?php $restQ = (float)$dk['rest'];
-      foreach (array_merge($dk['lager'], $dk['bestellt']) as $z): $vorschlagE = min((float)$z['e'], max(0.0, $restQ)); $fq = (float)$z['e'] > 0 ? (float)$z['frei'] / (float)$z['e'] : 1.0;
-        $vorschlag = $vorschlagE > 0 ? $vorschlagE * $fq : (float)$z['frei']; $restQ -= $vorschlagE; ?>
-      <tr><td style="white-space:normal"><?= h($z['text']) ?><?= !empty($z['eta']) ? ' <span class="muted">· erwartet ' . h(date('d.m.Y', strtotime((string)$z['eta']))) . '</span>' : '' ?></td>
-        <td class="bx-num"><?= h($bwM($z['frei'], $z['einheit'])) ?> frei</td>
-        <td><?= $z['quelle'] === 'charge' ? bx_badge('im Lager', 'info') : bx_badge('unterwegs', 'warn') ?></td>
-        <td style="text-align:right"><?php if ($dkFrei): ?><form method="post" class="bx-row" style="margin:0;gap:6px;justify-content:flex-end;flex-wrap:nowrap">
-          <input type="hidden" name="aktion" value="deckung_koppeln"><input type="hidden" name="quelle" value="<?= h($z['quelle']) ?>"><input type="hidden" name="qid" value="<?= (int)$z['id'] ?>">
-          <input type="text" inputmode="decimal" name="menge" value="<?= h(rtrim(rtrim(number_format($vorschlag, 3, ',', '.'), '0'), ',')) ?>" style="width:120px;text-align:right" title="Menge in <?= h($z['einheit']) ?>"> <span class="muted"><?= h($z['einheit']) ?></span>
-          <button class="btn btn-primary btn-sm" type="submit">Dem Auftrag zuordnen</button></form><?php endif; ?></td></tr>
-    <?php endforeach; ?>
-    </tbody></table>
-    <?php else: ?><div class="muted" style="font-size:13px">Nichts im Lager und keine offene Bestellung zum Bulk-<?= $dk['premix_item'] ? '/Premix-' : '' ?>Artikel dieser Rezeptur.</div><?php endif; ?>
-    <div class="muted" style="font-size:12px;margin-top:8px">Zuordnen = Ware/Bestellung gehört diesem Auftrag (beim Wareneingang gegen die Bestellung hängt sie direkt am Auftrag) und zählt als Deckung – die Karten unten rechnen nur noch den Rest. Ist noch kein Weg festgelegt, gilt er damit als festgelegt.</div>
-  </div>
+  <?php // Teil 3 (08.11.2026): Zuordnen steht nur noch in der Material-Übersicht – hier nur der Stand in einer Zeile. ?>
+  <div class="muted" style="font-size:13px;margin:0 0 14px">Bereits zugeordnet: <strong><?= h($dkM($dk['summe_gekoppelt'])) ?></strong>
+    · im Lager frei <?= h($dkM($dk['summe_lager'])) ?> · unterwegs <?= h($dkM($dk['summe_bestellt'])) ?> · <strong>Rest <?= h($dkM($dk['rest'])) ?></strong>
+    · <a href="#" data-goto="material">zuordnen im Reiter Material</a></div>
   <?php if ($gedeckt): ?>
   <div class="badge-ok" style="padding:10px 14px;border-radius:8px;margin-bottom:14px">Vollständig über Lager und Bestellung gedeckt – kein weiterer Bedarf, keine neue Bestellung nötig.</div>
   <?php endif; ?>
@@ -1492,6 +1459,20 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
   <?php if ($bw['schritte_erledigt'] > 0): ?><div class="muted" style="font-size:12px;margin-top:10px">Die Produktion hat begonnen – der Weg lässt sich nicht mehr ändern.</div><?php endif; ?>
   <?php if (($bw['pa']['status'] ?? '') === 'vorbereitung' && $bwAdmin): ?><div style="margin-top:10px;font-size:12px"><a href="?p=produktion_vorbereitung&id=<?= (int)$bw['pa']['id'] ?>&voll=1">Auf Quellen aufteilen (Lager / Fremd / Eigen)</a> <span class="muted">– Mischung aus Bestand, Zukauf und Eigenproduktion</span></div><?php endif; ?>
   <?php endif; ?>
+</div>
+<?php endif; ?>
+<?php // Teil 3: Handelsware hat keinen Produktionsauftrag – ihr Weg ist der Zukauf der fertigen Ware (Bestellung über den Einkauf).
+if (!$pa && !empty($a['produkt_id']) && produkt_ist_handelsware((int)$a['produkt_id'])): ?>
+<div class="bx-panel" data-panel="beschaffung">
+  <h2 style="margin:0 0 4px;font-size:16px">Beschaffungsweg</h2>
+  <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><?= bx_badge('Zukauf · Handelsware', 'info') ?> <span class="muted" style="font-size:13px">Fertige Ware wird zugekauft und weiterverkauft – kein Produktionsauftrag. Versandbereit, sobald die Ware frei im Lager liegt.</span></div>
+  <?php if ($zukaufPreise): $nzH = fn($x, $n = 4) => rtrim(rtrim(number_format((float)$x, $n, ',', '.'), '0'), ','); ?>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">EK je Einheit</th></tr></thead>
+    <tbody><?php foreach (array_slice($zukaufPreise, 0, 6) as $z): ?><tr><td><?= h($z['firma'] ?: '–') ?></td><td class="bx-num"><?= (float)$z['menge_ab'] > 0 ? $nzH($z['menge_ab'], 3) : '–' ?></td><td class="bx-num"><?= $nzH($z['preis']) ?> <?= h($z['waehrung'] ?: 'EUR') ?><?= $z['einheit'] ? ' / ' . h($z['einheit']) : '' ?></td></tr><?php endforeach; ?></tbody>
+  </table></div>
+  <?php else: ?><div class="muted" style="font-size:13px">Noch kein Zukaufpreis hinterlegt (Produkt → Lieferanten-Preise).</div><?php endif; ?>
+  <div style="margin-top:10px"><a class="btn btn-ghost btn-sm" href="?p=einkaufsliste">Bestellen über den Einkauf</a></div>
 </div>
 <?php endif; ?>
 <?php // Soll-Kette 3: Bereitschaft je Material (grün = da, rot = fehlt) + Kapselgröße/Form/Füllmenge – vorher eigene Seite „Vor-Produktion“.

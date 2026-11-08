@@ -313,3 +313,10 @@ Knopf **Zuordnen** je Zeile (bis Produktionsstart). Das Fenster je Zeile: besteh
 - Bulk/Fertigware (Zeile ohne Artikel): bisherige Bindung (`material_binden`, `bulk_res_storno`, `charge_loesen`) im selben Fenster (Admin).
 - Entfernt: Block „Material beschaffen & zuweisen“ (Bulkware binden + Bestellungen zu diesem Auftrag). „Bereitschaft“ bleibt als
   kurze Prüfliste (Verpackung/Etikett/Material) – Material-Details stehen nur in der Tabelle.
+
+## Teil 3 „Auftragsseite entschlacken“ – Beschaffungsweg (08.11.2026)
+Nur noch die Wahl: Karten (fertige Mischung/Kapsel, Premix, Einzelrohstoffe) mit Kosten für den Rest und „Diesen Weg festlegen“ /
+„Bestellen“ / „An Bedarfsliste senden“. Der Block „Schon vorhanden / unterwegs“ samt „Zuordnen“ ist raus – stattdessen eine Zeile
+„Bereits zugeordnet · im Lager frei · unterwegs · Rest“ mit Link in den Reiter Material (dort wird zugeordnet). Hinweis „Vollständig
+gedeckt“ und „Weg festlegen“ nach Zuordnung bleiben. Handelsware (ohne Produktionsauftrag) bekommt hier ihren Weg „Zukauf ·
+Handelsware“ mit den Zukaufpreisen und dem Link zum Einkauf.
