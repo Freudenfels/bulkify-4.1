@@ -10800,12 +10800,14 @@ function kundenetikett_nach_freigabe(int $auftrag_id): void {
     if ($curSig === '') {                       // v1 hat noch kein Design -> dieses übernehmen (kein Bump)
         q("UPDATE item SET etikett_datei_sig=?, etikett_dokument_id=? WHERE id=?", [$sig, (int)$dok['id'], $cur]);
         $use = $cur;
+        etikett_mass_aus_pdf_setzen($use, $dok);   // Maß aus dem Endformat (TrimBox) des neuen Designs
     } elseif ($curSig === $sig) {               // gleiches Design (Nachbestellung/Re-Freigabe) -> kein Bump
         $use = $cur;
     } else {                                    // NEUES Design freigegeben -> neue Version (nur in der Kette dieses Kunden)
         $ver = (int) scalar("SELECT COALESCE(etikett_version,1) FROM item WHERE id=?", [$cur]) + 1;
         q("UPDATE item SET gesperrt=1 WHERE id=?", [$cur]);
         $use = kundenetikett_version_anlegen($pid, $ver, (int)$dok['id'], $sig, $kid ?: null);
+        if ($use > 0) etikett_mass_aus_pdf_setzen($use, $dok);
     }
     if ($use > 0) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$use, $auftrag_id]);
     // Bedarf/Einkauf/Bereitschaft hängen am gebundenen Etikett-Artikel -> Cache neu rechnen (sonst meldet die
@@ -10942,17 +10944,85 @@ function etikett_bestand_info(int $produkt_id, ?int $kunde_id = null): array {
         'puffer'          => max(0.0, $physisch - $kundeRest),    // interner Überschuss (nicht an Kunden zeigen)
     ];
 }
-// Liest die Seitenmaße einer Druckdatei. PDF → aus /MediaBox in mm ('210 × 297 mm'); Bild → Pixel. Sonst null.
+// Seitenboxen der ERSTEN Seite eines PDFs in mm: ['TrimBox'=>[w,h], 'ArtBox'=>[w,h], 'MediaBox'=>[w,h]] (nur gefundene).
+// Sucht erst im Klartext, dann in komprimierten Objekt-Streams (PDF 1.5+, FlateDecode). Ohne Abhängigkeiten.
+function pdf_boxen(string $pfad): array {
+    if (!is_file($pfad)) return [];
+    $data = @file_get_contents($pfad, false, null, 0, 40000000);
+    if ($data === false || $data === '') return [];
+    $finde = function (string $txt): array {
+        $out = [];
+        foreach (['TrimBox', 'ArtBox', 'MediaBox'] as $box) {
+            if (!preg_match('/\/' . $box . '\s*\[\s*([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s*\]/', $txt, $m)) continue;
+            $w = abs((float)$m[3] - (float)$m[1]) * 25.4 / 72.0;   // Punkte (1/72 Zoll) → mm
+            $h = abs((float)$m[4] - (float)$m[2]) * 25.4 / 72.0;
+            if ($w > 0 && $h > 0) $out[$box] = [$w, $h];
+        }
+        return $out;
+    };
+    $b = $finde($data);
+    if (!isset($b['TrimBox']) && preg_match_all('/\/Type\s*\/ObjStm.*?stream\r?\n/s', $data, $mm, PREG_OFFSET_CAPTURE)) {
+        foreach ($mm[0] as $treffer) {                       // Seiten-Objekte stecken evtl. komprimiert in Objekt-Streams
+            $start = $treffer[1] + strlen($treffer[0]);
+            $ende  = strpos($data, 'endstream', $start);
+            if ($ende === false) continue;
+            $roh = @gzuncompress(substr($data, $start, $ende - $start));
+            if ($roh === false || $roh === '') continue;
+            $b2 = $finde($roh);
+            foreach ($b2 as $k => $v) if (!isset($b[$k])) $b[$k] = $v;
+            if (isset($b['TrimBox'])) break;
+        }
+    }
+    return $b;
+}
+// Etikett-Maß aus einer PDF-Druckdatei (Soll-Handbuch 4.5, Nico 08.11.2026): maßgeblich ist das ENDFORMAT =
+// TrimBox; fehlt sie, die ArtBox, sonst die MediaBox (Seite inkl. Beschnitt). Rückgabe ['w','h','quelle','label'] oder null.
+function pdf_etikett_mass(string $pfad): ?array {
+    if (strtolower(pathinfo($pfad, PATHINFO_EXTENSION)) !== 'pdf') return null;
+    $b = pdf_boxen($pfad);
+    foreach (['TrimBox', 'ArtBox', 'MediaBox'] as $box) {
+        if (empty($b[$box])) continue;
+        [$w, $h] = $b[$box];
+        $r = fn($x) => rtrim(rtrim(number_format($x, 1, ',', ''), '0'), ',');
+        return ['w' => $w, 'h' => $h, 'quelle' => $box, 'label' => $r($w) . ' × ' . $r($h) . ' mm'];
+    }
+    return null;
+}
+// Etikett-Artikel: Maß aus dem hochgeladenen/freigegebenen Design (PDF) übernehmen – nur beim Upload/bei der Freigabe
+// eines NEUEN Designs (kundenetikett_nach_freigabe), nie rückwirkend für bestehende Etiketten. Ausrichtung wie das bisher
+// gespeicherte Maß (z. B. 60 x 172 = schmal x lang), damit der Vergleich mit dem Glas-Endformat gleich bleibt.
+// etikett_druck = MediaBox (Druckdatei inkl. Beschnitt), wenn die Datei eine eigene TrimBox/ArtBox hat. Rückgabe: geändert ja/nein.
+function etikett_mass_aus_pdf_setzen(int $item_id, array $dok): bool {
+    if ($item_id <= 0 || empty($dok['datei'])) return false;
+    $pfad = BX_UPLOADS . '/' . basename((string)$dok['datei']);
+    $em = pdf_etikett_mass($pfad);
+    if (!$em) return false;
+    $vor = one("SELECT * FROM item WHERE id=? AND verpackung_rolle='etikett'", [$item_id]);
+    if (!$vor) return false;
+    $w = round((float)$em['w'], 1); $h = round((float)$em['h'], 1);
+    $ab = (float)($vor['breite_mm'] ?? 0); $ah = (float)($vor['hoehe_mm'] ?? 0);
+    if ($ab > 0 && $ah > 0 && (($ab < $ah) !== ($w < $h))) [$w, $h] = [$h, $w];
+    $z = fn($x) => rtrim(rtrim(number_format($x, 1, '.', ''), '0'), '.');
+    $druck = $vor['etikett_druck'] ?? null;
+    if ($em['quelle'] !== 'MediaBox') {
+        $mb = pdf_boxen($pfad)['MediaBox'] ?? null;
+        if ($mb) { [$dw, $dh] = [round($mb[0], 1), round($mb[1], 1)]; if (($w < $h) !== ($dw < $dh)) [$dw, $dh] = [$dh, $dw]; $druck = $z($dw) . ' x ' . $z($dh); }
+    }
+    q("UPDATE item SET breite_mm=?, hoehe_mm=?, etikett_format=?, etikett_final=?, etikett_druck=? WHERE id=?",
+      [$w, $h, $z($w) . ' x ' . $z($h) . ' mm', $z($w) . ' x ' . $z($h), $druck, $item_id]);
+    $nach = one("SELECT * FROM item WHERE id=?", [$item_id]);
+    if (function_exists('aenderung_protokollieren') && $nach) aenderung_protokollieren('item', $item_id, $vor, $nach, 'etikett_pdf_' . strtolower($em['quelle']));
+    return true;
+}
+// Liest die Maße einer Druckdatei. PDF → Endformat (TrimBox, sonst ArtBox, sonst MediaBox) in mm ('172 × 57 mm');
+// Bild → Pixel. Sonst null.
 function pdf_masse(string $pfad): ?array {
     if (!is_file($pfad)) return null;
     if (strtolower(pathinfo($pfad, PATHINFO_EXTENSION)) === 'pdf') {
-        $data = @file_get_contents($pfad, false, null, 0, 800000);
-        if ($data === false || !preg_match('/\/MediaBox\s*\[\s*([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s*\]/', $data, $m)) return null;
-        $w = abs((float)$m[3] - (float)$m[1]) * 25.4 / 72.0;   // Punkte (1/72 Zoll) → mm
-        $h = abs((float)$m[4] - (float)$m[2]) * 25.4 / 72.0;
-        if ($w <= 0 || $h <= 0) return null;
-        $r = fn($x) => rtrim(rtrim(number_format($x, 1, ',', ''), '0'), ',');
-        return ['w' => $w, 'h' => $h, 'einheit' => 'mm', 'label' => $r($w) . ' × ' . $r($h) . ' mm'];
+        $em = pdf_etikett_mass($pfad);
+        if (!$em) return null;
+        return ['w' => $em['w'], 'h' => $em['h'], 'einheit' => 'mm', 'quelle' => $em['quelle'],
+                'label' => $em['label'] . ($em['quelle'] === 'MediaBox' ? '' : ' (Endformat)')];
     }
     $g = @getimagesize($pfad);
     if ($g && !empty($g[0]) && !empty($g[1])) return ['w' => (float)$g[0], 'h' => (float)$g[1], 'einheit' => 'px', 'label' => $g[0] . ' × ' . $g[1] . ' px'];
