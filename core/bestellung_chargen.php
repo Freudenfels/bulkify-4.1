@@ -89,7 +89,113 @@ function bch_datei_speichern(string $feld, array $b, string $typ, int $bp_id, ?s
     $did = (int) insert_id();
     log_aktivitaet('bestellung', (int)$b['id'], $von === 'lieferant' ? 'lieferant' : 'team',
         ($typ === 'coa' ? 'CoA' : 'Spezifikation') . ' zur Bestellung hochgeladen' . ($charge_nr ? ' (Charge ' . $charge_nr . ')' : '') . '.', 'dokument', 'dokument', $did);
+    if ($typ === 'coa') { $GLOBALS['bch_letztes_coa'] = $did; bch_coa_job_starten($did); }   // CoA sofort auslesen lassen (Hintergrund), danach prüft das Team im Popup
     return [$did, ''];
+}
+
+// ---- CoA auslesen + prüfen (Nico 08.11.2026: „CoA hochladen, es wird ausgelesen, dann prüfe ich im Popup") ----------------
+// Ablauf: Upload -> bch_coa_job_starten() markiert das Dokument („wird ausgelesen") und stößt ki_job 'bestell_coa' an ->
+// bch_coa_auslesen() liest im Hintergrund (spec_ki_lesen, ca. 1 Minute) und legt das Ergebnis in dokument.ki_daten ab ->
+// die Bestellseite öffnet das Prüf-Popup (Datei + Charge/MHD/Menge + Analysewerte mit Abweichungen) -> „Geprüft – übernehmen".
+function bch_coa_job_starten(int $dok_id): void {
+    require_once __DIR__ . '/ki.php';
+    if ($dok_id <= 0 || !ki_bereit()) return;
+    q("UPDATE dokument SET ki_daten=?, ki_stand=NULL WHERE id=?", [json_encode(['status' => 'laeuft', 'seit' => gmdate('Y-m-d H:i:s')]), $dok_id]);
+    require_once __DIR__ . '/ki_job.php';
+    ki_job_starten('bestell_coa', $dok_id);
+}
+function bch_coa_auslesen(int $dok_id): void {
+    require_once __DIR__ . '/ki.php'; require_once __DIR__ . '/spec_ki.php';
+    $d = one("SELECT * FROM dokument WHERE id=? AND objekt_typ='bestellung' AND typ='coa'", [$dok_id]);
+    if (!$d) return;
+    $r = spec_ki_lesen(BX_UPLOADS . '/' . basename((string)$d['datei']));
+    if (!empty($r['ok'])) spec_ki_merken($dok_id, $r);
+    else q("UPDATE dokument SET ki_daten=?, ki_stand=? WHERE id=?", [json_encode(['status' => 'fehler', 'fehler' => (string)($r['fehler'] ?? 'Dokument nicht lesbar.')], JSON_UNESCAPED_UNICODE), gmdate('Y-m-d H:i:s'), $dok_id]);
+}
+// Stand eines CoA: 'geprueft' | 'laeuft' | 'fehler' | 'bereit' (KI-Ergebnis da, noch nicht geprüft) | 'ohne_ki' (selbst prüfen).
+function bch_coa_stand(array $d): string {
+    if (!empty($d['coa_geprueft_am'])) return 'geprueft';
+    $kd = json_decode((string)($d['ki_daten'] ?? ''), true);
+    if (is_array($kd) && ($kd['status'] ?? '') === 'laeuft') {
+        // Hängt der Hintergrund-Aufruf länger als 10 Minuten, gilt er als fehlgeschlagen (Team kann neu auslesen).
+        return strtotime((string)($kd['seit'] ?? '') . ' UTC') > time() - 600 ? 'laeuft' : 'fehler';
+    }
+    if (is_array($kd) && ($kd['status'] ?? '') === 'fehler') return 'fehler';
+    if (is_array($kd) && !empty($kd['ok'])) return 'bereit';
+    return 'ohne_ki';
+}
+// Grenzwert aus UNSERER Spezifikation am Rohstoff (item_grenzwert) zu einem Parameter – tolerant über den Namen.
+function bch_grenzwert_fuer(int $item_id, string $parameter): string {
+    static $cache = [];
+    if ($item_id <= 0 || !table_exists('item_grenzwert')) return '';
+    if (!isset($cache[$item_id])) $cache[$item_id] = all("SELECT parameter, grenzwert FROM item_grenzwert WHERE item_id=? ORDER BY sort, id", [$item_id]);
+    $n = fn($x) => preg_replace('/[^a-z0-9äöüß]+/u', '', mb_strtolower((string)$x));
+    $pn = $n($parameter);
+    if ($pn === '') return '';
+    foreach ($cache[$item_id] as $g) if ($n($g['parameter']) === $pn) return (string)$g['grenzwert'];
+    foreach ($cache[$item_id] as $g) { $gn = $n($g['parameter']); if ($gn !== '' && (str_contains($pn, $gn) || str_contains($gn, $pn))) return (string)$g['grenzwert']; }
+    return '';
+}
+// Erste Zahl eines Textes („< 0,5 ppm" -> 0.5, „1.2x10^3" -> 1200). null = keine Zahl.
+function bch_zahl(string $s): ?float {
+    $s = str_replace(['×', '·'], 'x', $s);
+    if (!preg_match('/(\d{1,3}(?:[.,]\d{3})+(?![.,]?\d)|\d+(?:[.,]\d+)?)(?:\s*x\s*10\s*\^?\s*([\-]?\d+))?/u', $s, $m)) return null;
+    // Tausender („1.000" / „1,000", Gruppen zu drei Stellen) vor Dezimalzahlen erkennen – sonst würde aus 1.000 cfu/g eine 1.
+    if (preg_match('/^\d{1,3}(?:[.,]\d{3})+$/', $m[1]) && preg_match('/(\d{1,3}(?:[.,]\d{3})+)(?![.,]?\d)/u', $s, $mt)) $v = (float) preg_replace('/[.,]/', '', $mt[1]);
+    else $v = (float) str_replace(',', '.', $m[1]);
+    if (isset($m[2]) && $m[2] !== '') $v *= 10 ** (int)$m[2];
+    return $v;
+}
+// Liegt das Ergebnis im Grenzwert? true = ok, false = Abweichung, null = nicht automatisch prüfbar (Text, unklare Form).
+function bch_wert_pruefen(string $grenz, string $erg): ?bool {
+    $g = mb_strtolower(trim($grenz)); $e = mb_strtolower(trim($erg));
+    if ($g === '' || $e === '') return null;
+    $neg = '/(negativ|negative|absent|abwesend|nicht nachweisbar|not detected|(?<![a-z])n\.?d\.?(?![a-z])|nachweisbar nicht)/u';
+    if (preg_match($neg, $g)) {                                   // Grenzwert „negativ / nicht nachweisbar"
+        if (preg_match($neg, $e) || preg_match('/^<|^≤|kleiner/u', $e)) return true;
+        if (preg_match('/(positiv|positive|present|nachweisbar|detected)/u', $e)) return false;
+        return null;
+    }
+    if (preg_match('/(entspricht|conform|complies|passes|bestanden)/u', $g) || preg_match('/(entspricht|conform|complies|passes|bestanden)/u', $e)) {
+        if (preg_match('/(entspricht|conform|complies|passes|bestanden|ok)/u', $e)) return true;
+        if (preg_match('/(nicht|not|fail)/u', $e)) return false;
+        return null;
+    }
+    $ev = bch_zahl($e); if ($ev === null) return null;
+    $kleinerAls = preg_match('/^\s*(<|≤|=<|<=)/u', $e) === 1;     // Ergebnis „< 10" = unter Nachweisgrenze
+    // Spanne „95 - 105 %" / „95~105"
+    if (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:-|–|~|bis|to)\s*(\d+(?:[.,]\d+)?)/u', $g, $m) && !preg_match('/x\s*10/u', $g)) {
+        $lo = (float) str_replace(',', '.', $m[1]); $hi = (float) str_replace(',', '.', $m[2]);
+        if ($lo < $hi) return $ev >= $lo - 1e-9 && $ev <= $hi + 1e-9;
+    }
+    $gv = bch_zahl($g); if ($gv === null) return null;
+    if (preg_match('/(≤|<=|=<|<|max|nmt|not more than|höchstens|hoechstens|kleiner)/u', $g)) return $kleinerAls ? $ev <= $gv + 1e-9 : $ev <= $gv + 1e-9;
+    if (preg_match('/(≥|>=|=>|>|min|nlt|not less than|mindestens|größer|groesser)/u', $g)) return $kleinerAls ? null : $ev >= $gv - 1e-9;
+    return null;
+}
+// Werte eines CoA für die Anzeige/Prüfung: je Zeile Grenzwert (unsere Spezifikation, sonst laut CoA) + Ergebnis + Status.
+function bch_coa_werte(array $werte, int $item_id): array {
+    $out = [];
+    foreach ($werte as $z) {
+        $p = trim((string)($z['parameter'] ?? '')); if ($p === '') continue;
+        $unsere = bch_grenzwert_fuer($item_id, $p);
+        $grenz = $unsere !== '' ? $unsere : (string)($z['spezifikation'] ?? '');
+        $out[] = ['parameter' => $p, 'spezifikation' => (string)($z['spezifikation'] ?? ''), 'unsere' => $unsere, 'ergebnis' => (string)($z['ergebnis'] ?? ''),
+                  'methode' => (string)($z['methode'] ?? ''), 'ok' => bch_wert_pruefen($grenz, (string)($z['ergebnis'] ?? ''))];
+    }
+    return $out;
+}
+// Nach dem Wareneingang: Analysewerte des GEPRÜFTEN CoA an die Charge (charge_analyse), falls die Charge noch keine hat.
+function bch_werte_an_charge(int $charge_id): int {
+    require_once __DIR__ . '/spec_ki.php';
+    if ($charge_id <= 0 || (int) scalar("SELECT COUNT(*) FROM charge_analyse WHERE charge_id=?", [$charge_id]) > 0) return 0;
+    foreach (charge_bestell_dokumente($charge_id) as $d) {
+        if ((string)$d['typ'] !== 'coa' || empty($d['coa_geprueft_am'])) continue;
+        $kd = json_decode((string)($d['ki_daten'] ?? ''), true);
+        $w = is_array($kd) ? (array)($kd['werte_bestaetigt'] ?? $kd['werte'] ?? []) : [];
+        if ($w) return spec_ki_werte_speichern($charge_id, $w);
+    }
+    return 0;
 }
 
 // POST-Aktionen des Blocks (aktion = bch_*). $von = 'team' | 'lieferant'. Rückgabe null = nicht zuständig, '' = ok, sonst Fehlertext.
@@ -142,14 +248,50 @@ function bestellung_chargen_post(array $b, string $von, string $sprache = 'de'):
         q("DELETE FROM dokument WHERE id=?", [(int)$d['id']]);
         return '';
     }
-    if ($akt === 'bch_ki' && $wer === 'team') {      // KI liest Charge + MHD aus einem hochgeladenen CoA (Vorschlag, Team bestätigt)
-        require_once __DIR__ . '/ki.php'; require_once __DIR__ . '/spec_ki.php';
+    if ($akt === 'bch_ki' && $wer === 'team') {      // CoA (erneut) auslesen lassen – läuft im Hintergrund
+        require_once __DIR__ . '/ki.php';
         if (!ki_bereit()) return 'Die KI ist nicht eingerichtet.';
-        $d = one("SELECT * FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND typ='coa'", [(int)($_POST['dok_id'] ?? 0), $bid]);
+        $d = one("SELECT id FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND typ='coa'", [(int)($_POST['dok_id'] ?? 0), $bid]);
         if (!$d) return 'CoA nicht gefunden.';
-        $r = spec_ki_lesen(BX_UPLOADS . '/' . basename((string)$d['datei']));
-        if (empty($r['ok'])) return 'KI: ' . ($r['fehler'] ?? 'Dokument nicht lesbar.');
-        spec_ki_merken((int)$d['id'], $r);
+        bch_coa_job_starten((int)$d['id']);
+        return '';
+    }
+    if ($akt === 'bch_coa_pruefen' && $wer === 'team') {   // Prüf-Popup bestätigt: Charge/MHD/Menge + Werte übernehmen
+        $d = one("SELECT * FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND typ='coa' AND bestellung_position_id IS NOT NULL", [(int)($_POST['dok_id'] ?? 0), $bid]);
+        if (!$d) return 'CoA nicht gefunden.';
+        $bpD = (int)$d['bestellung_position_id'];
+        $nr = mb_substr(trim((string)($_POST['charge_nr'] ?? '')), 0, 80);
+        if ($nr === '') return 'Bitte die Chargennummer eintragen bzw. bestätigen.';
+        $mhd = trim((string)($_POST['mhd'] ?? ''));
+        $mhd = preg_match('/^\d{4}-\d{2}-\d{2}$/', $mhd) ? $mhd : null;
+        $menge = bch_menge_lesen((string)($_POST['menge'] ?? ''));
+        // Charge-Zeile: die des CoA (gleiche alte Nummer) anpassen, sonst eine mit der bestätigten Nummer, sonst neu anlegen.
+        $zeile = null;
+        foreach (bch_zeilen($bpD) as $z) if (charge_gleich((string)$z['charge_nr'], (string)($d['charge_nr'] ?? '')) || charge_gleich((string)$z['charge_nr'], $nr)) { $zeile = $z; break; }
+        if ($zeile) q("UPDATE bestellung_charge SET charge_nr=?, mhd=COALESCE(?,mhd), menge=COALESCE(?,menge) WHERE id=?", [$nr, $mhd, $menge, (int)$zeile['id']]);
+        else q("INSERT INTO bestellung_charge (bestellung_position_id, charge_nr, mhd, menge, von, angelegt) VALUES (?,?,?,?,'team',?)", [$bpD, $nr, $mhd, $menge, gmdate('Y-m-d H:i:s')]);
+        // Bestätigte Werte (Ergebnis darf korrigiert werden) mit dem Ergebnis der Prüfung merken.
+        $kd = json_decode((string)($d['ki_daten'] ?? ''), true); if (!is_array($kd)) $kd = [];
+        $werte = [];
+        foreach ((array)($_POST['w_param'] ?? []) as $i => $par) {
+            $par = trim((string)$par); if ($par === '') continue;
+            $werte[] = ['parameter' => mb_substr($par, 0, 120), 'spezifikation' => mb_substr(trim((string)($_POST['w_spec'][$i] ?? '')), 0, 120),
+                        'ergebnis' => mb_substr(trim((string)($_POST['w_erg'][$i] ?? '')), 0, 120), 'methode' => mb_substr(trim((string)($_POST['w_meth'][$i] ?? '')), 0, 120)];
+        }
+        $itemId = (int) scalar("SELECT item_id FROM bestellung_position WHERE id=?", [$bpD]);
+        $abw = array_values(array_filter(bch_coa_werte($werte, $itemId), fn($w) => $w['ok'] === false));
+        $kd['werte_bestaetigt'] = $werte;
+        $u = function_exists('current_user') ? current_user() : null;
+        q("UPDATE dokument SET charge_nr=?, titel=?, ki_daten=?, coa_geprueft_am=?, coa_geprueft_von=?, befund=?, dok_datum=COALESCE(dok_datum, ?) WHERE id=?",
+          [$nr, 'CoA · Charge ' . $nr, json_encode($kd, JSON_UNESCAPED_UNICODE), gmdate('Y-m-d H:i:s'), (string)($u['name'] ?? 'Team'),
+           $abw ? 'auffaellig' : 'bestanden', gmdate('Y-m-d'), (int)$d['id']]);
+        log_aktivitaet('bestellung', $bid, 'team', 'CoA Charge ' . $nr . ' geprüft' . ($abw ? ' – ' . count($abw) . ' Abweichung(en): ' . implode(', ', array_map(fn($w) => $w['parameter'], $abw)) : ' – ohne Abweichung') . '.', 'dokument', 'dokument', (int)$d['id']);
+        if ($abw && function_exists('benachrichtigung_add'))
+            benachrichtigung_add('CoA-Abweichung: ' . ($b['nummer'] ?? ('Bestellung ' . $bid)) . ' · Charge ' . $nr,
+                count($abw) . ' Wert(e) außerhalb des Grenzwerts: ' . implode(', ', array_map(fn($w) => $w['parameter'] . ' ' . $w['ergebnis'], $abw)),
+                '?p=bestellung&id=' . $bid . '#chargen', 'qm', true);
+        // Schon eingebucht? Dann gehen die Werte gleich an die Charge, sonst beim Wareneingang (bch_werte_an_charge).
+        foreach (bch_eingebucht($bpD) as $c) if (charge_gleich((string)$c['charge_nr'], $nr)) bch_werte_an_charge((int)$c['id']);
         return '';
     }
     if ($akt === 'bch_ki_ok' && $wer === 'team') {   // KI-Vorschlag übernehmen -> Charge-Zeile + CoA bekommt die Chargennummer
@@ -179,7 +321,19 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
     $mz  = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
     $dat = fn($d) => $d ? date('d.m.Y', strtotime((string)$d)) : '–';
     $ki  = $von === 'team' && function_exists('ki_bereit') && ki_bereit();
-    $docLink = fn(array $d) => '<a href="' . $dl . (int)$d['id'] . '" target="_blank" rel="noopener" style="white-space:nowrap">' . $h($d['datei_orig'] ?: ($d['titel'] ?: 'Dokument')) . '</a>';
+    $docLink = function (array $d) use ($dl, $h, $von) {
+        $a = '<a href="' . $dl . (int)$d['id'] . '" target="_blank" rel="noopener" style="white-space:nowrap">' . $h($d['datei_orig'] ?: ($d['titel'] ?: 'Dokument')) . '</a>';
+        if ((string)$d['typ'] !== 'coa' || $von !== 'team') return $a;
+        $st = bch_coa_stand($d);
+        $badge = match ($st) {
+            'geprueft' => bx_badge((string)($d['befund'] ?? '') === 'auffaellig' ? 'geprüft · Abweichung' : 'geprüft', (string)($d['befund'] ?? '') === 'auffaellig' ? 'err' : 'ok'),
+            'laeuft'   => bx_badge('wird ausgelesen …', 'info'),
+            'fehler'   => bx_badge('nicht ausgelesen', 'warn'),
+            'bereit'   => bx_badge('ausgelesen – bitte prüfen', 'warn'),
+            default    => bx_badge('bitte prüfen', 'warn'),
+        };
+        return $a . ' ' . $badge . ' <button type="button" class="btn btn-ghost btn-sm" data-coa-pruefen="' . (int)$d['id'] . '">' . ($st === 'geprueft' ? 'ansehen' : 'Prüfen') . '</button>';
+    };
     $delDoc = function (array $d) use ($von, $t, $h) {
         if ($von === 'lieferant' && (string)$d['hochgeladen_von'] !== 'lieferant') return '';
         return '<form method="post" style="display:inline;margin:0" onsubmit="return confirm(' . $h(json_encode($t('Datei entfernen?', 'Remove file?', '删除文件？'), JSON_UNESCAPED_UNICODE)) . ');">'
@@ -232,20 +386,6 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
         $specs = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'spec'));
         foreach ($lose as $d) {
             $o .= '<div style="margin-top:10px;font-size:13px">CoA ' . $t('ohne Chargennummer', 'without batch number', '无批号') . ': ' . $docLink($d) . ' ' . $delDoc($d);
-            if ($von === 'team') {
-                $kd = json_decode((string)($d['ki_daten'] ?? ''), true);
-                $vor = is_array($kd) ? ($kd['charge'] ?? []) : [];
-                if (!empty($vor['charge_nr']) || !empty($vor['mhd'])) {
-                    $o .= '<form method="post" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin:6px 0 0"><input type="hidden" name="aktion" value="bch_ki_ok"><input type="hidden" name="dok_id" value="' . (int)$d['id'] . '">'
-                        . '<span class="muted">Vorschlag aus dem CoA (KI):</span>'
-                        . '<div class="bx-field" style="margin:0;min-width:140px"><label>Charge</label><input type="text" name="charge_nr" value="' . $h($vor['charge_nr'] ?? '') . '" required></div>'
-                        . '<div class="bx-field" style="margin:0;max-width:160px"><label>MHD</label><input type="date" name="mhd" value="' . $h($vor['mhd'] ?? '') . '"></div>'
-                        . '<div class="bx-field" style="margin:0;max-width:130px"><label>Menge</label><input type="text" name="menge" value="' . $h($vor['menge'] ?? '') . '"></div>'
-                        . '<button class="btn btn-primary btn-sm" type="submit">Übernehmen</button></form>';
-                } elseif ($ki) {
-                    $o .= ' <form method="post" style="display:inline;margin:0"><input type="hidden" name="aktion" value="bch_ki"><input type="hidden" name="dok_id" value="' . (int)$d['id'] . '"><button class="btn btn-ghost btn-sm" type="submit" data-busy="KI liest …">Charge + MHD per KI lesen</button></form>';
-                }
-            }
             $o .= '</div>';
         }
         $itemSpec = bch_item_spec((int)($p['item_id'] ?? 0));
@@ -263,5 +403,78 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
         }
         $o .= '</div>';
     }
+    if ($von === 'team') $o .= bch_coa_dialoge($b);
     return $o . '</div>';
+}
+
+// Prüf-Popups für alle CoA der Bestellung (Team). Öffnet automatisch, wenn ?coa=<dok> in der Adresse steht (direkt nach dem
+// Upload). Während die KI liest, zeigt das Popup den Stand und fragt alle 4 s nach (?p=bestellung&id=…&coa_stand=<dok>).
+function bch_coa_dialoge(array $b): string {
+    $h = fn($x) => htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8');
+    $bid = (int)$b['id'];
+    $docs = all("SELECT d.*, bp.item_id FROM dokument d JOIN bestellung_position bp ON bp.id=d.bestellung_position_id
+                 WHERE d.objekt_typ='bestellung' AND d.objekt_id=? AND d.typ='coa' ORDER BY d.id", [$bid]);
+    if (!$docs) return '';
+    require_once __DIR__ . '/ki.php';
+    $kiDa = ki_bereit();
+    $o = '';
+    foreach ($docs as $d) {
+        $did = (int)$d['id']; $st = bch_coa_stand($d);
+        $kd = json_decode((string)($d['ki_daten'] ?? ''), true); if (!is_array($kd)) $kd = [];
+        $ch = (array)($kd['charge'] ?? []);
+        $eingetragen = trim((string)($d['charge_nr'] ?? ''));
+        $zeile = null;
+        foreach (bch_zeilen((int)$d['bestellung_position_id']) as $z) if ($eingetragen !== '' && charge_gleich((string)$z['charge_nr'], $eingetragen)) { $zeile = $z; break; }
+        $vNr  = $st === 'geprueft' ? $eingetragen : (string)($ch['charge_nr'] ?? $eingetragen);
+        $vMhd = (string)($ch['mhd'] ?? ($zeile['mhd'] ?? ''));
+        if ($st === 'geprueft' && $zeile) $vMhd = (string)($zeile['mhd'] ?? $vMhd);
+        $vMen = (string)($ch['menge'] ?? ($zeile && $zeile['menge'] !== null ? rtrim(rtrim(number_format((float)$zeile['menge'], 3, ',', '.'), '0'), ',') : ''));
+        $werte = bch_coa_werte((array)($kd['werte_bestaetigt'] ?? $kd['werte'] ?? []), (int)$d['item_id']);
+        $nAbw = count(array_filter($werte, fn($w) => $w['ok'] === false));
+        $o .= '<dialog id="dlgCoa' . $did . '" class="bx-dialog" style="max-width:1180px;width:calc(100% - 24px)" data-stand="' . $h($st) . '">';
+        $o .= '<div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:10px"><h2 style="margin:0">CoA prüfen · ' . $h($d['datei_orig'] ?: 'CoA') . '</h2>'
+            . '<button type="button" class="btn btn-ghost btn-sm" onclick="this.closest(\'dialog\').close()">Schließen</button></div>';
+        $o .= '<div class="bx-row" style="gap:16px;align-items:stretch;flex-wrap:wrap">';
+        $o .= '<div style="flex:1 1 440px;min-width:0"><div style="text-align:right;margin-bottom:4px;font-size:12px"><a href="?p=dokument&id=' . $did . '" target="_blank" rel="noopener">In neuem Tab öffnen</a></div>'
+            . '<iframe src="?p=dokument&id=' . $did . '" loading="lazy" style="width:100%;height:68vh;border:1px solid var(--line);border-radius:8px;background:#fff" title="CoA"></iframe></div>';
+        $o .= '<div style="flex:1 1 440px;min-width:0">';
+        if ($st === 'laeuft') {
+            $o .= '<div class="bx-panel" style="margin:0"><strong>Das CoA wird ausgelesen …</strong><div class="muted" style="margin-top:6px">Das dauert meist eine halbe bis eine Minute. Das Fenster aktualisiert sich von selbst.</div></div>';
+        } else {
+            if ($st === 'fehler') $o .= '<div class="bx-panel" style="margin:0 0 10px;border-color:var(--warn)">Die KI konnte das CoA nicht auslesen' . (!empty($kd['fehler']) ? ' (' . $h($kd['fehler']) . ')' : '') . '. Bitte die Angaben selbst eintragen' . ($kiDa ? ' oder erneut auslesen.' : '.') . '</div>';
+            if ($st === 'ohne_ki') $o .= '<div class="muted" style="margin:0 0 10px">Automatisches Auslesen ist hier nicht eingerichtet – bitte die Angaben aus dem CoA selbst eintragen.</div>';
+            if ($st === 'geprueft') $o .= '<div class="bx-panel ' . ((string)$d['befund'] === 'auffaellig' ? '' : 'badge-ok') . '" style="margin:0 0 10px;padding:10px 12px">Geprüft am ' . $h(function_exists('fmt_zeit') ? fmt_zeit((string)$d['coa_geprueft_am'], 'd.m.Y H:i') : $d['coa_geprueft_am']) . ' von ' . $h($d['coa_geprueft_von']) . ((string)$d['befund'] === 'auffaellig' ? ' – mit Abweichung' : '') . '. Erneut speichern ist möglich.</div>';
+            $o .= '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="bch_coa_pruefen"><input type="hidden" name="dok_id" value="' . $did . '">';
+            $diff = $zeile && $vNr !== '' && !charge_gleich($vNr, (string)$zeile['charge_nr']);
+            $o .= '<div class="bx-row" style="gap:10px;flex-wrap:wrap;align-items:flex-end">'
+                . '<div class="bx-field" style="margin:0;min-width:160px"><label>Charge laut CoA</label><input type="text" name="charge_nr" required value="' . $h($vNr) . '"' . ($diff ? ' style="border-color:var(--err)"' : '') . '></div>'
+                . '<div class="bx-field" style="margin:0;max-width:170px"><label>MHD</label><input type="date" name="mhd" value="' . $h($vMhd) . '"></div>'
+                . '<div class="bx-field" style="margin:0;max-width:140px"><label>Menge</label><input type="text" name="menge" value="' . $h($vMen) . '"></div></div>';
+            if ($diff) $o .= '<div style="color:var(--err);font-size:13px;margin-top:6px">Eingetragen war Charge ' . $h($zeile['charge_nr']) . ' – das CoA nennt ' . $h($vNr) . '. Bitte klären, welche stimmt.</div>';
+            if (!empty($kd['hinweise'])) $o .= '<div class="muted" style="font-size:12px;margin-top:8px">Hinweise der KI: ' . $h(implode(' · ', (array)$kd['hinweise'])) . '</div>';
+            $o .= '<h3 style="margin:14px 0 6px;font-size:15px">Analysewerte' . ($werte ? ' (' . count($werte) . ($nAbw ? ', <span style="color:var(--err)">' . $nAbw . ' Abweichung(en)</span>' : '') . ')' : '') . '</h3>';
+            $o .= '<div class="bx-tablewrap" style="max-height:44vh;overflow:auto"><table class="bx-table" style="font-size:13px"><thead><tr><th>Parameter</th><th>Grenzwert</th><th>Ergebnis</th><th></th></tr></thead><tbody>';
+            $zeilenW = $werte ?: [['parameter' => '', 'spezifikation' => '', 'unsere' => '', 'ergebnis' => '', 'methode' => '', 'ok' => null]];
+            foreach ($zeilenW as $w) {
+                $stW = $w['ok'] === false ? '<span style="color:var(--err);font-weight:600">Abweichung</span>' : ($w['ok'] === true ? '<span class="muted">ok</span>' : '<span class="muted">selbst prüfen</span>');
+                $grenzAnz = $w['unsere'] !== '' ? $h($w['unsere']) . ' <span class="muted" style="font-size:11px">(unsere Spez.)</span>' . ($w['spezifikation'] !== '' && $w['spezifikation'] !== $w['unsere'] ? '<div class="muted" style="font-size:11px">CoA: ' . $h($w['spezifikation']) . '</div>' : '') : $h($w['spezifikation']);
+                $o .= '<tr' . ($w['ok'] === false ? ' style="background:rgba(192,57,43,.08)"' : '') . '><td><input type="text" name="w_param[]" value="' . $h($w['parameter']) . '" style="min-width:140px"></td>'
+                    . '<td>' . $grenzAnz . '<input type="hidden" name="w_spec[]" value="' . $h($w['spezifikation']) . '"><input type="hidden" name="w_meth[]" value="' . $h($w['methode']) . '"></td>'
+                    . '<td><input type="text" name="w_erg[]" value="' . $h($w['ergebnis']) . '" style="max-width:130px"></td><td>' . $stW . '</td></tr>';
+            }
+            $o .= '</tbody></table></div>';
+            $o .= '<div class="muted" style="font-size:12px;margin-top:6px">Grenzwert = unsere Spezifikation am Rohstoff, sonst der Wert auf dem CoA. „Abweichung" = Ergebnis außerhalb; „selbst prüfen" = Text oder Form, die das System nicht sicher vergleichen kann.</div>';
+            $o .= '<div class="bx-row" style="gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-primary" type="submit">Geprüft – übernehmen</button>'
+                . '<button type="button" class="btn btn-ghost" onclick="this.closest(\'dialog\').close()">Später</button></div></form>';
+            if ($kiDa && $st !== 'geprueft') $o .= '<form method="post" style="margin:8px 0 0"><input type="hidden" name="aktion" value="bch_ki"><input type="hidden" name="dok_id" value="' . $did . '"><button class="btn btn-ghost btn-sm" type="submit">Erneut auslesen</button></form>';
+        }
+        $o .= '</div></div></dialog>';
+    }
+    $o .= '<script>(function(){'
+        . 'document.querySelectorAll("[data-coa-pruefen]").forEach(function(b){b.addEventListener("click",function(){var d=document.getElementById("dlgCoa"+b.getAttribute("data-coa-pruefen"));if(d)d.showModal();});});'
+        . 'var m=location.search.match(/[?&]coa=(\\d+)/); if(!m) return; var d=document.getElementById("dlgCoa"+m[1]); if(!d) return; d.showModal();'
+        . 'if(d.getAttribute("data-stand")!=="laeuft") return;'
+        . 'var t=setInterval(function(){fetch("?p=bestellung&id=' . $bid . '&coa_stand="+m[1],{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(j){ if(j && j.stand && j.stand!=="laeuft"){ clearInterval(t); location.reload(); } }).catch(function(){});},4000);'
+        . '})();</script>';
+    return $o;
 }

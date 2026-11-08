@@ -1161,6 +1161,7 @@ function erp_bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids
         if ($bpKand && erp_spalte_da('charge', 'bestellung_position_id')) {
             $bpId = erp_position_fuer_charge($cid, $bpKand);
             if ($bpId) q("UPDATE charge SET bestellung_position_id=COALESCE(bestellung_position_id, ?) WHERE id=?", [$bpId, $cid]);
+            erp_charge_werte_aus_bestellung($cid);   // Analysewerte des geprüften CoA an die Charge
         }
         if ($rest > 1e-9) foreach ($pos as &$p) if ((int)$p['item_id'] === (int)$c['item_id']) {
             $p['gel'] = (float)$p['gel'] + $rest * erp_einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
@@ -1207,11 +1208,31 @@ function erp_charge_bestell_dokumente(int $charge_id): array {
     require_once __DIR__ . '/../../core/charge_norm.php';
     $c = one("SELECT charge_nr, bestellung_position_id FROM charge WHERE id=?", [$charge_id]);
     if (!$c || empty($c['bestellung_position_id'])) return [];
-    $docs = all("SELECT d.id, d.typ, d.titel, d.datei_orig, d.dok_datum, d.charge_nr FROM dokument d JOIN bestellung_position bp ON bp.id=d.bestellung_position_id
+    $docs = all("SELECT d.id, d.typ, d.titel, d.datei_orig, d.dok_datum, d.charge_nr, d.ki_daten" . (erp_spalte_da('dokument', 'coa_geprueft_am') ? ", d.coa_geprueft_am" : ", NULL AS coa_geprueft_am") . " FROM dokument d JOIN bestellung_position bp ON bp.id=d.bestellung_position_id
                  WHERE d.objekt_typ='bestellung' AND d.objekt_id=bp.bestellung_id AND d.bestellung_position_id=? ORDER BY d.id DESC",
                 [(int)$c['bestellung_position_id']]);
     return array_values(array_filter($docs, fn($d) => (string)$d['typ'] !== 'coa' || trim((string)($d['charge_nr'] ?? '')) === ''
         || charge_gleich((string)$d['charge_nr'], (string)($c['charge_nr'] ?? ''))));
+}
+// Analysewerte des im Prüf-Popup bestätigten CoA (dokument.ki_daten.werte_bestaetigt) an die Charge (charge_analyse) –
+// nur wenn die Charge noch keine Werte hat. Spiegel von bch_werte_an_charge() im Dashboard.
+function erp_charge_werte_aus_bestellung(int $charge_id): int {
+    if ($charge_id <= 0 || !tabelle_da('charge_analyse')) return 0;
+    if ((int) scalar("SELECT COUNT(*) FROM charge_analyse WHERE charge_id=?", [$charge_id]) > 0) return 0;
+    foreach (erp_charge_bestell_dokumente($charge_id) as $d) {
+        if ((string)$d['typ'] !== 'coa' || empty($d['coa_geprueft_am'])) continue;
+        $kd = json_decode((string)($d['ki_daten'] ?? ''), true);
+        $w = is_array($kd) ? (array)($kd['werte_bestaetigt'] ?? $kd['werte'] ?? []) : [];
+        $n = 0;
+        foreach (array_values($w) as $i => $z) {
+            if (trim((string)($z['parameter'] ?? '')) === '') continue;
+            q("INSERT INTO charge_analyse (charge_id,parameter,spezifikation,ergebnis,methode,sort) VALUES (?,?,?,?,?,?)",
+              [$charge_id, $z['parameter'], ($z['spezifikation'] ?? '') ?: null, ($z['ergebnis'] ?? '') ?: null, ($z['methode'] ?? '') ?: null, $i]);
+            $n++;
+        }
+        if ($n) return $n;
+    }
+    return 0;
 }
 function erp_bestellung_angekommen(int $bestellung_id): void {
     if ($bestellung_id <= 0 || !tabelle_da('bestellung')) return;

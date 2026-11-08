@@ -118,6 +118,7 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
   2. Stimmen die Werte? (Gehalt, Schwermetalle, Mikrobiologie, je nach Rohstoff Pestizide/Allergene - innerhalb der Spezifikation)
   3. Ist es gültig? (MHD passt, CoA ist für genau diese Lieferung ausgestellt)
 - **KI-Hilfe:** Das System liest das CoA aus, vergleicht Charge und Werte mit der Spezifikation und **markiert nur Abweichungen**. Tabea bestätigt mit einem Klick oder schaut sich die markierten Fälle an.
+  *(Gebaut 08.11.2026 an der Bestellung: CoA hochladen → KI liest im Hintergrund Charge, MHD, Menge und Analysewerte aus → Prüf-Popup mit Datei, Werten und markierten Abweichungen gegen unsere Spezifikation → "Geprüft – übernehmen". Bei Abweichung wichtige Benachrichtigung; die Werte gehen beim Wareneingang an die Charge.)*
 - **Fehlendes oder ungeprüftes CoA blockiert NICHT** Wareneingang oder Produktion - es erzeugt einen Hinweis und die Aufgabe "CoA fehlt / CoA prüfen" für Tabea. **Gesperrt wird erst vor dem Versand** bzw. vor der Freischaltung in Lager 2 (Prüfliste, 4.12).
 
 ### 4.5 Wareneingang
@@ -378,6 +379,7 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | Sofort-Fix Etikett-Format: 4.5 Etikett-Maß vs. Glas nur Hinweis, nie Sperre; Maß neuer Etiketten aus der TrimBox; Menü Einfach zeigt Buchhaltung für Rolle finance (3) | Nico / Claude Code |
 | 08.11.2026 | Sofort-Fix Bestellliste: 4.3 Kundenetiketten/bedruckte Beutel netto gegen Lager und unterwegs, eine Rechnung mit Reiter Material und Fortschritt | Nico / Claude Code |
 | 08.11.2026 | 4.4: Chargen & Dokumente (Charge, MHD, CoA, Spezifikation) an der Bestellposition, Team + Lieferant, Weitergabe an die Charge beim Wareneingang; Lieferantenrechnung auch durch das Team | Nico / Claude Code |
+| 08.11.2026 | 4.4: CoA an der Bestellung wird automatisch ausgelesen, Prüf-Popup mit markierten Abweichungen | Nico / Claude Code |
 | 08.11.2026 | 3: Menü "Einfach" flache Liste ohne Gruppen, größer, feste Reihenfolge, Linien-Icons | Nico / Claude Code |
 | 08.11.2026 | 3: Benachrichtigungen als erster Punkt in "Einfach" (Glocke mit Zähler), Eintrag unten entfällt dort | Nico / Claude Code |
 | 08.11.2026 | 3: Menüpunkt "Bestellt" (Bestellungen) in "Einfach" unter Einkauf | Nico / Claude Code |

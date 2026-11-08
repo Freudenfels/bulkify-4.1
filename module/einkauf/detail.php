@@ -7,6 +7,13 @@ require_once BX_ROOT . '/core/ki.php';
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
+// Stand des CoA-Auslesens fürs Prüf-Popup (JSON, fragt alle 4 s nach).
+if (!$neu && isset($_GET['coa_stand'])) {
+    require_once BX_ROOT . '/core/bestellung_chargen.php';
+    $cd = one("SELECT * FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND typ='coa'", [(int)$_GET['coa_stand'], (int)$id]);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['stand' => $cd ? bch_coa_stand($cd) : 'fehler']); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
@@ -49,7 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_once BX_ROOT . '/core/bestellung_chargen.php';
         $bRow = one("SELECT * FROM bestellung WHERE id=?", [(int)$id]);
         $f = $bRow ? (bestellung_chargen_post($bRow, 'team', 'de') ?? '') : 'Bestellung nicht gefunden.';
-        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f)) . '#chargen'); exit;
+        // Nach einem CoA-Upload bzw. „erneut auslesen" öffnet sich das Prüf-Popup dieses CoA.
+        $coaPop = (int)($GLOBALS['bch_letztes_coa'] ?? 0) ?: ($aktion === 'bch_ki' ? (int)($_POST['dok_id'] ?? 0) : 0);
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f)) . ($coaPop && $f === '' ? '&coa=' . $coaPop : '') . '#chargen'); exit;
     }
     // Lieferantenrechnung durch das Team hochladen (kommt bei „Direkt bestellt" per Mail). Gleicher Platz wie der
     // Portal-Upload des Lieferanten (dokument typ='rechnung' an der Bestellung) – es gibt nur EINE Rechnung je Bestellung.

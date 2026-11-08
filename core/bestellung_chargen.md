@@ -14,3 +14,12 @@
 - `charge_coa_fehlt($charge_id)` – für den Hinweis beim Wareneingang (blockiert nichts).
 
 **Lager-App:** Spiegel in `lager/core/erp.php` (`erp_position_fuer_charge`, `erp_charge_bestell_dokumente`), ohne `core/schema.php`.
+
+## CoA auslesen + Prüf-Popup (08.11.2026)
+Nico: „CoA hochladen, es wird ausgelesen, dann prüfe ich (Popup)."
+1. **Upload** (Team oder Lieferant, jeder CoA-Weg im Block): `bch_coa_job_starten()` markiert `dokument.ki_daten` = `{"status":"laeuft"}` und stößt `ki_job('bestell_coa', dok)` an (`core/ki_job.php`). Ohne KI-Schlüssel passiert nichts – das Popup bittet dann, selbst einzutragen.
+2. **Auslesen im Hintergrund:** `bch_coa_auslesen()` → `spec_ki_lesen()` (Charge, MHD, Menge, Analysewerte) → `spec_ki_merken()`. Fehler landen als `{"status":"fehler"}`; hängt es > 10 Min, gilt es als fehlgeschlagen (`bch_coa_stand`).
+3. **Popup** (`bch_coa_dialoge`, nur Team): öffnet nach dem Upload automatisch (`?coa=<dok>`), sonst über „Prüfen" am CoA. Links die Datei (iframe + „In neuem Tab öffnen"), rechts Charge/MHD/Menge (vorbelegt, rot wenn die eingetragene Charge abweicht), Hinweise der KI und die Analysewerte. Während die KI liest, fragt das Popup alle 4 s `?p=bestellung&id=…&coa_stand=<dok>` und lädt neu, sobald das Ergebnis da ist.
+4. **Abweichungen:** Grenzwert = unsere Spezifikation am Rohstoff (`item_grenzwert`, tolerant über den Parameternamen, `bch_grenzwert_fuer`), sonst der Wert auf dem CoA. `bch_wert_pruefen()` versteht ≤/</max/NMT, ≥/>/min/NLT, Spannen, „x10^n", Tausender (1.000/1,000), negativ/nicht nachweisbar, entspricht/conforms; sonst „selbst prüfen".
+5. **„Geprüft – übernehmen"** (`bch_coa_pruefen`): Charge-Zeile anlegen/anpassen, CoA bekommt die Chargennummer, `coa_geprueft_am/_von`, `befund` bestanden/auffaellig, bestätigte Werte in `ki_daten.werte_bestaetigt`. Bei Abweichung: wichtige Benachrichtigung „CoA-Abweichung". Werte gehen an die Charge (`charge_analyse`) – sofort, wenn schon eingebucht, sonst beim Wareneingang (`bch_werte_an_charge` bzw. `erp_charge_werte_aus_bestellung`).
+Am CoA steht ein Status: wird ausgelesen / ausgelesen – bitte prüfen / bitte prüfen / geprüft (· Abweichung).

@@ -1407,6 +1407,8 @@ function init_schema(): void {
     ensure_column('dokument', 'rechnung_nr', "VARCHAR(80) NULL");       // Lieferantenrechnung: Nummer des Lieferanten
     ensure_column('dokument', 'betrag', "DECIMAL(14,2) NULL");          // Lieferantenrechnung: Betrag
     ensure_column('dokument', 'waehrung', "VARCHAR(8) NULL");
+    ensure_column('dokument', 'coa_geprueft_am', "DATETIME NULL");     // CoA an der Bestellung im Prüf-Popup bestätigt (UTC)
+    ensure_column('dokument', 'coa_geprueft_von', "VARCHAR(190) NULL");
 
     // Maschinenfuhrpark (Spec 9.3) – ab jetzt IM DASHBOARD verwaltet. Tabellen bleiben pr_maschine/pr_raum
     // (geteilte DB), damit bestehende IDs, QR-Codes (MA-<id>) und prod_charge.maschine_id gueltig bleiben.
@@ -4586,6 +4588,7 @@ function bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids): a
             require_once __DIR__ . '/bestellung_chargen.php';
             $bpId = bch_position_fuer_charge($cid, $bpKand);
             if ($bpId) q("UPDATE charge SET bestellung_position_id=COALESCE(bestellung_position_id, ?) WHERE id=?", [$bpId, $cid]);
+            bch_werte_an_charge($cid);   // Analysewerte des geprüften CoA an die Charge
         }
         // Mehrlieferung auf die erste passende Position schreiben (Rest > 0): zählt als geliefert, nie negativ „unterwegs".
         if ($rest > 1e-9) foreach ($pos as &$p) if ((int)$p['item_id'] === (int)$c['item_id']) {

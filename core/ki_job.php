@@ -46,6 +46,10 @@ function ki_job_ausfuehren(string $art, int $id): void {
         require_once __DIR__ . '/rezeptur_ki.php';
         $r = rezeptur_ki_entwickeln($id);
         if ($r['ok']) rezeptur_ki_merken($id, $r);
+    } elseif ($art === 'bestell_coa') {
+        // CoA an einer Bestellung auslesen (Charge, MHD, Menge, Analysewerte) – danach prüft das Team im Popup.
+        require_once __DIR__ . '/bestellung_chargen.php';
+        bch_coa_auslesen($id);
     } elseif ($art === 'dokimport') {
         // Massen-Import: ein Worker-Durchlauf (eine Datei lesen+zuordnen, dann sich selbst fortsetzen).
         // id = job_id. Mehrere Worker laufen parallel (dokimport_worker_starten).

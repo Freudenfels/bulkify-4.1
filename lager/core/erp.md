@@ -130,3 +130,5 @@ Umlagern Lager 1 -> Lager 2 (04.11.2026): `erp_umlagern_kandidaten()` (freie Fer
 
 ## Bestellung ↔ Charge (08.11.2026)
 `erp_bestellung_lieferung_erfassen()` setzt `charge.bestellung_position_id` (über `erp_position_fuer_charge()`, Chargennummer tolerant über `core/charge_norm.php`). `erp_charge_bestell_dokumente($charge_id)` liest CoA/Spezifikation der Bestellposition – Spiegel von `charge_bestell_dokumente()` im Dashboard.
+
+`erp_charge_werte_aus_bestellung($charge_id)`: Analysewerte des im Popup bestätigten CoA (`dokument.ki_daten.werte_bestaetigt`) beim Wareneingang an die Charge (`charge_analyse`), nur wenn sie noch keine hat.
