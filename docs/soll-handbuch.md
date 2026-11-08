@@ -286,6 +286,7 @@ Regeln: Eine Aufgabe verschwindet, sobald die Ursache behoben ist (automatisch) 
   4. **Umbuchen** - Kacheln: Einlagern · Nach Lager 2 · Kisten
   5. **Versand** - Kacheln: Versandbereit (Zähler) · Warenausgang · Lieferschein erstellen
   6. **Lager 1** - Kacheln: Bestand · Quarantäne; Zähler am Menüpunkt = Chargen in Quarantäne
+     - Bestand-Tabelle schmal: Finden · Produkt · Menge · Status · Kategorie (Charge klein unter dem Namen; MHD, Eingang, Ort, Etikett auf der Chargen-Seite)
   7. **Lager 2** - Kacheln: Fremdlager-Bestand · Artikel
 
   Darunter klein: Bewegungen · Mülleimer · Einstellungen (Admin) · Zum Dashboard. Nicht mehr im Menü, aber erreichbar: Blinker (über die Suche), Erwartete Lieferungen (Kachel "Aus Liste wählen"), Kundenware einbuchen (Kachel), die frühere Lager-2-Suche (leitet auf die gemeinsame Suche).

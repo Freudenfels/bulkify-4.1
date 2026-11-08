@@ -84,28 +84,24 @@ if ($nur_kisten):
 <?php if (!$zeilen): ?>
   <div class="bx-panel muted">Nichts im Bestand<?= $q ? ' für „' . h($q) . '"' : '' ?>.</div>
 <?php else: ?>
+<?php // Schmale Tabelle (Nico 08.11.2026): Finden zuerst, dann nur Produkt, Menge, Status, Kategorie.
+      // Charge steht klein unter dem Namen (zum Unterscheiden und für die Suche); MHD, Eingang, Ort, Etikett auf der Chargen-Seite. ?>
 <div class="bx-tablewrap" style="margin-bottom:var(--sp-6)">
-  <table class="bx-table lg-karten" id="lg-bestand">
+  <table class="bx-table lg-karten lg-bestand-schmal" id="lg-bestand">
     <thead><tr>
-      <th>Rohstoff / Produkt</th><?= $kat === '' ? '<th>Kategorie</th>' : '' ?>
-      <th>Charge</th><th>Eingang</th><th>MHD</th><th>Bestand</th><th>Status</th><th>Ort</th><th>Finden</th><th></th>
+      <th style="width:1%"></th><th>Produkt</th><th>Menge</th><th>Status</th><?= $kat === '' ? '<th>Kategorie</th>' : '' ?>
     </tr></thead>
     <tbody>
     <?php foreach ($zeilen as $z):
       $bf = blinker_fuer_charge((int)$z['id']); $lid = (int)($bf['leiste']['id'] ?? 0);
-      $ort = $bf['kiste'] ? 'Kiste ' . (string)$bf['kiste']['kiste_name'] : ($bf['leiste'] ? (string)$bf['leiste']['code'] : '');
+      $unter = array_filter([$z['artikelnummer'] ? (string)$z['artikelnummer'] : '', $z['charge_nr'] ? 'Charge ' . (string)$z['charge_nr'] : '', erp_bezug_text($z)]);
     ?>
       <tr onclick="location.href='?p=charge&id=<?= (int)$z['id'] ?>'" style="cursor:pointer">
-        <td data-label=""><a href="?p=charge&id=<?= (int)$z['id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)$z['item_name']) ?></a><?= $z['artikelnummer'] ? ' <span class="muted">' . h((string)$z['artikelnummer']) . '</span>' : '' ?><?php $bz = erp_bezug_text($z); if ($bz !== ''): ?><div class="muted" style="font-size:12px;margin-top:2px"><?= h($bz) ?></div><?php endif; ?></td>
-        <?= $kat === '' ? '<td data-label="Kategorie" class="muted">' . h(erp_kategorie_label($z)) . '</td>' : '' ?>
-        <td data-label="Charge" class="lg-code"><?= h((string)$z['charge_nr']) ?></td>
-        <td data-label="Eingang" class="muted"><?= !empty($z['wareneingang']) ? h(date('d.m.Y', strtotime((string)$z['wareneingang']))) : '–' ?></td>
-        <td data-label="MHD"><?= mhd_html($z['mhd']) ?></td>
-        <td data-label="Bestand"><?= h(menge_txt($z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
+        <td data-label="" class="lg-td-finden"><?php if ($lid): ?><button type="button" class="btn btn-primary btn-sm" data-klingeln="<?= $lid ?>" data-farbe="gruen" data-sek="40" onclick="event.stopPropagation()">Finden</button><?php else: ?><span class="muted" style="font-size:12px;white-space:nowrap">kein Blinker</span><?php endif; ?></td>
+        <td data-label="" class="lg-td-name"><a href="?p=charge&id=<?= (int)$z['id'] ?>" class="lg-namelink" onclick="event.stopPropagation()"><?= h((string)$z['item_name']) ?></a><?php if ($unter): ?><div class="muted" style="font-size:12px;margin-top:2px;font-weight:400"><?= h(implode(' · ', $unter)) ?></div><?php endif; ?></td>
+        <td data-label="Menge" style="white-space:nowrap"><?= h(menge_txt($z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
         <td data-label="Status"><?= status_badge($z['status']) ?><?= (($z['standort'] ?? 'lager1') === 'produktion') ? ' <span class="bx-badge" style="background:#eef3e0;color:#3d5a18;border:1px solid #c9d9a3">in Produktion</span>' : '' ?></td>
-        <td data-label="Ort"><?= $ort !== '' ? '<span class="lg-code">' . h($ort) . '</span>' : '<span class="muted">–</span>' ?></td>
-        <td data-label="Finden" class="lg-td-finden"><?php if ($lid): ?><button type="button" class="btn btn-primary btn-sm" data-klingeln="<?= $lid ?>" data-farbe="gruen" data-sek="40" onclick="event.stopPropagation()">Finden</button><?php else: ?><span class="muted" style="font-size:12px">kein Blinker</span><?php endif; ?></td>
-        <td data-label="" style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=etikett_ansicht&id=<?= (int)$z['id'] ?>&zurueck=<?= rawurlencode('?p=bestand' . $qs . '&sort=' . $sort) ?>" onclick="event.stopPropagation()" title="Etikett ansehen / drucken">Etikett</a></td>
+        <?= $kat === '' ? '<td data-label="Kategorie" class="muted">' . h(erp_kategorie_label($z)) . '</td>' : '' ?>
       </tr>
     <?php endforeach; ?>
     </tbody>

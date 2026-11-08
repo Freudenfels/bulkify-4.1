@@ -220,3 +220,12 @@
 .bx-side nav .lg-navklein a{font-size:13px;padding:6px var(--sp-5);color:#b9c6b4}
 .bx-side nav .lg-navklein a.on{color:#fff}
 @media (max-width:860px){.bx-side nav .lg-navklein a{font-size:14px !important;padding:8px 18px !important}}
+
+/* Bestand schmal (08.11.2026): Finden-Knopf vorne. Auf dem Handy (Karten) steht der Name oben, Finden unten über die volle Breite. */
+.lg-bestand-schmal td.lg-td-finden{white-space:nowrap}
+.lg-bestand-schmal td.lg-td-name{white-space:normal;min-width:220px}
+@media (max-width:860px){
+  .lg-bestand-schmal tr{display:flex !important;flex-direction:column}
+  .lg-bestand-schmal td.lg-td-name{order:-1;font-size:var(--fs-lg);font-weight:600}
+  .lg-bestand-schmal td.lg-td-finden{order:9}
+}
