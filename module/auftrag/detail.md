@@ -279,3 +279,6 @@ Im Block „Externer Labortest“ steht, solange kein Bericht vorliegt, der Knop
 
 ## Fortschritt neu (08.11.2026)
 Die Fortschrittsleiste im Reiter Produktion nutzt `auftrag_fortschritt()` (core/schema.md): Status/Abschluss-Text je Schritt, Etiketten-Stand (rot „Etiketten Daten fehlen“), Teilmengen, Labor statt QC; Energetisierung als eigenes Kästchen rechts über der Leiste. Die Schritt-Karten darunter (manuelles Setzen) laufen unverändert über die bisherigen Phasen.
+
+## Schritt-Karten neu (08.11.2026)
+Die Karten unter „Schritte“ (Reiter Produktion) kommen jetzt aus derselben neuen Kette wie die Leiste (`auftrag_fortschritt()`): gleiche Schritte, Etiketten-Stand („Etiketten nicht bestellt“ mit Link zum Einkauf, rot „Etiketten/Beutel Daten fehlen“ mit Link zum Reiter Material), Teilmengen („teilweise · X von Y Stk“), Material-Gate („blockiert“) nur am Produktions-Schritt. „Schritt abschließen“ am ersten offenen Schritt setzt die passende bisherige Stufe (`phase_setzen`, Zuordnung im 6. Feld der Schritte). Manuelles Setzen (eingeklappt) unverändert.

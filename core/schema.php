@@ -6324,11 +6324,13 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
     $lt = $labor ? auftrag_labortest_status($aid, isset($a['produkt_id']) ? (int)$a['produkt_id'] : null) : null;
 
     // Erledigt-Signale je Schritt (später erreichte Schritte schließen frühere mit ab – wie heute).
-    $qcDone    = $labor ? ($lt['status'] === 'abgeschlossen') : ($d[5] !== null || $versandbereit);
-    $umvDone   = $g['umv'] ? ($fertig($g['umv']) || $qcDone || $versandbereit) : true;
-    $etikDone  = $g['etik'] ? ($fertig($g['etik']) || ($g['umv'] && $fertig($g['umv'])) || $qcDone || $versandbereit) : ($idx >= 5 || $versandbereit);
+    // Bisherige Phase (inkl. manuell gesetzter Stufe phase_override) gilt als Untergrenze: idx 4 = „In Produktion" erledigt,
+    // 5 = „Etikettiert" erledigt, 6 = Qualitätsprüfung erledigt (Versandbereit), 7 = versendet.
+    $qcDone    = $labor ? ($lt['status'] === 'abgeschlossen') : ($d[5] !== null || $versandbereit || $idx >= 6);
+    $umvDone   = $g['umv'] ? ($fertig($g['umv']) || $qcDone || $versandbereit || $idx >= 5) : true;
+    $etikDone  = $g['etik'] ? ($fertig($g['etik']) || ($g['umv'] && $fertig($g['umv'])) || $qcDone || $versandbereit || $idx >= 5) : ($idx >= 5 || $versandbereit);
     $prodDone  = ($g['herst'] && $fertig($g['herst'])) || $bulkDa !== null || ($g['abf'] && $fertig($g['abf'])) || ($g['etik'] && $fertig($g['etik']))
-              || ($g['umv'] && $fertig($g['umv'])) || $versandbereit || $d[5] !== null;
+              || ($g['umv'] && $fertig($g['umv'])) || $versandbereit || $d[5] !== null || $idx >= 4;
     $prodDatum = $datum($g['herst']) ?? $bulkDa;
     $prodStart = $idx >= 3;
     $rohDone   = $d[2] !== null || $prodStart;
@@ -6427,6 +6429,11 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
                   'state' => $es === 'abgeschlossen' ? 'done' : ($es === 'laeuft' ? 'current' : ''),
                   'sub' => $es === 'laeuft' && $bis ? 'bis ' . date('d.m.Y', strtotime((string)$bis)) : ($start !== '' ? 'Start ' . date('d.m.Y', strtotime($start)) : 'noch nicht gestartet')];
     }
+    // Je Schritt die bisherige Phasen-Stufe, die ihn als erledigt markiert (für „Schritt abschließen" über phase_setzen).
+    $stufe = ['Rohstoff angekommen' => 3, 'Produziert' => 4, 'Etikettiert' => 5, 'Verpackt' => 5, 'Qualitätsprüfung abgeschlossen' => 6,
+              'Abgeschlossen' => 6, 'Versendet' => 7, 'Eingelagert' => 7];
+    foreach ($steps as &$s) $s[5] = $stufe[$s[1]] ?? null;
+    unset($s);
     return ['steps' => $steps, 'energ' => $energ, 'menge' => ['ziel' => $ziel, 'geb' => $geb, 'vers' => $vers]];
 }
 

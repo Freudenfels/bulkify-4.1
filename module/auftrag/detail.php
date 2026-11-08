@@ -1199,39 +1199,43 @@ if (auftrag_braucht_etikett($id)):
   <?php if (isset($_GET['statusok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Status aktualisiert – der Kunde sieht es sofort.</div><?php endif; ?>
   <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
     <div class="k muted" style="margin-bottom:10px">Schritte</div>
+    <?php // Schritt-Karten aus der NEUEN Kette (gleiche Schritte wie die Leiste oben, inkl. Etiketten-Stand und Teilmengen).
+          // „Schritt abschließen" setzt die passende bisherige Stufe (phase_setzen) – Logik dahinter unverändert.
+          $fsSteps = $fsA['steps']; $fsN = count($fsSteps); $fsErster = null;
+          foreach ($fsSteps as $fi => $fx) if ($fx[2] !== 'done') { $fsErster = $fi; break; } ?>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <?php foreach ($phasenA as $pi => $plbl):
-          $done    = $pi < $curIdxA;
-          $current = $pi === $curIdxA;
-          $blocked = $current && $berWartet && $pi <= 3;          // Material-Gate nur bis „In Produktion"
-          $laeuft  = $current && !$blocked;
-          $farbe = $done ? 'var(--gruen,#1D9E75)' : ($blocked ? '#b23b2f' : ($laeuft ? '#C9A227' : 'var(--line)'));
-          $stTxt = $done ? 'fertig' : ($blocked ? 'blockiert' : ($laeuft ? 'läuft' : 'wartet'));
-          $ikon  = $done ? '&#10003;' : ($current ? '&#9679;' : '&#9675;');
-          $actor = ($istFremd && in_array($pi, [3, 4, 5], true)) ? 'Lieferant' : 'wir';
-          $datum = $phDates[$pi] ?? null;
+      <?php foreach ($fsSteps as $fi => $fx):
+          [$fStatus, $fFertig, $fState, $fDatum, $fSub] = $fx; $fStufe = $fx[5] ?? null;
+          $fDone = $fState === 'done';
+          $fBlock = !$fDone && $fFertig === 'Produziert' && $berWartet && $fi === $fsErster;   // Material-Gate
+          $farbe = $fDone ? 'var(--gruen,#1D9E75)' : (($fState === 'err' || $fBlock) ? '#b23b2f' : (in_array($fState, ['current', 'teil'], true) ? '#C9A227' : 'var(--line)'));
+          $stTxt = $fDone ? 'fertig' : ($fState === 'err' ? 'fehlt' : ($fBlock ? 'blockiert' : ($fState === 'teil' ? 'teilweise' : ($fState === 'current' ? 'läuft' : 'wartet'))));
+          $ikon  = $fDone ? '&#10003;' : ($fState === 'err' ? '!' : ($fi === $fsErster ? '&#9679;' : '&#9675;'));
+          $actor = ($istFremd && in_array($fFertig, ['Produziert', 'Etikettiert', 'Verpackt', 'Qualitätsprüfung abgeschlossen'], true)) ? 'Lieferant' : 'wir';
       ?>
-      <div class="bx-panel" style="padding:10px 14px;margin:0;border-left:4px solid <?= $farbe ?>;<?= $current ? 'background:var(--panel-2)' : '' ?>">
+      <div class="bx-panel" style="padding:10px 14px;margin:0;border-left:4px solid <?= $farbe ?>;<?= $fi === $fsErster ? 'background:var(--panel-2)' : '' ?>">
         <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
           <div style="display:flex;align-items:center;gap:10px">
-            <span style="color:<?= $farbe ?>;font-size:16px;line-height:1"><?= $ikon ?></span>
+            <span style="color:<?= $farbe ?>;font-size:16px;line-height:1;font-weight:700"><?= $ikon ?></span>
             <div>
-              <div style="font-weight:600;font-size:14px">Schritt <?= $pi + 1 ?>/<?= $nPh ?>: <?= h($plbl) ?></div>
-              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor === 'Lieferant' ? 'Lieferant' : 'wir' ?><?= $datum ? ' · ' . h(fmt_zeit((string)$datum, 'd.m.Y')) : '' ?></div>
+              <div style="font-weight:600;font-size:14px">Schritt <?= $fi + 1 ?>/<?= $fsN ?>: <?= h($fDone ? $fFertig : $fStatus) ?></div>
+              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor ?><?= $fDatum ? ' · ' . h(fmt_zeit((string)$fDatum, 'd.m.Y')) : '' ?><?= $fSub ? ' · ' . h((string)$fSub) : '' ?></div>
             </div>
           </div>
-          <?php if ($current && $pi + 1 < $nPh): ?>
+          <?php if ($fi === $fsErster && $fStufe !== null && $fStufe > $curIdxA): ?>
           <form method="post" style="margin:0">
             <input type="hidden" name="aktion" value="phase_setzen">
-            <input type="hidden" name="phase" value="<?= $pi + 1 ?>">
-            <button class="btn btn-primary btn-sm" type="submit"><?= $pi + 1 === $nPh - 1 ? 'Auftrag abschließen' : 'Schritt abschließen' ?> &rarr;</button>
+            <input type="hidden" name="phase" value="<?= (int)$fStufe ?>">
+            <button class="btn btn-primary btn-sm" type="submit"><?= $fStufe >= $nPh - 1 ? 'Auftrag abschließen' : 'Schritt abschließen' ?> &rarr;</button>
           </form>
-          <?php elseif ($current): ?>
-          <span class="muted" style="font-size:12px">letzter Schritt</span>
           <?php endif; ?>
         </div>
-        <?php if ($blocked): ?>
+        <?php if ($fBlock): ?>
         <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Wartet auf Material.</span> <a href="#" data-goto="material">Was fehlt? &rarr; Reiter Material</a></div>
+        <?php elseif ($fState === 'err'): ?>
+        <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Der Kunde hat noch keine Druckdatei hochgeladen.</span> <a href="#" data-goto="material">Selbst hochladen &rarr; Reiter Material</a></div>
+        <?php elseif (!$fDone && $fStatus === 'Etiketten nicht bestellt'): ?>
+        <div style="margin-top:8px;font-size:12px"><a href="?p=einkaufsliste">Etiketten bestellen &rarr; Einkauf</a></div>
         <?php endif; ?>
       </div>
       <?php endforeach; ?>

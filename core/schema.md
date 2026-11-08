@@ -528,3 +528,4 @@ Abgeschlossen · Versenden (Versendet) bzw. Einlagern (Eingelagert) bei Fulfillm
 - `$leicht=true` (Listen) spart die Bedarfsrechnung. `auftrag_fortschritt_stand()` = Text für Listen (rot vor laufend vor zuletzt erledigt).
 - `auftrag_fortschritt_kunde()` = Kundensicht (Einkaufsstände der Etiketten → „Etikettierung", Untertexte weg) – fürs Portal vorbereitet.
 - `auftrag_track_icon('err')` = „!".
+- Jeder Schritt trägt im 6. Feld die bisherige Phasen-Stufe, die ihn erledigt (für „Schritt abschließen“); `phase_override` wirkt als Untergrenze auch auf Produziert (≥4), Etikettiert/Verpackt (≥5) und Qualitätsprüfung (≥6).
