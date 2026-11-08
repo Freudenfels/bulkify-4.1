@@ -865,7 +865,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
     <?php endif; ?>
   </form>
   <?php endif; ?>
-  <?php if ($c['korrektur'] !== ''): ?>
+  <?php if (($c['korrektur'] ?? '') !== ''): ?>
     <div style="margin-top:14px">
       <div class="muted" style="font-size:12px;margin-bottom:4px"><?= $fix ? 'Korrektur, die „Beheben" für die angehakten Zeilen ausführt' : 'Dokumentierte Korrektur (wird hier nicht ausgeführt)' ?></div>
       <pre style="margin:0;padding:10px 12px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-family:var(--mono);border-radius:8px;white-space:pre-wrap;font-size:12px"><?= h($c['korrektur']) ?></pre>
