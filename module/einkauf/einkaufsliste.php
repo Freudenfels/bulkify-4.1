@@ -575,11 +575,16 @@ if ($ohneFestlegung): ?>
   [onH,onP].forEach(function(el){ if(el){ el.addEventListener('input',upd); el.addEventListener('change',upd); } });
   document.querySelectorAll('select[name^="lief["]').forEach(function(s){ s.addEventListener('change',upd); });
   // Auch Enter im Feld oder ein anderer Weg darf nicht unvollständig absenden.
-  if(bex && bex.form) bex.form.addEventListener('submit', function(ev){
-    var m = ev.submitter ? ev.submitter.value : '';
-    if(m==='online' && onlineFehlt().length){ ev.preventDefault(); upd(); var d=document.getElementById('onlineBox'); if(d) d.open=true; if(onHw) onHw.scrollIntoView({block:'center'}); }
-    if(m==='direkt' && direktFehlt()){ ev.preventDefault(); upd(); if(diHw) diHw.scrollIntoView({block:'center'}); }
-  });
+  // Capture auf document und VOR dem allgemeinen Lade-Anzeiger (render_footer) registriert: gestoppt wird ganz, sonst
+  // bliebe der Knopf mit Spinner stehen.
+  var bf = bex ? bex.form : null;
+  if(bf) document.addEventListener('submit', function(ev){
+    if(ev.target!==bf) return;
+    var m = ev.submitter ? ev.submitter.value : '', stopp=false;
+    if(m==='online' && onlineFehlt().length){ stopp=true; var d=document.getElementById('onlineBox'); if(d) d.open=true; }
+    if(m==='direkt' && direktFehlt()) stopp=true;
+    if(stopp){ ev.preventDefault(); ev.stopImmediatePropagation(); upd(); var h=m==='online'?onHw:diHw; if(h) h.scrollIntoView({block:'center'}); }
+  }, true);
   if(a) a.addEventListener('change',function(){boxes.forEach(function(c){ if(c.closest('tr').style.display!=='none') c.checked=a.checked; });upd();});
   // Suche: Zeilen der "Zu bestellen"-Tabelle filtern; versteckte Zeilen werden abgewählt.
   var q=document.getElementById('bestSuche'), tb=document.getElementById('bestTbody');
@@ -625,12 +630,13 @@ if ($ohneFestlegung): ?>
   var f=document.querySelector('form input[name="aktion"][value="vorsorglich"]'); f=f?f.form:null; if(!f) return;
   var hw=f.querySelector('.vs-hinweis');
   function preisOk(v){ var r=(v||'').replace(/[^0-9.,]/g,'').replace(/\./g,'').replace(',', '.'); var x=parseFloat(r); return isFinite(x) && x>0; }
-  f.addEventListener('submit', function(ev){
+  document.addEventListener('submit', function(ev){
+    if(ev.target!==f) return;
     var m = ev.submitter ? ev.submitter.value : '', fehlt=[];
     if(m==='online'){ if(f.on_haendler.value.trim()==='') fehlt.push('Online-Händler / Quelle'); if(!preisOk(f.on_preis.value)) fehlt.push('Preis gesamt'); }
     if(m==='direkt' && !f.lieferant_id.value) fehlt.push('Lieferant');
-    if(fehlt.length){ ev.preventDefault(); hw.hidden=false; hw.textContent='Nicht bestellt – es fehlt: ' + fehlt.join(' und ') + '.'; hw.scrollIntoView({block:'center'}); }
+    if(fehlt.length){ ev.preventDefault(); ev.stopImmediatePropagation(); hw.hidden=false; hw.textContent='Nicht bestellt – es fehlt: ' + fehlt.join(' und ') + '.'; hw.scrollIntoView({block:'center'}); }
     else hw.hidden=true;
-  });
+  }, true);
 })();</script>
 <?php render_footer(); ?>
