@@ -1482,8 +1482,35 @@ if (!function_exists('portal_auftrag_track')) {
             }
             return $out;   // leer = kein Fortschritts-Balken
         }
+        // Produkt-Aufträge: neue Fortschrittskette (08.11.2026) in der Kundensicht – Etiketten-Einkaufsstände nur als
+        // „Etikettierung", rot „Etiketten Daten fehlen" mit Upload-Hinweis, Teilmengen, Labor statt QC. Energetisierung
+        // steht nicht in der Kette, sondern separat (portal_auftrag_energ()). Kein Zukauf-Verräter: Texte sind für alle Wege gleich.
+        if (function_exists('auftrag_fortschritt')) {
+            $f = auftrag_fortschritt($a);
+            $GLOBALS['bx_portal_energ'][(int)$a['id']] = $f['energ'];
+            $out = [];
+            foreach (auftrag_fortschritt_kunde($f['steps']) as [$status, $fertigTxt, $state, $datum, $sub]) {
+                $dok = null;
+                if ($fertigTxt === 'Laboranalyse abgeschlossen' && $state === 'done')
+                    $dok = auftrag_labortest_status((int)$a['id'], isset($a['produkt_id']) ? (int)$a['produkt_id'] : null)['dok_id'] ?? null;
+                $out[] = ['label' => $state === 'done' ? $fertigTxt : $status, 'date' => $datum, 'sub' => $sub, 'dok_id' => $dok,
+                          'done' => $state === 'done', 'current' => in_array($state, ['current', 'teil'], true), 'state' => $state];
+            }
+            return $out;
+        }
         return kunde_auftrag_track($a);
     }
+}
+// Energetisierung eines Auftrags (separat neben dem Fortschritt) – wird von portal_auftrag_track() mit ermittelt.
+if (!function_exists('portal_auftrag_energ')) {
+function portal_auftrag_energ(int $aid): ?array { return $GLOBALS['bx_portal_energ'][$aid] ?? null; }
+// Klasse/Icon/Untertext eines Track-Eintrags (alte Einträge ohne 'state' -> done/current wie bisher).
+function portal_track_state(array $t): string { return (string)($t['state'] ?? ($t['done'] ? 'done' : ($t['current'] ? 'current' : ''))); }
+function portal_energ_html(?array $e): string {
+    if (!$e) return '';
+    return '<span class="bx-hstep-energ ' . h($e['state']) . '" title="Energetisierung – läuft unabhängig vom Fortschritt"><span class="dot">'
+         . auftrag_track_icon($e['state']) . '</span>' . h($e['status']) . ' <span class="muted">' . h($e['sub']) . '</span></span>';
+}
 }
 
 // Menüpunkte (nur freigeschaltete) + Gruppierung
@@ -4238,6 +4265,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         $complete = $istAbgeschl($a);
         // aktueller Schritt-Index aus dem (DL- oder Produkt-)Track
         $curIdx = 0; foreach ($trackA as $i => $t) { if (!empty($t['current'])) { $curIdx = $i; break; } if (!empty($t['done'])) $curIdx = $i; }
+        foreach ($trackA as $i => $t) if (($t['state'] ?? '') === 'err') { $curIdx = $i; break; }   // rot (z. B. Etiketten-Daten fehlen) hat Vorrang
         $totalA = count($trackA) ?: 1;
         // Etikett offen? Nur Produkt-Aufträge, die ein Etikett brauchen und noch nicht freigegeben sind.
         $etMiss = !$istDLrow && !$complete && auftrag_braucht_etikett((int)$a['id']) && !etikett_freigegeben((int)$a['id']); ?>
@@ -4247,6 +4275,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div><strong><?= h($a['nummer']) ?></strong> · <?= h($titelFuer($a)) ?> <span class="muted">· <?= number_format((int)$a['menge'], 0, ',', '.') ?> Packungen</span><?= !empty($a['kontingent_id']) ? ' <span class="muted" style="font-size:12px">· aus Jahresvertrag</span>' : '' ?>
         <?php $chg = $auftragChargen[(int)$a['id']] ?? []; if ($chg): ?><div class="muted" style="font-size:13px;margin-top:2px">Charge <?= h(implode(', ', array_map(fn($c) => $c['nr'], $chg))) ?><?php $m0 = $chg[0]['mhd'] ?? null; if ($m0): ?> · MHD <?= h(date('d.m.Y', strtotime((string)$m0))) ?><?php endif; ?></div><?php endif; ?></div>
       <div class="bx-row" style="gap:10px;align-items:center">
+        <?= $istDLrow ? '' : portal_energ_html(portal_auftrag_energ((int)$a['id'])) ?>
         <span class="muted" style="font-size:13px;white-space:nowrap"><?= $complete ? 'Abgeschlossen' : (!$trackA ? 'In Bearbeitung' : 'Schritt ' . ($curIdx + 1) . '/' . $totalA . ': ' . h((string)($trackA[$curIdx]['label'] ?? ''))) ?></span>
         <?php if ($etMiss): ?><?= bx_badge(auftrag_design_label((int)$a['id']) . ' fehlt', 'err') ?><?php endif; ?>
         <?= $aufBadge($a) ?><?php $kontStorno = ($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']);
@@ -4254,10 +4283,10 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <?php if ($etMiss): $dlbl = auftrag_design_label((int)$a['id']); ?><div style="margin-top:8px;color:#8f231b;font-size:13px;font-weight:600"><?= h($dlbl) ?> fehlt – bitte <?= $dlbl === 'Etikett' ? 'Etikett-Design' : 'Beutel-Design' ?> hochladen und freigeben (Bestellung öffnen).</div><?php endif; ?>
     <ul class="bx-steps" style="margin-top:12px">
-      <?php foreach ($trackA as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : '');
-          $sub = $t['date'] ? fmt_zeit($t['date'], 'd.m.Y') : ($t['sub'] ?? ''); ?>
-        <li class="bx-step <?= $cls ?>">
-          <span class="dot"><?= $statusIcon($cls) ?></span>
+      <?php foreach ($trackA as $t): $cls = portal_track_state($t);
+          $sub = $t['date'] ? fmt_zeit($t['date'], 'd.m.Y') : (($t['sub'] ?? '') === 'upload' ? (str_starts_with((string)$t['label'], 'Beutel') ? 'Beutel-Design hochladen' : 'Etikett hochladen') : ($t['sub'] ?? '')); ?>
+        <li class="bx-step <?= h($cls) ?>">
+          <span class="dot"><?= $cls === 'err' ? '!' : $statusIcon($cls) ?></span>
           <span class="lbl"><?= h($t['label']) ?><?php if ($sub !== ''): ?><br><span class="muted" style="font-size:12px"><?= h($sub) ?></span><?php endif; ?></span>
         </li>
       <?php endforeach; ?>
@@ -4392,15 +4421,15 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php /* Fortschritt (bei DL „nur Abrechnung" ist der Track leer, dann kein Balken) */ ?>
   <?php if ($track): ?>
   <div class="bx-panel">
-    <h2 style="margin:0 0 18px;font-size:16px">Fortschritt</h2>
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 18px"><h2 style="margin:0;font-size:16px">Fortschritt</h2><?= portal_energ_html(portal_auftrag_energ((int)$a['id'])) ?></div>
     <?php $ltTxt = portal_liefertermin_aktiv() ? auftrag_liefertermin_text($a) : ''; if ($ltTxt !== ''): ?><p style="margin:-8px 0 14px;font-size:14px"><?= h($ltTxt) ?></p><?php endif; ?>
     <div style="overflow-x:auto">
       <ul class="bx-htrack">
-        <?php foreach ($track as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>
-          <li class="bx-hstep <?= $cls ?>">
-            <span class="dot"><?= $statusIcon($t['done'] ? 'done' : ($t['current'] ? 'current' : '')) ?></span>
+        <?php foreach ($track as $t): $cls = portal_track_state($t); ?>
+          <li class="bx-hstep <?= h($cls) ?>">
+            <span class="dot"><?= $cls === 'err' ? '!' : $statusIcon($cls) ?></span>
             <span class="lbl"><?= h($t['label']) ?></span>
-            <span class="date"><?= $t['date'] ? h(fmt_zeit($t['date'], 'd.m.Y')) : h($t['sub'] ?? '') ?></span>
+            <span class="date"><?= $t['date'] ? h(fmt_zeit($t['date'], 'd.m.Y')) : (($t['sub'] ?? '') === 'upload' ? '<a href="#etikett">' . (str_starts_with((string)$t['label'], 'Beutel') ? 'Beutel-Design hochladen' : 'Etikett hochladen') . '</a>' : h($t['sub'] ?? '')) ?></span>
           </li>
         <?php endforeach; ?>
       </ul>
@@ -4612,7 +4641,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     }
   ?>
   <?php if ($etBraucht && !$etFrei): ?>
-  <div class="bx-panel" style="margin:0 0 var(--sp-5);border-color:var(--gruen);background:var(--panel-2)"><?= $etHtml ?></div>
+  <div class="bx-panel" id="etikett" style="margin:0 0 var(--sp-5);border-color:var(--gruen);background:var(--panel-2)"><?= $etHtml ?></div>
   <?php endif; ?>
 
   <!-- Bestelldetails + Rechnung nebeneinander -->
@@ -4745,7 +4774,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   </div>
   <?php if ($etBraucht && $etFrei): ?>
-  <div class="bx-panel" style="margin:0 0 var(--sp-5)"><?= $etHtml ?></div>
+  <div class="bx-panel" id="etikett" style="margin:0 0 var(--sp-5)"><?= $etHtml ?></div>
   <?php endif; ?>
 
   <div class="bx-panel" id="rueckfrage">

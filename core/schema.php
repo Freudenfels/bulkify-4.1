@@ -6344,6 +6344,13 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
     $weg = !empty($a['produkt_id']) ? one("SELECT weg_etikettieren, weg_karton, weg_beipack FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : null;
     // Ohne Schritte zusätzlich: braucht der Auftrag überhaupt ein Etikett (Behälter da)? Handelsware/Bulk ohne Behälter -> kein Etikett-Punkt.
     $mitEtikett = $hatSchritte ? (bool)$g['etik'] : ((!$weg || (int)$weg['weg_etikettieren'] === 1) && auftrag_braucht_etikett($aid));
+    // Vollbedruckter Beutel: kein Etikett-Material/-Schritt – fehlt nur das Beutel-Design, erscheint ein roter Punkt „Beutel Daten fehlen".
+    $vollbedruckt = function_exists('auftrag_vollbedruckt') && auftrag_vollbedruckt($aid);
+    if ($vollbedruckt) {
+        $mitEtikett = false;
+        if (!$versandbereit && empty($a['v3_id']) && !etikett_vorhanden($aid))
+            $steps[] = ['Beutel Daten fehlen', 'Beutel-Design da', 'err', null, 'Kunde hat noch nichts hochgeladen'];
+    }
     $mitUmv     = $hatSchritte ? (bool)$g['umv']  : ($weg && ((int)$weg['weg_karton'] === 1 || (int)$weg['weg_beipack'] === 1));
     if ($mitEtikett) {
         // Etiketten-Daten fehlen: Auftrag braucht ein Etikett, aber es gibt keine Druckdatei – weder am Auftrag (Kunden-Upload)
@@ -6427,7 +6434,7 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
 // nur als „Etikettierung"; „Etiketten Daten fehlen" sieht er rot mit Upload-Link. Interne Untertexte (Liefertermin, abgefüllt) entfallen.
 function auftrag_fortschritt_kunde(array $steps): array {
     foreach ($steps as &$s) {
-        if ($s[1] === 'Etikettiert' && $s[2] === 'err') { $s[4] = 'upload'; continue; }
+        if ($s[2] === 'err') { $s[4] = 'upload'; continue; }
         if ($s[1] === 'Etikettiert' && !in_array($s[2], ['done', 'teil'], true)) { $s[0] = 'Etikettierung'; $s[4] = null; }
         if (is_string($s[4]) && preg_match('/abgefüllt|erwartet|Kunde hat/u', $s[4])) $s[4] = null;
     }

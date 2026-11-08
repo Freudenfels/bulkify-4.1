@@ -511,8 +511,10 @@ Vorher galt nur die zugeordnete Ware. Die Material-Übersicht zeigte z. B. 9.000
 `rohstoff_ek_bei_menge()` nimmt je Lieferant die größte passende Staffel; liegt die Menge **unter** seiner kleinsten Staffel (240 kg bei „ab 250 kg“), gilt deren Preis – wie `staffel_je_lieferant()`. Vorher kam dann gar kein Lieferantenpreis (nur der flache EK, oft 0) und der Beschaffungsweg zeigte „kein Preis“. `rohstoff_ek_detail()` liefert zusätzlich die Mindestmenge des gewählten Lieferanten; der Beschaffungsweg zeigt sie als „Mindestmenge 250 kg“ unter dem Betrag.
 
 ## Fortschritt neu (08.11.2026) – `auftrag_fortschritt()`
-Neue Fortschrittskette, **vorerst nur intern** (Dashboard Auftrag + Auftragsliste); das Kundenportal nutzt weiter
-`kunde_auftrag_track()`. Je Schritt Status-Text solange offen, Abschluss-Text wenn erledigt:
+Neue Fortschrittskette – Dashboard (Auftrag + Auftragsliste) und **seit 08.11.2026 auch Kundenportal** (über
+`portal_auftrag_track()` in module/portal/kunde.php, Kundensicht `auftrag_fortschritt_kunde()`). `kunde_auftrag_track()` bleibt
+als Altfunktion bestehen. **Vollbedruckter Beutel** (`auftrag_vollbedruckt`): kein Etikett-Punkt; fehlt das Beutel-Design,
+roter Punkt „Beutel Daten fehlen". Je Schritt Status-Text solange offen, Abschluss-Text wenn erledigt:
 Bestätigt · Rohstoff bestellt (Rohstoff angekommen) · In Produktion (Produziert) · Etiketten-Stand (Etikettiert) ·
 [Verpacken (Verpackt), nur mit Umkarton/Beipackzettel] · Qualitätsprüfung (… abgeschlossen) bzw. Laboranalyse statt QC ·
 Abgeschlossen · Versenden (Versendet) bzw. Einlagern (Eingelagert) bei Fulfillment.

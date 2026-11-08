@@ -430,3 +430,11 @@ verfügbar, Ware versendet, Rechnung erstellt; max. 8, neueste zuerst). Leere Zu
 `?v=rechnung_beleg&id=<beleg>`: PDF direkt über die Rechnung (nur eigene, freigegebene, nicht stornierte), erzeugt mit `rechnung_pdf_bauen()` wie in der Buchhaltung. Die Rechnungsliste verlinkt jede Rechnung so (Original-Upload weiter über `rechnung_datei`).
 - Vorher hing der Knopf am Auftrag (`rechnung_pdf&aid=`): Manuelle Rechnungen ohne Auftrag hatten keinen Knopf, DL-Rechnungen (DR-) am DL-Auftrag liefen in 404, weil DL-Aufträge nicht unter Bestellungen stehen.
 - Alt-Belege ohne Positionen fallen auf das Bestellungs-PDF zurück.
+
+## Fortschritt neu (08.11.2026)
+`portal_auftrag_track()` liefert für Produkt-Aufträge die neue Kette aus `auftrag_fortschritt()` in der Kundensicht
+(`auftrag_fortschritt_kunde()`): Status-Text solange offen, Abschluss-Text wenn erledigt; Etiketten-Einkaufsstände nur als
+„Etikettierung"; rot „Etiketten Daten fehlen" bzw. „Beutel Daten fehlen" mit Link zum Etikett-Bereich (`#etikett`);
+Teilmengen („Teilweise produziert · X von Y Stk", halber Punkt); Laboranalyse statt Qualitätsprüfung (Bericht-Download wie bisher);
+Energetisierung nicht mehr in der Kette, sondern als Kästchen (`portal_energ_html()`) neben „Fortschritt" bzw. in der Bestellkarte.
+In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. DL-Aufträge unverändert (eigene Schritte).

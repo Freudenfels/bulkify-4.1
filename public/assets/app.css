@@ -287,6 +287,12 @@ hr.bx{border:none;border-top:1px solid var(--line);margin:var(--sp-5) 0}
 .bx-step.current::before{background:var(--gruen)}
 .bx-step.done .lbl,.bx-step.current .lbl{color:var(--text)}
 .bx-step.current .lbl{font-weight:600}
+/* Fortschritt neu (Portal-Liste): teilweise + rot */
+.bx-step.teil::before{background:linear-gradient(90deg,var(--line),var(--gruen))}
+.bx-step.teil .dot{background:linear-gradient(90deg,var(--gruen) 50%,var(--line) 50%)}
+.bx-step.teil .lbl{color:var(--text);font-weight:600}
+.bx-step.err .dot{background:var(--err,#b23b2f);font-weight:700}
+.bx-step.err .lbl{color:var(--err,#b23b2f);font-weight:600}
 
 /* ---------- Produkt-Accordion (Portal) ---------- */
 .pt-acc{border:1px solid var(--line);border-radius:var(--r);margin-bottom:10px;background:var(--panel)}
