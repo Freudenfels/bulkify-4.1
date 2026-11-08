@@ -124,7 +124,8 @@ function bx_nav_einfach(): array {
     // Menü-Editor (der steuert nur „Ausführlich"). Ziele und Rechte wie in der Registry; Buchhaltung nur mit Rolle finance.
     // Platz für „Zu erledigen" (Schritt 4) ist ganz oben reserviert und wird bis dahin nicht angezeigt.
     $reg = bx_nav_registry();
-    $plan = ['anfragen' => null, 'angebote' => null, 'auftraege' => null, 'einkaufsliste' => 'Einkauf', 'produktion' => null,
+    // Benachrichtigungen ganz oben (Nico 08.11.2026; später unter „Zu erledigen"), Zähler = ungelesene des Nutzers.
+    $plan = ['benachrichtigungen' => null, 'anfragen' => null, 'angebote' => null, 'auftraege' => null, 'einkaufsliste' => 'Einkauf', 'produktion' => null,
              'lager' => 'Lager', 'produkte' => null, 'rezeptur' => null, 'rohstoffe' => null];
     $nav = [];
     foreach ($plan as $key => $label) {
@@ -140,6 +141,7 @@ function bx_nav_einfach(): array {
 // Linien-Icons fürs Menü „Einfach" (Stil Lucide/Feather, Inline-SVG in currentColor – keine Emojis, kein CDN).
 function bx_nav_icon(string $key): string {
     static $p = [
+        'benachrichtigungen' => '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
         'aufgaben'      => '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
         'anfragen'      => '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
         'angebote'      => '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
@@ -237,6 +239,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
        . ".bx-navflat a.on .bx-navico{opacity:1}"
        . ".bx-navflat .bx-navlbl{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}"
        . ".bx-navflat .bx-navbadge{min-width:22px;height:22px;line-height:22px;font-size:12px;padding:0 6px}"
+       . ".bx-navicowrap{position:relative;flex:0 0 19px;width:19px;height:19px;display:inline-flex}"
+       . ".bx-navflat .bx-navbadge.bx-navbadge-ico{position:absolute;top:-9px;left:4px;min-width:18px;height:18px;line-height:18px;font-size:10px;padding:0 3px}"
        . "@media (max-width:860px){.bx-side nav .bx-navflat a{font-size:16px;padding:12px var(--sp-5)}}</style>";
     $darf = function_exists('route_erlaubt');   // Auth aktiv?
     // Globale Suche (nur Admin): ein Feld ganz oben, sucht über alle Bereiche.
@@ -330,6 +334,11 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
             };
             $badge = $n > 0 ? "<span class=\"bx-navbadge\" title=\"$badgeTitel\">$n</span>" : '';
             $ico = $menuModus === 'einfach' ? bx_nav_icon((string)$key) : '';
+            // Benachrichtigungen: Zähler an der Glocke statt rechts – sonst wird das lange Wort bei 3-stelliger Zahl abgeschnitten.
+            if ($ico !== '' && $key === 'benachrichtigungen') {
+                $ico = '<span class="bx-navicowrap">' . $ico . ($n > 0 ? '<span class="bx-navbadge bx-navbadge-ico" title="' . h($badgeTitel) . '">' . ($n > 99 ? '99+' : $n) . '</span>' : '') . '</span>';
+                $badge = '';
+            }
             $grpHtml .= "<a href=\"" . h($href) . "\"$cls>" . $ico . "<span class=\"bx-navlbl\">" . h($label) . "</span>$badge</a>";
         }
         if ($menuModus === 'einfach') { echo "<div class=\"bx-navflat\">" . $grpHtml . "</div>"; continue; }   // flach, ohne Gruppen
@@ -359,9 +368,12 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         $rollen = function_exists('rollen_liste') ? rollen_liste() : [];
         $meine = array_map(fn($r) => $rollen[$r] ?? $r, user_rollen());
         $nBenach = function_exists('benachrichtigungen_ungelesen_count') ? benachrichtigungen_ungelesen_count((int)$u['id']) : 0;
-        echo "<div class=\"bx-userbox\">"
-           . "<a class=\"bx-usernotify\" href=\"?p=benachrichtigungen\" style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;text-decoration:none;color:inherit\">"
+        // Im Menü „Einfach" steht Benachrichtigungen als Menüpunkt oben – unten dann nicht doppelt.
+        $benachUnten = $menuModus !== 'einfach'
+           ? "<a class=\"bx-usernotify\" href=\"?p=benachrichtigungen\" style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;text-decoration:none;color:inherit\">"
            . "<span>Benachrichtigungen</span>" . ($nBenach > 0 ? "<span class=\"bx-navbadge\">" . (int)$nBenach . "</span>" : "<span class=\"muted\" style=\"font-size:12px\">keine neuen</span>") . "</a>"
+           : '';
+        echo "<div class=\"bx-userbox\">" . $benachUnten
            . "<div class=\"bx-username\">" . h($u['name']) . "</div>"
            . "<div class=\"bx-userroles\">" . h(implode(' · ', $meine) ?: 'keine Rolle') . "</div>"
            . ($menuModus !== 'werk' ? bx_menu_umschalter($menuModus) : '')

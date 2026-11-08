@@ -59,6 +59,9 @@ Gilt vor den älteren Absätzen oben (Anfragen-Gruppe mit 4 Punkten und Lager-Gr
   (Inline-SVG im Lucide-Stil, `currentColor`, 19 px; inbox, file-text, clipboard-check, shopping-cart, factory, warehouse, package,
   flask-conical, leaf, calculator; `aufgaben` = list-checks für „Zu erledigen"). Größer: 15 px Schrift, 10 px Innenabstand, Zähler 22 px;
   am Handy 16 px. Seitenleiste bleibt 224 px. Platz für „Zu erledigen" ganz oben (kommt mit Schritt 4).
+  **Benachrichtigungen** (08.11.2026) ist der erste Punkt (Icon bell, später unter „Zu erledigen"); Zähler = ungelesene des Nutzers, sitzt an der
+  Glocke (ab 100 „99+"), bei 0 keiner. Im Modus einfach entfällt dafür der Benachrichtigungs-Link unten in der Benutzer-Box (Ausführlich und Werk
+  unverändert). Rechte unverändert: Die Route `benachrichtigungen` ist laut Rollen-Map nur Admin – andere Rollen sehen den Punkt nicht.
   Das Logo links oben führt zur Startseite (`?p=dashboard`, Werk `?p=werk`).
 - **Ausführlich** = `bx_nav()` wie bisher (Menü-Editor bestimmt Gruppen und Reihenfolge) plus Unterprogramme.
 - **Anfragen = ein Punkt** (`anfragen`, Seite `module/anfrage/liste.php` mit allen Arten). Felder `alt_route`/`alt_href`: darf der Nutzer

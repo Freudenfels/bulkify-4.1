@@ -58,6 +58,7 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
 
 **Einfach (Alltag)** ist **eine flache Liste ohne Gruppen** (keine Zwischenüberschriften, kein Auf-/Zuklappen), etwas größer, jeder Punkt mit Linien-Icon, in dieser festen Reihenfolge (Nico 08.11.2026):
 - **Zu erledigen** (die zentrale Aufgabenliste, Abschnitt 6) - ganz oben, mit Zähler *(kommt mit Schritt 4, bis dahin nicht angezeigt)*
+- **Benachrichtigungen** - Glocke mit Zähler der ungelesenen; darunter bzw. bis Schritt 4 ganz oben. In "Einfach" entfällt dafür der kleine Eintrag unten in der Seitenleiste. *(Heute ein gemeinsames Team-Postfach, das nur Admins öffnen dürfen - Freigabe für weitere Rollen offen, Abschnitt 12.)*
 1. **Anfragen** - **eine** Tabelle mit allen Anfragearten (Rezeptur-, Produkt-, Rohstoff-, Dienstleistungsanfragen), Spalte "Art", Filter nach Art, Markierung "neu"
 2. **Angebote**
 3. **Aufträge**
@@ -343,6 +344,7 @@ Diese MDs/Rückmeldungen bleiben als Detail-Quelle gültig, soweit sie dem Handb
 4. ~~Kontingent-Preis~~ - **entschieden 08.11.:** voller Packungspreis (`gesamt_netto / menge`, bei AB-3289 10,17 €), wie die Funktion schon speichert; nur der Erklärtext wurde korrigiert.
 5. ~~GBA-Formular: Berichtsempfänger~~ - **zurückgestellt** (08.11.): Labor läuft heute über unseren Upload, Zusammenarbeit mit einem Labor erst in Zukunft. "Ans Labor senden"/GBA bleiben wie sie sind (kein Ausbau, nichts entfernt); das Feld "Unter-Charge der Probe" ist ebenfalls zurückgestellt.
 6. **Kundenpreise-Liste:** Mengen-Staffel je Bestellmenge nötig oder ein Preis je Verpackungsgröße genug?
+7. **Benachrichtigungen für alle Rollen?** Heute ein gemeinsames Team-Postfach (mit Kunden/Preisen), nur Admin darf es öffnen. Freigeben für weitere Rollen, oder je Nutzer filtern (jeder sieht nur, was ihn betrifft)?
 
 ---
 
@@ -374,3 +376,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | Sofort-Fix Etikett-Format: 4.5 Etikett-Maß vs. Glas nur Hinweis, nie Sperre; Maß neuer Etiketten aus der TrimBox; Menü Einfach zeigt Buchhaltung für Rolle finance (3) | Nico / Claude Code |
 | 08.11.2026 | Sofort-Fix Bestellliste: 4.3 Kundenetiketten/bedruckte Beutel netto gegen Lager und unterwegs, eine Rechnung mit Reiter Material und Fortschritt | Nico / Claude Code |
 | 08.11.2026 | 3: Menü "Einfach" flache Liste ohne Gruppen, größer, feste Reihenfolge, Linien-Icons | Nico / Claude Code |
+| 08.11.2026 | 3: Benachrichtigungen als erster Punkt in "Einfach" (Glocke mit Zähler), Eintrag unten entfällt dort | Nico / Claude Code |
