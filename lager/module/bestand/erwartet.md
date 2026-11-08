@@ -29,3 +29,7 @@ Leerzustand: Hinweis, dass nichts unterwegs ist (erscheint, sobald im Dashboard 
 
 Je Position „für AB-… · Kunde“, wenn die Bestellung für einen Auftrag ist (Soll-Kette 3, 04.11.2026).
 - 08.11.2026 (Handbuch 4.5): Auch Portal-Bestellungen mit Status `gesendet` erscheinen; unter der Bestellnummer steht dann „noch nicht bestätigt". Einbuchen wie gewohnt.
+
+## 08.11.2026
+- Ein Termin am Bestelltag oder davor (Eingabefehler, z. B. BE-2924) gilt als „offen“ statt „überfällig“.
+- Der Artikelname ist ein Link und öffnet direkt den Wareneingang dieser Lieferung (wie „Einbuchen“).

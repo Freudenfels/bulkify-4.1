@@ -289,7 +289,7 @@ if (!$neu) {
        . '<div style="font-size:24px;font-weight:700;margin:2px 0 6px;color:' . $stufeFarbe . '">' . h($stufe['label']) . '</div>'
        . '<div class="muted" style="font-size:14px">Lieferant: <strong>' . ($liefName !== '' ? h($liefName) : (($b['bestellart'] ?? '') === 'online' ? 'Online-Einkauf (ohne Lieferant)' : '–')) . '</strong>'
        . (!empty($b['bestelldatum']) ? ' · bestellt am ' . h(date('d.m.Y', strtotime((string)$b['bestelldatum']))) : '')
-       . (!empty($b['eta_geplant']) ? ' · ' . (($b['bestellart'] ?? '') === 'direkt' ? 'erwartet am ' : 'zugesagter Termin ') . h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '')
+       . (!empty($b['eta_geplant']) && (empty($b['bestelldatum']) || (string)$b['eta_geplant'] > (string)$b['bestelldatum']) ? ' · ' . (($b['bestellart'] ?? '') === 'direkt' ? 'erwartet am ' : 'zugesagter Termin ') . h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '')
        . (!empty($b['angekommen_am']) ? ' · angekommen ' . h(date('d.m.Y', strtotime((string)$b['angekommen_am']))) : '')
        . '</div></div>';
     // B6: Aktionen erst sammeln (Output-Buffer) und GANZ UNTEN ausgeben.

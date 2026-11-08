@@ -20,6 +20,10 @@ $kats  = erp_kategorien();              // rohstoff/verpackung/verbrauch/fertig/
 $zeilen = [];
 foreach ($lieferungen as $l) {
     $eta  = (string)($l['eta_geplant'] ?? '');
+    // Ein Termin am Bestelltag oder davor ist ein Eingabefehler (BE-2924: bestellt und „erwartet" am 28.10.) – nicht als
+    // „überfällig" zeigen, sondern wie „offen" (Termin an der Bestellung im Dashboard korrigierbar).
+    $bdat = (string)($l['bestelldatum'] ?? '');
+    if ($eta !== '' && $bdat !== '' && $eta <= $bdat) $eta = '';
     $kopf = [
         'lieferant'      => (string)($l['lieferant'] ?? ''),
         'lieferant_id'   => (int)($l['lieferant_id'] ?? 0),
@@ -85,7 +89,7 @@ if ($hatRest) $reiter['rest'] = 'Sonstiges';
     $buchUrl = '?p=we&lieferung=' . (int)$z['bestellung_id'];
   ?>
     <tr data-kat="<?= h($z['tabkey']) ?>" data-such="<?= h($such) ?>">
-      <td data-label="Artikel"><?= $z['name'] !== '' ? h($z['name']) : '<span class="muted">Artikel beim Einbuchen wählen</span>' ?><?php
+      <td data-label="Artikel"><?= $z['name'] !== '' ? ($z['hat_pos'] ? '<a href="' . h($buchUrl) . '" style="font-weight:600">' . h($z['name']) . '</a>' : h($z['name'])) : '<span class="muted">Artikel beim Einbuchen wählen</span>' ?><?php
           if ($z['kapselgroesse'] !== ''): ?> <span class="badge" style="margin-left:4px"><?= h($z['kapselgroesse']) ?></span><?php endif;
           if (($z['fuer_auftrag'] ?? '') !== ''): ?><div class="muted" style="font-size:12px;margin-top:2px">für <?= h($z['fuer_auftrag']) ?></div><?php endif; ?></td>
       <td data-label="Kategorie" class="muted"><?= h($katLabel) ?></td>

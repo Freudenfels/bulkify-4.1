@@ -39,6 +39,8 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
             . '</form>';
     } else {
         $direkt = (string)($b['bestellart'] ?? '') === 'direkt';
+        // Termin am Bestelltag oder davor = Eingabefehler (BE-2924) -> nicht anzeigen, über „Termin ändern" korrigierbar.
+        if (!empty($b['eta_geplant']) && !empty($b['bestelldatum']) && (string)$b['eta_geplant'] <= (string)$b['bestelldatum']) $b['eta_geplant'] = null;
         $o .= '<div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'
             . '<span>' . ($direkt ? $t('Erwartet am', 'Expected on', '预计到货') : $t('Zugesagter Termin', 'Confirmed date', '确认交货日期')) . ': <strong>'
             . ($b['eta_geplant'] ? $h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '–') . '</strong></span>'
