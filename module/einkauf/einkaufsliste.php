@@ -194,6 +194,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
 
 $aggAlle = bedarf_aggregiert(false);
 $aggBedarf = array_values(array_filter($aggAlle, fn($a) => $a['zu_bestellen'] > 1e-6));
+// Gesperrt = Etikett bzw. bedruckter Beutel ohne Kunden-Freigabe: nicht bestellbar -> nicht unter „Zu bestellen",
+// sondern im eigenen Reiter „Wartet auf Freigabe" (Nico 08.11.2026). Gleiche Regel wie die Sperre je Zeile unten.
+$istGesperrt = fn($a) => (!empty($a['etikett']) || !empty($a['druck'])) && empty($a['etikett_ok']);
+$aggWartet = array_values(array_filter($aggBedarf, $istGesperrt));
+$aggBedarf = array_values(array_filter($aggBedarf, fn($a) => !$istGesperrt($a)));
 // Ware in Quarantäne, die den offenen Bedarf (teilweise) deckt: NICHT nachbestellen, sondern freigeben (St-07).
 $quarListe = array_values(array_filter($aggAlle, fn($a) => empty($a['etikett']) && (float)($a['quarantaene'] ?? 0) > 1e-6 && (float)$a['need'] - (float)$a['stock'] > 1e-6));
 $bulkBedarf = array_values(array_filter(bedarf_bulk(false), fn($b) => $b['zu_bestellen'] > 1e-6));
@@ -212,21 +217,23 @@ $BM_KAT = betriebsmittel_kategorien();
 
 $aktTyp = $_GET['typ'] ?? '';
 // Produktions-Typen + Nachbestellung (Meldebestand) + freie Betriebsmittel-Typen als eigene Reiter.
-$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten / Tüten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT;
+$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten / Tüten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT + ['wartet' => 'Wartet auf Freigabe'];
 // Ordnet eine freie Bedarfszeile einem Betriebsmittel-Reiter zu (ohne Kategorie = Sonstiges).
 $freiMatch = function($f, $t) {
     $k = (string)($f['kategorie'] ?? '');
     return $t === 'sonstiges' ? ($k === 'sonstiges' || $k === '') : ($k === $t);
 };
 $istFreiTyp = isset($BM_KAT[$aktTyp]);
-$anzahlTyp = function($t) use ($aggBedarf, $bulkBedarf, $freiBedarf, $nachBedarf, $BM_KAT, $freiMatch) {
+$anzahlTyp = function($t) use ($aggBedarf, $aggWartet, $bulkBedarf, $freiBedarf, $nachBedarf, $BM_KAT, $freiMatch) {
+    if ($t === 'wartet') return count($aggWartet);
     if ($t === 'fertig') return count($bulkBedarf);
     if ($t === 'nachbestell') return count($nachBedarf);
     if ($t === '') return count($aggBedarf) + count($bulkBedarf) + count($freiBedarf) + count($nachBedarf);
     if (isset($BM_KAT[$t])) return count(array_filter($freiBedarf, fn($f) => $freiMatch($f, $t)));
     return count(array_filter($aggBedarf, fn($a) => $a['typ'] === $t));
 };
-$aggTab  = ($aktTyp === 'fertig' || $aktTyp === 'nachbestell' || $istFreiTyp) ? [] : array_values(array_filter($aggBedarf, fn($a) => $aktTyp === '' || $a['typ'] === $aktTyp));
+$aggTab  = $aktTyp === 'wartet' ? $aggWartet
+         : (($aktTyp === 'fertig' || $aktTyp === 'nachbestell' || $istFreiTyp) ? [] : array_values(array_filter($aggBedarf, fn($a) => $aktTyp === '' || $a['typ'] === $aktTyp)));
 $bulkTab = ($aktTyp === '' || $aktTyp === 'fertig') ? $bulkBedarf : [];
 $freiTab = ($aktTyp === '') ? $freiBedarf : ($istFreiTyp ? array_values(array_filter($freiBedarf, fn($f) => $freiMatch($f, $aktTyp))) : []);
 $nachTab = ($aktTyp === '' || $aktTyp === 'nachbestell') ? $nachBedarf : [];
@@ -351,12 +358,13 @@ if ($ohneFestlegung): ?>
       <a href="?p=einkaufsliste<?= $t ? '&typ=' . $t : '' ?>" class="<?= $aktTyp === $t ? 'on' : '' ?>"><?= h($lbl) ?><?= $n ? ' (' . $n . ')' : '' ?></a>
     <?php endforeach; ?>
   </div>
+  <?php if ($aktTyp === 'wartet'): ?><p class="muted" style="font-size:13px;margin:10px 0 0">Etiketten und bedruckte Beutel, deren Design der Kunde noch nicht freigegeben hat. Sie sind noch nicht bestellbar und stehen deshalb nicht unter „Zu bestellen". Nach der Freigabe erscheinen sie dort automatisch (Menge bereits netto gegen Lager und unterwegs).</p><?php endif; ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
     <thead><tr><th style="width:34px"></th><th>Artikel / Produkt</th><th></th><th class="bx-num">zu bestellen</th><th style="width:190px">Lieferant</th><th>Aufträge</th></tr></thead>
     <tbody id="bestTbody">
       <?php if (!$hatWas): ?><tr><td colspan="6" class="muted"><?= $istFreiTyp
           ? 'Noch nichts unter „' . h($BM_KAT[$aktTyp]) . '" eingetragen – weiter unten unter „Neuen Bedarf eintragen" hinzufügen.'
-          : 'Kein offener Bedarf in diesem Typ.' ?></td></tr><?php endif; ?>
+          : ($aktTyp === 'wartet' ? 'Nichts wartet auf eine Kunden-Freigabe.' : 'Kein offener Bedarf in diesem Typ.') ?></td></tr><?php endif; ?>
       <?php foreach ($aggTab as $a):
           $istEtikett = !empty($a['etikett']);
           $key = $istEtikett ? ('etikett:' . (int)$a['item_id'] . ':' . (int)$a['auftrag_id']) : ('item:' . (int)$a['item_id']);
@@ -448,7 +456,7 @@ if ($ohneFestlegung): ?>
       <?php endforeach; ?>
     </tbody>
   </table></div>
-  <?php if ($hatWas): ?>
+  <?php if ($hatWas && $aktTyp !== 'wartet'): ?>
   <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:14px">
     <input type="hidden" name="aktion" value="bestellen">
     <div class="bx-field" style="margin:0;max-width:180px"><label>Bestellt am</label><input type="date" name="datum" value="<?= date('Y-m-d') ?>"></div>
