@@ -6378,7 +6378,13 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
             // Etiketten-Stand aus dem Material: auf Lager (Bedarf gedeckt) / bestellt (offene Bestellung) / noch nicht bestellt.
             $eid = !empty($a['produkt_id']) ? etikett_item_fuer_auftrag_kunde($aid, (int)$a['produkt_id']) : 0;
             $fehlt = null;
-            if ($pa && !$leicht) foreach (auftrag_bedarf_cached((int)$pa['id']) as $b) if (($b['rolle'] ?? '') === 'Etikett') { $fehlt = (float)$b['fehlt']; $eid = (int)($b['item_id'] ?? 0) ?: $eid; }
+            // Gleiche Rechnung wie Material-Reiter und Bestellliste (material_deckung, Rest-Bedarf): „auf Lager", sobald der freie
+            // Bestand den noch offenen Bedarf deckt – berechnet, nichts von Hand zu setzen (Sofort-Fix 08.11.2026).
+            if ($pa && !$leicht) foreach (auftrag_bedarf_rest((int)$pa['id']) as $b) if (($b['rolle'] ?? '') === 'Etikett') {
+                $eid = (int)($b['item_id'] ?? 0) ?: $eid;
+                $md = material_deckung($eid, (float)$b['benoetigt'], $aid);
+                $fehlt = max(0.0, (float)$b['benoetigt'] - $md['frei']);
+            }
             if ($fehlt === null && $eid > 0)   // ohne PA bzw. in Listen: Bestand des Etiketts gegen die Auftragsmenge
                 $fehlt = max(0.0, (float)$a['menge'] - (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei'", [$eid]));
             $offenBest = $eid > 0 ? one("SELECT MIN(b.eta_geplant) eta, COUNT(*) n FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id

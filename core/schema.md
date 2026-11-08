@@ -524,6 +524,7 @@ Abgeschlossen · Versenden (Versendet) bzw. Einlagern (Eingelagert) bei Fulfillm
   (Herstellung ohne „Verpacken"=Abfüllen; zugekaufte Bulk-Charge `item.kategorie='fertig'` = produziert).
 - **Etiketten-Stand**: rot „Etiketten Daten fehlen" (braucht Etikett, keine Datei am Auftrag/Kundenetikett-Artikel; nie bei v3-Aufträgen)
   → „Etiketten nicht bestellt" → „Etiketten bestellt" (offene Bestellung, ggf. „erwartet …") → „Etiketten auf Lager" → „Etikettiert".
+  Seit 08.11.2026 rechnet der Etiketten-Stand über `material_deckung()` gegen den **noch offenen** Bedarf (`auftrag_bedarf_rest`): „auf Lager", sobald der freie Bestand des Etikett-Artikels reicht – rein berechnet, nichts gespeichert, keine Bestellung nötig, wenn die Etiketten schon da sind.
   Ohne PA-Schritte entscheiden `produkt.weg_*` und `auftrag_braucht_etikett()`, ob es Etikett-/Verpacken-Punkte gibt.
 - **Teilmengen**: Zustand `teil` (halber Punkt) mit „X von Y Stk" aus `auftrag_mengenfortschritt()` bzw. `versendet_menge`.
 - **Energetisierung** nicht in der Kette, sondern `['energ']` (separates Kästchen).
