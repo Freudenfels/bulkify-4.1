@@ -827,7 +827,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
 </div>
 
 <?php foreach ($CHECKS as $k => $c):
-    $rows = $ERG[$k]['rows']; $n = count($rows); $fix = $c['fix']; $leerOk = $c['leer_ok'] ?? true;
+    $rows = $ERG[$k]['rows']; $n = count($rows); $fix = $c['fix'] ?? null; $leerOk = $c['leer_ok'] ?? true;
     $kind = ($leerOk ? $n > 0 : $n === 0) ? 'warn' : 'ok';
     $spalten = $rows ? array_values(array_filter(array_keys($rows[0]), fn($s) => $s[0] !== '_')) : [];
     $hatLink = $rows && array_key_exists('_link', $rows[0]);
