@@ -158,6 +158,15 @@ table.bx-table{border-collapse:collapse;width:100%}
 .bx-hstep .lbl{display:block;margin-top:8px;font-size:var(--fs-xs);color:var(--muted);line-height:1.25}
 .bx-hstep.done .lbl,.bx-hstep.current .lbl{color:var(--text);font-weight:500}
 .bx-hstep .date{display:block;margin-top:3px;font-size:11px;color:var(--muted)}
+/* Fortschritt neu (08.11.2026): teilweise (halber Punkt) + rot (z. B. Etiketten-Daten fehlen) + Energetisierung separat */
+.bx-hstep.teil::before{background:linear-gradient(90deg,var(--line),var(--gruen))}
+.bx-hstep.teil .dot{background:linear-gradient(90deg,var(--gruen) 50%,var(--line) 50%)}
+.bx-hstep.teil .lbl{color:var(--text);font-weight:500}
+.bx-hstep.err .dot{background:var(--err,#b23b2f);font-weight:700}
+.bx-hstep.err .lbl{color:var(--err,#b23b2f);font-weight:600}
+.bx-hstep-energ{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:5px 12px;font-size:12px;white-space:nowrap}
+.bx-hstep-energ .dot{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--line);color:#fff;font-size:11px}
+.bx-hstep-energ.done .dot,.bx-hstep-energ.current .dot{background:var(--gruen)}
 .bx-field{margin-bottom:var(--sp-4)}
 .bx-field > label{display:block;color:var(--text);margin-bottom:5px;white-space:nowrap;font-weight:400}
 .bx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--sp-4)}

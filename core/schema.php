@@ -6288,8 +6288,167 @@ function kunde_auftrag_track(array $a): array {
     }
     return $track;
 }
+// Fortschritt NEU (Nico 08.11.2026): je Schritt Status-Text solange offen, Abschluss-Text wenn erledigt; Labor ersetzt die
+// Qualitätsprüfung; Energetisierung separat (nicht in der Kette); Etiketten-Stand; Teilmengen. Nutzt NUR vorhandene Daten –
+// die bisherige kunde_auftrag_phase() (inkl. phase_override) ist Untergrenze, kein Auftrag steht weiter hinten als vorher.
+// $leicht=true (Listen): Etiketten-Stand ohne die teure Bedarfsrechnung (nur Bestand des Etikett-Artikels gegen die Menge).
+// Rückgabe: ['steps'=>[[status, fertig-Text, state(done|current|teil|err|''), datum, untertext]], 'energ'=>?array, 'menge'=>[...]].
+// Kundenportal nutzt (noch) kunde_auftrag_track(); Kundenvariante dieser Kette: auftrag_fortschritt_kunde().
+function auftrag_fortschritt(array $a, bool $leicht = false): array {
+    $aid = (int)$a['id']; $st = (string)$a['status'];
+    $ff  = auftrag_ist_fulfillment($aid);
+    $alt = kunde_auftrag_phase($a);            // heutige Engine = Untergrenze (inkl. Admin-Override) – nie weniger Fortschritt als heute
+    $idx = (int)$alt['idx']; $d = $alt['dates'];
+    $versandbereit = in_array($st, ['erledigt', 'versendet'], true) || $idx >= 6;
+    $abgeschlossen = $st === 'versendet' || $idx >= 7;
+
+    // Produktionsschritte des (letzten) PA nach Gruppen: Herstellung (Kapseln/Pulver, Bulk bereitstellen) / Abfüllen
+    // („Verpacken" = ins Glas/Dose) / Etikett / Umverpackung / QC. Abfüllen + Etikettieren laufen meist zusammen.
+    $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$aid]);
+    $g = ['herst' => [], 'abf' => [], 'etik' => [], 'umv' => [], 'qc' => []];
+    if ($pa) foreach (all("SELECT station, erledigt, erledigt_at FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [(int)$pa['id']]) as $s) {
+        $n = (string)$s['station'];
+        $k = preg_match('/etikett/i', $n) ? 'etik' : (preg_match('/beipack|umkarton/i', $n) ? 'umv' : (preg_match('/qualit/i', $n) ? 'qc'
+           : (preg_match('/freigabe/i', $n) ? null : ($n === 'Verpacken' ? 'abf' : 'herst'))));
+        if ($k) $g[$k][] = $s;
+    }
+    // Zugekaufte Bulkware (fertige Kapseln) schon da? Dann gilt „Produziert" ebenfalls.
+    $bulkDa = $pa ? one("SELECT MIN(COALESCE(c.wareneingang, c.angelegt)) d FROM charge c JOIN item i ON i.id=c.item_id
+                         WHERE i.kategorie='fertig' AND (c.auftrag_id=? OR c.pa_id=?)", [$aid, (int)$pa['id']]) : null;
+    $bulkDa = $bulkDa && !empty($bulkDa['d']) ? $bulkDa['d'] : null;
+    $fertig = fn(array $list) => $list && !array_filter($list, fn($s) => (int)$s['erledigt'] !== 1);
+    $datum  = function (array $list) { $m = null; foreach ($list as $s) if (!empty($s['erledigt_at']) && ($m === null || $s['erledigt_at'] > $m)) $m = $s['erledigt_at']; return $m; };
+
+    // Labor statt Qualitätsprüfung, wenn für den Auftrag/Kunden eine Laboranalyse vorgesehen ist (gleiche Regel wie heute).
+    $labor = kunde_will_labortest((int)$a['kunde_id']) || !empty($a['laboranalyse_gebucht']);
+    $lt = $labor ? auftrag_labortest_status($aid, isset($a['produkt_id']) ? (int)$a['produkt_id'] : null) : null;
+
+    // Erledigt-Signale je Schritt (später erreichte Schritte schließen frühere mit ab – wie heute).
+    $qcDone    = $labor ? ($lt['status'] === 'abgeschlossen') : ($d[5] !== null || $versandbereit);
+    $umvDone   = $g['umv'] ? ($fertig($g['umv']) || $qcDone || $versandbereit) : true;
+    $etikDone  = $g['etik'] ? ($fertig($g['etik']) || ($g['umv'] && $fertig($g['umv'])) || $qcDone || $versandbereit) : ($idx >= 5 || $versandbereit);
+    $prodDone  = ($g['herst'] && $fertig($g['herst'])) || $bulkDa !== null || ($g['abf'] && $fertig($g['abf'])) || ($g['etik'] && $fertig($g['etik']))
+              || ($g['umv'] && $fertig($g['umv'])) || $versandbereit || $d[5] !== null;
+    $prodDatum = $datum($g['herst']) ?? $bulkDa;
+    $prodStart = $idx >= 3;
+    $rohDone   = $d[2] !== null || $prodStart;
+    $rohBest   = $d[1] !== null;
+
+    $steps = [];
+    $steps[] = ['Bestätigt', 'Bestätigt', 'done', $d[0], null];
+    $steps[] = ['Rohstoff bestellt', 'Rohstoff angekommen', $rohDone ? 'done' : ($rohBest ? 'current' : ''), $rohDone ? $d[2] : $d[1], null];
+    $steps[] = ['In Produktion', 'Produziert', $prodDone ? 'done' : ($prodStart ? 'current' : ''), $prodDone ? $prodDatum : null, null];
+    // Etikett-Schritt nur, wenn der PA einen Etikettieren-Schritt hat (oder es noch keinen PA gibt).
+    // Ohne Produktionsschritte (PA noch nicht festgelegt) entscheiden die Produktions-Wege des Produkts (weg_*), wie heute beim Anlegen der Schritte.
+    $hatSchritte = $g['herst'] || $g['etik'] || $g['umv'] || $g['qc'];
+    $weg = !empty($a['produkt_id']) ? one("SELECT weg_etikettieren, weg_karton, weg_beipack FROM produkt WHERE id=?", [(int)$a['produkt_id']]) : null;
+    // Ohne Schritte zusätzlich: braucht der Auftrag überhaupt ein Etikett (Behälter da)? Handelsware/Bulk ohne Behälter -> kein Etikett-Punkt.
+    $mitEtikett = $hatSchritte ? (bool)$g['etik'] : ((!$weg || (int)$weg['weg_etikettieren'] === 1) && auftrag_braucht_etikett($aid));
+    $mitUmv     = $hatSchritte ? (bool)$g['umv']  : ($weg && ((int)$weg['weg_karton'] === 1 || (int)$weg['weg_beipack'] === 1));
+    if ($mitEtikett) {
+        // Etiketten-Daten fehlen: Auftrag braucht ein Etikett, aber es gibt keine Druckdatei – weder am Auftrag (Kunden-Upload)
+        // noch am Kundenetikett-Artikel aus einer früheren Bestellung. Dann rot, egal wie weit die Produktion ist.
+        $datenFehlen = false;
+        // v3-Altaufträge: Etikett-Dateien liegen nicht in 4.1 -> nie als „fehlen" werten (sonst grundlos rot).
+        if (!$etikDone && empty($a['v3_id']) && auftrag_braucht_etikett($aid) && !etikett_vorhanden($aid)) {
+            $eid = !empty($a['produkt_id']) ? etikett_item_fuer_auftrag_kunde($aid, (int)$a['produkt_id']) : 0;
+            $datenFehlen = !($eid > 0 && one("SELECT 1 FROM item WHERE id=? AND (etikett_dokument_id IS NOT NULL OR COALESCE(etikett_datei_sig,'')<>'')", [$eid]));
+        }
+        if ($datenFehlen) {
+            $steps[] = ['Etiketten Daten fehlen', 'Etikettiert', 'err', null, 'Kunde hat noch nichts hochgeladen'];
+        } elseif ($etikDone) {
+            $steps[] = ['Etikettiert', 'Etikettiert', 'done', $d[4] ?? $datum($g['etik']), null];
+        } else {
+            // Etiketten-Stand aus dem Material: auf Lager (Bedarf gedeckt) / bestellt (offene Bestellung) / noch nicht bestellt.
+            $eid = !empty($a['produkt_id']) ? etikett_item_fuer_auftrag_kunde($aid, (int)$a['produkt_id']) : 0;
+            $fehlt = null;
+            if ($pa && !$leicht) foreach (auftrag_bedarf_cached((int)$pa['id']) as $b) if (($b['rolle'] ?? '') === 'Etikett') { $fehlt = (float)$b['fehlt']; $eid = (int)($b['item_id'] ?? 0) ?: $eid; }
+            if ($fehlt === null && $eid > 0)   // ohne PA bzw. in Listen: Bestand des Etiketts gegen die Auftragsmenge
+                $fehlt = max(0.0, (float)$a['menge'] - (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei'", [$eid]));
+            $offenBest = $eid > 0 ? one("SELECT MIN(b.eta_geplant) eta, COUNT(*) n FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                                         WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL
+                                           AND bp.menge > COALESCE(bp.geliefert_menge,0)", [$eid]) : null;
+            $abgefuellt = $g['abf'] && $fertig($g['abf']);
+            if ($fehlt !== null && $fehlt <= 1e-6)      { $txt = 'Etiketten auf Lager';   $sub = $abgefuellt ? 'abgefüllt, bereit zum Etikettieren' : null; }
+            elseif ($offenBest && (int)$offenBest['n'] > 0) { $txt = 'Etiketten bestellt'; $sub = !empty($offenBest['eta']) ? 'erwartet ' . date('d.m.Y', strtotime((string)$offenBest['eta'])) : ($abgefuellt ? 'abgefüllt, wartet auf Etiketten' : null); }
+            else                                         { $txt = 'Etiketten nicht bestellt'; $sub = $abgefuellt ? 'abgefüllt, wartet auf Etiketten' : null; }
+            $steps[] = [$txt, 'Etikettiert', $prodDone ? 'current' : '', null, $sub];
+        }
+    }
+    if ($mitUmv)            $steps[] = ['Verpacken', 'Verpackt', $umvDone ? 'done' : ($etikDone ? 'current' : ''), $umvDone ? $datum($g['umv']) : null, null];
+    if ($labor) {
+        $sub = $lt['status'] === 'laeuft' ? 'beim Labor' . (!empty($lt['versendet_am']) ? ' seit ' . date('d.m.Y', strtotime((string)$lt['versendet_am'])) : '') : null;
+        // Labor läuft parallel: ist der Bericht noch nicht da, bleibt der Punkt offen/aktiv – auch wenn danach schon fertig ist.
+        $steps[] = ['Laboranalyse', 'Laboranalyse abgeschlossen', $qcDone ? 'done' : ($umvDone && $etikDone && $prodDone || $lt['status'] === 'laeuft' ? 'current' : ''), $qcDone ? $lt['datum'] : null, $sub];
+    } else {
+        $steps[] = ['Qualitätsprüfung', 'Qualitätsprüfung abgeschlossen', $qcDone ? 'done' : ($umvDone && $etikDone && $prodDone ? 'current' : ''), $qcDone ? $d[5] : null, null];
+    }
+    $steps[] = ['Abgeschlossen', 'Abgeschlossen', $versandbereit ? 'done' : '', $versandbereit ? $d[6] : null, null];
+    $steps[] = $ff ? ['Einlagern', 'Eingelagert', $abgeschlossen ? 'done' : ($versandbereit ? 'current' : ''), $abgeschlossen ? $d[7] : null, null]
+                   : ['Versenden', 'Versendet', $abgeschlossen ? 'done' : ($versandbereit ? 'current' : ''), $abgeschlossen ? $d[7] : null, null];
+    // Teilmengen (Teilproduktion/Teilversand): Mengen gibt es nur für fertig gebuchte Ware (produktion_gebucht je PA)
+    // und Versendetes (auftrag.versendet_menge). Ist davon erst ein Teil da, wird der Schritt „teilweise" (halber Punkt)
+    // mit „X von Y Stk" – statt ganz offen oder ganz erledigt.
+    $mf = auftrag_mengenfortschritt($aid);
+    $ziel = max((int)($a['menge'] ?? 0), (int)$mf['ziel']); $geb = (int)$mf['gebucht']; $vers = min((int)($a['versendet_menge'] ?? 0), max($geb, 0));
+    $vonBis = fn(int $x) => number_format($x, 0, ',', '.') . ' von ' . number_format($ziel, 0, ',', '.') . ' Stk';
+    if ($ziel > 0 && $geb > 0 && $geb < $ziel) {
+        foreach ($steps as &$s) {
+            if ($s[2] === 'done' || $s[2] === 'err') continue;
+            if ($s[1] === 'Produziert')  { $s = ['Teilweise produziert', 'Produziert', 'teil', null, $vonBis($geb)]; }
+            if ($s[1] === 'Etikettiert') { $s = ['Teilweise etikettiert', 'Etikettiert', 'teil', null, $vonBis($geb)]; }
+        }
+        unset($s);
+    }
+    if ($ziel > 0 && $vers > 0 && $vers < $ziel)
+        foreach ($steps as &$s) if ($s[1] === 'Versendet' || $s[1] === 'Eingelagert') $s = ['Teilweise ' . mb_strtolower($s[1]), $s[1], 'teil', null, $vonBis($vers)];
+    unset($s);
+
+    // Höchstens EIN „aktiv" außerhalb des parallelen Labors: der erste nicht erledigte Schritt.
+    $erster = null;
+    foreach ($steps as $i => $s) if (!in_array($s[2], ['done', 'err', 'teil'], true)) { $erster = $i; break; }
+    foreach ($steps as $i => &$s) if ($s[2] === 'current' && $i !== $erster && $s[0] !== 'Laboranalyse') $s[2] = '';
+    unset($s);
+
+    // Energetisierung separat (nicht in der Kette), nur für freigeschaltete Kunden – wie heute.
+    $energ = null;
+    if (kunde_zeigt_energetisierung((int)$a['kunde_id'])) {
+        $start = (string)($a['energ_start'] ?? '');
+        $es = $start !== '' ? energ_status($start) : '';
+        $bis = $start !== '' ? energ_fertig_am($start) : null;
+        $energ = ['status' => $es === 'abgeschlossen' ? 'Energetisiert' : ($es === 'laeuft' ? 'Energetisierung läuft' : 'Energetisierung geplant'),
+                  'state' => $es === 'abgeschlossen' ? 'done' : ($es === 'laeuft' ? 'current' : ''),
+                  'sub' => $es === 'laeuft' && $bis ? 'bis ' . date('d.m.Y', strtotime((string)$bis)) : ($start !== '' ? 'Start ' . date('d.m.Y', strtotime($start)) : 'noch nicht gestartet')];
+    }
+    return ['steps' => $steps, 'energ' => $energ, 'menge' => ['ziel' => $ziel, 'geb' => $geb, 'vers' => $vers]];
+}
+
+// Kundensicht der neuen Kette (für das Portal, noch nicht eingebaut): interne Einkaufs-Stände der Etiketten (nicht bestellt / bestellt / auf Lager) sieht der Kunde
+// nur als „Etikettierung"; „Etiketten Daten fehlen" sieht er rot mit Upload-Link. Interne Untertexte (Liefertermin, abgefüllt) entfallen.
+function auftrag_fortschritt_kunde(array $steps): array {
+    foreach ($steps as &$s) {
+        if ($s[1] === 'Etikettiert' && $s[2] === 'err') { $s[4] = 'upload'; continue; }
+        if ($s[1] === 'Etikettiert' && !in_array($s[2], ['done', 'teil'], true)) { $s[0] = 'Etikettierung'; $s[4] = null; }
+        if (is_string($s[4]) && preg_match('/abgefüllt|erwartet|Kunde hat/u', $s[4])) $s[4] = null;
+    }
+    unset($s);
+    return $steps;
+}
+
+// Aktueller Stand für Listen als [Text, state]: ein roter Punkt hat Vorrang (z. B. „Etiketten Daten fehlen"), sonst der
+// laufende/teilweise Schritt, sonst der zuletzt erledigte (dessen Abschluss-Text, z. B. „Bestätigt") – nie ein noch
+// nicht erreichter Schritt (sonst stünde „Rohstoff bestellt" da, obwohl nichts bestellt ist).
+function auftrag_fortschritt_stand(array $a): array {
+    $steps = auftrag_fortschritt($a, true)['steps'];
+    foreach ($steps as $s) if ($s[2] === 'err') return [$s[0], 'err'];
+    foreach ($steps as $s) if ($s[2] === 'current' || $s[2] === 'teil') return [$s[0], $s[2]];
+    $letzter = null;
+    foreach ($steps as $s) if ($s[2] === 'done') $letzter = $s;
+    return $letzter ? [$letzter[1], 'done'] : [$steps[0][0], ''];
+}
 // Einheitliches Status-Icon fuer die Fortschritts-Punkte: Haken (erledigt), Sanduhr (laeuft), sonst leer.
 function auftrag_track_icon(string $state): string {
+    if ($state === 'err') return '!';
     static $sand = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px"><path d="M6 2h12M6 22h12M6 2c0 4 3 6 6 10 3-4 6-6 6-10M6 22c0-4 3-6 6-10 3 4 6 6 6 10"/></svg>';
     if ($state === 'done' || $state === 'abgeschlossen') return '&#10003;';
     if ($state === 'current' || $state === 'laeuft')      return $sand;

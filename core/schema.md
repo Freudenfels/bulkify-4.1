@@ -509,3 +509,20 @@ Vorher galt nur die zugeordnete Ware. Die Material-Übersicht zeigte z. B. 9.000
 ## Staffelpreis unter der Mindestmenge (06.11.2026)
 
 `rohstoff_ek_bei_menge()` nimmt je Lieferant die größte passende Staffel; liegt die Menge **unter** seiner kleinsten Staffel (240 kg bei „ab 250 kg“), gilt deren Preis – wie `staffel_je_lieferant()`. Vorher kam dann gar kein Lieferantenpreis (nur der flache EK, oft 0) und der Beschaffungsweg zeigte „kein Preis“. `rohstoff_ek_detail()` liefert zusätzlich die Mindestmenge des gewählten Lieferanten; der Beschaffungsweg zeigt sie als „Mindestmenge 250 kg“ unter dem Betrag.
+
+## Fortschritt neu (08.11.2026) – `auftrag_fortschritt()`
+Neue Fortschrittskette, **vorerst nur intern** (Dashboard Auftrag + Auftragsliste); das Kundenportal nutzt weiter
+`kunde_auftrag_track()`. Je Schritt Status-Text solange offen, Abschluss-Text wenn erledigt:
+Bestätigt · Rohstoff bestellt (Rohstoff angekommen) · In Produktion (Produziert) · Etiketten-Stand (Etikettiert) ·
+[Verpacken (Verpackt), nur mit Umkarton/Beipackzettel] · Qualitätsprüfung (… abgeschlossen) bzw. Laboranalyse statt QC ·
+Abgeschlossen · Versenden (Versendet) bzw. Einlagern (Eingelagert) bei Fulfillment.
+- **Nur vorhandene Daten**: `kunde_auftrag_phase()` (inkl. `phase_override`) ist Untergrenze; Feinschritte aus `produktion_schritt`
+  (Herstellung ohne „Verpacken"=Abfüllen; zugekaufte Bulk-Charge `item.kategorie='fertig'` = produziert).
+- **Etiketten-Stand**: rot „Etiketten Daten fehlen" (braucht Etikett, keine Datei am Auftrag/Kundenetikett-Artikel; nie bei v3-Aufträgen)
+  → „Etiketten nicht bestellt" → „Etiketten bestellt" (offene Bestellung, ggf. „erwartet …") → „Etiketten auf Lager" → „Etikettiert".
+  Ohne PA-Schritte entscheiden `produkt.weg_*` und `auftrag_braucht_etikett()`, ob es Etikett-/Verpacken-Punkte gibt.
+- **Teilmengen**: Zustand `teil` (halber Punkt) mit „X von Y Stk" aus `auftrag_mengenfortschritt()` bzw. `versendet_menge`.
+- **Energetisierung** nicht in der Kette, sondern `['energ']` (separates Kästchen).
+- `$leicht=true` (Listen) spart die Bedarfsrechnung. `auftrag_fortschritt_stand()` = Text für Listen (rot vor laufend vor zuletzt erledigt).
+- `auftrag_fortschritt_kunde()` = Kundensicht (Einkaufsstände der Etiketten → „Etikettierung", Untertexte weg) – fürs Portal vorbereitet.
+- `auftrag_track_icon('err')` = „!".

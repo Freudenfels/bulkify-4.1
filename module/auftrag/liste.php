@@ -119,6 +119,12 @@ $standBadge = function($r) use ($phaseStil) {
     if ($st === 'storniert') return bx_badge('storniert', 'err');
     $ff = !empty($r['nutzt_fulfillment']);   // Fulfillment: eingelagert statt versendet
     if ($st === 'versendet')  return bx_badge($ff ? 'eingelagert' : 'versendet', 'ok');
+    // Fortschritt NEU (08.11.2026): aktueller Schritt der neuen Kette (z. B. „Etiketten bestellt", „Teilweise produziert",
+    // rot „Etiketten Daten fehlen"). Leichte Variante ohne Bedarfsrechnung, damit die Liste schnell bleibt.
+    if (($r['kategorie'] ?? '') !== 'dienstleistung') {
+        [$lbl, $state] = auftrag_fortschritt_stand($r);
+        return bx_badge($lbl, ['err' => 'err', 'teil' => 'warn', 'current' => 'warn'][$state] ?? 'info');
+    }
     $ph  = kunde_auftrag_phase($r);
     $idx = (int)$ph['idx'];
     $lbl = auftrag_phasen($ff)[$idx] ?? status_text($st);

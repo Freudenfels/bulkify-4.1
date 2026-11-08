@@ -276,3 +276,6 @@ Im Block „Externer Labortest“ steht, solange kein Bericht vorliegt, der Knop
 
 **Beschaffungsweg – Mindestmenge (06.11.2026):** Bei den Einzelrohstoffen gilt auch unterhalb der kleinsten Lieferanten-Staffel deren Preis; unter dem Betrag steht dann klein „Mindestmenge 250 kg“ (Mindestmenge des gewählten Lieferanten).
 - Kopfbereich zeigt den Kunden immer mit vollem Firmennamen (nicht das interne Kürzel – das gilt nur in Tabellen), 08.11.2026
+
+## Fortschritt neu (08.11.2026)
+Die Fortschrittsleiste im Reiter Produktion nutzt `auftrag_fortschritt()` (core/schema.md): Status/Abschluss-Text je Schritt, Etiketten-Stand (rot „Etiketten Daten fehlen“), Teilmengen, Labor statt QC; Energetisierung als eigenes Kästchen rechts über der Leiste. Die Schritt-Karten darunter (manuelles Setzen) laufen unverändert über die bisherigen Phasen.

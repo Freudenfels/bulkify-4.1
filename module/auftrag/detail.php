@@ -1088,7 +1088,7 @@ if (auftrag_braucht_etikett($id)):
 </div>
 <?php endif; ?>
 
-<?php $track = kunde_auftrag_track($a); ?>
+<?php // Fortschritts-Kette: auftrag_fortschritt() direkt an der Leiste unten ?>
 <div class="bx-panel" data-panel="produktion">
   <h2 style="margin:0 0 14px;font-size:16px">Fortschritt</h2>
   <?php
@@ -1166,13 +1166,21 @@ if (auftrag_braucht_etikett($id)):
     </div>
   </div>
   <?php endif; ?>
+  <?php // Fortschritt NEU (08.11.2026, intern): Status solange offen, Abschluss-Text wenn erledigt; Etiketten-Stand,
+        // Teilmengen, Labor statt QC, Energetisierung separat. Kundenportal zeigt vorerst noch die bisherige Kette.
+  $fsA = auftrag_fortschritt($a); ?>
+  <?php if ($fsA['energ']): $eA = $fsA['energ']; ?>
+  <div style="display:flex;justify-content:flex-end;margin:0 0 4px">
+    <span class="bx-hstep-energ <?= h($eA['state']) ?>" title="Energetisierung – läuft unabhängig vom Fortschritt"><span class="dot"><?= auftrag_track_icon($eA['state']) ?></span><?= h($eA['status']) ?> <span class="muted"><?= h($eA['sub']) ?></span></span>
+  </div>
+  <?php endif; ?>
   <div style="overflow-x:auto">
     <ul class="bx-htrack">
-      <?php foreach ($track as $t): $cls = $t['done'] ? 'done' : ($t['current'] ? 'current' : ''); ?>
-        <li class="bx-hstep <?= $cls ?>">
-          <span class="dot"><?= auftrag_track_icon($cls) ?></span>
-          <span class="lbl"><?= h($t['label']) ?></span>
-          <span class="date"><?= $t['date'] ? h(fmt_zeit($t['date'], 'd.m.Y')) : h($t['sub'] ?? '') ?></span>
+      <?php foreach ($fsA['steps'] as [$fsStatus, $fsFertig, $fsState, $fsDatum, $fsSub]): ?>
+        <li class="bx-hstep <?= h($fsState) ?>">
+          <span class="dot"><?= auftrag_track_icon($fsState) ?></span>
+          <span class="lbl"><?= h($fsState === 'done' ? $fsFertig : $fsStatus) ?></span>
+          <span class="date"><?= $fsDatum ? h(fmt_zeit((string)$fsDatum, 'd.m.Y')) : h((string)($fsSub ?? '')) ?></span>
         </li>
       <?php endforeach; ?>
     </ul>

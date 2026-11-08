@@ -24,3 +24,6 @@ Neben „Aufträge ohne Preis“: „Preise nachtragen“ -> `?p=kundenpreise&oh
 Reiter „wartet auf Freigabe“: ohne Produktionsaufträge stornierter Aufträge (`pa_aktiv_sql()`, 03.11.2026).
 
 Reiter „Beschaffungsweg offen“ statt „Wartet auf Freigabe“ (04.11.2026).
+
+## Spalte Stand (08.11.2026)
+Zeigt den aktuellen Schritt der neuen Fortschrittskette (`auftrag_fortschritt_stand()`): rot zuerst (z. B. „Etiketten Daten fehlen“), sonst laufend/teilweise, sonst zuletzt erledigt. DL-Aufträge wie bisher.
