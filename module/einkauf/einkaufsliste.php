@@ -220,7 +220,7 @@ $etLief = one("SELECT id, firma FROM lieferanten WHERE firma LIKE '%labelist%' O
 
 $aktTyp = $_GET['typ'] ?? '';
 // Produktions-Typen + Nachbestellung (Meldebestand) + freie Betriebsmittel-Typen als eigene Reiter.
-$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten / Tüten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT + ['wartet' => 'Wartet auf Freigabe'];
+$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten / Tüten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT + ['wartet' => 'Wartet'];
 // Ordnet eine freie Bedarfszeile einem Betriebsmittel-Reiter zu (ohne Kategorie = Sonstiges).
 $freiMatch = function($f, $t) {
     $k = (string)($f['kategorie'] ?? '');
