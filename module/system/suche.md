@@ -25,3 +25,6 @@ Die Auftrags- und Angebots-Suche matcht zusätzlich den **Produktnamen** (`auftr
 
 ## Warenart-Labels (Teil 3 Block K)
 Das Kategorie-Label kommt jetzt aus `kategorie_labels()` (`core/schema.php`) statt aus einer lokalen Liste – `fertig`→Bulkware, `verkaufsfertig`→Fertigprodukt, einheitlich mit dem Rest des Dashboards.
+
+## Inventarnummer (08.11.2026)
+7–8 Ziffern im Suchfeld finden zusätzlich Etikettenrollen/Gebinde über `charge_gebinde.inventar_nr` (Altdaten: erste 7 Ziffern). Treffer: Nummer · Artikel, darunter Charge, Menge, Status, Auftrag; Klick öffnet den Artikel.

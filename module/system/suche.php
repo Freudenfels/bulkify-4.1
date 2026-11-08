@@ -46,6 +46,22 @@ if (mb_strlen($q) >= 2) {
         fn($r) => $r['firma'],
         fn($r) => trim(($r['lieferantennummer'] ? $r['lieferantennummer'] . ' · ' : '') . ($r['ansprechpartner'] ?: '') . ($r['ort'] ? ' · ' . $r['ort'] : '')));
 
+    // Inventarnummer (Aufkleber auf Etikettenrolle/Gebinde, 8 Ziffern; Altdaten auf 7 gekürzt) -> Rolle mit Etikett, Charge, Auftrag.
+    $qz = preg_replace('/\D+/', '', $q);
+    if (strlen($qz) >= 7 && strlen($qz) <= 8) {
+        try {
+            $add('Etikettenrollen / Gebinde (Inventarnummer)',
+                all("SELECT g.id, g.inventar_nr, g.menge, g.status, c.charge_nr, c.item_id, i.name AS item_name, i.kategorie, a.nummer AS auftrag_nr
+                     FROM charge_gebinde g JOIN charge c ON c.id=g.charge_id JOIN item i ON i.id=c.item_id
+                     LEFT JOIN auftrag a ON a.id=g.auftrag_id
+                     WHERE g.inventar_nr IN (?, ?) ORDER BY (g.status<>'leer') DESC, g.id DESC LIMIT $LIMIT", [$qz, substr($qz, 0, 7)]),
+                fn($r) => ($r['kategorie'] === 'verpackung' ? '?p=verpackung&id=' : '?p=rohstoff&id=') . $r['item_id'],
+                fn($r) => $r['inventar_nr'] . ' · ' . $r['item_name'],
+                fn($r) => trim('Charge ' . $r['charge_nr'] . ' · ' . number_format((float)$r['menge'], 0, ',', '.') . ' Stk · ' . $r['status']
+                    . ($r['auftrag_nr'] ? ' · Auftrag ' . $r['auftrag_nr'] : '')));
+        } catch (\Throwable $e) { /* Spalte inventar_nr (noch) nicht da */ }
+    }
+
     $KAT = kategorie_labels();   // einheitliche Labels (Bulkware / Fertigprodukt), Block K
     $add('Rohstoffe / Artikel',
         all("SELECT id, name, name_lat, artikelnummer, kategorie FROM item
