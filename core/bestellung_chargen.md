@@ -25,3 +25,8 @@ Nico: „CoA hochladen, es wird ausgelesen, dann prüfe ich (Popup)."
 Am CoA steht ein Status: wird ausgelesen / ausgelesen – bitte prüfen / bitte prüfen / geprüft (· Abweichung).
 
 **Nur das CoA hochladen (08.11.2026):** Im Formular der Position ist die Charge kein Pflichtfeld mehr. Wird nur eine CoA-Datei gewählt, legt `bch_add` das CoA ohne Charge-Zeile ab; die KI liest Charge/MHD/Menge, die Zeile entsteht erst mit „Geprüft – übernehmen“ im Popup. Ohne Charge und ohne Datei: Hinweis „Bitte die Chargennummer eintragen oder ein CoA hochladen“.
+
+**Zwei getrennte Wege je Position (08.11.2026, Nico: „entweder wir tippen es nur ein, oder wir laden eines hoch und es wird ausgelesen“):**
+- **CoA hochladen** (`bch_doc`, dok_typ coa): nur die Datei – Charge, MHD, Menge und Werte werden ausgelesen, bestätigt im Prüf-Popup (legt dort die Charge-Zeile an bzw. ordnet das CoA einer schon eingetippten Zeile zu).
+- **Ohne CoA eintragen** (`bch_add`): Charge (Pflicht), MHD, Menge – ohne Datei.
+- In der Chargen-Tabelle steht bei Zeilen ohne CoA nur „kein CoA“ (kein eigenes Upload-Feld mehr). Spezifikation hat einen eigenen kleinen Upload, nur solange keine vorliegt.

@@ -367,8 +367,7 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
                 $coas = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'coa' && charge_gleich((string)($d['charge_nr'] ?? ''), (string)$z['charge_nr'])));
                 $coaHtml = '';
                 foreach ($coas as $d) $coaHtml .= $docLink($d) . ' ' . $delDoc($d) . ' ';
-                if (!$coas) $coaHtml = '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:6px;margin:0;flex-wrap:nowrap"><input type="hidden" name="aktion" value="bch_coa"><input type="hidden" name="zeile_id" value="' . (int)$z['id'] . '">'
-                    . '<input type="file" name="bch_coa" required accept=".pdf,.png,.jpg,.jpeg,.webp" style="max-width:190px"><button class="btn btn-ghost btn-sm" type="submit">' . $t('CoA hochladen', 'Upload CoA', '上传 COA') . '</button></form>';
+                if (!$coas) $coaHtml = '<span class="muted">' . $t('kein CoA', 'no CoA', '无 COA') . '</span>';
                 $ein = array_values(array_filter($einH, fn($c) => charge_gleich((string)$c['charge_nr'], (string)$z['charge_nr'])));
                 $einHtml = $ein ? $t('ja', 'yes', '是') . ', ' . $dat($ein[0]['wareneingang']) : '<span class="muted">–</span>';
                 $del = ($von === 'team' || (string)$z['von'] === 'lieferant')
@@ -379,14 +378,24 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
             }
             $o .= '</tbody></table></div>';
         }
-        // Neue Charge eintragen
-        $o .= '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">'
+        // Zwei getrennte Wege (Nico 08.11.2026): ENTWEDER das CoA hochladen – Charge, MHD, Menge und Werte werden ausgelesen und
+        // im Popup bestätigt – ODER die Charge ohne CoA eintippen. Kein gemischtes Formular mehr.
+        $o .= '<div class="bx-row" style="gap:12px;align-items:stretch;flex-wrap:wrap;margin-top:10px">';
+        $o .= '<form method="post" enctype="multipart/form-data" style="flex:1 1 300px;min-width:0;margin:0;border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
+            . '<input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '"><input type="hidden" name="dok_typ" value="coa">'
+            . '<div style="font-weight:600;margin-bottom:2px">' . $t('CoA hochladen', 'Upload CoA', '上传 COA') . '</div>'
+            . '<div class="muted" style="font-size:12px;margin-bottom:8px">' . $t('Charge, MHD, Menge und Analysewerte werden ausgelesen – danach kurz prüfen.', 'Batch, best-before date, quantity and analysis values are read automatically.', '批号、保质期、数量和检测值将自动读取。') . '</div>'
+            . '<div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap"><input type="file" name="bch_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp" style="max-width:240px">'
+            . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Hochladen', 'Upload', '上传') . '</button></div></form>';
+        $o .= '<form method="post" style="flex:1 1 420px;min-width:0;margin:0;border:1px solid var(--line);border-radius:10px;padding:10px 12px">'
             . '<input type="hidden" name="aktion" value="bch_add"><input type="hidden" name="bp_id" value="' . $bp . '">'
-            . '<div class="bx-field" style="margin:0;min-width:150px"><label>' . $t('Charge des Lieferanten', 'Batch number', '批号') . '</label><input type="text" name="charge_nr" maxlength="80" placeholder="' . $h($t('leer = aus dem CoA lesen', 'empty = read from CoA', '留空 = 从 COA 读取')) . '"></div>'
+            . '<div style="font-weight:600;margin-bottom:8px">' . $t('Ohne CoA eintragen', 'Enter without CoA', '不上传 COA 直接填写') . '</div>'
+            . '<div class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">'
+            . '<div class="bx-field" style="margin:0;min-width:140px;flex:1"><label>' . $t('Charge des Lieferanten', 'Batch number', '批号') . '</label><input type="text" name="charge_nr" required maxlength="80"></div>'
             . '<div class="bx-field" style="margin:0;max-width:160px"><label>' . $t('MHD', 'Best before', '保质期') . '</label><input type="date" name="mhd"></div>'
-            . '<div class="bx-field" style="margin:0;max-width:130px"><label>' . $t('Menge (optional)', 'Quantity (optional)', '数量（可选）') . '</label><input type="text" name="menge" inputmode="decimal" placeholder="' . $h($p['einheit']) . '"></div>'
-            . '<div class="bx-field" style="margin:0;min-width:200px"><label>CoA</label><input type="file" name="bch_coa" accept=".pdf,.png,.jpg,.jpeg,.webp"></div>'
-            . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Charge / CoA speichern', 'Save batch / CoA', '保存批次 / COA') . '</button></form>';
+            . '<div class="bx-field" style="margin:0;max-width:110px"><label>' . $t('Menge', 'Quantity', '数量') . '</label><input type="text" name="menge" inputmode="decimal" placeholder="' . $h($p['einheit']) . '"></div>'
+            . '<button class="btn btn-ghost btn-sm" type="submit">' . $t('Eintragen', 'Save', '保存') . '</button></div></form>';
+        $o .= '</div>';
         // CoA ohne Charge-Zeile (z. B. erst die Datei, Charge später / per KI) + Spezifikation
         $lose = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'coa' && trim((string)($d['charge_nr'] ?? '')) === ''));
         $specs = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'spec'));
@@ -397,15 +406,13 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
         $itemSpec = bch_item_spec((int)($p['item_id'] ?? 0));
         $o .= '<div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:13px"><span class="muted">' . $t('Spezifikation', 'Specification', '规格书') . ':</span> ';
         foreach ($specs as $d) $o .= $docLink($d) . ' ' . $delDoc($d) . ' ';
+        if (!$specs && !$itemSpec) $o .= '<span class="muted">–</span>';
         if (!$specs && $itemSpec) $o .= ($von === 'team' ? '<a href="?p=dokument&id=' . (int)$itemSpec['id'] . '" target="_blank">' . $h($itemSpec['datei_orig'] ?: 'Spezifikation') . '</a>' : $h($itemSpec['datei_orig'] ?: '')) . ' <span class="muted">(' . $t('liegt am Rohstoff vor', 'already on file', '已存档') . ')</span>';
         $o .= '</div>';
-        {   // Weiteres Dokument: Spezifikation (nur solange keine vorliegt) oder ein CoA, dessen Charge später eingetragen wird
-            $o .= '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:8px"><input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '">'
-                . '<div class="bx-field" style="margin:0"><label>' . $t('Weiteres Dokument', 'Other document', '其他文件') . '</label><select name="dok_typ">'
-                . ((!$specs && !$itemSpec) ? '<option value="spec">' . $t('Spezifikation', 'Specification', '规格书') . '</option>' : '')
-                . '<option value="coa">' . $t('CoA (Charge später eintragen)', 'CoA (batch number later)', 'COA（稍后填写批号）') . '</option></select></div>'
-                . '<div class="bx-field" style="margin:0;min-width:200px"><label>' . $t('Datei', 'File', '文件') . '</label><input type="file" name="bch_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>'
-                . '<button class="btn btn-ghost btn-sm" type="submit">' . $t('Hochladen', 'Upload', '上传') . '</button></form>';
+        if (!$specs && !$itemSpec) {   // Spezifikation hochladen – nur solange weder an der Position noch am Rohstoff eine liegt
+            $o .= '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px"><input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '"><input type="hidden" name="dok_typ" value="spec">'
+                . '<input type="file" name="bch_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp" style="max-width:240px">'
+                . '<button class="btn btn-ghost btn-sm" type="submit">' . $t('Spezifikation hochladen', 'Upload specification', '上传规格书') . '</button></form>';
         }
         $o .= '</div>';
     }
