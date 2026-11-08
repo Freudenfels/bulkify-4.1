@@ -514,8 +514,9 @@ if ($gebucht):
           <div class="we-et-zeile"><span class="muted">Kunde</span> <span id="weEtKunde">–</span></div>
           <div class="we-et-zeile"><span class="muted">Artikel</span> <span id="weEtArtikel">–</span></div>
           <div id="weEtWarn" class="we-et-warn" hidden></div>
-          <div class="muted" style="font-size:13px;margin-top:var(--sp-3)">Design und Größe mit der gelieferten Rolle vergleichen. Passt etwas nicht: nicht einbuchen und Rücksprache halten.</div>
-          <button type="button" class="btn btn-primary" id="weEtOk" style="margin-top:var(--sp-3)">Design und Größe stimmen – Menge erfassen</button>
+          <div id="weEtMassHinweis" class="we-et-info" hidden></div>
+          <div class="muted" style="font-size:13px;margin-top:var(--sp-3)">Design mit der gelieferten Rolle vergleichen. Etiketten sind oft ein paar Millimeter größer als das Glas (Sicherheitsmaß) – das ist in Ordnung.</div>
+          <button type="button" class="btn btn-primary" id="weEtOk" style="margin-top:var(--sp-3)">Menge erfassen</button>
         </div>
       </div>
     </div>
@@ -663,7 +664,8 @@ if ($gebucht):
   .we-et-zeile{margin:4px 0;overflow-wrap:anywhere}
   .we-et-daten .btn{white-space:normal;max-width:100%;text-align:center}
   .we-et-warn{margin-top:var(--sp-3);padding:10px 12px;border-radius:8px;border:1px solid var(--warn);color:var(--text)}
-  .we-kacheln[hidden],.we-et-pruef[hidden],.we-et-warn[hidden],#weKopf[hidden],#wePosPanel[hidden]{display:none}
+  .we-et-info{margin-top:var(--sp-3);padding:10px 12px;border-radius:8px;background:rgba(127,127,127,.08);border:1px solid rgba(127,127,127,.25);color:var(--text)}
+  .we-kacheln[hidden],.we-et-pruef[hidden],.we-et-warn[hidden],.we-et-info[hidden],#weKopf[hidden],#wePosPanel[hidden]{display:none}
 </style>
 <script src="/assets/etikett_vorschau.js"></script>
 
@@ -1246,11 +1248,14 @@ if ($gebucht):
     if(e.dok){ bxEtikettVorschau(vz, '?p=dok&id='+e.dok, e.pdf); }
     else { vz.innerHTML='<div class="we-et-warn" style="margin:0">Kein freigegebenes Etikett-Design hinterlegt.</div>'; hinw.push('Ohne freigegebenes Design lässt sich nur die Größe prüfen.'); }
     if(!gm && !em) hinw.push('Für dieses Etikett sind keine Maße hinterlegt.');
-    // Abweichung: hinterlegtes Etikett-Maß vs. Glas-Endformat (Toleranz 2 mm) -> klarer Warnhinweis.
+    // Abweichung Etikett-Maß vs. Glas-Endformat (Toleranz 2 mm): NUR neutraler Hinweis, nie Sperre
+    // (Soll-Handbuch 4.5, Entscheidung Nico 08.11.2026: Etiketten sind oft 2-5 mm größer = Sicherheitsmaß).
+    var mh=document.getElementById('weEtMassHinweis'), mhTxt='';
     if(etGlas && etGlas.breite && etGlas.hoehe && e.breite && e.hoehe
        && (Math.abs(e.breite-etGlas.breite)>2 || Math.abs(e.hoehe-etGlas.hoehe)>2)){
-      hinw.push('Achtung: Das am Etikett hinterlegte Maß ('+em+') weicht vom Glas-Endformat ('+gm+(etGlas.name?', '+etGlas.name:'')+') ab. Nicht einbuchen – bitte prüfen/Rücksprache.');
+      mhTxt='Hinweis: Etikett '+em+', Glas-Endformat '+gm+(etGlas.name?' ('+etGlas.name+')':'')+' – Maße weichen ab. Etiketten sind oft etwas größer, einbuchen ist möglich.';
     }
+    if(mh){ mh.hidden=!mhTxt; mh.textContent=mhTxt; }
     warn.hidden=!hinw.length; warn.textContent=hinw.join(' ');
     etPruef.hidden=false; etPanels(false);
     if(etOk) etOk.disabled=false;

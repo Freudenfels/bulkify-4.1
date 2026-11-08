@@ -50,6 +50,8 @@ Wählt man ein Etikett (Typ „Verpackung / Etikett“; Kundenetiketten heißen 
 
 Hat ein Kundenetikett kein freigegebenes Design, steht dort „Kein freigegebenes Etikett-Design hinterlegt“. Das Buchen selbst ist unverändert.
 
+**Maß nur zur Info (08.11.2026):** Der Hinweistext sagt nicht mehr „nicht buchen, Rücksprache“. Etiketten sind oft 2–5 mm größer als das Glas-Endformat (Sicherheitsmaß) – das ist kein Fehler und sperrt nie (Soll-Handbuch 4.5).
+
 Freigeben aus der Quarantäne läuft über `charge_quarantaene_freigeben()` (04.11.2026). Die Quarantäne-Liste steht jetzt auch unter Lager → Freigaben.
 
 Soll-Kette 2a (04.11.2026): Haken **„Problem (Beschädigung, Abweichung) – in Quarantäne buchen“** im Formular, gilt für Wareneingang und Zukauf. Ohne Haken ist die Ware frei.

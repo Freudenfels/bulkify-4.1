@@ -225,7 +225,7 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
           <div class="muted" style="font-size:13px">Größe</div>
           <div id="weEtikettMass" style="font-size:28px;font-weight:600;line-height:1.15;margin:2px 0 10px">–</div>
           <div id="weEtikettDaten" style="font-size:14px;line-height:1.7;overflow-wrap:anywhere"></div>
-          <div class="muted" style="font-size:12px;margin-top:8px">Design und Größe mit dem gelieferten Etikett vergleichen. Passt etwas nicht: nicht buchen, Rücksprache halten.</div>
+          <div class="muted" style="font-size:12px;margin-top:8px">Design mit dem gelieferten Etikett vergleichen. Etiketten sind oft ein paar Millimeter größer als das Glas (Sicherheitsmaß) – das ist in Ordnung und kein Grund, nicht zu buchen.</div>
         </div>
       </div>
     </div>
