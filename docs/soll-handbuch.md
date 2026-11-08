@@ -111,6 +111,7 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
 ### 4.4 CoA zur Lieferung (Eingangsunterlagen)
 - **Portal-Lieferanten** müssen beim Melden "versendet" die **Chargennummer** eintragen **und das CoA hochladen** - sonst können sie nicht abschließen.
 - **Direkt bestellt/telefonisch:** Nico (oder Einkauf) lädt das CoA aus der Mail an der Bestellung hoch und trägt die Charge ein.
+- **Ein Platz für die Unterlagen (gebaut 08.11.2026):** Charge, MHD, Menge, CoA und Spezifikation liegen **an der Bestellposition** (Block "Chargen & Dokumente" auf der Bestellseite), die Rechnung im Block "Zahlung". Hochladen können **Team und Lieferant** (Portal) - dieselbe Ablage, zwei Oberflächen, nichts doppelt (nur eine Rechnung je Bestellung). Mehrere Chargen je Position möglich (Teillieferung, zwei Chargen). Liegt am Rohstoff schon eine gültige Spezifikation, wird sie nur angezeigt. Beim **Wareneingang gegen die Bestellung** (Lager-App und Dashboard) bekommt die Charge die Bestellposition; CoA und Spezifikation hängen damit **automatisch an der Charge** - auch wenn das CoA erst später hochgeladen wird. Fehlt das CoA beim Wareneingang: nur Hinweis, blockiert nichts. Die eingetragene Charge ist die Vergleichsbasis für den blinden Chargen-Abgleich (4.5, kommt mit Schritt 6).
 - **Bei jeder Preisabgabe** im Lieferantenportal ist mindestens **eine Spezifikation oder ein CoA** Pflicht.
 - **Prüfung durch QM (Tabea)** - geht schon **vor** der Lieferung, sobald das CoA da ist. "Geprüft" heißt:
   1. Passt es zur Ware? (Chargennummer CoA = Charge der Lieferung)
@@ -376,6 +377,7 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | Schritt 2: Menü Einfach/Ausführlich gebaut (3); Entscheidungen 12.1 (Einkauf + Lager in Einfach, Lager ein Punkt), 12.4 (voller Packungspreis), 12.5 inkl. Feld Unter-Charge der Probe zurückgestellt; Fixes 10.2/10.3/10.4, 4.9 Meldetexte, 4.11 Easy Production frei, 4.12 Labor-Befund/charge_norm, 4.5 Erwartete Lieferungen + Schnellmaske stillgelegt; 10.5 geprüft | Nico / Claude Code |
 | 08.11.2026 | Sofort-Fix Etikett-Format: 4.5 Etikett-Maß vs. Glas nur Hinweis, nie Sperre; Maß neuer Etiketten aus der TrimBox; Menü Einfach zeigt Buchhaltung für Rolle finance (3) | Nico / Claude Code |
 | 08.11.2026 | Sofort-Fix Bestellliste: 4.3 Kundenetiketten/bedruckte Beutel netto gegen Lager und unterwegs, eine Rechnung mit Reiter Material und Fortschritt | Nico / Claude Code |
+| 08.11.2026 | 4.4: Chargen & Dokumente (Charge, MHD, CoA, Spezifikation) an der Bestellposition, Team + Lieferant, Weitergabe an die Charge beim Wareneingang; Lieferantenrechnung auch durch das Team | Nico / Claude Code |
 | 08.11.2026 | 3: Menü "Einfach" flache Liste ohne Gruppen, größer, feste Reihenfolge, Linien-Icons | Nico / Claude Code |
 | 08.11.2026 | 3: Benachrichtigungen als erster Punkt in "Einfach" (Glocke mit Zähler), Eintrag unten entfällt dort | Nico / Claude Code |
 | 08.11.2026 | 3: Menüpunkt "Bestellt" (Bestellungen) in "Einfach" unter Einkauf | Nico / Claude Code |
