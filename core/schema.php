@@ -7468,8 +7468,12 @@ function bestellung_stufe(array $b): array {
 function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = null, ?string $eta = null, string $notiz = '', string $wer = ''): void {
     $d = fn($x) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$x) ? (string)$x : null;
     $wer = $wer !== '' ? $wer : (string)(function_exists('current_user') ? (current_user()['name'] ?? '') : '');
+    $bestellt = $d($datum) ?? gmdate('Y-m-d');
+    // „Erwartet am" nur, wenn es NACH dem Bestelltag liegt – eine Lieferung am Bestelltag oder davor ist ein Eingabefehler
+    // (BE-2924: bestellt 28.10., „erwartet" 28.10.). Ohne Termin bleibt das Feld leer und lässt sich an der Bestellung setzen.
+    $eta = $d($eta); if ($eta !== null && $eta <= $bestellt) $eta = null;
     q("UPDATE bestellung SET bestellart='direkt', status='bestellt', bestaetigt=1, bestaetigt_am=?, bestaetigt_von=?, bestelldatum=?, eta_geplant=COALESCE(?, eta_geplant), notiz=? WHERE id=?",
-      [gmdate('Y-m-d H:i:s'), $wer ?: 'Einkauf', $d($datum) ?? gmdate('Y-m-d'), $d($eta), trim('Direkt bestellt (Telefon/Mail)' . ($notiz !== '' ? ' · ' . $notiz : '')), $bestellung_id]);
+      [gmdate('Y-m-d H:i:s'), $wer ?: 'Einkauf', $bestellt, $eta, trim('Direkt bestellt (Telefon/Mail)' . ($notiz !== '' ? ' · ' . $notiz : '')), $bestellung_id]);
     log_aktivitaet('bestellung', $bestellung_id, 'team', 'Direkt beim Lieferanten bestellt (Telefon/Mail) – ohne Mail, gilt als bestätigt' . ($notiz !== '' ? ': ' . $notiz : '') . '.', 'status');
     if (function_exists('bedarf_bump')) bedarf_bump();
 }

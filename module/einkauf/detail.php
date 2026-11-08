@@ -25,6 +25,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // Ablauf beim Lieferanten – dieselben Aktionen nutzt spaeter das Lieferantenportal.
     // Über das Portal gesendet, Lieferant hat aber telefonisch bestätigt: bestellt + bestätigt, ohne weitere Mail (08.11.2026).
+    // Liefertermin setzen/ändern (Team) – v. a. bei „direkt bestellt", wo kein Lieferant im Portal einen Termin zusagt.
+    // Muss nach dem Bestelltag liegen; leer = kein Termin.
+    if ($aktion === 'eta_setzen' && !$neu) {
+        $eta = trim((string)($_POST['eta'] ?? ''));
+        $bd  = (string) scalar("SELECT COALESCE(bestelldatum, DATE(angelegt)) FROM bestellung WHERE id=?", [(int)$id]);
+        if ($eta !== '' && (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $eta) || ($bd !== '' && $eta <= $bd))) {
+            header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode('Der Termin muss nach dem Bestelltag (' . ($bd !== '' ? date('d.m.Y', strtotime($bd)) : '–') . ') liegen.')); exit;
+        }
+        q("UPDATE bestellung SET eta_geplant=? WHERE id=?", [$eta !== '' ? $eta : null, (int)$id]);
+        log_aktivitaet('bestellung', (int)$id, 'team', $eta !== '' ? 'Liefertermin auf ' . date('d.m.Y', strtotime($eta)) . ' gesetzt.' : 'Liefertermin entfernt.', 'status');
+        bedarf_bump();
+        header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
+    }
     if ($aktion === 'telefonisch_bestaetigt' && !$neu) {
         $f = bestellung_telefonisch_bestaetigen((int)$id);
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
@@ -276,7 +289,7 @@ if (!$neu) {
        . '<div style="font-size:24px;font-weight:700;margin:2px 0 6px;color:' . $stufeFarbe . '">' . h($stufe['label']) . '</div>'
        . '<div class="muted" style="font-size:14px">Lieferant: <strong>' . ($liefName !== '' ? h($liefName) : (($b['bestellart'] ?? '') === 'online' ? 'Online-Einkauf (ohne Lieferant)' : '–')) . '</strong>'
        . (!empty($b['bestelldatum']) ? ' · bestellt am ' . h(date('d.m.Y', strtotime((string)$b['bestelldatum']))) : '')
-       . (!empty($b['eta_geplant']) ? ' · zugesagter Termin ' . h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '')
+       . (!empty($b['eta_geplant']) ? ' · ' . (($b['bestellart'] ?? '') === 'direkt' ? 'erwartet am ' : 'zugesagter Termin ') . h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '')
        . (!empty($b['angekommen_am']) ? ' · angekommen ' . h(date('d.m.Y', strtotime((string)$b['angekommen_am']))) : '')
        . '</div></div>';
     // B6: Aktionen erst sammeln (Output-Buffer) und GANZ UNTEN ausgeben.

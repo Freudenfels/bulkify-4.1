@@ -38,9 +38,13 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
             . '<button class="btn btn-primary" type="submit">' . $t('Bestellung bestätigen', 'Confirm order', '确认订单') . '</button>'
             . '</form>';
     } else {
+        $direkt = (string)($b['bestellart'] ?? '') === 'direkt';
         $o .= '<div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">'
-            . '<span>' . $t('Zugesagter Termin', 'Confirmed date', '确认交货日期') . ': <strong>'
+            . '<span>' . ($direkt ? $t('Erwartet am', 'Expected on', '预计到货') : $t('Zugesagter Termin', 'Confirmed date', '确认交货日期')) . ': <strong>'
             . ($b['eta_geplant'] ? $h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '–') . '</strong></span>'
+            . ($wer === 'team' && empty($b['angekommen_am'])
+                ? '<form method="post" class="bx-row" style="gap:6px;align-items:center;margin:0"><input type="hidden" name="aktion" value="eta_setzen">'
+                  . '<input type="date" name="eta" value="' . $h((string)($b['eta_geplant'] ?? '')) . '" style="max-width:160px"><button class="btn btn-ghost btn-sm" type="submit">' . $t('Termin ändern', 'Change date', '修改日期') . '</button></form>' : '')
             . ($b['bestaetigt_von'] ? '<span class="muted" style="font-size:13px">' . $t('bestätigt durch', 'confirmed by', '确认人') . ' ' . $h($b['bestaetigt_von']) . '</span>' : '')
             . ($b['angekommen_am'] ? '<span class="muted" style="font-size:13px">' . $t('Wareneingang', 'Goods received', '收货') . ': ' . $h(date('d.m.Y', strtotime((string)$b['angekommen_am']))) . '</span>'
                : (!empty($b['teilgeliefert_am']) ? '<span class="muted" style="font-size:13px">' . $t('Teillieferung eingegangen', 'Partial delivery received', '部分到货') . ': ' . $h(date('d.m.Y', strtotime((string)$b['teilgeliefert_am']))) . '</span>' : ''))

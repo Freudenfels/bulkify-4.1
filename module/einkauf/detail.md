@@ -60,3 +60,6 @@ Bei Status `gesendet` und noch nicht bestätigt: Knopf „Telefonisch bestätigt
 
 ## CoA-Prüf-Popup (08.11.2026)
 Nach einem CoA-Upload im Block „Chargen & Dokumente“ springt die Seite auf `&coa=<dok>` und öffnet das Prüf-Popup. `GET coa_stand=<dok>` liefert den Stand des Auslesens als JSON (`{"stand":"laeuft|bereit|fehler|geprueft|ohne_ki"}`). Logik in `core/bestellung_chargen.php`.
+
+## Liefertermin bei „direkt bestellt“ (08.11.2026)
+Kopf und Ablauf sagen bei `bestellart='direkt'` „erwartet am“ statt „zugesagter Termin“ (kein Lieferant hat zugesagt). Das Team kann den Termin im Ablauf-Block setzen/ändern (Aktion `eta_setzen`, muss nach dem Bestelltag liegen, leer = kein Termin, protokolliert). `bestellung_direkt_abschliessen()` übernimmt „Erwartet am“ nur, wenn es nach dem Bestelltag liegt (Anlass BE-2924: bestellt und „erwartet“ am selben Tag).

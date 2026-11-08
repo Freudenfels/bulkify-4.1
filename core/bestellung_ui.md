@@ -13,3 +13,6 @@
 
 ## Wareneingang → Portal-Status (Nacht 4b)
 Neue letzte Station **„Wareneingang bei bulkify"** (`eingegangen`, de/en/zh). Sie setzt nur der Wareneingang: beim vollständigen Einbuchen einer Lieferanten-Bestellung (Dashboard, Lager-App, Knopf „liefern"), nicht der Lieferant per Knopf. Bei einer Teillieferung steht im Ablauf „Teillieferung eingegangen: Datum" (`bestellung.teilgeliefert_am`). **Keine Mail an den Lieferanten.** Das Team bekommt eine Dashboard-Benachrichtigung „Lieferung eingebucht: BE-… (Firma)", bei einer Teillieferung mit Anzahl offener Positionen (`bestellung_eingang_melden()`).
+
+## 08.11.2026
+Bei „direkt bestellt“ heißt der Termin „Erwartet am“; das Team (`$wer='team'`) sieht daneben ein Datumsfeld „Termin ändern“ (Aktion `eta_setzen`, bis zum Wareneingang).
