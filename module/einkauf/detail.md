@@ -49,3 +49,6 @@ Die Bestelldetailseite ist von oben nach unten neu geordnet:
 
 Knopf „liefern“ (04.11.2026): Enthält die Bestellung Bulkware ohne Lagerartikel (Freitext), wird nichts gebucht und die Bestellung bleibt offen. Hinweis: in der Lager-App unter Wareneingang einbuchen (Charge, MHD, Auftrag).
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## Telefonisch bestätigt (08.11.2026)
+Bei Status `gesendet` und noch nicht bestätigt: Knopf „Telefonisch bestätigt“ → `bestellung_telefonisch_bestaetigen()`: Status bestellt, bestätigt, Notiz-Zusatz, ohne Mail.

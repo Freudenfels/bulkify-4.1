@@ -73,3 +73,6 @@ Zeilen aus `bedarf_bulk()` mit `art='fertig'` heißen „Fertigware: …", Menge
 **Vollbedruckter Beutel (03.11.2026):** wie Etiketten gesperrt („gesperrt“, kein Haken), bis der Kunde das Beutel-Design
 aller Aufträge mit diesem Beutel freigegeben hat (`druck` + `etikett_ok` aus `bedarf_aggregiert()`).
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## Dritter Bestellweg „Direkt bestellt (Telefon/Mail)“ (08.11.2026)
+Neben „Über Lieferant (Portal)“ und „Online bestellt“: Box „Direkt bestellt (Telefon/Mail)“ (Erwartet am, Notiz) und in „Vorsorglich bestellen“ ein dritter Knopf (bestellt am, erwartet am, Notiz). Für JEDEN Lieferanten (auch mit Portal-Account), nur Lieferant nötig; je Position eine Bestellung (wie Portal-Weg), Preis aus dem Lieferantenpreis. `bestellung_direkt_abschliessen()`: Status bestellt, bestaetigt=1 (+am/von), bestellart=direkt, keine Mail. Dropdowns markieren „· Portal“ (Account + Preis) bzw. „· direkt“.

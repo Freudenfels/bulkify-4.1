@@ -538,3 +538,6 @@ Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohs
 
 ## Zuordnen je Materialzeile (08.11.2026)
 `auftrag_material_quellen($item)` (freie Chargen abzgl. Charge-Reservierungen, offene Bestellpositionen abzgl. Reservierungen), `auftrag_material_zugeordnet($aid)`, `auftrag_material_zuordnen()`, `auftrag_material_loesen()` – Reservierung als einzige Schreibstelle für Nicht-Bulk-Material.
+
+## Direkt bestellt (08.11.2026)
+`bestellung_direkt_abschliessen($bid, $datum, $eta, $notiz)` – dritter Bestellweg (bestellt + bestätigt, bestellart=direkt, keine Mail); `bestellung_telefonisch_bestaetigen($bid)` – gesendet → bestellt ohne Mail. Statustext „direkt bestellt“.

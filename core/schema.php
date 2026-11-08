@@ -7406,14 +7406,40 @@ function bestellung_stufe(array $b): array {
         }
         if ($station === 'versand')    return ['label'=>'versandbereit', 'kind'=>'info'];
         if ((int)($b['bestaetigt'] ?? 0) === 1 || in_array($station, ['angenommen','produktion','qualitaet'], true)) {
-            $lbl = $station !== '' && isset(bestellung_stationen()[$station]) ? bestellung_stationen()[$station] : 'bestätigt';
+            $lbl = $station !== '' && isset(bestellung_stationen()[$station]) ? bestellung_stationen()[$station]
+                 : ((string)($b['bestellart'] ?? '') === 'direkt' ? 'direkt bestellt' : 'bestätigt');
             return ['label'=>$lbl, 'kind'=>'ok'];
         }
         return ['label'=>'wartet auf Bestätigung', 'kind'=>'warn'];
     }
     // Lieferant ohne Portal / Online: selbstgepflegter Stand.
     if ((string)($b['bestellart'] ?? '') === 'online') return ['label'=>'online bestellt', 'kind'=>'info'];
+    if ((string)($b['bestellart'] ?? '') === 'direkt') return ['label'=>'direkt bestellt', 'kind'=>'info'];
     return ['label'=>'bestellt', 'kind'=>'info'];
+}
+// Dritter Bestellweg „Direkt bestellt (Telefon/Mail)" (Nico 08.11.2026): beim Lieferanten (egal ob mit Portal-Account) selbst
+// bestellt – Status sofort „bestellt" und bestätigt, KEINE Mail/Portal-Benachrichtigung. Der Lieferant sieht die Bestellung im
+// Portal trotzdem (Tracking, Rechnung), muss aber nichts bestätigen. $datum = Bestelldatum (leer = heute), $eta = erwarteter Termin.
+function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = null, ?string $eta = null, string $notiz = '', string $wer = ''): void {
+    $d = fn($x) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$x) ? (string)$x : null;
+    $wer = $wer !== '' ? $wer : (string)(function_exists('current_user') ? (current_user()['name'] ?? '') : '');
+    q("UPDATE bestellung SET bestellart='direkt', status='bestellt', bestaetigt=1, bestaetigt_am=?, bestaetigt_von=?, bestelldatum=?, eta_geplant=COALESCE(?, eta_geplant), notiz=? WHERE id=?",
+      [gmdate('Y-m-d H:i:s'), $wer ?: 'Einkauf', $d($datum) ?? gmdate('Y-m-d'), $d($eta), trim('Direkt bestellt (Telefon/Mail)' . ($notiz !== '' ? ' · ' . $notiz : '')), $bestellung_id]);
+    log_aktivitaet('bestellung', $bestellung_id, 'team', 'Direkt beim Lieferanten bestellt (Telefon/Mail) – ohne Mail, gilt als bestätigt' . ($notiz !== '' ? ': ' . $notiz : '') . '.', 'status');
+    if (function_exists('bedarf_bump')) bedarf_bump();
+}
+// Bereits über das Portal gesendete Bestellung (Status gesendet, wartet auf Bestätigung) – der Lieferant hat am Telefon bestätigt.
+// Setzt „bestellt" + bestätigt, ohne weitere Mail. Rückgabe '' = ok, sonst Fehlertext.
+function bestellung_telefonisch_bestaetigen(int $bestellung_id, string $wer = ''): string {
+    $b = one("SELECT id, status, bestaetigt, notiz FROM bestellung WHERE id=?", [$bestellung_id]);
+    if (!$b) return 'Bestellung nicht gefunden.';
+    if ((string)$b['status'] !== 'gesendet' || (int)$b['bestaetigt'] === 1) return 'Nur für gesendete, noch nicht bestätigte Bestellungen.';
+    $wer = $wer !== '' ? $wer : (string)(current_user()['name'] ?? 'Einkauf');
+    q("UPDATE bestellung SET status='bestellt', bestaetigt=1, bestaetigt_am=?, bestaetigt_von=?, notiz=? WHERE id=?",
+      [gmdate('Y-m-d H:i:s'), $wer, trim((string)$b['notiz'] . ' · telefonisch bestätigt'), $bestellung_id]);
+    log_aktivitaet('bestellung', $bestellung_id, 'team', 'Telefonisch bestätigt (' . $wer . ') – ohne Mail.', 'status');
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return '';
 }
 // Erinnerung an den Portal-Lieferanten senden (unbestätigte Bestellung). Setzt erinnert_am.
 // Rückgabe: '' = gesendet, sonst Fehlertext. $auto=true für den Cron (kein User-Kontext).
