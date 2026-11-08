@@ -6179,8 +6179,12 @@ function kunde_auftrag_phase(array $a): array {
          : ($aid > 0 ? auftrag_ist_fulfillment($aid) : false);
     $dates = array_fill(0, 9, null);
     $dates[0] = $a['angelegt'] ?? null;                                  // Bestätigt
+    // „Rohstoff bestellt" nur aus einer ECHTEN Bestellung zum Auftrag (Nico 08.11.2026): an den Lieferanten gesendet,
+    // bestätigt oder geliefert. Ein Entwurf (status 'offen', z. B. aus „Bestellen" im Beschaffungsweg oder der
+    // Einkaufsliste), eine stornierte Bestellung, „Weg festlegen" oder „An Bedarfsliste senden" zählen NICHT.
+    $echt = "(b.status IN ('gesendet','bestellt','geliefert') OR b.angekommen_am IS NOT NULL)";
     $best = one("SELECT COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d FROM bestellung b
-                 JOIN bestellung_position bp ON bp.bestellung_id=b.id WHERE bp.auftrag_id=?", [$aid]);
+                 JOIN bestellung_position bp ON bp.bestellung_id=b.id WHERE bp.auftrag_id=? AND $echt", [$aid]);
     $bestellt = $best && !empty($best['d']);
     if ($bestellt) $dates[1] = $best['d'];
     // Rohstoffe werden artikelweise (über mehrere Aufträge gebündelt) bestellt -> die Bestellposition trägt
@@ -6188,15 +6192,12 @@ function kunde_auftrag_phase(array $a): array {
     // (bestellung_erstellen protokolliert je Auftrag, dessen Bedarf die Bestellung deckt: ref_typ='bestellung').
     // Den auch als „Rohstoff bestellt" werten, sonst bliebe die Phase bei reinen Rohstoff-Bestellungen hängen.
     if (!$bestellt) {
-        $la = one("SELECT MIN(erstellt) d FROM aktivitaet WHERE objekt_typ='auftrag' AND objekt_id=? AND ref_typ='bestellung'", [$aid]);
+        $la = one("SELECT MIN(COALESCE(b.bestelldatum, ak.erstellt)) d FROM aktivitaet ak JOIN bestellung b ON b.id=ak.ref_id
+                   WHERE ak.objekt_typ='auftrag' AND ak.objekt_id=? AND ak.ref_typ='bestellung' AND $echt", [$aid]);
         if ($la && !empty($la['d'])) { $bestellt = true; $dates[1] = $la['d']; }
     }
-    // Retroaktiv (auch für Aufträge VOR dem Verlauf-Fix): sind alle eingekauften Rohstoffe des Auftrags durch
-    // offene Bestellungen gedeckt, gilt „Rohstoff bestellt" ebenfalls.
-    if (!$bestellt) {
-        $rb = auftrag_rohstoffe_beschafft($aid);
-        if ($rb !== null) { $bestellt = true; $dates[1] = $dates[1] ?? $rb; }
-    }
+    // Die frühere Ableitung „alle Rohstoffe durch irgendeine offene Bestellung gedeckt" (auftrag_rohstoffe_beschafft)
+    // zählt NICHT mehr: sie war artikelweit (auch Bestellungen anderer Aufträge, auch Entwürfe) – keine Bestellung ZUM Auftrag.
     $angDate = null;
     $we = one("SELECT COALESCE(MIN(c.wareneingang), MIN(c.angelegt)) d FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie<>'verkaufsfertig'", [$aid]);   // Fertigware zählt nicht als „Rohstoff angekommen"
     if ($we && !empty($we['d'])) $angDate = $we['d'];

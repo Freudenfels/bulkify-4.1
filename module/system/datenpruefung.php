@@ -38,6 +38,24 @@ $CHECKS = [
                     'update' => "UPDATE produkt p JOIN rezeptur r ON r.id=p.rezeptur_id SET p.exklusiv=1, p.kunde_id=r.kunde_id
                                  WHERE r.exklusiv=1 AND r.kunde_id IS NOT NULL AND p.exklusiv=0 AND p.id IN ({IDS})"],
     ],
+    'rohstoff_bestellt_ohne' => [
+        'titel' => 'Fortschritt „Rohstoff bestellt“ ohne echte Bestellung',
+        'info'  => 'Aufträge, deren Fortschritt von Hand auf „Rohstoff bestellt“ gesetzt ist, ohne dass es eine echte Bestellung zum Auftrag gibt '
+                 . '(an den Lieferanten gesendet, bestätigt oder geliefert). Kunde sieht im Portal „Rohstoff bestellt“. Korrektur: die manuell gesetzte Stufe entfernen – '
+                 . 'danach zeigt der Fortschritt wieder den echten Stand (Bestätigt bzw. sobald bestellt: Rohstoff bestellt).',
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, k.firma AS kunde, a.status, a.phase_override, a.status_datum
+                    FROM auftrag a LEFT JOIN kunden k ON k.id = a.kunde_id
+                    WHERE a.phase_override = 1 AND a.status NOT IN ('storniert','versendet','erledigt')
+                      AND NOT EXISTS (SELECT 1 FROM bestellung_position bp JOIN bestellung b ON b.id = bp.bestellung_id
+                                      WHERE bp.auftrag_id = a.id AND (b.status IN ('gesendet','bestellt','geliefert') OR b.angekommen_am IS NOT NULL))
+                      AND NOT EXISTS (SELECT 1 FROM aktivitaet ak JOIN bestellung b ON b.id = ak.ref_id
+                                      WHERE ak.objekt_typ = 'auftrag' AND ak.objekt_id = a.id AND ak.ref_typ = 'bestellung'
+                                        AND (b.status IN ('gesendet','bestellt','geliefert') OR b.angekommen_am IS NOT NULL))
+                    ORDER BY a.id DESC",
+        'korrektur' => "UPDATE auftrag SET phase_override=NULL WHERE phase_override=1 AND id IN (...);",
+        'fix'   => ['tabelle' => 'auftrag', 'typ' => 'auftrag',
+                    'update' => "UPDATE auftrag SET phase_override=NULL WHERE phase_override=1 AND status NOT IN ('storniert','versendet','erledigt') AND id IN ({IDS})"],
+    ],
     's10_bulk' => [
         'titel' => 'S-10: Bulk-Bestellungen in g/ml mit €/kg-Preis',
         'info'  => 'Bulk-Positionen in g oder ml mit einem Preis, der nach €/kg aussieht (Summe dadurch 1.000-fach). Korrektur: Menge in kg bzw. l umrechnen'

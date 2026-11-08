@@ -529,3 +529,9 @@ Abgeschlossen · Versenden (Versendet) bzw. Einlagern (Eingelagert) bei Fulfillm
 - `auftrag_fortschritt_kunde()` = Kundensicht (Einkaufsstände der Etiketten → „Etikettierung", Untertexte weg) – fürs Portal vorbereitet.
 - `auftrag_track_icon('err')` = „!".
 - Jeder Schritt trägt im 6. Feld die bisherige Phasen-Stufe, die ihn erledigt (für „Schritt abschließen“); `phase_override` wirkt als Untergrenze auch auf Produziert (≥4), Etikettiert/Verpackt (≥5) und Qualitätsprüfung (≥6).
+
+## „Rohstoff bestellt“ nur bei echter Bestellung (08.11.2026)
+`kunde_auftrag_phase()`: Phase 1 nur, wenn eine Bestellung zum Auftrag den Status gesendet/bestellt/geliefert hat oder angekommen ist
+(Position mit auftrag_id oder Verlaufseintrag ref_typ=bestellung). Entwürfe (status offen), stornierte Bestellungen, „Weg festlegen“
+und „An Bedarfsliste senden“ zählen nicht. Die artikelweite Ableitung `auftrag_rohstoffe_beschafft()` wird dafür nicht mehr genutzt.
+Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohstoff_bestellt_ohne`.
