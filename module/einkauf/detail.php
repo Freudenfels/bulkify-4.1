@@ -58,7 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = $bRow ? (bestellung_chargen_post($bRow, 'team', 'de') ?? '') : 'Bestellung nicht gefunden.';
         // Nach einem CoA-Upload bzw. „erneut auslesen" öffnet sich das Prüf-Popup dieses CoA.
         $coaPop = (int)($GLOBALS['bch_letztes_coa'] ?? 0) ?: ($aktion === 'bch_ki' ? (int)($_POST['dok_id'] ?? 0) : 0);
-        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f)) . ($coaPop && $f === '' ? '&coa=' . $coaPop : '') . '#chargen'); exit;
+        $meld = (string)($GLOBALS['bch_meldung'] ?? '');
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f)) . ($coaPop && $f === '' ? '&coa=' . $coaPop : '') . ($meld !== '' ? '&aufg=' . rawurlencode($meld) : '') . '#chargen'); exit;
     }
     // Lieferantenrechnung durch das Team hochladen (kommt bei „Direkt bestellt" per Mail). Gleicher Platz wie der
     // Portal-Upload des Lieferanten (dokument typ='rechnung' an der Bestellung) – es gibt nur EINE Rechnung je Bestellung.

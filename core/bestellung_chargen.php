@@ -185,6 +185,75 @@ function bch_coa_werte(array $werte, int $item_id): array {
     }
     return $out;
 }
+// ---- Bezug zum Rohstoff (Nico 08.11.2026) ------------------------------------------------------------------------------
+// Ein CoA gilt für EINE Charge, die Spezifikation für den Rohstoff allgemein. Darum überschreibt das Bestell-CoA den Rohstoff
+// NICHT: (1) es erscheint in den Dokumenten des Rohstoffs, (2) nur FEHLENDES wird ergänzt (keine Grenzwerte -> aus dem CoA;
+// Wirkstoff ohne Gehalt -> Gehalt aus dem CoA; noch gar keine Wirkstoffe -> die des CoA), (3) Unterschiede meldet das Popup.
+
+// Bestell-CoAs/-Spezifikationen eines Rohstoffs (für die Rohstoffseite), neueste zuerst.
+function bch_item_dokumente(int $item_id): array {
+    if ($item_id <= 0 || !column_exists('dokument', 'bestellung_position_id')) return [];
+    return all("SELECT d.*, b.id AS bestellung_id, b.nummer AS bestellung_nr, l.firma AS lieferant
+                FROM dokument d JOIN bestellung_position bp ON bp.id=d.bestellung_position_id
+                JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                WHERE d.objekt_typ='bestellung' AND d.objekt_id=bp.bestellung_id AND bp.item_id=? AND d.typ IN ('coa','spec')
+                ORDER BY d.id DESC", [$item_id]);
+}
+// Unterschiede CoA <-> Rohstoff für den Hinweis im Popup: Wirkstoffgehalt und Grenzwerte (nur wo beide Seiten etwas haben).
+function bch_rohstoff_unterschiede(int $item_id, array $kd, array $werte): array {
+    if ($item_id <= 0) return [];
+    $out = [];
+    $fmt = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ',');
+    foreach ((array)($kd['wirkstoffe'] ?? []) as $w) {
+        $nm = trim((string)($w['name'] ?? '')); $g = $w['gehalt_prozent'] ?? null;
+        if ($nm === '' || $g === null || $g === '') continue;
+        $r = one("SELECT iw.gehalt_prozent FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id WHERE iw.item_id=? AND LOWER(n.name)=LOWER(?) LIMIT 1", [$item_id, $nm]);
+        if ($r && $r['gehalt_prozent'] !== null && abs((float)$r['gehalt_prozent'] - (float)$g) > 0.05)
+            $out[] = 'Wirkstoff ' . $nm . ': CoA ' . $fmt($g) . ' % – am Rohstoff ' . $fmt($r['gehalt_prozent']) . ' %';
+    }
+    $n = fn($x) => preg_replace('/\s+/u', '', mb_strtolower((string)$x));
+    foreach ($werte as $z) {
+        $spec = trim((string)($z['spezifikation'] ?? '')); $p = trim((string)($z['parameter'] ?? ''));
+        if ($spec === '' || $p === '') continue;
+        $unsere = bch_grenzwert_fuer($item_id, $p);
+        if ($unsere !== '' && $n($unsere) !== $n($spec)) $out[] = 'Grenzwert ' . $p . ': CoA ' . $spec . ' – unsere Spezifikation ' . $unsere;
+    }
+    return $out;
+}
+// Beim Bestätigen: nur Fehlendes am Rohstoff ergänzen. Rückgabe: Liste der Ergänzungen (für Protokoll/Meldung).
+function bch_rohstoff_ergaenzen(int $item_id, array $kd, array $werte): array {
+    require_once __DIR__ . '/spec_ki.php';
+    if ($item_id <= 0) return [];
+    $neu = [];
+    // Grenzwerte nur, wenn der Rohstoff noch GAR KEINE hat (sonst würde jede Lieferung die Spezifikation verändern).
+    if ((int) scalar("SELECT COUNT(*) FROM item_grenzwert WHERE item_id=?", [$item_id]) === 0) {
+        $g = spec_ki_grenzwerte($item_id, ['werte' => $werte]);
+        if ($g) $neu[] = $g . ' Grenzwert(e)';
+    }
+    $ws = (array)($kd['wirkstoffe'] ?? []);
+    if ($ws) {
+        if ((int) scalar("SELECT COUNT(*) FROM item_wirkstoff WHERE item_id=?", [$item_id]) === 0) {
+            $w = spec_ki_wirkstoffe($item_id, ['wirkstoffe' => $ws]);           // noch keine Wirkstoffe -> die des CoA
+            if ($w) $neu[] = $w . ' Wirkstoff(e)';
+        } else {
+            $w = 0;                                                             // nur Gehalt dort, wo er fehlt
+            foreach ($ws as $x) {
+                $nm = trim((string)($x['name'] ?? '')); $g = $x['gehalt_prozent'] ?? null;
+                if ($nm === '' || $g === null || $g === '') continue;
+                $r = one("SELECT iw.id FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id
+                          WHERE iw.item_id=? AND LOWER(n.name)=LOWER(?) AND iw.gehalt_prozent IS NULL AND (iw.gehalt_wert IS NULL OR iw.gehalt_wert='') LIMIT 1", [$item_id, $nm]);
+                if ($r) { $gv = (float) str_replace(',', '.', (string)$g); q("UPDATE item_wirkstoff SET gehalt_prozent=?, gehalt_wert=?, gehalt_einheit='prozent' WHERE id=?", [$gv, $gv, (int)$r['id']]); $w++; }
+            }
+            if ($w) $neu[] = $w . ' Wirkstoffgehalt(e)';
+        }
+    }
+    if ($neu) {
+        spec_nach_datenaenderung($item_id, 'CoA aus Bestellung');   // Erst-Daten: automatisch frei; sonst „wartet auf Freigabe"
+        log_aktivitaet('item', $item_id, 'team', 'Aus geprüftem Bestell-CoA ergänzt (nur Fehlendes): ' . implode(', ', $neu) . '.', 'notiz');
+    }
+    return $neu;
+}
+
 // Nach dem Wareneingang: Analysewerte des GEPRÜFTEN CoA an die Charge (charge_analyse), falls die Charge noch keine hat.
 function bch_werte_an_charge(int $charge_id): int {
     require_once __DIR__ . '/spec_ki.php';
@@ -296,6 +365,9 @@ function bestellung_chargen_post(array $b, string $von, string $sprache = 'de'):
             benachrichtigung_add('CoA-Abweichung: ' . ($b['nummer'] ?? ('Bestellung ' . $bid)) . ' · Charge ' . $nr,
                 count($abw) . ' Wert(e) außerhalb des Grenzwerts: ' . implode(', ', array_map(fn($w) => $w['parameter'] . ' ' . $w['ergebnis'], $abw)),
                 '?p=bestellung&id=' . $bid . '#chargen', 'qm', true);
+        // Rohstoff: nur Fehlendes ergänzen (Grenzwerte/Wirkstoffe), nie überschreiben.
+        $erg = bch_rohstoff_ergaenzen($itemId, $kd, $werte);
+        if ($erg) $GLOBALS['bch_meldung'] = 'Am Rohstoff ergänzt: ' . implode(', ', $erg) . '.';
         // Schon eingebucht? Dann gehen die Werte gleich an die Charge, sonst beim Wareneingang (bch_werte_an_charge).
         foreach (bch_eingebucht($bpD) as $c) if (charge_gleich((string)$c['charge_nr'], $nr)) bch_werte_an_charge((int)$c['id']);
         return '';
@@ -464,6 +536,10 @@ function bch_coa_dialoge(array $b): string {
                 . '<div class="bx-field" style="margin:0;max-width:140px"><label>Menge</label><input type="text" name="menge" value="' . $h($vMen) . '"></div></div>';
             if ($diff) $o .= '<div style="color:var(--err);font-size:13px;margin-top:6px">Eingetragen war Charge ' . $h($zeile['charge_nr']) . ' – das CoA nennt ' . $h($vNr) . '. Bitte klären, welche stimmt.</div>';
             if (!empty($kd['hinweise'])) $o .= '<div class="muted" style="font-size:12px;margin-top:8px">Hinweise der KI: ' . $h(implode(' · ', (array)$kd['hinweise'])) . '</div>';
+            $unt = bch_rohstoff_unterschiede((int)$d['item_id'], $kd, (array)($kd['werte_bestaetigt'] ?? $kd['werte'] ?? []));
+            if ($unt) $o .= '<div class="bx-panel" style="margin:12px 0 0;padding:10px 12px;border-color:var(--warn)"><strong>Anders als am Rohstoff</strong> <span class="muted" style="font-size:12px">– wird nicht automatisch geändert</span>'
+                . '<ul style="margin:6px 0 0 18px;padding:0;font-size:13px">' . implode('', array_map(fn($x) => '<li>' . $h($x) . '</li>', $unt)) . '</ul>'
+                . '<div style="font-size:12px;margin-top:6px"><a href="?p=rohstoff&id=' . (int)$d['item_id'] . '" target="_blank">Spezifikation am Rohstoff ansehen/anpassen</a></div></div>';
             $o .= '<h3 style="margin:14px 0 6px;font-size:15px">Analysewerte' . ($werte ? ' (' . count($werte) . ($nAbw ? ', <span style="color:var(--err)">' . $nAbw . ' Abweichung(en)</span>' : '') . ')' : '') . '</h3>';
             $o .= '<div class="bx-tablewrap" style="max-height:44vh;overflow:auto"><table class="bx-table" style="font-size:13px"><thead><tr><th>Parameter</th><th>Grenzwert</th><th>Ergebnis</th><th></th></tr></thead><tbody>';
             $zeilenW = $werte ?: [['parameter' => '', 'spezifikation' => '', 'unsere' => '', 'ergebnis' => '', 'methode' => '', 'ok' => null]];

@@ -32,3 +32,9 @@ Am CoA steht ein Status: wird ausgelesen / ausgelesen – bitte prüfen / bitte 
 - In der Chargen-Tabelle steht bei Zeilen ohne CoA nur „kein CoA“ (kein eigenes Upload-Feld mehr). Spezifikation hat einen eigenen kleinen Upload, nur solange keine vorliegt.
 
 **Anordnung (08.11.2026):** In einer Zeile links „Charge des Lieferanten · MHD · Menge · Eintragen“, dann „oder“, rechts „CoA mit KI auslesen“ (Datei + Hochladen). Keine Kästen/Überschriften mehr.
+
+## Bezug zum Rohstoff (08.11.2026, Nico „ok“ zum Vorschlag)
+Ein Bestell-CoA gilt für eine Charge – es **überschreibt den Rohstoff nicht**:
+1. **Anzeigen:** `bch_item_dokumente($item)` – Rohstoffseite, Reiter Dokumente, Block „Unterlagen aus Bestellungen“ (CoA/Spezifikation, Charge, Bestellung, Datum, Prüfstatus).
+2. **Nur Fehlendes ergänzen** beim „Geprüft – übernehmen“ (`bch_rohstoff_ergaenzen`): Grenzwerte nur, wenn der Rohstoff noch **gar keine** hat; Wirkstoffe nur, wenn noch keine da sind, sonst nur der **Gehalt**, wo er fehlt. Danach `spec_nach_datenaenderung()` – Erst-Daten werden automatisch freigegeben, sonst „wartet auf Freigabe“ (Kunde sieht bis dahin die alte Version). Meldung oben („Am Rohstoff ergänzt: …“), Eintrag im Rohstoff-Verlauf.
+3. **Unterschiede melden** (`bch_rohstoff_unterschiede`): Im Popup Kasten „Anders als am Rohstoff – wird nicht automatisch geändert“ (Wirkstoffgehalt CoA vs. Rohstoff, Grenzwert CoA vs. unsere Spezifikation) mit Link zur Rohstoffseite.

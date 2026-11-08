@@ -179,3 +179,6 @@ Oben steht die Summe „noch unterwegs“ je Einheit. Entwürfe (Status offen, n
 
 **EK aus Lieferantenpreis (06.11.2026):** Der EK-Preis im Reiter Einkauf wird automatisch aus den Lieferantenpreisen übernommen (`item_ek_aus_lieferantenpreis()`): günstigster Einstiegspreis (kleinste Staffel je Lieferant, EUR), Haupt-Lieferant wird mitgesetzt, wenn keiner gewählt ist. Das passiert beim Hinzufügen/Löschen eines Lieferantenpreises, beim Speichern und beim Öffnen der Seite (falls der EK noch 0 ist). Unter dem Feld steht dann „aus Lieferantenpreis übernommen“. Wer den EK von Hand ändert, behält ihn (`item.ek_auto=0`); 0 eintragen schaltet wieder auf automatisch.
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## Unterlagen aus Bestellungen (08.11.2026)
+Im Reiter Dokumente unter „Unsere Dokumente“: CoA und Spezifikationen des Lieferanten, die an Bestellungen dieses Rohstoffs hochgeladen wurden (`bch_item_dokumente`, `core/bestellung_chargen.php`) – mit Charge, Bestellung (Link), Datum und Prüfstatus. Sie ändern die Spezifikation nicht; beim Prüfen wird nur Fehlendes ergänzt.

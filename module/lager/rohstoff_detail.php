@@ -1766,6 +1766,29 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
     </table></div>
     <p class="muted" style="font-size:12px;margin-top:8px">Spezifikation-Freigabe im Reiter „Spezifikation", CoA-Freigabe im Reiter „Chargen". Lieferanten-Originale bleiben intern.</p>
   </div>
+  <?php // CoA/Spezifikationen, die an Bestellungen dieses Rohstoffs hochgeladen wurden (Lieferanten-Originale, intern).
+    require_once BX_ROOT . '/core/bestellung_chargen.php';
+    $bestDoks = bch_item_dokumente((int)$id);
+    if ($bestDoks): ?>
+  <div class="bx-panel">
+    <h2 style="margin-top:0">Unterlagen aus Bestellungen <?= bx_hint('CoA und Spezifikationen des Lieferanten, die an einer Bestellung hochgeladen wurden. Sie ändern die Spezifikation des Rohstoffs nicht – ergänzt wird beim Prüfen nur, was hier noch fehlt.') ?></h2>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Dokument</th><th>Charge</th><th>Bestellung</th><th>Hochgeladen</th><th>Prüfung</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($bestDoks as $bd): $stBd = (string)$bd['typ'] === 'coa' ? bch_coa_stand($bd) : ''; ?>
+        <tr>
+          <td><strong><?= (string)$bd['typ'] === 'coa' ? 'CoA' : 'Spezifikation' ?></strong> <span class="muted" style="font-size:12px"><?= h((string)($bd['datei_orig'] ?? '')) ?></span></td>
+          <td><?= ($bd['charge_nr'] ?? '') !== '' && $bd['charge_nr'] !== null ? h((string)$bd['charge_nr']) : '<span class="muted">–</span>' ?></td>
+          <td><a href="?p=bestellung&id=<?= (int)$bd['bestellung_id'] ?>#chargen"><?= h((string)$bd['bestellung_nr']) ?></a><?= !empty($bd['lieferant']) ? ' <span class="muted" style="font-size:12px">· ' . h((string)$bd['lieferant']) . '</span>' : '' ?></td>
+          <td class="muted"><?= h(date('d.m.Y', strtotime((string)$bd['angelegt']))) ?></td>
+          <td><?= $stBd === 'geprueft' ? bx_badge((string)($bd['befund'] ?? '') === 'auffaellig' ? 'geprüft · Abweichung' : 'geprüft', (string)($bd['befund'] ?? '') === 'auffaellig' ? 'err' : 'ok') : ($stBd !== '' ? bx_badge('noch nicht geprüft', 'warn') : '<span class="muted">–</span>') ?></td>
+          <td class="bx-num"><a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=<?= (int)$bd['id'] ?>">öffnen</a></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
   <?php endif; ?>
 </section>
 <?php anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=rohstoff&id=' . (int)$id . '&tab=ek'); ?>

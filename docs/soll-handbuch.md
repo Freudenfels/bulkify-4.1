@@ -119,6 +119,7 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
   3. Ist es gültig? (MHD passt, CoA ist für genau diese Lieferung ausgestellt)
 - **KI-Hilfe:** Das System liest das CoA aus, vergleicht Charge und Werte mit der Spezifikation und **markiert nur Abweichungen**. Tabea bestätigt mit einem Klick oder schaut sich die markierten Fälle an.
   *(Gebaut 08.11.2026 an der Bestellung: CoA hochladen → KI liest im Hintergrund Charge, MHD, Menge und Analysewerte aus → Prüf-Popup mit Datei, Werten und markierten Abweichungen gegen unsere Spezifikation → "Geprüft – übernehmen". Bei Abweichung wichtige Benachrichtigung; die Werte gehen beim Wareneingang an die Charge.)*
+  *(Rohstoff: Ein Bestell-CoA überschreibt die Spezifikation des Rohstoffs nie. Es erscheint in den Dokumenten des Rohstoffs; beim Prüfen wird nur Fehlendes ergänzt (Grenzwerte, wenn noch keine da sind; fehlender Wirkstoffgehalt). Unterschiede zum Rohstoff zeigt das Popup als Hinweis - angepasst wird von Hand.)*
 - **Fehlendes oder ungeprüftes CoA blockiert NICHT** Wareneingang oder Produktion - es erzeugt einen Hinweis und die Aufgabe "CoA fehlt / CoA prüfen" für Tabea. **Gesperrt wird erst vor dem Versand** bzw. vor der Freischaltung in Lager 2 (Prüfliste, 4.12).
 
 ### 4.5 Wareneingang
