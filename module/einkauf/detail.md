@@ -52,3 +52,8 @@ Knopf „liefern“ (04.11.2026): Enthält die Bestellung Bulkware ohne Lagerart
 
 ## Telefonisch bestätigt (08.11.2026)
 Bei Status `gesendet` und noch nicht bestätigt: Knopf „Telefonisch bestätigt“ → `bestellung_telefonisch_bestaetigen()`: Status bestellt, bestätigt, Notiz-Zusatz, ohne Mail.
+
+## Chargen & Dokumente, Rechnung durch das Team (08.11.2026)
+- Nach dem Positionen-Überblick steht der Block **„Chargen & Dokumente“** (`bestellung_chargen_panel`, `core/bestellung_chargen.php`): Charge, MHD, Menge und CoA je Position, Spezifikation, KI-Vorschlag aus dem CoA. POST `bch_*` → `bestellung_chargen_post`, Rücksprung auf `#chargen`.
+- Block **Zahlung**: solange keine Rechnung vorliegt, Formular „Rechnung hochladen“ (PDF, Rechnungsnummer, Datum, Betrag, Währung = Lieferantenwährung) → `bestellung_team_rechnung_hochladen()` (`core/lieferant_dateien.php`). Gleicher Platz wie der Portal-Upload; es gibt nur eine Rechnung je Bestellung. Anzeige mit Nr./Datum/Betrag und wer sie hochgeladen hat. Leertext: „noch keine hochgeladen - Lieferant im Portal oder hier hochladen“.
+- Die Liste unten heißt „Weitere Dokumente zur Bestellung“ und zeigt nur Dokumente ohne Position (`bestell_dokumente($id, true)`).

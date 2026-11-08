@@ -41,6 +41,10 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aktion === 'bestell_dok_upload') {
         require_once BX_ROOT . '/core/lieferant_dateien.php';
         $fehler = bestell_dok_upload($id, $lid, (string)($_POST['bd_typ'] ?? 'sonstiges'), lp_sprache());
+    } elseif (strncmp($aktion, 'bch_', 4) === 0) {
+        // Chargen & Dokumente je Position – derselbe Baustein und dieselbe Ablage wie auf der Bestellseite des Teams.
+        require_once BX_ROOT . '/core/bestellung_chargen.php';
+        $fehler = bestellung_chargen_post($b, 'lieferant', lp_sprache()) ?? '';
     } elseif ($aktion === 'bestell_dok_del') {
         $dd = (int)($_POST['dok_id'] ?? 0);
         if ($dd) { $row = one("SELECT datei FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND lieferant_id=?", [$dd, $id, $lid]);
@@ -196,7 +200,9 @@ if (!$b):
 
   <?php // Dokumente & Rechnung: der Lieferant lädt CoA, Rechnung o. Ä. direkt zu DIESER Bestellung hoch.
   require_once BX_ROOT . '/core/lieferant_dateien.php';
-  $bdoks = bestell_dokumente($id);
+  $bdoks = bestell_dokumente($id, true);   // je Position abgelegte CoA/Spezifikationen stehen im Block „Chargen & Dokumente"
+  require_once BX_ROOT . '/core/bestellung_chargen.php';
+  echo bestellung_chargen_panel($b, 'lieferant', lp_sprache());
   $BDTYP = ['coa'=>lp_t('bd_coa'), 'rechnung'=>lp_t('bd_rechnung'), 'lieferschein'=>lp_t('bd_lieferschein'), 'spec'=>lp_t('spezifikation'), 'analyse'=>lp_t('bd_analyse'), 'zahlungsbeleg'=>lp_t('bd_zahlungsbeleg'), 'sonstiges'=>lp_t('sonstiges')]; ?>
   <?php // E8: Zahlungsstatus (vom Team gesetzt) – der Lieferant sieht „bezahlt" samt Beleg.
     if (!empty($b['bezahlt_am'])): ?>

@@ -178,13 +178,49 @@ function bestell_dok_upload(int $bestellung_id, int $lieferant_id, string $typ, 
     if (!move_uploaded_file($_FILES['dok']['tmp_name'], BX_UPLOADS . '/' . $fn))
         return $t('Die Datei konnte nicht gespeichert werden.', 'The file could not be saved.', '文件无法保存。');
     $typ = in_array($typ, ['coa', 'rechnung', 'lieferschein', 'spec', 'analyse', 'sonstiges'], true) ? $typ : 'sonstiges';
+    // Nur EINE Rechnung je Bestellung – hat das Team sie schon (z. B. per Mail erhalten) hochgeladen, keine zweite.
+    if ($typ === 'rechnung' && (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung'", [$bestellung_id]) > 0) {
+        @unlink(BX_UPLOADS . '/' . $fn);
+        return $t('Zu dieser Bestellung liegt bereits eine Rechnung vor.', 'An invoice for this order is already on file.', '此订单已有发票。');
+    }
     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von) VALUES ('bestellung',?,?,?,?,?,?,0,'lieferant')",
       [$bestellung_id, $typ, $lieferant_id, mb_substr(trim((string)($_POST['dok_titel'] ?? '')), 0, 190) ?: null, $fn, mb_substr($orig, 0, 255)]);
     $dokId = (int) insert_id();
     log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Datei zur Bestellung ' . $bestellung_id . ' hochgeladen (' . $typ . ').', 'dokument', 'dokument', $dokId);
     return '';
 }
-// Dokumente einer Bestellung (vom Lieferanten hochgeladen).
-function bestell_dokumente(int $bestellung_id): array {
-    return all("SELECT id, typ, titel, datei, datei_orig, angelegt FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? ORDER BY id DESC", [$bestellung_id]);
+// Dokumente einer Bestellung (Lieferant im Portal bzw. Team). $nur_allgemein: ohne die je Position abgelegten CoA/Spezifikationen
+// (die zeigt der Block „Chargen & Dokumente", core/bestellung_chargen.php) – damit nichts doppelt erscheint.
+function bestell_dokumente(int $bestellung_id, bool $nur_allgemein = false): array {
+    $w = $nur_allgemein && column_exists('dokument', 'bestellung_position_id') ? " AND bestellung_position_id IS NULL" : "";
+    return all("SELECT id, typ, titel, datei, datei_orig, angelegt, hochgeladen_von FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=?$w ORDER BY id DESC", [$bestellung_id]);
+}
+// Lieferantenrechnung durch das Team (Bestellseite, Block „Zahlung"): Datei + Rechnungsnummer, Datum, Betrag. Gleicher Platz wie
+// der Portal-Upload (dokument typ='rechnung' an der Bestellung); liegt schon eine Rechnung vor, wird keine zweite angelegt.
+function bestellung_team_rechnung_hochladen(int $bestellung_id): string {
+    $b = one("SELECT id, lieferant_id, nummer FROM bestellung WHERE id=?", [$bestellung_id]);
+    if (!$b) return 'Bestellung nicht gefunden.';
+    if ((int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung'", [$bestellung_id]) > 0)
+        return 'Zu dieser Bestellung liegt bereits eine Rechnung vor.';
+    if (empty($_FILES['re_datei']['name']) || ($_FILES['re_datei']['error'] ?? 1) !== UPLOAD_ERR_OK) return 'Bitte die Rechnung (PDF) auswählen.';
+    $orig = (string)$_FILES['re_datei']['name'];
+    $ext  = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', pathinfo($orig, PATHINFO_EXTENSION)));
+    if (!in_array($ext, ['pdf', 'png', 'jpg', 'jpeg', 'webp'], true)) return 'Bitte PDF oder Bild hochladen.';
+    if ((int)$_FILES['re_datei']['size'] > lieferant_datei_max_mb() * 1024 * 1024) return 'Die Datei ist zu groß.';
+    if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
+    $fn = 'bestellung_' . $bestellung_id . '_rechnung_' . bin2hex(random_bytes(6)) . '.' . $ext;
+    if (!move_uploaded_file($_FILES['re_datei']['tmp_name'], BX_UPLOADS . '/' . $fn)) return 'Die Datei konnte nicht gespeichert werden.';
+    $nr  = mb_substr(trim((string)($_POST['re_nr'] ?? '')), 0, 80);
+    $dat = trim((string)($_POST['re_datum'] ?? ''));
+    $dat = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dat) ? $dat : null;
+    $btrRoh = trim((string)($_POST['re_betrag'] ?? ''));
+    $btr = $btrRoh !== '' ? (function_exists('zahl_lesen') ? zahl_lesen($btrRoh) : (float) str_replace(',', '.', str_replace('.', '', $btrRoh))) : null;
+    $wae = strtoupper(preg_replace('/[^A-Za-z]/', '', (string)($_POST['re_waehrung'] ?? 'EUR'))) ?: 'EUR';
+    q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von,rechnung_nr,dok_datum,betrag,waehrung)
+       VALUES ('bestellung',?,'rechnung',?,?,?,?,0,'team',?,?,?,?)",
+      [$bestellung_id, !empty($b['lieferant_id']) ? (int)$b['lieferant_id'] : null, 'Rechnung' . ($nr !== '' ? ' ' . $nr : ''), $fn, mb_substr($orig, 0, 255),
+       $nr !== '' ? $nr : null, $dat, $btr, $wae]);
+    $did = (int) insert_id();
+    log_aktivitaet('bestellung', $bestellung_id, 'team', 'Lieferantenrechnung' . ($nr !== '' ? ' ' . $nr : '') . ' vom Team hochgeladen.', 'dokument', 'dokument', $did);
+    return '';
 }

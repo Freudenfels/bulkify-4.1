@@ -32,3 +32,6 @@ Bestätigen und Station „versendet“ schicken eine Mail ans Team; die übrige
 
 ## Dokumenttyp Lieferschein (Aufräumen 15)
 Lieferanten können zu einer Bestellung jetzt auch einen **Lieferschein** hochladen (de/en/zh, `bd_lieferschein`). Das Team sieht ihn an der Bestellung unter „Dokumente vom Lieferanten".
+
+## Chargen & Dokumente (08.11.2026)
+Vor „Dokumente & Rechnung“ steht derselbe Block wie auf der Bestellseite des Teams (`bestellung_chargen_panel($b, 'lieferant', lp_sprache())`): Charge, MHD, Menge, CoA je Charge, Spezifikation. Aktionen `bch_*` über `bestellung_chargen_post($b, 'lieferant', …)`; der Lieferant entfernt nur Eigenes. Die Dokumentenliste darunter zeigt nur noch Dokumente ohne Position. Eine zweite Rechnung wird abgelehnt, wenn schon eine vorliegt (z. B. vom Team hochgeladen).

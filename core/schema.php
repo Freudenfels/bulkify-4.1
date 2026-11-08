@@ -1389,6 +1389,24 @@ function init_schema(): void {
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
     ensure_column('bestellung_position', 'geliefert_menge', "DECIMAL(14,3) NOT NULL DEFAULT 0");   // Teillieferung (Nacht 1c): schon eingebucht, in Positions-Einheit
+    // Chargen & Dokumente an der Bestellposition (08.11.2026, Handbuch 4.4): Charge + MHD + Menge des Lieferanten je Position,
+    // mehrere Zeilen je Position möglich (Teillieferung / zwei Chargen). Team und Lieferant (Portal) pflegen dieselben Zeilen.
+    // Vergleichsbasis für den späteren blinden Chargen-Abgleich (4.5, Schritt 6). Dokumente (CoA/Spezifikation) liegen in der
+    // bestehenden Ablage `dokument` (objekt_typ='bestellung') mit bestellung_position_id + charge_nr.
+    $pdo->exec("CREATE TABLE IF NOT EXISTS bestellung_charge (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        bestellung_position_id INT NOT NULL,
+        charge_nr VARCHAR(80) NOT NULL,
+        mhd DATE NULL,
+        menge DECIMAL(14,3) NULL,
+        von VARCHAR(20) NOT NULL DEFAULT 'team',
+        angelegt DATETIME NOT NULL,
+        KEY idx_bp (bestellung_position_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    ensure_column('dokument', 'bestellung_position_id', "INT NULL");   // Dokument gehört zu dieser Bestellposition (CoA/Spezifikation)
+    ensure_column('dokument', 'rechnung_nr', "VARCHAR(80) NULL");       // Lieferantenrechnung: Nummer des Lieferanten
+    ensure_column('dokument', 'betrag', "DECIMAL(14,2) NULL");          // Lieferantenrechnung: Betrag
+    ensure_column('dokument', 'waehrung', "VARCHAR(8) NULL");
 
     // Maschinenfuhrpark (Spec 9.3) – ab jetzt IM DASHBOARD verwaltet. Tabellen bleiben pr_maschine/pr_raum
     // (geteilte DB), damit bestehende IDs, QR-Codes (MA-<id>) und prod_charge.maschine_id gueltig bleiben.

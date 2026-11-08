@@ -18,3 +18,8 @@ Keine neue Tabelle: die vorhandene `dokument` mit `objekt_typ='lieferant'`, `obj
 
 ## Wo es hängt
 Intern `module/lieferant/detail.php` (Reiter „Dokumente"), Portal `module/lieferant/dateien.php`. Jeder Upload schreibt einen Eintrag in den Aktivitätsverlauf des Lieferanten.
+
+## 08.11.2026
+- `bestell_dokumente($id, $nur_allgemein)`: mit `true` ohne die je Position abgelegten CoA/Spezifikationen (die zeigt `core/bestellung_chargen.php`).
+- `bestell_dok_upload`: Typ Rechnung wird abgelehnt, wenn zur Bestellung schon eine Rechnung liegt.
+- Neu `bestellung_team_rechnung_hochladen($bestellung_id)`: Lieferantenrechnung durch das Team (`dokument` typ rechnung, `hochgeladen_von='team'`, Spalten `rechnung_nr`, `dok_datum`, `betrag`, `waehrung`).

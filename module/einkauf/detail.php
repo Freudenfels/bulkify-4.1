@@ -44,6 +44,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f = mail_bereit() ? mail_lieferant_bestellung((int)$id) : '';
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode('Bestellung gespeichert, aber E-Mail nicht verschickt: ' . $f))); exit;
     }
+    // Chargen & Dokumente je Position (Handbuch 4.4) – derselbe Baustein wie im Lieferantenportal.
+    if (strncmp($aktion, 'bch_', 4) === 0 && !$neu) {
+        require_once BX_ROOT . '/core/bestellung_chargen.php';
+        $bRow = one("SELECT * FROM bestellung WHERE id=?", [(int)$id]);
+        $f = $bRow ? (bestellung_chargen_post($bRow, 'team', 'de') ?? '') : 'Bestellung nicht gefunden.';
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f)) . '#chargen'); exit;
+    }
+    // Lieferantenrechnung durch das Team hochladen (kommt bei „Direkt bestellt" per Mail). Gleicher Platz wie der
+    // Portal-Upload des Lieferanten (dokument typ='rechnung' an der Bestellung) – es gibt nur EINE Rechnung je Bestellung.
+    if ($aktion === 'team_rechnung' && !$neu) {
+        require_once BX_ROOT . '/core/lieferant_dateien.php';
+        $f = bestellung_team_rechnung_hochladen((int)$id);
+        header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
+    }
     // Rückfrage an den Lieferanten – hängt an dieser Bestellung, der Lieferant sieht sie im Portal.
     if ($aktion === 'nachricht' && !$neu) {
         require_once BX_ROOT . '/core/nachricht.php';
@@ -318,6 +332,10 @@ if (!$neu) {
         echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. bereits gelieferte Menge je Position (geliefert = eingebuchte Chargen). Bei einer Teillieferung bleibt die Bestellung offen, der Rest zählt weiter als unterwegs. Bearbeiten unten im Formular.</p></div>';
     }
 
+    // Chargen & Dokumente je Position: Charge, MHD, CoA, Spezifikation – Team und Lieferant (Portal) pflegen dieselbe Liste.
+    require_once BX_ROOT . '/core/bestellung_chargen.php';
+    echo bestellung_chargen_panel($b, 'team', 'de');
+
     // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.
     if (($b['bestellart'] ?? '') === 'online') {
         $zl = bestellung_zahlarten();
@@ -337,18 +355,35 @@ if (!$neu) {
 
     // E8: Zahlung der Lieferantenrechnung (nur bei Lieferanten-Bestellungen; online ist bereits selbst bezahlt).
     if (!empty($b['lieferant_id'])) {
-        $rechnDocs = all("SELECT id, datei_orig, titel FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [(int)$id]);
+        $rechnDocs = all("SELECT id, datei_orig, titel, rechnung_nr, dok_datum, betrag, waehrung, hochgeladen_von FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [(int)$id]);
         $zbeleg = all("SELECT id, datei_orig, titel FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='zahlungsbeleg' ORDER BY id DESC", [(int)$id]);
         $istBezahlt = !empty($b['bezahlt_am']);
         echo '<div class="bx-panel"><h2 style="margin-top:0">Zahlung</h2>';
         // Rechnung(en) des Lieferanten zum Download
         echo '<div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px">';
         echo '<div><div class="muted" style="font-size:12px">Rechnung des Lieferanten</div><div>';
-        if ($rechnDocs) { foreach ($rechnDocs as $rd) echo '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">' . h((string)($rd['datei_orig'] ?: 'Rechnung')) . '</a>'; }
-        else echo '<span class="muted">noch keine hochgeladen (Lieferant lädt sie im Portal hoch)</span>';
+        if ($rechnDocs) { foreach ($rechnDocs as $rd) {
+            $rInfo = array_filter([(string)($rd['rechnung_nr'] ?? '') !== '' ? 'Nr. ' . $rd['rechnung_nr'] : '',
+                                   !empty($rd['dok_datum']) ? 'vom ' . date('d.m.Y', strtotime((string)$rd['dok_datum'])) : '',
+                                   ($rd['betrag'] ?? null) !== null ? number_format((float)$rd['betrag'], 2, ',', '.') . ' ' . ((string)($rd['waehrung'] ?? '') ?: 'EUR') : '',
+                                   (string)($rd['hochgeladen_von'] ?? '') === 'team' ? 'vom Team hochgeladen' : 'vom Lieferanten im Portal']);
+            echo '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">' . h((string)($rd['datei_orig'] ?: 'Rechnung')) . '</a>'
+               . '<span class="muted" style="font-size:12px;margin-right:12px">' . h(implode(' · ', $rInfo)) . '</span>';
+        } }
+        else echo '<span class="muted">noch keine hochgeladen - Lieferant im Portal oder hier hochladen</span>';
         echo '</div></div>';
         echo '<div><div class="muted" style="font-size:12px">Status</div><div>' . ($istBezahlt ? bx_badge('bezahlt am ' . date('d.m.Y', strtotime((string)$b['bezahlt_am'])) . ((string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : ''), 'ok') : bx_badge('offen', 'warn')) . '</div></div>';
         echo '</div>';
+        if (!$rechnDocs) {
+            echo '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">'
+               . '<input type="hidden" name="aktion" value="team_rechnung">'
+               . '<div class="bx-field" style="margin:0;min-width:220px"><label>Rechnung hochladen (PDF)</label><input type="file" name="re_datei" required accept=".pdf,.jpg,.jpeg,.png,.webp"></div>'
+               . '<div class="bx-field" style="margin:0;min-width:150px"><label>Rechnungsnummer</label><input type="text" name="re_nr" maxlength="80"></div>'
+               . '<div class="bx-field" style="margin:0;max-width:170px"><label>Rechnungsdatum</label><input type="date" name="re_datum"></div>'
+               . '<div class="bx-field" style="margin:0;max-width:140px"><label>Betrag</label><input type="text" name="re_betrag" inputmode="decimal" placeholder="z. B. 1.250,00"></div>'
+               . '<div class="bx-field" style="margin:0;max-width:90px"><label>Währung</label><input type="text" name="re_waehrung" value="' . h((string) scalar("SELECT COALESCE(NULLIF(waehrung,''),'EUR') FROM lieferanten WHERE id=?", [(int)$b['lieferant_id']]) ?: 'EUR') . '" maxlength="8"></div>'
+               . '<button class="btn btn-ghost btn-sm" type="submit">Rechnung speichern</button></form>';
+        }
         if (!$istBezahlt) {
             echo '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">'
                . '<input type="hidden" name="aktion" value="bezahlt">'
@@ -500,11 +535,11 @@ function psum(){
 <?php // Vom Lieferanten zu dieser Bestellung hochgeladene Dokumente (CoA, Rechnung zum Bezahlen …).
 if (!$neu):
   require_once BX_ROOT . '/core/lieferant_dateien.php';
-  $bdoks = bestell_dokumente((int)$id);
+  $bdoks = bestell_dokumente((int)$id, true);   // je Position abgelegte CoA/Spezifikationen stehen im Block „Chargen & Dokumente"
   $BDTYP = ['coa'=>'CoA / Analysenzertifikat','rechnung'=>'Rechnung','lieferschein'=>'Lieferschein','spec'=>'Spezifikation','analyse'=>'Laboranalyse','sonstiges'=>'Sonstiges'];
   if ($bdoks): ?>
   <div class="bx-panel">
-    <h2 style="margin-top:0">Dokumente vom Lieferanten</h2>
+    <h2 style="margin-top:0">Weitere Dokumente zur Bestellung</h2>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Typ</th><th>Datei</th><th>Datum</th><th></th></tr></thead>
       <tbody>
