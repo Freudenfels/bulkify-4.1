@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
     $onWaehr    = strtoupper(preg_replace('/[^A-Za-z]/', '', (string)($_POST['on_waehrung'] ?? 'EUR'))) ?: 'EUR';
     $onPreisRaw = preg_replace('/[^0-9.,]/', '', trim((string)($_POST['on_preis'] ?? '')));
     $onPreis    = $onPreisRaw !== '' ? (float) str_replace(',', '.', str_replace('.', '', $onPreisRaw)) : 0.0;
-    if ($online && ($onHaendler === '' || $onPreis <= 0)) { header('Location: ?p=einkaufsliste&onlinefehler=1'); exit; }
+    if ($online && $onHaendler === '') { header('Location: ?p=einkaufsliste&onlinefehler=1'); exit; }   // Preis optional (netto, kommt sonst mit der Rechnung)
     if ($direkt && !$sup) { header('Location: ?p=einkaufsliste&direktfehler=1'); exit; }
     if (!$online && !$direkt && !lieferant_portalfaehig((int)$sup, $iid, null)) { header('Location: ?p=einkaufsliste&vorsorgportal=1'); exit; }
     if ($iid > 0 && $menge > 0 && scalar("SELECT id FROM item WHERE id=?", [$iid])) {
@@ -59,9 +59,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
             } elseif ($online) {
                 $notiz = 'Vorsorglich · online bestellt bei ' . $onHaendler
                        . ($onZahlart !== '' ? ' · ' . (bestellung_zahlarten()[$onZahlart] ?? $onZahlart) : '')
-                       . ' · ' . number_format($onPreis, 2, ',', '.') . ' ' . $onWaehr;
+                       . ' · ' . ($onPreis > 0 ? number_format($onPreis, 2, ',', '.') . ' ' . $onWaehr . ' netto' : 'Preis folgt mit der Rechnung');
                 q("UPDATE bestellung SET bestellart='online', status='bestellt', online_haendler=?, online_zahlart=?, online_preis=?, online_waehrung=?, notiz=? WHERE id=?",
-                  [$onHaendler, $onZahlart ?: null, $onPreis, $onWaehr, $notiz, $bid]);
+                  [$onHaendler, $onZahlart ?: null, $onPreis > 0 ? $onPreis : null, $onWaehr, $notiz, $bid]);
             } else {
                 q("UPDATE bestellung SET bestellart='lieferant', status='gesendet', notiz='Vorsorglich · an den Lieferanten-Account gesendet – wartet auf Bestätigung' WHERE id=?", [$bid]);
                 if (mail_bereit()) mail_lieferant_bestellung($bid);
@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $onWaehr    = strtoupper(preg_replace('/[^A-Za-z]/', '', (string)($_POST['on_waehrung'] ?? 'EUR'))) ?: 'EUR';
     $onPreisRaw = preg_replace('/[^0-9.,]/', '', trim((string)($_POST['on_preis'] ?? '')));
     $onPreis    = $onPreisRaw !== '' ? (float) str_replace(',', '.', str_replace('.', '', $onPreisRaw)) : 0.0;
-    if ($online && ($onHaendler === '' || $onPreis <= 0)) {   // Online-Pflicht: wo + welcher Preis
+    if ($online && $onHaendler === '') {   // Online-Pflicht: nur wo (Händler). Preis optional – netto, sonst später über die Rechnung (Buchhaltung)
         header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&onlinefehler=1'); exit;
     }
     // Mengen-Override aus dem Feld lesen (deutsche Schreibweise: Punkt = Tausender, Komma = Dezimal); nur positiv zählt.
@@ -156,9 +156,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $finalOnline = function(int $bid) use ($onHaendler, $onZahlart, $onPreis, $onWaehr) {
         $notiz = 'Online bestellt bei ' . $onHaendler
                . ($onZahlart !== '' ? ' · ' . (bestellung_zahlarten()[$onZahlart] ?? $onZahlart) : '')
-               . ' · ' . number_format($onPreis, 2, ',', '.') . ' ' . $onWaehr;
+               . ' · ' . ($onPreis > 0 ? number_format($onPreis, 2, ',', '.') . ' ' . $onWaehr . ' netto' : 'Preis folgt mit der Rechnung');
         q("UPDATE bestellung SET bestellart='online', status='bestellt', online_haendler=?, online_zahlart=?, online_preis=?, online_waehrung=?, notiz=? WHERE id=?",
-          [$onHaendler, $onZahlart ?: null, $onPreis, $onWaehr, $notiz, $bid]);
+          [$onHaendler, $onZahlart ?: null, $onPreis > 0 ? $onPreis : null, $onWaehr, $notiz, $bid]);
     };
     // Lieferanten-Weg: an den Account gesendet (wartet auf Bestätigung) + Mail. Direkt-Weg: bestellt + bestätigt, KEINE Mail.
     $finalLief = function(int $bid) use ($direkt, $datum) {
@@ -214,6 +214,9 @@ foreach ($lieferanten as $l) $liefWaehr[(int)$l['id']] = (string)($l['waehrung']
 $zugangIds = [];
 foreach (all("SELECT DISTINCT lieferant_id FROM benutzer WHERE lieferant_id IS NOT NULL AND aktiv=1") as $z) $zugangIds[(int)$z['lieferant_id']] = true;
 $BM_KAT = betriebsmittel_kategorien();
+// Standard-Lieferant für Etiketten (Nico 08.11.2026: „bei Etiketten immer Labelisten"): vorbelegt, wenn am Artikel kein
+// Hauptlieferant steht – im Direkt-Weg je Zeile, im Online-Weg als Händler. Bleibt änderbar.
+$etLief = one("SELECT id, firma FROM lieferanten WHERE firma LIKE '%labelist%' ORDER BY id LIMIT 1") ?: ['id' => 0, 'firma' => 'Labelisten'];
 
 $aktTyp = $_GET['typ'] ?? '';
 // Produktions-Typen + Nachbestellung (Meldebestand) + freie Betriebsmittel-Typen als eigene Reiter.
@@ -284,8 +287,8 @@ $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit =
 render_header('einkaufsliste', 'Bestellen');
 bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von zwei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Beides landet unter „Bestellt".',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
-if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (mit Händler/Zahlart/Preis)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : 'Lieferant ohne aktiven Account/Preis. Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
-if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Online bestellt" fehlen Händler/Quelle oder der gezahlte Preis. Bitte die Positionen erneut anhaken und beides angeben.</div>';
+if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (Händler gespeichert, Preis falls angegeben)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : 'Lieferant ohne aktiven Account/Preis. Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
+if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Online bestellt" fehlt Händler/Quelle. Bitte die Positionen erneut anhaken und den Händler angeben.</div>';
 if (isset($_GET['vorsorgportal'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Dieser Lieferant hat keinen aktiven Account oder keinen Preis – über das Portal nicht bestellbar. Bitte „Direkt bestellt (Telefon/Mail)" oder „Online bestellt" nutzen.</div>';
 if (isset($_GET['direktfehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Direkt bestellt" bitte einen Lieferanten wählen.</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
@@ -372,7 +375,7 @@ if ($ohneFestlegung): ?>
           $ei = $istEtikett ? etikett_info((int)$a['auftrag_id']) : null;
       ?>
         <tr<?= $gesperrt ? ' style="opacity:.75"' : '' ?>>
-          <td><?php if ($gesperrt): ?><span title="<?= !empty($a['druck']) ? 'Beutel-Design noch nicht vom Kunden freigegeben' : 'Etikett noch nicht vom Kunden freigegeben' ?>">gesperrt</span><?php else: ?><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"><?php endif; ?></td>
+          <td><?php if ($gesperrt): ?><span title="<?= !empty($a['druck']) ? 'Beutel-Design noch nicht vom Kunden freigegeben' : 'Etikett noch nicht vom Kunden freigegeben' ?>">gesperrt</span><?php else: ?><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"<?= $istEtikett ? ' data-etikett="1"' : '' ?>><?php endif; ?></td>
           <td><?= h($a['name']) ?>
             <?php if ($istEtikett): ?>
               <?php if ($gesperrt): ?> <?= bx_badge('wartet auf Kunden-Freigabe','warn') ?>
@@ -385,7 +388,7 @@ if ($ohneFestlegung): ?>
           </td>
           <td><?= $rolleBadge($a['rolle']) ?></td>
           <td class="bx-num"><?php if ($gesperrt): ?><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php else: ?><?= $mengeInput($key, (float)$a['zu_bestellen'], (string)$a['einheit']) ?><?php endif; ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($a['need']) ?> · Lager <?= $mfmt($a['stock']) ?><?= (float)($a['quarantaene'] ?? 0) > 1e-6 ? ' · Quarantäne ' . $mfmt($a['quarantaene']) : '' ?><?= $a['bestellt'] > 1e-6 ? ' · unterwegs ' . $mfmt($a['bestellt']) : '' ?> · zu bestellen <?= $mfmt($a['zu_bestellen']) ?><?= $istEtikett ? ' · kundenspezifisch' : '' ?></div></td>
-          <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'])) ?></td>
+          <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0) ?: ($istEtikett ? (int)$etLief['id'] : 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'])) ?></td>
           <?php // Kunde·Produkt je Auftrag nur bei bedruckten Tüten/Beuteln (kundenspezifisch) – bei Gläsern & Co. nicht nötig.
                 $zeigKdPr = (($a['verpackungsart'] ?? '') === 'beutel'); ?>
           <td style="font-size:12px"><?php if ($zeigKdPr): // Beutel: je Auftrag eine Kunde·Produkt-Unterzeile -> gestapelt lassen ?>
@@ -461,6 +464,7 @@ if ($ohneFestlegung): ?>
     <input type="hidden" name="aktion" value="bestellen">
     <div class="bx-field" style="margin:0;max-width:180px"><label>Bestellt am</label><input type="date" name="datum" value="<?= date('Y-m-d') ?>"></div>
     <button class="btn btn-primary" id="btnBestellen" type="submit" name="modus" value="lieferant" disabled title="Nur portalfähige Lieferanten (aktiver Account UND hinterlegter Preis) – die Bestellung geht in deren Account und wartet auf Bestätigung.">Über Lieferant (Portal)</button>
+    <button class="btn btn-ghost" id="btnDirektSchnell" type="submit" name="modus" value="direkt" disabled title="Schon beim Lieferanten bestellt (Sammelorder, Telefon, Mail): als bestellt erfassen – keine Mail, kein Preis nötig, Lieferant je Zeile (Etiketten: Labelisten vorbelegt).">Als bestellt erfassen (direkt)</button>
   </div>
   <details id="direktBox" class="bx-panel" style="margin-top:12px;padding:12px 16px">
     <summary style="cursor:pointer;font-weight:600">Direkt bestellt (Telefon/Mail) <span class="muted" style="font-weight:400;font-size:12px">– beim gewählten Lieferanten selbst bestellt, auch mit Portal-Account: keine Mail, keine Bestätigung nötig</span></summary>
@@ -475,17 +479,17 @@ if ($ohneFestlegung): ?>
   <details id="onlineBox" class="bx-panel" style="margin-top:12px;padding:12px 16px">
     <summary style="cursor:pointer;font-weight:600">Online bestellt <span class="muted" style="font-weight:400;font-size:12px">– selbst online gekauft (Amazon, Shop, Druckerei …): wo, wie und zu welchem Preis</span></summary>
     <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
-      <div class="bx-field" style="margin:0;min-width:220px"><label>Händler / Quelle (Pflicht)</label><input type="text" name="on_haendler" id="onHaendler" placeholder="z. B. Amazon, Etikettendruckerei XY"></div>
+      <div class="bx-field" style="margin:0;min-width:220px"><label>Händler / Quelle (Pflicht)</label><input type="text" name="on_haendler" id="onHaendler" placeholder="z. B. Amazon, Etikettendruckerei XY" data-etikett-lief="<?= h((string)$etLief['firma']) ?>"></div>
       <div class="bx-field" style="margin:0"><label>Zahlungsart</label>
         <select name="on_zahlart"><option value="">– wählen –</option><?php foreach (bestellung_zahlarten() as $zk => $zl): ?><option value="<?= h($zk) ?>"><?= h($zl) ?></option><?php endforeach; ?></select>
       </div>
-      <div class="bx-field" style="margin:0;max-width:150px"><label>Preis gesamt (Pflicht)</label><input type="text" name="on_preis" id="onPreis" inputmode="decimal" placeholder="z. B. 96,50"></div>
+      <div class="bx-field" style="margin:0;max-width:170px"><label>Preis gesamt netto (optional)</label><input type="text" name="on_preis" id="onPreis" inputmode="decimal" placeholder="leer = folgt mit Rechnung"></div>
       <div class="bx-field" style="margin:0;max-width:90px"><label>Währung</label><input type="text" name="on_waehrung" value="EUR" maxlength="8"></div>
       <div class="bx-field" style="margin:0;min-width:220px"><label>Rechnung (optional)</label><input type="file" name="on_rechnung" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"></div>
       <button class="btn btn-primary" id="btnOnline" type="submit" name="modus" value="online" disabled>Online bestellt erfassen</button>
     </div>
     <div id="onlineHinweis" class="bx-fehlhinweis" hidden></div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen oben setzen; die <strong>Menge je Zeile</strong> steht passend zur Warenart (Pulver in kg, Verpackung/Leerkapseln in Stk). Händler + Preis (gesamt) angeben, optional die <strong>Rechnung</strong> hochladen. Legt EINE Bestellung ohne Lieferant an (Status „bestellt"); Händler, Zahlungsart, Preis und Rechnung werden für die spätere Abrechnung gespeichert.</p>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen oben setzen; die <strong>Menge je Zeile</strong> steht passend zur Warenart (Pulver in kg, Verpackung/Leerkapseln in Stk). Händler angeben (bei Etiketten mit Labelisten vorbelegt). Preis <strong>netto</strong> und Rechnung sind optional – sonst kommen sie später mit der Rechnung über die Buchhaltung. Legt EINE Bestellung ohne Lieferant an (Status „bestellt"); Händler, Zahlungsart, Preis und Rechnung werden für die spätere Abrechnung gespeichert.</p>
   </details>
   <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen setzen und einen Weg wählen. <strong>Über Lieferant (Portal)</strong> = je Position eine eigene Bestellung, geht in den Account des gewählten Lieferanten (nur mit aktivem Account und Preis). So kann er jede Position einzeln annehmen/ablehnen. <strong>Direkt bestellt</strong> = per Telefon/Mail beim Lieferanten bestellt, ohne Mail und Bestätigung. <strong>Online bestellt</strong> = du hast selbst online gekauft. In allen Fällen wandert die Position nach „Bestellt".</p>
   <?php endif; ?>
@@ -545,7 +549,7 @@ if ($ohneFestlegung): ?>
       <div class="bx-field" style="margin:0"><label>Zahlungsart</label>
         <select name="on_zahlart"><option value="">– wählen –</option><?php foreach (bestellung_zahlarten() as $zk => $zl): ?><option value="<?= h($zk) ?>"><?= h($zl) ?></option><?php endforeach; ?></select>
       </div>
-      <div class="bx-field" style="margin:0;max-width:150px"><label>Preis (gesamt)</label><input type="text" name="on_preis" inputmode="decimal" placeholder="z. B. 96,50"></div>
+      <div class="bx-field" style="margin:0;max-width:150px"><label>Preis gesamt netto (optional)</label><input type="text" name="on_preis" inputmode="decimal" placeholder="leer = folgt mit Rechnung"></div>
       <div class="bx-field" style="margin:0;max-width:90px"><label>Währung</label><input type="text" name="on_waehrung" value="EUR" maxlength="8"></div>
     </div>
     <div class="bx-row" style="margin-top:var(--sp-4);gap:8px;flex-wrap:wrap">
@@ -559,7 +563,7 @@ if ($ohneFestlegung): ?>
       <div class="bx-field" style="margin:0;max-width:170px"><label>Direkt: erwartet am</label><input type="date" name="di_eta"></div>
       <div class="bx-field" style="margin:0;min-width:240px;flex:1"><label>Direkt: Notiz</label><input type="text" name="di_notiz" placeholder="z. B. telefonisch mit Herrn X"></div>
     </div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">„Über Lieferant (Portal)" braucht einen Lieferanten mit aktivem Account und Preis. „Direkt bestellt" braucht nur den Lieferanten (Preis aus dem Lieferantenpreis, keine Mail). „Online bestellt" braucht Händler + Preis (Zahlungsart empfohlen).</p>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">„Über Lieferant (Portal)" braucht einen Lieferanten mit aktivem Account und Preis. „Direkt bestellt" braucht nur den Lieferanten (Preis aus dem Lieferantenpreis, keine Mail). „Online bestellt" braucht den Händler; Preis (netto) und Zahlungsart sind optional.</p>
   </div>
 </form>
 <script>(function(){
@@ -568,15 +572,25 @@ if ($ohneFestlegung): ?>
   // Gleiche Regeln wie der Server (Nico 08.11.2026: Fehlendes gar nicht erst abschicken lassen, statt danach einen
   // leicht zu übersehenden Hinweis zu zeigen). Online: Händler + Preis > 0. Direkt: jede angehakte Zeile braucht einen Lieferanten.
   function preisOk(v){ var r=(v||'').replace(/[^0-9.,]/g,'').replace(/\./g,'').replace(',', '.'); var f=parseFloat(r); return isFinite(f) && f>0; }
-  function onlineFehlt(){ var f=[]; if(!onH || onH.value.trim()==='') f.push('Händler / Quelle'); if(!onP || !preisOk(onP.value)) f.push('Preis gesamt'); return f; }
+  function onlineFehlt(){ var f=[]; if(!onH || onH.value.trim()==='') f.push('Händler / Quelle'); return f; }   // Preis optional
+  var bds=document.getElementById('btnDirektSchnell'), onHAuto=false;
+  function etikettVorbelegen(){   // nur Etiketten angehakt + Händler leer (oder von uns vorbelegt) -> Labelisten
+    if(!onH) return; var any=false, nurEt=true;
+    boxes.forEach(function(c){ if(!c.checked) return; any=true; if(!c.dataset.etikett) nurEt=false; });
+    var v=onH.getAttribute('data-etikett-lief')||'';
+    if(any && nurEt && v && (onH.value.trim()==='' || onHAuto)){ onH.value=v; onHAuto=true; }
+    else if(onHAuto && (!any || !nurEt)){ onH.value=''; onHAuto=false; }
+  }
+  if(onH) onH.addEventListener('input', function(){ onHAuto=false; });
   function direktFehlt(){ var n=0; boxes.forEach(function(c){ if(!c.checked) return; var s=document.querySelector('select[name="lief['+c.value+']"]'); if(!s || !s.value) n++; }); return n; }
   function hinweis(el, txt){ if(!el) return; el.hidden=!txt; el.textContent=txt||''; }
   function upd(){
     var any=false; boxes.forEach(function(c){if(c.checked)any=true;});
+    etikettVorbelegen();
     if(btn)btn.disabled=!any;
     var of=onlineFehlt(); if(bex) bex.disabled=!any || of.length>0;
     hinweis(onHw, any && of.length ? 'Noch nicht bestellbar – es fehlt: ' + of.join(' und ') + '.' : '');
-    var dn=direktFehlt(); if(bdi) bdi.disabled=!any || dn>0;
+    var dn=direktFehlt(); if(bdi) bdi.disabled=!any || dn>0; if(bds) bds.disabled=!any || dn>0;
     hinweis(diHw, any && dn ? 'Noch nicht bestellbar – bei ' + dn + ' angehakten Zeile(n) fehlt der Lieferant.' : '');
   }
   boxes.forEach(function(c){c.addEventListener('change',upd);});
@@ -641,7 +655,7 @@ if ($ohneFestlegung): ?>
   document.addEventListener('submit', function(ev){
     if(ev.target!==f) return;
     var m = ev.submitter ? ev.submitter.value : '', fehlt=[];
-    if(m==='online'){ if(f.on_haendler.value.trim()==='') fehlt.push('Online-Händler / Quelle'); if(!preisOk(f.on_preis.value)) fehlt.push('Preis gesamt'); }
+    if(m==='online'){ if(f.on_haendler.value.trim()==='') fehlt.push('Online-Händler / Quelle'); }
     if(m==='direkt' && !f.lieferant_id.value) fehlt.push('Lieferant');
     if(fehlt.length){ ev.preventDefault(); ev.stopImmediatePropagation(); hw.hidden=false; hw.textContent='Nicht bestellt – es fehlt: ' + fehlt.join(' und ') + '.'; hw.scrollIntoView({block:'center'}); }
     else hw.hidden=true;

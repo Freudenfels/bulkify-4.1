@@ -86,3 +86,8 @@ Neben „Über Lieferant (Portal)“ und „Online bestellt“: Box „Direkt be
 
 ## Reiter „Wartet auf Freigabe" (08.11.2026)
 Gesperrte Zeilen (Kundenetikett bzw. bedruckter Beutel ohne Kunden-Freigabe des Designs, `etikett_ok` leer) stehen nicht mehr unter „Zu bestellen" und zählen in keinem Typ-Reiter und nicht in „Alle". Sie haben einen eigenen Reiter **„Wartet auf Freigabe"** (`?typ=wartet`, mit Zähler): gleiche Zeilen wie bisher (Netto-Menge, Aufträge, Badge „wartet auf Kunden-Freigabe"), ohne Häkchen und ohne Bestell-Knöpfe, mit kurzem Hinweis. Nach der Freigabe erscheint die Zeile automatisch im passenden Reiter unter „Zu bestellen".
+
+## Preis optional, Labelisten vorbelegt, schneller Weg (08.11.2026)
+- **Online bestellt:** Pflicht ist nur noch Händler/Quelle. Der Preis ist **optional** und als **netto** beschriftet; leer → `online_preis` NULL, Notiz „Preis folgt mit der Rechnung" (Preis/Rechnung laufen dann über die Buchhaltung). Gleiches im Formular „Vorsorglich bestellen".
+- **Etiketten → Labelisten:** Standard-Lieferant für Etiketten ist der Lieferant, dessen Firma „labelist" enthält (`$etLief`). Er ist je Etikett-Zeile im Lieferanten-Feld vorbelegt, wenn am Artikel kein Hauptlieferant steht, und wird als Händler bei „Online bestellt" eingetragen, wenn nur Etiketten angehakt sind (solange man ihn nicht selbst ändert).
+- **Schneller Weg:** Neben „Über Lieferant (Portal)" steht **„Als bestellt erfassen (direkt)"** – gleicher Weg wie „Direkt bestellt" (bestellt + bestätigt, keine Mail, kein Preis nötig), ohne das Feld aufklappen zu müssen. Aktiv, sobald jede angehakte Zeile einen Lieferanten hat.
