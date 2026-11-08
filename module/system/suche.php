@@ -1,6 +1,6 @@
 <?php
 // Globale Suche (Admin): ein Feld, das über alle wichtigen Bereiche sucht – Kunden,
-// Lieferanten, Rohstoffe/Artikel, Produkte, Rezepturen, Angebote, Aufträge – und die
+// Lieferanten, Rohstoffe, übrige Artikel, Produkte, Rezepturen, Angebote, Aufträge – und die
 // Treffer gruppiert und anklickbar zeigt.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
@@ -63,13 +63,24 @@ if (mb_strlen($q) >= 2) {
     }
 
     $KAT = kategorie_labels();   // einheitliche Labels (Bulkware / Fertigprodukt), Block K
-    $add('Rohstoffe / Artikel',
+    // Rohstoffe getrennt von den übrigen Lagerartikeln (Nico 08.11.2026): Wer den ORIGINALEN Rohstoff sucht, soll ihn nicht
+    // zwischen Etiketten, Beuteln, Bulk- und Fertigware-Artikeln gleichen Namens suchen müssen. Rohstoffe stehen zuerst.
+    $itemWo = "(name LIKE ? OR name_en LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR artikelnummer LIKE ?)";
+    $itemSub = fn($r) => trim(($r['artikelnummer'] ? $r['artikelnummer'] . ' · ' : '') . ($KAT[$r['kategorie']] ?? $r['kategorie']) . ($r['name_lat'] ? ' · ' . $r['name_lat'] : ''));
+    $add('Rohstoffe',
         all("SELECT id, name, name_lat, artikelnummer, kategorie FROM item
-             WHERE name LIKE ? OR name_en LIKE ? OR name_lat LIKE ? OR synonym LIKE ? OR artikelnummer LIKE ?
+             WHERE kategorie IN ('rohstoff','leerkapsel') AND $itemWo
              ORDER BY name LIMIT $LIMIT", array_fill(0, 5, $like)),
         fn($r) => '?p=rohstoff&id=' . $r['id'],
         fn($r) => $r['name'],
-        fn($r) => trim(($r['artikelnummer'] ? $r['artikelnummer'] . ' · ' : '') . ($KAT[$r['kategorie']] ?? $r['kategorie']) . ($r['name_lat'] ? ' · ' . $r['name_lat'] : '')));
+        $itemSub);
+    $add('Artikel (Verpackung, Etiketten, Bulk, Fertigware)',
+        all("SELECT id, name, name_lat, artikelnummer, kategorie FROM item
+             WHERE COALESCE(kategorie,'') NOT IN ('rohstoff','leerkapsel') AND $itemWo
+             ORDER BY FIELD(kategorie,'verpackung','fertig','verkaufsfertig'), name LIMIT $LIMIT", array_fill(0, 5, $like)),
+        fn($r) => ($r['kategorie'] === 'verpackung' ? '?p=verpackung&id=' : '?p=rohstoff&id=') . $r['id'],
+        fn($r) => $r['name'],
+        $itemSub);
 
     $add('Produkte',
         all("SELECT id, nummer, name, kundenname FROM produkt
@@ -168,7 +179,7 @@ bx_head('Globale Suche', $q !== '' ? $gesamt . ' Treffer für „' . h($q) . '"'
     </div>
   <?php endforeach; ?>
 <?php else: ?>
-  <div class="bx-panel muted">Tippe oben einen Suchbegriff ein. Die Suche geht über Kunden, Lieferanten, Rohstoffe/Artikel, Produkte, Rezepturen, Angebote, Aufträge und Lieferanten-Anfragen (LA).</div>
+  <div class="bx-panel muted">Tippe oben einen Suchbegriff ein. Die Suche geht über Kunden, Lieferanten, Rohstoffe, Artikel (Verpackung, Etiketten, Bulk, Fertigware), Produkte, Rezepturen, Angebote, Aufträge und Lieferanten-Anfragen (LA).</div>
 <?php endif; ?>
 <style>
 .bx-searchhits{display:flex;flex-direction:column}

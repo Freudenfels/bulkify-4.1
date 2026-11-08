@@ -7,7 +7,8 @@ Route ist ohnehin Admin-only).
 ## Durchsuchte Bereiche
 - **Kunden** – Firma, Ansprechpartner, E-Mail, Kundennummer, Ort, Marke (kunde_marke)
 - **Lieferanten** – Firma, Ansprechpartner, E-Mail, Nummer, Ort, Webseite
-- **Rohstoffe / Artikel** – Name, Name en/lat, Synonym, Artikelnummer (alle Kategorien)
+- **Rohstoffe** – nur `kategorie` rohstoff/leerkapsel (Name, Name en/lat, Synonym, Artikelnummer); steht vor den übrigen Artikeln, damit der Original-Rohstoff sofort zu finden ist (08.11.2026)
+- **Artikel (Verpackung, Etiketten, Bulk, Fertigware)** – alle anderen Lagerartikel, gleiche Felder; Verpackung/Etiketten öffnen `?p=verpackung`, der Rest `?p=rohstoff`
 - **Produkte** – Name, Kundenname, Nummer
 - **Rezepturen** – Name, Nummer
 - **Angebote** – Angebotsnummer, Kundenfirma
