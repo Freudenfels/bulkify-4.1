@@ -31,3 +31,6 @@ bulkify-Dokument** (`build_spec_pdf()` / `build_coa_pdf()`, Routen `spec_pdf`/`c
 - `dokumente_fuer_kunde()` schließt sie immer aus (egal wie `kunde_sichtbar` steht).
 - Im `dokument_panel()` erscheinen sie als „intern · nie an Kunde" (kein Freigabe-Schalter).
 - Zusätzliche harte Sperre in `module/portal/dokument_download.php` (liefert sie nie aus).
+
+## Lieferanten-Auswahl als Suchfeld (09.11.2026)
+Im Upload-Formular von `dokument_panel()` wird die Lieferanten-Auswahl ab mehr als 10 Lieferanten zum Suchfeld (`rscombo`).

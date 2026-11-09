@@ -116,7 +116,7 @@ function dokument_panel(string $objekt_typ, int $objekt_id, array $lieferanten):
         <div class="bx-grid">
           <div class="bx-field"><label>Typ</label><select name="dok_typ"><?php foreach ($TYP as $key=>$lbl): ?><option value="<?= $key ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
           <div class="bx-field"><label>Lieferant <?= bx_hint('von welchem Anbieter stammt der Nachweis?') ?></label>
-            <select name="dok_lieferant"><option value="">– keiner –</option><?php foreach ($lieferanten as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?></select>
+            <select name="dok_lieferant"<?= count($lieferanten) > 10 ? ' class="rscombo"' : '' ?>><option value="">– keiner –</option><?php foreach ($lieferanten as $lf): ?><option value="<?= (int)$lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?></select>
           </div>
           <div class="bx-field"><label>Titel (optional)</label><input type="text" name="dok_titel" placeholder="z. B. CoA Charge 2026-04"></div>
           <div class="bx-field"><label>Datei</label><input type="file" name="dok" required accept="application/pdf,image/*"></div>
