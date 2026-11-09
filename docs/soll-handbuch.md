@@ -399,3 +399,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | 3: Benachrichtigungen als erster Punkt in "Einfach" (Glocke mit Zähler), Eintrag unten entfällt dort | Nico / Claude Code |
 | 08.11.2026 | 3: Menüpunkt "Bestellt" (Bestellungen) in "Einfach" unter Einkauf | Nico / Claude Code |
 | 09.11.2026 | Nachbestellungen: im Portal unter Bestellungen sichtbar, solange sie auf die Preisprüfung warten; Hinweis in der Auftragsliste; ohne Preis am Vorauftrag gilt der Kundenpreis, Freigabe nie mit 0 € | Nico / Claude Code |
+| 09.11.2026 | Nachbestellungen prüfen: je Nachbestellung Info-Block mit Konfiguration (Behälter/Deckel/Etikett verlinkt, Vorauftrag, Etikett-Freigabe), Preis-Herkunft (Angebote, Vorauftrag, letzte Rechnung, Kundenpreis, EK + Marge) und früheren Aufträgen; Produkt verlinkt. |

@@ -50,3 +50,7 @@ Siehe auch: Portal-Box in [../module/portal/_angebot_karte.php](../module/portal
 - `nachbestellung_bestaetigen()` lehnt 0 € ab (sonst Auftrag + Rechnung über 0 €).
 - `nachbestellung_kundenpreis_uebernehmen($id)`: Team übernimmt den Kundenpreis und gibt in einem Schritt frei.
 - `nachbestellung_offen_kunde($kunde)`: offene Nachbestellungen (Prüfung / neuer Preis) für das Portal „Bestellungen“.
+
+## Entscheidungsgrundlage (09.11.2026)
+- `nachbestellung_kundenpreis_teile()` liefert den Kundenpreis aufgeteilt (Herstellung, Verpackung, Gesamt, Staffel); `nachbestellung_kundenpreis_vk()` nutzt sie.
+- `nachbestellung_entscheidung($nb)` sammelt für die Team-Seite: Vorauftrag, Verpackungsteile, Angebotsstaffel, frühere Aufträge mit Rechnungsbetrag je Pkg, letzte Rechnung, Kundenpreis und EK (Füllung über `produkt_variante_ek()` + Verpackung über `pack_ek_bei_menge()`). Ändert nichts.

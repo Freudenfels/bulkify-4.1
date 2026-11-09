@@ -117,18 +117,66 @@ function nachbestellung_preis_fuer(int $kunde_id, int $produkt_id, int $stueck, 
 // Kundenpreis (?p=kundenpreise: Herstellung je Pkg, passende Packungsgröße, Staffel nach Bestellmenge) plus Verpackung,
 // Deckel und Etikett bei dieser Menge – dieselbe Rechnung wie die Kundenpreis-Liste. Kein Kundenpreis = 0 („Preis folgt").
 function nachbestellung_kundenpreis_vk(int $kunde_id, int $produkt_id, int $stueck, int $menge, ?int $verpackung_id = null): float {
-    if ($kunde_id <= 0 || $produkt_id <= 0 || !table_exists('produkt_kundenpreis')) return 0.0;
+    return (float)(nachbestellung_kundenpreis_teile($kunde_id, $produkt_id, $stueck, $menge, $verpackung_id)['gesamt'] ?? 0);
+}
+// Kundenpreis aufgeteilt: ['herstellung'=>€, 'verpackung'=>€, 'gesamt'=>€, 'staffel'=>Bestellmenge der Kundenpreis-Zeile] oder [].
+function nachbestellung_kundenpreis_teile(int $kunde_id, int $produkt_id, int $stueck, int $menge, ?int $verpackung_id = null): array {
+    if ($kunde_id <= 0 || $produkt_id <= 0 || !table_exists('produkt_kundenpreis')) return [];
     $rows = all("SELECT COALESCE(menge_pro_vpe,0) AS stk, COALESCE(anzahl_vpe,0) AS bm, preis FROM produkt_kundenpreis
                  WHERE produkt_id=? AND kunde_id=? AND preis>0", [$produkt_id, $kunde_id]);
     if ($stueck > 0) $rows = array_values(array_filter($rows, fn($r) => (int)$r['stk'] === $stueck || (int)$r['stk'] === 0));
-    if (!$rows) return 0.0;
+    if (!$rows) return [];
     $preis = null; $best = -1;
     foreach ($rows as $r) { $bm = (int)$r['bm']; if ($bm > 0 && $bm <= $menge && $bm > $best) { $best = $bm; $preis = (float)$r['preis']; } }
-    if ($preis === null) foreach ($rows as $r) if ((int)$r['bm'] === 0) { $preis = (float)$r['preis']; break; }
-    if ($preis === null) { usort($rows, fn($a, $b) => (int)$a['bm'] <=> (int)$b['bm']); $preis = (float)$rows[0]['preis']; }
-    if ($preis <= 0) return 0.0;
+    if ($preis === null) foreach ($rows as $r) if ((int)$r['bm'] === 0) { $preis = (float)$r['preis']; $best = 0; break; }
+    if ($preis === null) { usort($rows, fn($a, $b) => (int)$a['bm'] <=> (int)$b['bm']); $preis = (float)$rows[0]['preis']; $best = (int)$rows[0]['bm']; }
+    if ($preis <= 0) return [];
     $verp = function_exists('verpackung_cent_je_pack') ? verpackung_cent_je_pack($produkt_id, max(1, $menge), $kunde_id, $verpackung_id ?: null) / 100 : 0.0;
-    return round($preis + $verp, 4);
+    return ['herstellung' => round($preis, 4), 'verpackung' => round($verp, 4), 'gesamt' => round($preis + $verp, 4), 'staffel' => max(0, $best)];
+}
+
+// Entscheidungsgrundlage für die Preisprüfung (Team, Nico 09.11.2026): was genau nachbestellt wird (Produkt, Packungsgröße,
+// Behälter/Deckel/Etikett des Vorauftrags) und woher ein Preis kommen kann – Angebotsstaffel, Vorauftrag, letzte Rechnung,
+// Kundenpreis, EK. Nur lesen, keine Änderung.
+function nachbestellung_entscheidung(array $nb): array {
+    $kid = (int)$nb['kunde_id']; $pid = (int)($nb['produkt_id'] ?? 0); $stk = (int)($nb['stueck'] ?? 0); $menge = (int)$nb['menge'];
+    $qa = (int)($nb['quelle_auftrag_id'] ?? 0)
+        ? one("SELECT id, nummer, angelegt, menge, stueck, vk_stueck, gesamt_netto, verpackung_id, status, etikett_freigegeben FROM auftrag WHERE id=?", [(int)$nb['quelle_auftrag_id']])
+        : null;
+    $verpId = (int)($qa['verpackung_id'] ?? 0) ?: null;
+    $items = ($pid > 0 && function_exists('produkt_verpackung_items')) ? produkt_verpackung_items($pid, $verpId) : [];
+    // Frühere Aufträge dieses Kunden für dieses Produkt, je mit Preis/Pkg und dem, was dafür berechnet wurde (Rechnungen ohne Storno).
+    $hist = [];
+    if ($pid > 0) {
+        foreach (all("SELECT a.id, a.nummer, a.angelegt, a.menge, a.stueck, a.vk_stueck, a.gesamt_netto, a.status, a.verpackung_id, i.name AS verp_name
+                      FROM auftrag a LEFT JOIN item i ON i.id=a.verpackung_id
+                      WHERE a.kunde_id=? AND a.produkt_id=? AND a.status<>'storniert' ORDER BY a.id DESC LIMIT 6", [$kid, $pid]) as $a) {
+            $re = one("SELECT GROUP_CONCAT(nummer ORDER BY id SEPARATOR ', ') AS nr, COALESCE(SUM(netto),0) AS netto
+                       FROM beleg WHERE auftrag_id=? AND typ='rechnung' AND status<>'storniert'", [(int)$a['id']]) ?: [];
+            $reNetto = (float)($re['netto'] ?? 0);
+            $hist[] = $a + ['preis' => auftrag_vk_gesamt($a), 're_nr' => (string)($re['nr'] ?? ''),
+                            're_preis' => ($reNetto > 0 && (int)$a['menge'] > 0) ? round($reNetto / (int)$a['menge'], 4) : 0.0];
+        }
+    }
+    $letzteRe = null;
+    foreach ($hist as $h) if ($h['re_preis'] > 0) { $letzteRe = $h; break; }
+    // EK je Packung wie in der Preismatrix: Füllung je Form (Pulver nach Gramm usw., Staffel = Bestellmenge) + Behälter/Deckel/Etikett.
+    $ekF = ($pid > 0 && $stk > 0 && function_exists('produkt_variante_ek')) ? round(produkt_variante_ek($pid, $stk, (int)$verpId, $menge), 4) : 0.0;
+    $ekV = 0.0;
+    if (function_exists('pack_ek_bei_menge')) foreach ($items as $it) $ekV += pack_ek_bei_menge((int)$it['id'], max(1, $menge));
+    $ekV = round($ekV, 4);
+    return [
+        'quelle'      => $qa,
+        'quelle_preis'=> $qa ? auftrag_vk_gesamt($qa) : 0.0,
+        'items'       => $items,
+        'staffel'     => $pid > 0 ? nachbestellung_staffel($kid, $pid, $stk) : [],
+        'historie'    => $hist,
+        'letzte_re'   => $letzteRe,
+        'kundenpreis' => nachbestellung_kundenpreis_teile($kid, $pid, $stk, $menge, $verpId),
+        'ek_fuellung' => $ekF,
+        'ek_verpackung' => $ekV,
+        'ek'          => $ekF > 0 ? round($ekF + $ekV, 4) : 0.0,   // ohne Füllungs-EK kein EK (sonst wäre nur die Verpackung „EK")
+    ];
 }
 
 // Offene Nachbestellungen eines Kunden (Portal „Bestellungen": eingegangen, aber noch kein Auftrag).

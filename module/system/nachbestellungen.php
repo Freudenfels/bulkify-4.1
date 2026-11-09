@@ -39,7 +39,68 @@ $erledigt = all("SELECT n.*, k.firma AS kunde, COALESCE(NULLIF(p.name,''),'') AS
                  LEFT JOIN auftrag a ON a.id=n.auftrag_id
                  WHERE n.status='bestaetigt' ORDER BY n.id DESC LIMIT 15");
 
+// Entscheidungsgrundlage je Nachbestellung (Nico 09.11.2026): Konfiguration mit Links, Preisquellen, frühere Aufträge.
+function nb_info_render(array $n, array $i, callable $eur, callable $paket): void {
+    $kv = fn(string $l, string $v) => '<div class="nb-kv"><span class="muted">' . h($l) . '</span><span>' . $v . '</span></div>';
+    $q = $i['quelle'];
+    echo '<div class="nb-grid">';
+    // 1) Was wird nachbestellt
+    echo '<div><div class="nb-tit">Konfiguration</div>';
+    echo $kv('Packungsgröße', h($paket($n['stueck'], $n['produkt_id'] ?? 0)));
+    if ($i['items']) foreach ($i['items'] as $it)
+        echo $kv($it['rolle'], '<a href="?p=verpackung&id=' . (int)$it['id'] . '">' . h((string)$it['name']) . '</a>' . (!empty($it['artikelnummer']) ? ' <span class="muted">' . h((string)$it['artikelnummer']) . '</span>' : ''));
+    else echo $kv('Verpackung', '<span style="color:#8f231b">keine hinterlegt</span>');
+    if ($q) {
+        echo $kv('Vorauftrag', '<a href="?p=auftrag&id=' . (int)$q['id'] . '">' . h((string)($q['nummer'] ?: '#' . (int)$q['id'])) . '</a> <span class="muted">' . h(fmt_zeit((string)$q['angelegt'], 'd.m.Y')) . ' · ' . number_format((int)$q['menge'], 0, ',', '.') . ' Pkg</span>');
+        echo $kv('Etikett-Freigabe', (int)($q['etikett_freigegeben'] ?? 0) === 1 ? 'freigegeben (wird übernommen)' : '<span style="color:#8a6d00">am Vorauftrag nicht freigegeben</span>');
+    } else echo $kv('Vorauftrag', '<span class="muted">aus Angebot, kein Auftrag</span>');
+    echo '</div>';
+    // 2) Woher kann der Preis kommen
+    echo '<div><div class="nb-tit">Preis-Herkunft je Pkg</div>';
+    if ($i['staffel']) {
+        $t = []; foreach ($i['staffel'] as $s) $t[] = 'ab ' . number_format((int)$s['menge'], 0, ',', '.') . ': ' . $eur($s['vk']);
+        echo $kv('Angebote', h(implode(' · ', $t)));
+    } else echo $kv('Angebote', '<span class="muted">kein Angebot mit Preis</span>');
+    echo $kv('Vorauftrag', $i['quelle_preis'] > 0 ? $eur($i['quelle_preis']) : '<span class="muted">ohne Preis</span>');
+    $lr = $i['letzte_re'];
+    echo $kv('Zuletzt berechnet', $lr ? $eur($lr['re_preis']) . ' <span class="muted">' . h($lr['re_nr']) . ' · ' . h((string)($lr['nummer'] ?: '#' . (int)$lr['id'])) . '</span>' : '<span class="muted">keine Rechnung</span>');
+    $kp = $i['kundenpreis'];
+    echo $kv('Kundenpreis', $kp ? $eur($kp['gesamt']) . ' <span class="muted">= Herstellung ' . $eur($kp['herstellung']) . ' + Verpackung ' . $eur($kp['verpackung']) . ($kp['staffel'] > 0 ? ' · Staffel ab ' . number_format($kp['staffel'], 0, ',', '.') : '') . '</span>'
+                                     : '<span class="muted">nicht hinterlegt</span> <a href="?p=kundenpreise&ohne=1">Kundenpreise</a>');
+    if ($i['ek'] > 0) {
+        $ref = (float)$n['vk_stueck'] > 0 ? (float)$n['vk_stueck'] : (float)($kp['gesamt'] ?? 0);
+        $marge = $ref > 0 ? round(($ref - $i['ek']) / $ref * 100) : null;
+        echo $kv('EK ca.', $eur($i['ek']) . ' <span class="muted">= Füllung ' . $eur($i['ek_fuellung']) . ' + Verpackung ' . $eur($i['ek_verpackung']) . '</span>' . ($marge !== null ? ' <span class="' . ($marge < marge_min_prozent() ? '' : 'muted') . '"' . ($marge < marge_min_prozent() ? ' style="color:#8f231b"' : '') . '>· Marge ' . (int)$marge . ' %</span>' : ''));
+    } else echo $kv('EK ca.', '<span class="muted">nicht berechenbar (Rezeptur ohne Preise)</span>');
+    echo '</div>';
+    // 3) Frühere Aufträge
+    echo '<div><div class="nb-tit">Frühere Aufträge</div>';
+    if (!$i['historie']) echo '<div class="muted">keine</div>';
+    else {
+        echo '<table class="nb-hist"><tbody>';
+        foreach ($i['historie'] as $h)
+            echo '<tr><td><a href="?p=auftrag&id=' . (int)$h['id'] . '">' . h((string)($h['nummer'] ?: '#' . (int)$h['id'])) . '</a></td>'
+               . '<td class="muted">' . h(fmt_zeit((string)$h['angelegt'], 'd.m.Y')) . '</td>'
+               . '<td class="bx-num">' . number_format((int)$h['menge'], 0, ',', '.') . '</td>'
+               . '<td class="bx-num">' . ($h['preis'] > 0 ? $eur($h['preis']) : '<span class="muted">0 €</span>') . '</td>'
+               // Packungsgröße/Behälter nur zeigen, wenn sie von dieser Nachbestellung abweichen.
+               . '<td class="muted">' . h(implode(' · ', array_filter([
+                     (int)$h['stueck'] !== (int)$n['stueck'] ? $paket($h['stueck'], $n['produkt_id'] ?? 0) : '',
+                     (int)($h['verpackung_id'] ?? 0) !== (int)($q['verpackung_id'] ?? 0) ? (string)($h['verp_name'] ?? '') : '']))) . '</td></tr>';
+        echo '</tbody></table>';
+    }
+    echo '</div></div>';
+}
+
 render_header('nachbestellungen', 'Nachbestellungen');
+echo '<style>
+#nbOffen td:nth-child(2),#nbOffen td:nth-child(6){white-space:normal;min-width:200px}
+.nb-info td{background:var(--panel-2);white-space:normal;padding:10px 12px 14px}
+.nb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px 28px;font-size:13px}
+.nb-tit{color:var(--muted,#6b7280);font-size:12px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.nb-kv{display:flex;gap:10px;padding:2px 0}.nb-kv>span:first-child{flex:0 0 120px}
+.nb-hist td{padding:2px 10px 2px 0;border:0;white-space:nowrap}
+</style>';
 bx_head('Nachbestellungen', count($offen) . ' zu prüfen',
     bx_hint('Vom Kunden verbindlich zum zuletzt vereinbarten Preis ausgelöst. In der Regel nur Preis bestätigen und freigeben – der Auftrag entsteht dann automatisch inkl. übernommener Etikett-Freigabe.'));
 
@@ -53,10 +114,10 @@ $paket = fn($stk, $pid = 0) => (int)$stk > 0 ? form_groessen_label(auftrag_darre
 <div class="bx-panel">
   <h2 style="margin-top:0">Zu prüfen</h2>
   <?php if (!$offen): ?><div class="muted">Keine offenen Nachbestellungen.</div><?php else: ?>
-  <div class="bx-tablewrap"><table class="bx-table">
+  <div class="bx-tablewrap"><table class="bx-table" id="nbOffen">
     <thead><tr><th>Kunde</th><th>Produkt</th><th class="bx-num">Menge</th><th class="bx-num">Preis / Pkg</th><th class="bx-num">Gesamt netto</th><th>Status / Aktion</th></tr></thead>
     <tbody>
-    <?php foreach ($offen as $n): $menge = (int)$n['menge']; $vk = (float)$n['vk_stueck']; $netto = $menge * $vk;
+    <?php foreach ($offen as $n): $menge = (int)$n['menge']; $vk = (float)$n['vk_stueck']; $netto = $menge * $vk; $info = nachbestellung_entscheidung($n);
         // Ohne Preis (Altauftrag mit 0 €): Vorschlag aus den zentralen Kundenpreisen, Freigabe erst mit Preis.
         $vor = 0.0;
         if ($vk <= 0) {
@@ -65,7 +126,7 @@ $paket = fn($stk, $pid = 0) => (int)$stk > 0 ? form_groessen_label(auftrag_darre
         } ?>
       <tr>
         <td><?= kunde_link($n['kunde_id'], (string)($n['kunde'] ?: ('Kunde #' . (int)$n['kunde_id']))) ?></td>
-        <td><?= h((string)($n['produkt'] ?: '–')) ?> <span class="muted"><?= h($paket($n['stueck'], $n['produkt_id'] ?? 0)) ?></span></td>
+        <td><?= (int)$n['produkt_id'] ? '<a href="?p=produkt&id=' . (int)$n['produkt_id'] . '">' . h((string)($n['produkt'] ?: '–')) . '</a>' : h((string)($n['produkt'] ?: '–')) ?> <span class="muted"><?= h($paket($n['stueck'], $n['produkt_id'] ?? 0)) ?></span></td>
         <td class="bx-num"><?= number_format($menge, 0, ',', '.') ?></td>
         <td class="bx-num"><?= $vk > 0 ? $eur($vk) : '<span style="color:#8f231b">fehlt</span>' . ($vor > 0 ? '<div class="muted" style="font-size:12px">Kundenpreis ' . $eur($vor) . '</div>' : '') ?></td>
         <td class="bx-num"><?= $vk > 0 ? $eur($netto) : ($vor > 0 ? '<span class="muted">' . $eur($menge * $vor) . '</span>' : '–') ?></td>
@@ -102,6 +163,7 @@ $paket = fn($stk, $pid = 0) => (int)$stk > 0 ? form_groessen_label(auftrag_darre
           <?php endif; ?>
         </td>
       </tr>
+      <tr class="nb-info"><td colspan="6"><?php nb_info_render($n, $info, $eur, $paket); ?></td></tr>
     <?php endforeach; ?>
     </tbody>
   </table></div>

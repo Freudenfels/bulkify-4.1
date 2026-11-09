@@ -14,3 +14,10 @@ Logik liegt vollständig in [../../core/nachbestellung.php](../../core/nachbeste
 ## Ohne Preis (09.11.2026)
 
 Steht der Preis auf 0 (Vorauftrag ohne Preis), zeigt die Zeile „fehlt“ und darunter den Kundenpreis-Vorschlag. Knopf **„Kundenpreis x € übernehmen & freigeben“** erzeugt den Auftrag zu diesem Preis. Gibt es keinen Kundenpreis, ist „Preis anpassen“ offen (geht zur Freigabe an den Kunden) und ein Link führt zu den Kundenpreisen. „Preis bestätigen & freigeben“ gibt es nur mit Preis.
+
+## Entscheidungsgrundlage je Nachbestellung (09.11.2026)
+Unter jeder offenen Nachbestellung steht ein Info-Block, damit der Preis ohne Suchen entschieden werden kann:
+- **Konfiguration:** Packungsgröße, Behälter/Deckel/Etikett des Vorauftrags (je mit Link zur Verpackung), Vorauftrag (Link), ob die Etikett-Freigabe übernommen wird. Das Produkt in der Zeile ist ein Link zur Produktseite.
+- **Preis-Herkunft je Pkg:** Preise aus früheren Angeboten (Staffel), Preis des Vorauftrags, zuletzt berechnet laut Rechnung, Kundenpreis (Herstellung + Verpackung), EK ca. (Füllung + Verpackung wie in der Preismatrix) mit Marge; Marge unter dem Mindestwert rot.
+- **Frühere Aufträge:** die letzten 6 Aufträge des Kunden für dieses Produkt mit Menge und Preis/Pkg; Packungsgröße/Behälter nur, wenn sie abweichen.
+Daten kommen aus `nachbestellung_entscheidung()` (core/nachbestellung.php), nur lesend.
