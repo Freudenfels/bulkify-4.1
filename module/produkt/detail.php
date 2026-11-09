@@ -4,6 +4,7 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/spec_ki.php';   // Spec/CoA am Produkt per KI auslesen
+require_once BX_ROOT . '/core/anfrage_ui.php'; // „Beim Lieferanten anfragen" (Fertigprodukt-Anfrage, Nico 09.11.2026)
 
 $DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 $id  = $_GET['id'] ?? 'neu';
@@ -276,12 +277,22 @@ function verp_slot(string $label, string $name, array $rows, $current, string $h
 $kopfAkt = bx_btn('Zurück zur Liste', '?p=produkte', 'ghost');
 if (!$neu && function_exists('has_role') && has_role('admin'))
     $kopfAkt .= ' <form method="post" style="display:inline" onsubmit="return confirm(\'Dieses Produkt endgültig löschen? Geht nur, wenn es nicht mehr verwendet wird (Auftrag/Angebot/Produktion/Bestand).\');"><input type="hidden" name="aktion" value="loeschen"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Löschen</button></form>';
+// Direkt von der Produktseite beim Lieferanten anfragen: die Rezeptur des Produkts als Fertigprodukt (Fremdfertigung),
+// gleiches Popup wie an Angebot/Rezeptur (Lieferanten wählen, Mengen-Staffel, CoA). Nur mit Rezeptur und für Einkauf/Vertrieb.
+$anfRid = $neu ? 0 : (int)($p['rezeptur_id'] ?? 0);
+$anfDarf = $anfRid > 0 && (!function_exists('has_role') || has_role('admin') || has_role('einkauf') || has_role('sales'));
+if ($anfDarf) {
+    $anfForm = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$anfRid]);
+    $kopfAkt = anfrage_produkt_badge($anfRid) . ' ' . anfrage_produkt_button($anfRid, (string)$p['name'], $anfForm, 'Beim Lieferanten anfragen', 'btn btn-primary btn-sm') . ' ' . $kopfAkt;
+}
 render_header('produkte', $neu ? 'Neues Produkt' : $p['name']);
 bx_head($neu ? 'Neues Produkt' : $v('name'),
         $neu ? 'Rezeptur + Verpackung + Kunde' : trim($v('nummer')),
         $kopfAkt);
 if (!$neu && !empty($p['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($p['angelegt'], 'd.m.Y H:i')) . (!empty($p['aktualisiert']) && $p['aktualisiert'] !== $p['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($p['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['angefragt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Anfrage an ' . (int)$_GET['angefragt'] . ' Lieferant(en) gestellt' . ((int)($_GET['gemailt'] ?? 0) > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per Mail' : '') . ' – Antworten unter <a href="?p=lief_anfragen">Lieferanten-Anfragen</a>.</div>';
+if (isset($_GET['anffehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Anfrage nicht gestellt – bitte mindestens einen Lieferanten wählen.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 $prodDelFehler = (string)($_SESSION['prod_del_fehler'] ?? '');
 if ($prodDelFehler !== '') { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($prodDelFehler) . '</div>'; unset($_SESSION['prod_del_fehler']); }
@@ -975,4 +986,5 @@ if (!$neu):
 </script>
 <style>.bx-tab-aus,.bx-mfg-aus{display:none !important}</style>
 <?php
+if ($anfDarf) anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=produkt&id=' . (int)$id);
 render_footer();

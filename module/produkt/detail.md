@@ -103,3 +103,6 @@ Abgelöst durch den Abschnitt unten (Rezeptur = Tagesdosis).
 
 Behälter gewechselt, Name nicht von Hand geändert (03.11.2026): Der Behälter-Teil im Namen zieht mit (`produkt_name_behaelter_nachziehen`), der alte Name wird Synonym. Vorher stand oben „100 ml Glas“, unten 150 ml.
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## Beim Lieferanten anfragen (09.11.2026)
+Oben im Seitenkopf (nur wenn das Produkt eine Rezeptur hat, für Admin/Einkauf/Vertrieb): Status-Badge (nicht angefragt / angefragt / Angebote liegen vor) und Knopf **„Beim Lieferanten anfragen"**. Er öffnet das gemeinsame Anfrage-Popup (`core/anfrage_ui.php`, Fertigprodukt-Modus): Lieferanten wählen, Mengen-Staffel, CoA/Spezifikation, Incoterm/Versandart, Notiz. Gesendet wird über `?p=preis_anfragen` (Rezeptur als Fertigprodukt/Fremdfertigung); danach zurück aufs Produkt mit Hinweis und Link zu den Lieferanten-Anfragen.
