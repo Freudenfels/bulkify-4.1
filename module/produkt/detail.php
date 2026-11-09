@@ -1,990 +1,798 @@
 <?php
-// Produkt anlegen & bearbeiten – Rezeptur + Verpackung + Kunde, mit Live-Kalkulation
+// Produktseite (Umbau Nico 09.11.2026, Vorbild Auftragsseite): Kopf + Kacheln (ändern per Stift -> Fenster -> Speichern,
+// jede Kachel speichert für sich) + Reiter Rezeptur · Kunden · Beschaffung · Produktion · Kalkulation · Dokumente.
+// Je Sache genau eine Stelle. Neuanlage (?p=produkt&id=neu) ist ein kurzes Formular; danach geht es hier weiter.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
-require_once BX_ROOT . '/core/spec_ki.php';   // Spec/CoA am Produkt per KI auslesen
-require_once BX_ROOT . '/core/anfrage_ui.php'; // „Beim Lieferanten anfragen" (Fertigprodukt-Anfrage, Nico 09.11.2026)
+require_once BX_ROOT . '/core/spec_ki.php';             // Spec/CoA am Produkt per KI auslesen
+require_once BX_ROOT . '/core/anfrage_ui.php';          // „Beim Lieferanten anfragen" (Fertigprodukt-Anfrage)
+require_once BX_ROOT . '/core/produkt_kalkulation.php'; // Kosten je Packung, Beschaffung, Kunden (nur lesen)
 
-$DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
+$DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig','granulat'=>'Granulat'];
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
-
+$istPost = $_SERVER['REQUEST_METHOD'] === 'POST';
+$aktion = (string)($_POST['aktion'] ?? '');
+$zurueck = fn(string $q = '', string $anker = '') => header('Location: ?p=produkt&id=' . (int)$id . $q . ($anker !== '' ? '#' . $anker : ''));
 $fehler = '';
-// Preismatrix neu berechnen (eigene Aktion)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'matrix' && is_numeric($id)) {
-    $n = produkt_matrix_generieren((int)$id);
-    header('Location: ?p=produkt&id=' . $id . '&matrix=' . $n); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && is_numeric($id)) {
-    $dokId = dokument_upload('produkt', (int)$id);
-    // Bei Spec/CoA direkt von der KI auslesen lassen (läuft nur auf beta) und den Vorschlag am Dokument merken.
-    $gelesen = ($dokId && in_array($_POST['dok_typ'] ?? '', ['spec', 'coa', 'analyse'], true)) ? (spec_ki_nach_upload($dokId) ? 1 : 0) : 0;
-    header('Location: ?p=produkt&id=' . $id . '&gespeichert=1' . ($gelesen ? '&kigelesen=1' : '') . '#specfeld'); exit;
-}
-// Produktinformationsblatt (PIB) hochladen bzw. entfernen (hochgeladenes hat Vorrang vor dem Auto-PIB).
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'pib_upload' && is_numeric($id)) {
-    require_once BX_ROOT . '/core/pdf_pib.php';
-    pib_upload((int)$id);
-    header('Location: ?p=produkt&id=' . $id . '&pib=1#pibfeld'); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'pib_del' && is_numeric($id)) {
-    require_once BX_ROOT . '/core/pdf_pib.php';
-    pib_del((int)$id);
-    header('Location: ?p=produkt&id=' . $id . '&pibweg=1#pibfeld'); exit;
-}
-// Von der KI aus dem Spec gelesene Produktfelder (Haltbarkeit, Allergene) übernehmen.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_uebernehmen' && is_numeric($id)) {
-    $vor = spec_ki_vorschlag((int)($_POST['dok_id'] ?? 0));
-    $stamm = (array)($vor['stamm'] ?? []);
-    $n = 0;
-    foreach (['haltbarkeit' => 60, 'allergene' => 255] as $f => $len) {
-        if (trim((string)($stamm[$f] ?? '')) !== '') { q("UPDATE produkt SET `$f`=? WHERE id=?", [mb_substr((string)$stamm[$f], 0, $len), (int)$id]); $n++; }
+
+// ---------------------------------------------------------------- Aktionen (bestehendes Produkt)
+if ($istPost && !$neu) {
+    $pid = (int)$id;
+    if ($aktion === 'matrix') { $n = produkt_matrix_generieren($pid); $zurueck('&matrix=' . $n . '&tab=kalkulation'); exit; }
+    if ($aktion === 'dok_upload') {
+        // EIN Upload für alle Dokumenttypen; bei Spec/CoA/Analyse liest die KI aus (nur beta) und merkt den Vorschlag am Dokument.
+        $dokId = dokument_upload('produkt', $pid);
+        $gelesen = ($dokId && in_array($_POST['dok_typ'] ?? '', ['spec', 'coa', 'analyse'], true)) ? (spec_ki_nach_upload($dokId) ? 1 : 0) : 0;
+        $zurueck('&gespeichert=1&tab=dokumente' . ($gelesen ? '&kigelesen=1' : ''), 'dok'); exit;
     }
-    header('Location: ?p=produkt&id=' . $id . '&specueb=' . $n . '#specfeld'); exit;
-}
-// Zukauf-Preis (Fertigprodukt) manuell hinzufügen / löschen.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zk_preis_add' && is_numeric($id)) {
-    $lid   = ($_POST['zk_lieferant'] ?? '') !== '' ? (int)$_POST['zk_lieferant'] : null;
-    $lname = trim((string)($_POST['zk_lieferant_name'] ?? ''));
-    $preis = (float) str_replace(',', '.', $_POST['zk_preis'] ?? '0');
-    $mab   = (float) str_replace(',', '.', $_POST['zk_menge_ab'] ?? '0');
-    $inco  = array_key_exists($_POST['zk_incoterm'] ?? '', incoterm_liste()) ? $_POST['zk_incoterm'] : null;
-    $vers  = array_key_exists($_POST['zk_versandart'] ?? '', versandart_liste()) ? $_POST['zk_versandart'] : null;
-    // Preis je PACKUNG (fertige Ware / Handelsware, St-24) oder je Kapsel/Stück (lose Bulkware).
-    $zkEinh = ($_POST['zk_einheit'] ?? '') === 'packung' ? 'packung' : 'kapsel';
-    if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand) VALUES (?,?,?,?,?,?,?,?, 'EUR', CURDATE())",
-        [(int)$id, $lid, $lname ?: null, $mab, $preis, $zkEinh, $inco, $vers]);
-    header('Location: ?p=produkt&id=' . $id . '&zkok=1#zukauf'); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'zk_preis_del' && is_numeric($id)) {
-    q("DELETE FROM produkt_lieferant_preis WHERE id=? AND produkt_id=?", [(int)($_POST['preis_id'] ?? 0), (int)$id]);
-    header('Location: ?p=produkt&id=' . $id . '#zukauf'); exit;
-}
-// Kundenpreis anlegen (vereinbarter VK je Packung je Kunde) -> Kunde sieht im Portal „ab xy" statt „auf Anfrage".
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kp_add' && is_numeric($id)) {
-    $kpk = (int)($_POST['kp_kunde'] ?? 0);
-    $kpm = trim((string)($_POST['kp_menge'] ?? '')) !== '' ? max(0, (int)$_POST['kp_menge']) : null;   // Kapseln/Stück je Verpackung
-    $kpa = trim((string)($_POST['kp_anzahl'] ?? '')) !== '' ? max(0, (int)str_replace('.', '', (string)$_POST['kp_anzahl'])) : null;  // Anzahl Verpackungen
-    $kpp = (float) str_replace(',', '.', (string)($_POST['kp_preis'] ?? '0'));   // Preis je Packung (ohne Verpackung)
-    $kpn = trim((string)($_POST['kp_notiz'] ?? ''));
-    if ($kpk > 0 && $kpp > 0) {
-        // Gibt es für diesen Kunden schon eine Zeile dieser Größe (Produkt + Kunde + Menge je Packung), wird sie aktualisiert
-        // statt eine zweite anzulegen (gleicher Schlüssel wie kundenpreis_setzen()).
-        $kpEx = $kpm ? (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND COALESCE(anzahl_vpe,0)=? LIMIT 1", [(int)$id, $kpk, $kpm, (int)($kpa ?? 0)]) : 0;
-        if ($kpEx) q("UPDATE produkt_kundenpreis SET preis=?, notiz=? WHERE id=?", [$kpp, $kpn ?: null, $kpEx]);
-        else q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,preis,notiz) VALUES (?,?,?,?,?,?)",
-          [(int)$id, $kpk, $kpm, $kpa, $kpp, $kpn ?: null]);
-        log_aktivitaet('produkt', (int)$id, 'team', 'Kundenpreis gesetzt: ' . number_format($kpp, 2, ',', '.') . ' € je Packung' . ($kpm ? ' (' . $kpm . ' je VPE)' : '') . '.', 'notiz');
+    if ($aktion === 'pib_upload') { require_once BX_ROOT . '/core/pdf_pib.php'; pib_upload($pid); $zurueck('&pib=1&tab=dokumente', 'pibfeld'); exit; }
+    if ($aktion === 'pib_del')    { require_once BX_ROOT . '/core/pdf_pib.php'; pib_del($pid);    $zurueck('&pibweg=1&tab=dokumente', 'pibfeld'); exit; }
+    if ($aktion === 'spec_uebernehmen') {
+        $vor = spec_ki_vorschlag((int)($_POST['dok_id'] ?? 0)); $stamm = (array)($vor['stamm'] ?? []); $n = 0;
+        foreach (['haltbarkeit' => 60, 'allergene' => 255] as $f => $len)
+            if (trim((string)($stamm[$f] ?? '')) !== '') { q("UPDATE produkt SET `$f`=? WHERE id=?", [mb_substr((string)$stamm[$f], 0, $len), $pid]); $n++; }
+        $zurueck('&specueb=' . $n . '&tab=dokumente', 'dok'); exit;
     }
-    header('Location: ?p=produkt&id=' . $id . '&kpok=1#kundenpreise'); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kp_del' && is_numeric($id)) {
-    q("DELETE FROM produkt_kundenpreis WHERE id=? AND produkt_id=?", [(int)($_POST['kp_id'] ?? 0), (int)$id]);
-    header('Location: ?p=produkt&id=' . $id . '#kundenpreise'); exit;
-}
-// Kundenspezifischer Produktname setzen/ändern bzw. entfernen (je Produkt+Kunde).
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kn_setzen' && is_numeric($id)) {
-    $knk = (int)($_POST['kn_kunde'] ?? 0);
-    $knn = trim((string)($_POST['kn_name'] ?? ''));
-    if ($knk > 0) {
-        produkt_kundenname_setzen((int)$id, $knk, $knn);
-        log_aktivitaet('produkt', (int)$id, 'team', $knn !== '' ? 'Kundenspezifischer Name gesetzt für Kunde #' . $knk . ': „' . $knn . '".' : 'Kundenspezifischer Name entfernt für Kunde #' . $knk . '.', 'notiz');
+    if ($aktion === 'zk_preis_add') {
+        $lid   = ($_POST['zk_lieferant'] ?? '') !== '' ? (int)$_POST['zk_lieferant'] : null;
+        $lname = trim((string)($_POST['zk_lieferant_name'] ?? ''));
+        $preis = (float) str_replace(',', '.', (string)($_POST['zk_preis'] ?? '0'));   // Preis: Komma als Dezimaltrenner (0,0228)
+        $mab   = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['zk_menge_ab'] ?? '0'));   // Menge: Tausenderpunkt (60.000)
+        $inco  = array_key_exists($_POST['zk_incoterm'] ?? '', incoterm_liste()) ? $_POST['zk_incoterm'] : null;
+        $vers  = array_key_exists($_POST['zk_versandart'] ?? '', versandart_liste()) ? $_POST['zk_versandart'] : null;
+        $zkEinh = ($_POST['zk_einheit'] ?? '') === 'packung' ? 'packung' : (($_POST['zk_einheit'] ?? '') === 'kg' ? 'kg' : 'kapsel');
+        if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand) VALUES (?,?,?,?,?,?,?,?, 'EUR', CURDATE())",
+            [$pid, $lid, $lname ?: null, $mab, $preis, $zkEinh, $inco, $vers]);
+        $zurueck('&zkok=1&tab=beschaffung', 'zukauf'); exit;
     }
-    header('Location: ?p=produkt&id=' . $id . '&knok=1#kundennamen'); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'kn_del' && is_numeric($id)) {
-    produkt_kundenname_setzen((int)$id, (int)($_POST['kn_kunde'] ?? 0), '');
-    header('Location: ?p=produkt&id=' . $id . '#kundennamen'); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_frei' && is_numeric($id)) {
-    dokument_freigabe_toggle('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
-    header('Location: ?p=produkt&id=' . $id . '#dok'); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_del' && is_numeric($id)) {
-    dokument_delete('produkt', (int)$id, (int)($_POST['dok_id'] ?? 0));
-    header('Location: ?p=produkt&id=' . $id . '#dok'); exit;
-}
-// Novel-Food automatisch prüfen (Rezeptur-Zutaten gegen EU-Katalog) und Status setzen.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'novelfood_pruefen' && is_numeric($id)) {
-    $erg = produkt_novelfood_pruefen((int)$id);
-    if ($erg['status'] !== 'unklar') q("UPDATE produkt SET novelfood_status=? WHERE id=?", [$erg['status'], (int)$id]);
-    $_SESSION['nf_ergebnis'] = $erg;
-    header('Location: ?p=produkt&id=' . $id . '&nfcheck=1'); exit;
-}
-// Produkt löschen (nur Admin, nur wenn nicht mehr verwendet).
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'loeschen' && is_numeric($id)) {
-    if (!has_role('admin')) { header('Location: ?p=produkt&id=' . $id); exit; }
-    $r = produkt_loeschen((int)$id);
-    if (!empty($r['ok'])) { header('Location: ?p=produkte&geloescht=1'); exit; }
-    $_SESSION['prod_del_fehler'] = $r['fehler'] ?? 'Löschen fehlgeschlagen.';
-    header('Location: ?p=produkt&id=' . $id); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
-    $f = fn($k) => trim($_POST[$k] ?? '');
-    if ($f('name') === '') {
-        $fehler = 'Name ist ein Pflichtfeld.';
-    } elseif (((string)($_POST['extern'] ?? '0') === '1') && ($_POST['kunde_id'] ?? '') === '') {
-        $fehler = 'Für ein externes Produkt (Kundenware) bitte den Kunden wählen.';
-    } else {
-        $kunde_id = ($_POST['kunde_id'] ?? '') !== '' ? (int)$_POST['kunde_id'] : null;
-        $rez_id   = ($_POST['rezeptur_id'] ?? '') !== '' ? (int)$_POST['rezeptur_id'] : null;
+    if ($aktion === 'zk_preis_del') { q("DELETE FROM produkt_lieferant_preis WHERE id=? AND produkt_id=?", [(int)($_POST['preis_id'] ?? 0), $pid]); $zurueck('&tab=beschaffung', 'zukauf'); exit; }
+    // Kundenpreis anlegen/ändern (vereinbarter VK je Packung ohne Verpackung) – im Reiter Kunden je Zeile.
+    if ($aktion === 'kp_add') {
+        $kpk = (int)($_POST['kp_kunde'] ?? 0);
+        $kpm = trim((string)($_POST['kp_menge'] ?? '')) !== '' ? max(0, (int) str_replace('.', '', (string)$_POST['kp_menge'])) : null;
+        $kpa = trim((string)($_POST['kp_anzahl'] ?? '')) !== '' ? max(0, (int) str_replace('.', '', (string)$_POST['kp_anzahl'])) : null;
+        $kpp = (float) str_replace(',', '.', (string)($_POST['kp_preis'] ?? '0'));
+        $kpn = trim((string)($_POST['kp_notiz'] ?? ''));
+        if ($kpk > 0 && $kpp > 0) {
+            $kpEx = $kpm ? (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND COALESCE(anzahl_vpe,0)=? LIMIT 1", [$pid, $kpk, $kpm, (int)($kpa ?? 0)]) : 0;
+            if ($kpEx) q("UPDATE produkt_kundenpreis SET preis=?, notiz=? WHERE id=?", [$kpp, $kpn ?: null, $kpEx]);
+            else q("INSERT INTO produkt_kundenpreis (produkt_id,kunde_id,menge_pro_vpe,anzahl_vpe,preis,notiz) VALUES (?,?,?,?,?,?)", [$pid, $kpk, $kpm, $kpa, $kpp, $kpn ?: null]);
+            log_aktivitaet('produkt', $pid, 'team', 'Kundenpreis gesetzt: ' . number_format($kpp, 2, ',', '.') . ' € je Packung' . ($kpm ? ' (' . $kpm . ' je VPE)' : '') . '.', 'notiz');
+        }
+        if (trim((string)($_POST['kn_name'] ?? '')) !== '' && $kpk > 0) produkt_kundenname_setzen($pid, $kpk, trim((string)$_POST['kn_name']));
+        $zurueck('&kpok=1&tab=kunden', 'kundennamen'); exit;
+    }
+    if ($aktion === 'kp_del') { q("DELETE FROM produkt_kundenpreis WHERE id=? AND produkt_id=?", [(int)($_POST['kp_id'] ?? 0), $pid]); $zurueck('&tab=kunden', 'kundennamen'); exit; }
+    if ($aktion === 'kn_setzen') {
+        $knk = (int)($_POST['kn_kunde'] ?? 0); $knn = trim((string)($_POST['kn_name'] ?? ''));
+        if ($knk > 0) {
+            produkt_kundenname_setzen($pid, $knk, $knn);
+            log_aktivitaet('produkt', $pid, 'team', $knn !== '' ? 'Kundenspezifischer Name gesetzt für Kunde #' . $knk . ': „' . $knn . '".' : 'Kundenspezifischer Name entfernt für Kunde #' . $knk . '.', 'notiz');
+        }
+        $zurueck('&knok=1&tab=kunden', 'kundennamen'); exit;
+    }
+    if ($aktion === 'kn_del') { produkt_kundenname_setzen($pid, (int)($_POST['kn_kunde'] ?? 0), ''); $zurueck('&tab=kunden', 'kundennamen'); exit; }
+    if ($aktion === 'dok_frei') { dokument_freigabe_toggle('produkt', $pid, (int)($_POST['dok_id'] ?? 0)); $zurueck('&tab=dokumente', 'dok'); exit; }
+    if ($aktion === 'dok_del')  { dokument_delete('produkt', $pid, (int)($_POST['dok_id'] ?? 0));          $zurueck('&tab=dokumente', 'dok'); exit; }
+    if ($aktion === 'novelfood_pruefen') {
+        $erg = produkt_novelfood_pruefen($pid);
+        if ($erg['status'] !== 'unklar') q("UPDATE produkt SET novelfood_status=? WHERE id=?", [$erg['status'], $pid]);
+        $_SESSION['nf_ergebnis'] = $erg;
+        $zurueck('&nfcheck=1'); exit;
+    }
+    if ($aktion === 'loeschen') {
+        if (!has_role('admin')) { $zurueck(); exit; }
+        $r = produkt_loeschen($pid);
+        if (!empty($r['ok'])) { header('Location: ?p=produkte&geloescht=1'); exit; }
+        $_SESSION['prod_del_fehler'] = $r['fehler'] ?? 'Löschen fehlgeschlagen.';
+        $zurueck(); exit;
+    }
+    // Eine Kachel speichern: genau das Feld dieser Kachel (jede Kachel für sich).
+    if ($aktion === 'kachel') {
+        $alt = one("SELECT * FROM produkt WHERE id=?", [$pid]) ?: [];
+        $feld = (string)($_POST['feld'] ?? '');
         $iid = fn($k) => ($_POST[$k] ?? '') !== '' ? (int)$_POST[$k] : null;
-        $verp_id  = $iid('verpackung_id');
-        $exkl = isset($_POST['exklusiv']) ? 1 : 0;
-        $extern = ((string)($_POST['extern'] ?? '0') === '1') ? 1 : 0;   // Radio „Art des Produkts" (0=Herstellung, 1=nur Fulfillment)
-        if ($extern) { $exkl = 1; $rez_id = null; }   // externe Kundenware gehört dem Kunden und hat KEINE Rezeptur bei uns
-        // Der Kunde ist nur bei einem exklusiven Produkt der Besitzer. Ein Katalogprodukt gehört niemandem –
-        // sonst steht in der Produktliste ein Kundenname bei einem Produkt, das jeder Kunde bestellen kann.
-        if (!$exkl) $kunde_id = null;
-        $einh = $f('einheiten_pro_packung') === '' ? 0 : (int)$f('einheiten_pro_packung');
-        $tag  = $f('einnahme_pro_tag') === '' ? 1 : $f('einnahme_pro_tag');
-        $kdname = $f('kundenname') ?: null;   // Name für den Kunden (leer = interner Name)
-        $name = produkt_name_versioniert($f('name'), $neu ? 0 : (int)$id);   // interner Name eindeutig (v2, v3 …)
-        $nf = in_array($f('novelfood_status'), ['unklar','konform','novel_food','pruefung'], true) ? $f('novelfood_status') : 'unklar';
-        $halt = mb_substr($f('haltbarkeit'), 0, 60) ?: null; $allerg = mb_substr($f('allergene'), 0, 255) ?: null;
-        $synonyme = $f('synonyme');
-        $kartonInh = $f('karton_inhalt') === '' ? null : max(0, (int)$f('karton_inhalt'));   // Packungen je Umkarton
-        if ($neu) {
-            q("INSERT INTO produkt (nummer,name,synonyme,kundenname,kunde_id,rezeptur_id,verpackung_id,verschluss_id,etikett_id,karton_id,karton_inhalt,beipack_id,leerkapsel_id,exklusiv,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status,haltbarkeit,allergene,notiz)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-              [naechste_nummer('P'), $name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $kartonInh, $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status') ?: 'entwurf', $nf, $halt, $allerg, $f('notiz')]);
-            $id = insert_id();
-            log_aktivitaet('kunde', (int)($kunde_id ?: 0), 'team', 'Produkt „' . $name . '" angelegt.', 'produkt', (int)$id);
-        } else {
-            // Umbenennung: den bisherigen Anzeigenamen (Kundenname bevorzugt) automatisch als Synonym merken.
-            $alt = one("SELECT name, kundenname, verpackung_id FROM produkt WHERE id=?", [(int)$id]);
-            $altAnzeige = trim((string)($alt['kundenname'] ?? '')) !== '' ? (string)$alt['kundenname'] : (string)($alt['name'] ?? '');
-            $neuAnzeige = $kdname ?: $name;
-            if ($altAnzeige !== '' && $altAnzeige !== $neuAnzeige && mb_stripos($synonyme, $altAnzeige) === false) {
-                $synonyme = trim(($synonyme !== '' ? $synonyme . "\n" : '') . $altAnzeige);
-            }
-            q("UPDATE produkt SET name=?,synonyme=?,kundenname=?,kunde_id=?,rezeptur_id=?,verpackung_id=?,verschluss_id=?,etikett_id=?,karton_id=?,karton_inhalt=?,beipack_id=?,leerkapsel_id=?,exklusiv=?,einheiten_pro_packung=?,einnahme_pro_tag=?,status=?,novelfood_status=?,haltbarkeit=?,allergene=?,notiz=? WHERE id=?",
-              [$name, $synonyme ?: null, $kdname, $kunde_id, $rez_id, $verp_id, $iid('verschluss_id'), $iid('etikett_id'), $iid('karton_id'), $kartonInh, $iid('beipack_id'), $iid('leerkapsel_id'), $exkl, $einh, $tag, $f('status'), $nf, $halt, $allerg, $f('notiz'), (int)$id]);
-            // Behälter gewechselt, Name nicht von Hand geändert -> „· 100 ml Glas" im Namen auf den neuen Behälter ziehen.
-            if ((string)($alt['name'] ?? '') === $name && (int)($alt['verpackung_id'] ?? 0) !== (int)($verp_id ?? 0))
-                produkt_name_behaelter_nachziehen((int)$id, (int)($alt['verpackung_id'] ?? 0), (int)($verp_id ?? 0), 'produkt');
+        $txt = '';
+        switch ($feld) {
+            case 'name':
+                $name = trim((string)($_POST['name'] ?? ''));
+                if ($name === '') { $zurueck('&kfehler=' . urlencode('Name ist ein Pflichtfeld.')); exit; }
+                $name = produkt_name_versioniert($name, $pid);
+                $syn = trim((string)($_POST['synonyme'] ?? ''));
+                $altAnz = (string)($alt['name'] ?? '');
+                if ($altAnz !== '' && $altAnz !== $name && mb_stripos($syn, $altAnz) === false) $syn = trim(($syn !== '' ? $syn . "\n" : '') . $altAnz);   // alter Name wird Synonym
+                q("UPDATE produkt SET name=?, synonyme=?, kundenname=? WHERE id=?", [$name, $syn ?: null, trim((string)($_POST['kundenname'] ?? '')) ?: null, $pid]);
+                $txt = 'Name/Synonyme geändert'; break;
+            case 'rezeptur':
+                q("UPDATE produkt SET rezeptur_id=? WHERE id=?", [$iid('rezeptur_id'), $pid]); $txt = 'Rezeptur geändert'; break;
+            case 'kapsel':
+                if (!empty($alt['rezeptur_id'])) { q("UPDATE rezeptur SET kapselgroesse_id=? WHERE id=?", [$iid('kapselgroesse_id'), (int)$alt['rezeptur_id']]); $txt = 'Kapselgröße an der Rezeptur geändert'; }
+                break;
+            case 'menge':
+                $m = (int) str_replace('.', '', (string)($_POST['einheiten_pro_packung'] ?? '0'));
+                q("UPDATE produkt SET einheiten_pro_packung=? WHERE id=?", [max(0, $m), $pid]); $txt = 'Menge je Packung: ' . $m; break;
+            case 'verpackung':
+                $vp = $iid('verpackung_id');
+                q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$vp, $pid]);
+                if ((int)($alt['verpackung_id'] ?? 0) !== (int)($vp ?? 0)) produkt_name_behaelter_nachziehen($pid, (int)($alt['verpackung_id'] ?? 0), (int)($vp ?? 0), 'produkt');
+                if (function_exists('bedarf_bump')) bedarf_bump();
+                $txt = 'Glas/Behälter geändert'; break;
+            case 'deckel':
+                q("UPDATE produkt SET verschluss_id=? WHERE id=?", [$iid('verschluss_id'), $pid]); if (function_exists('bedarf_bump')) bedarf_bump(); $txt = 'Deckel geändert'; break;
+            case 'leerkapsel':
+                q("UPDATE produkt SET leerkapsel_id=? WHERE id=?", [$iid('leerkapsel_id'), $pid]); $txt = 'Leerkapsel geändert'; break;
+            case 'verzehr':
+                $t = (float) str_replace(',', '.', (string)($_POST['einnahme_pro_tag'] ?? '1'));
+                q("UPDATE produkt SET einnahme_pro_tag=? WHERE id=?", [$t > 0 ? $t : 1, $pid]); $txt = 'Verzehr je Tag geändert'; break;
+            case 'haltbarkeit':
+                q("UPDATE produkt SET haltbarkeit=?, allergene=? WHERE id=?", [mb_substr(trim((string)($_POST['haltbarkeit'] ?? '')), 0, 60) ?: null, mb_substr(trim((string)($_POST['allergene'] ?? '')), 0, 255) ?: null, $pid]);
+                $txt = 'Haltbarkeit/Allergene geändert'; break;
+            case 'status':
+                $st = in_array($_POST['status'] ?? '', ['entwurf', 'aktiv', 'inaktiv'], true) ? $_POST['status'] : 'entwurf';
+                q("UPDATE produkt SET status=? WHERE id=?", [$st, $pid]); $txt = 'Status: ' . $st; break;
+            case 'novelfood':
+                $nf = in_array($_POST['novelfood_status'] ?? '', ['unklar','konform','novel_food','pruefung'], true) ? $_POST['novelfood_status'] : 'unklar';
+                q("UPDATE produkt SET novelfood_status=? WHERE id=?", [$nf, $pid]); $txt = 'Novel-Food-Status geändert'; break;
+            case 'mwst':
+                if (has_role('admin')) { $ms = trim((string)($_POST['mwst_satz'] ?? '')); q("UPDATE produkt SET mwst_satz=? WHERE id=?", [$ms === '' ? null : mwst_normalisieren((float) str_replace(',', '.', $ms)), $pid]); $txt = 'MwSt-Satz geändert'; }
+                break;
+            case 'katalog':
+                $exkl = isset($_POST['exklusiv']) ? 1 : 0;
+                $kid = $exkl ? $iid('kunde_id') : null;   // Kunde ist nur bei exklusiv der Besitzer
+                if ((int)($alt['extern'] ?? 0) === 1) { $exkl = 1; $kid = $kid ?: ((int)($alt['kunde_id'] ?? 0) ?: null); }
+                q("UPDATE produkt SET exklusiv=?, kunde_id=? WHERE id=?", [$exkl, $kid, $pid]); $txt = $exkl ? 'exklusiv gesetzt' : 'Katalogprodukt'; break;
+            case 'art':
+                $art = (string)($_POST['art'] ?? 'eigen');
+                $ext = $art === 'fulfillment' ? 1 : 0; $hw = $art === 'handelsware' ? 1 : 0;
+                if ($ext && empty($alt['kunde_id']) && !$iid('kunde_id')) { $zurueck('&kfehler=' . urlencode('Für „Nur Fulfillment" bitte den Kunden wählen.')); exit; }
+                q("UPDATE produkt SET extern=?, handelsware=? WHERE id=?", [$ext, $hw, $pid]);
+                if ($ext) q("UPDATE produkt SET exklusiv=1, kunde_id=COALESCE(?, kunde_id), rezeptur_id=NULL WHERE id=?", [$iid('kunde_id'), $pid]);   // Kundenware: gehört dem Kunden, keine Rezeptur
+                $txt = 'Art des Produkts: ' . $art; break;
+            case 'produktion':
+                // Reiter Produktion: Stückliste (Karton, Packungen je Umkarton, Beipackzettel, abweichendes Etikett), Standard-Produktionsweg, Notiz.
+                q("UPDATE produkt SET karton_id=?, karton_inhalt=?, beipack_id=?, etikett_id=?, notiz=? WHERE id=?",
+                  [$iid('karton_id'), trim((string)($_POST['karton_inhalt'] ?? '')) === '' ? null : max(0, (int) str_replace('.', '', (string)$_POST['karton_inhalt'])),
+                   $iid('beipack_id'), $iid('etikett_id'), trim((string)($_POST['notiz'] ?? '')), $pid]);
+                if (has_role('admin')) foreach (['abfuellen', 'etikettieren', 'karton', 'beipack'] as $wf) q("UPDATE produkt SET weg_$wf=? WHERE id=?", [isset($_POST['weg_' . $wf]) ? 1 : 0, $pid]);
+                if (function_exists('bedarf_bump')) bedarf_bump();
+                $txt = 'Stückliste/Produktionsweg geändert';
+                log_aktivitaet('produkt', $pid, 'team', $txt . '.', 'notiz');
+                $zurueck('&gespeichert=1&tab=produktion'); exit;
         }
-        // USt-Satz je Produkt – NUR Admin. Leer = Standard (NULL -> 19 % aus den Einstellungen). Auf zulässigen Satz gezogen.
-        if (has_role('admin') && array_key_exists('mwst_satz', $_POST)) {
-            $ms = trim((string)$_POST['mwst_satz']);
-            $msVal = $ms === '' ? null : mwst_normalisieren((float) str_replace(',', '.', $ms));
-            q("UPDATE produkt SET mwst_satz=? WHERE id=?", [$msVal, (int)$id]);
-        }
-        // Standard-Produktionsweg (Ausbaustufen) – nur Admin darf das setzen.
-        if (has_role('admin')) {
-            foreach (['abfuellen', 'etikettieren', 'karton', 'beipack'] as $wf)
-                q("UPDATE produkt SET weg_$wf=? WHERE id=?", [isset($_POST['weg_' . $wf]) ? 1 : 0, (int)$id]);
-        }
-        q("UPDATE produkt SET extern=? WHERE id=?", [$extern, (int)$id]);
-        // Handelsware (Spec 7.1): nur bei Eigenprodukt relevant (extern hat ohnehin keine Produktion). Beim
-        // Bestellen wird dann KEIN Produktionsauftrag erzeugt – versendet wird aus dem Bestand.
-        $handelsware = (!$extern && isset($_POST['handelsware'])) ? 1 : 0;
-        q("UPDATE produkt SET handelsware=? WHERE id=?", [$handelsware, (int)$id]);
-        header('Location: ?p=produkt&id=' . $id . '&gespeichert=1'); exit;
+        if ($txt !== '') log_aktivitaet('produkt', $pid, 'team', $txt . '.', 'notiz');
+        $zurueck('&gespeichert=1'); exit;
     }
 }
 
-$p = $neu ? ['status'=>'entwurf','einnahme_pro_tag'=>2,'einheiten_pro_packung'=>120]
-          : one("SELECT * FROM produkt WHERE id=?", [(int)$id]);
-if (!$p) { $neu = true; $p = ['status'=>'entwurf','einnahme_pro_tag'=>2,'einheiten_pro_packung'=>120]; }
-$v = fn($k) => h((string)($p[$k] ?? ''));
-// Externes Produkt (Kundenware): neu via ?extern=1 (+ optional ?kunde_id=) oder bestehendes mit produkt.extern=1.
-$istExtern = $neu ? isset($_GET['extern']) : ((int)($p['extern'] ?? 0) === 1);
-if ($neu && $istExtern) {
-    if (($_GET['kunde_id'] ?? '') !== '') $p['kunde_id'] = (int)$_GET['kunde_id'];
-    $p['exklusiv'] = 1;                         // gehört dem Kunden
-    $p['status']   = 'aktiv';
+// ---------------------------------------------------------------- Neuanlage (kurzes Formular)
+if ($istPost && $neu && $aktion === 'anlegen') {
+    $name = trim((string)($_POST['name'] ?? ''));
+    $art  = (string)($_POST['art'] ?? 'eigen');
+    $ext  = $art === 'fulfillment' ? 1 : 0;
+    $kid  = ($_POST['kunde_id'] ?? '') !== '' ? (int)$_POST['kunde_id'] : null;
+    $exkl = ($ext || isset($_POST['exklusiv'])) ? 1 : 0;
+    if ($name === '') $fehler = 'Name ist ein Pflichtfeld.';
+    elseif ($ext && !$kid) $fehler = 'Für ein externes Produkt (Kundenware) bitte den Kunden wählen.';
+    else {
+        $rid = (!$ext && ($_POST['rezeptur_id'] ?? '') !== '') ? (int)$_POST['rezeptur_id'] : null;
+        $vp  = ($_POST['verpackung_id'] ?? '') !== '' ? (int)$_POST['verpackung_id'] : null;
+        $m   = (int) str_replace('.', '', (string)($_POST['einheiten_pro_packung'] ?? '0'));
+        $name = produkt_name_versioniert($name, 0);
+        q("INSERT INTO produkt (nummer,name,kunde_id,rezeptur_id,verpackung_id,exklusiv,extern,handelsware,einheiten_pro_packung,einnahme_pro_tag,status,novelfood_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+          [naechste_nummer('P'), $name, $exkl ? $kid : null, $rid, $vp, $exkl, $ext, $art === 'handelsware' ? 1 : 0, max(0, $m), 1, $ext ? 'aktiv' : 'entwurf', 'unklar']);
+        $nid = (int) insert_id();
+        log_aktivitaet('kunde', (int)($kid ?: 0), 'team', 'Produkt „' . $name . '" angelegt.', 'produkt', $nid);
+        header('Location: ?p=produkt&id=' . $nid . '&gespeichert=1'); exit;
+    }
 }
 
+// ---------------------------------------------------------------- Daten
 $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
-$rezepte = all("SELECT id, name, darreichungsform, kapselgroesse_id FROM rezeptur ORDER BY name");
-// Kundenetikett-Artikel (verpackung_rolle='etikett' MIT produkt_id) sind automatisch verwaltet und gehören
-// genau einem Produkt – im Stücklisten-Dropdown darum nur die generischen Etiketten + die EIGENEN zeigen.
-$verpackungen = all("SELECT id, name, ek_preis, max_fuellgewicht_g, volumen_ml, COALESCE(verpackung_rolle,'primaer') AS rolle
-                     FROM item WHERE kategorie='verpackung' AND gesperrt=0
-                       AND (COALESCE(verpackung_rolle,'primaer')<>'etikett' OR produkt_id IS NULL OR produkt_id=?)
-                     ORDER BY name", [is_numeric($id) ? (int)$id : 0]);
-// Verpackungen nach Rolle gruppieren (für die Stückliste-Auswahlen)
-$VERP_ROLLE = ['primaer'=>[],'verschluss'=>[],'etikett'=>[],'karton'=>[],'beipack'=>[]];
-foreach ($verpackungen as $vp) { $r = $vp['rolle'] ?: 'primaer'; if (!isset($VERP_ROLLE[$r])) $r='primaer'; $VERP_ROLLE[$r][] = $vp; }
-seed_kapselgroesse_if_empty();
-$KAPSELN = all("SELECT id, name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg ASC");
-$leerkapseln = all("SELECT id, name, kapselgroesse_id FROM item WHERE kategorie='rohstoff' AND form='kapselhuelle' AND gesperrt=0 ORDER BY name");
-// Auto-Bestimmung nur bei bestehendem Kapselprodukt (für den Hinweis unter der Auswahl)
-$kapKandidaten = $neu ? [] : produkt_leerkapsel_kandidaten((int)$id);
-$kapEffektiv   = $neu ? null : produkt_leerkapsel_id((int)$id);
-// Darreichungsform des Produkts – bestimmt, ob die Matrixgröße Stück, Gramm oder Milliliter meint
-$pForm = $neu ? 'kapsel' : ((string) scalar("SELECT r.darreichungsform FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.id=?", [(int)$id]) ?: 'kapsel');
-// Preis-Matrix laden + nach (Stück, Verpackung) gruppieren, Bestellmengen als Spalten
-$matrix = $neu ? [] : all("SELECT pp.*, i.name AS verp FROM produkt_preis pp JOIN item i ON i.id=pp.verpackung_id WHERE pp.produkt_id=? ORDER BY pp.stueck, i.name, pp.bestellmenge", [(int)$id]);
-// Vereinbarte Kundenpreise je Produkt (welcher Kunde zahlt was) – u. a. aus dem v3-Import.
-$kundenpreise = $neu ? [] : all("SELECT kp.*, k.firma FROM produkt_kundenpreis kp JOIN kunden k ON k.id=kp.kunde_id WHERE kp.produkt_id=? ORDER BY k.firma, kp.anzahl_vpe", [(int)$id]);
-$matrixMengen = array_values(array_unique(array_map(fn($r) => (int)$r['bestellmenge'], $matrix)));
-sort($matrixMengen);
-$matrixGrid = [];
-foreach ($matrix as $r) {
-    $key = $r['stueck'] . '|' . $r['verp'];
-    $matrixGrid[$key]['stueck'] = (int)$r['stueck'];
-    $matrixGrid[$key]['verp'] = $r['verp'];
-    $matrixGrid[$key]['cells'][(int)$r['bestellmenge']] = ['ek'=>(float)$r['ek_preis'], 'vk'=>(float)$r['vk_preis']];
-}
+$rscombo = fn(array $liste) => count($liste) > 10 ? ' class="rscombo"' : '';
+$optListe = function (array $rows, $cur, string $leer = '– keine –', ?callable $lbl = null) {
+    $o = '<option value="">' . h($leer) . '</option>';
+    foreach ($rows as $r) $o .= '<option value="' . (int)$r['id'] . '"' . ((int)$cur === (int)$r['id'] ? ' selected' : '') . '>' . h($lbl ? $lbl($r) : (string)$r['name']) . '</option>';
+    return $o;
+};
+// Primärverpackungen = Gläser, Dosen, Beutel, Flaschen (Rolle primaer, ohne Kundenetiketten-Artikel); Deckel = nur Verschlüsse.
+$verpListe = fn(string $rolle, int $pid = 0) => all("SELECT id, name FROM item WHERE kategorie='verpackung' AND gesperrt=0 AND COALESCE(verpackung_rolle,'primaer')=?
+                                                       AND (? <> 'etikett' OR produkt_id IS NULL OR produkt_id=?) ORDER BY name", [$rolle, $rolle, $pid]);
 
-// Rezepturen vorberechnen: Nährstoffe (mg/Einheit), Kosten/Einheit, Gewicht/Einheit
-$REZEPTE = [];
-foreach ($rezepte as $rz) {
-    $nutr = []; $cost = 0.0; $weight = 0.0;
-    foreach (all("SELECT item_id, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=?", [$rz['id']]) as $z) {
-        $mg = (float)$z['menge_mg']; $weight += $mg;
-        $it = $z['item_id'] ? one("SELECT ek_preis,preis_bezug,dichte FROM item WHERE id=?", [$z['item_id']]) : null;
-        if ($it) {
-            $pb = $it['preis_bezug']; $ek = (float)$it['ek_preis'];
-            $perMg = $pb === 'kg' ? $ek/1e6 : ($pb === 'g' ? $ek/1e3 : ($pb === 'L' && $it['dichte'] ? ($ek/(1000*(float)$it['dichte']))/1e3 : 0));
-            $cost += $mg * $perMg;
-        }
-        if ($z['item_id']) foreach (all("SELECT n.name,n.nrv_wert,n.einheit,n.ie_mg,n.einheit_anzeige,
-                 COALESCE(iw.gehalt_wert, iw.gehalt_prozent) AS gehalt_wert, COALESCE(iw.gehalt_einheit,'prozent') AS gehalt_einheit
-                 FROM item_wirkstoff iw JOIN naehrstoff n ON n.id=iw.naehrstoff_id WHERE iw.item_id=?", [$z['item_id']]) as $w) {
-            if ($w['gehalt_wert'] === null) continue;
-            $mgN = $mg * wirkstoff_mg_je_mg($w['gehalt_wert'], $w['gehalt_einheit'], $w['ie_mg']);
-            if (!isset($nutr[$w['name']])) $nutr[$w['name']] = ['name'=>$w['name'],'mg'=>0.0,'nrv'=>$w['nrv_wert'],'einheit'=>$w['einheit'],'ie_mg'=>$w['ie_mg']!==null?(float)$w['ie_mg']:null,'anzeige'=>$w['einheit_anzeige']];
-            $nutr[$w['name']]['mg'] += $mgN;
-        }
-    }
-    $REZEPTE[$rz['id']] = ['name'=>$rz['name'],'form'=>$rz['darreichungsform'],'kapselgroesse_id'=>(int)($rz['kapselgroesse_id']??0),'nutrients'=>array_values($nutr),'cost'=>$cost,'weight'=>$weight];
-}
-$VERP = [];
-foreach ($verpackungen as $vp) $VERP[$vp['id']] = [
-    'name'=>$vp['name'], 'ek'=>(float)$vp['ek_preis'], 'rolle'=>$vp['rolle'],
-    'max_g'=>$vp['max_fuellgewicht_g']!==null?(float)$vp['max_fuellgewicht_g']:null,
-    'vol'=>$vp['volumen_ml']!==null?(float)$vp['volumen_ml']:null,
-    'kap'=>pack_kapazitaet_fuer((int)$vp['id']),   // [kapselgroesse_id => stück]
-];
-
-// Eine Auswahl für einen Stücklisten-Slot (Verschluss/Etikett/Karton/Beipack …)
-function verp_slot(string $label, string $name, array $rows, $current, string $hint = ''): string {
-    $opts = '<option value="">– keine –</option>';
-    foreach ($rows as $vp) {
-        $sel = (int)$current === (int)$vp['id'] ? 'selected' : '';
-        $opts .= '<option value="' . (int)$vp['id'] . '" ' . $sel . '>' . h($vp['name']) . '</option>';
-    }
-    $h = $hint ? ' ' . bx_hint($hint) : '';
-    return '<div class="bx-field"><label>' . h($label) . $h . '</label>'
-         . '<select name="' . $name . '" id="' . $name . '">' . $opts . '</select></div>';
-}
-
-$kopfAkt = bx_btn('Zurück zur Liste', '?p=produkte', 'ghost');
-if (!$neu && function_exists('has_role') && has_role('admin'))
-    $kopfAkt .= ' <form method="post" style="display:inline" onsubmit="return confirm(\'Dieses Produkt endgültig löschen? Geht nur, wenn es nicht mehr verwendet wird (Auftrag/Angebot/Produktion/Bestand).\');"><input type="hidden" name="aktion" value="loeschen"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Löschen</button></form>';
-// Direkt von der Produktseite beim Lieferanten anfragen: die Rezeptur des Produkts als Fertigprodukt (Fremdfertigung),
-// gleiches Popup wie an Angebot/Rezeptur (Lieferanten wählen, Mengen-Staffel, CoA). Nur mit Rezeptur und für Einkauf/Vertrieb.
-$anfRid = $neu ? 0 : (int)($p['rezeptur_id'] ?? 0);
-$anfDarf = $anfRid > 0 && (!function_exists('has_role') || has_role('admin') || has_role('einkauf') || has_role('sales'));
-if ($anfDarf) {
-    $anfForm = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$anfRid]);
-    $kopfAkt = anfrage_produkt_badge($anfRid) . ' ' . anfrage_produkt_button($anfRid, (string)$p['name'], $anfForm, 'Beim Lieferanten anfragen', 'btn btn-primary btn-sm') . ' ' . $kopfAkt;
-}
-render_header('produkte', $neu ? 'Neues Produkt' : $p['name']);
-bx_head($neu ? 'Neues Produkt' : $v('name'),
-        $neu ? 'Rezeptur + Verpackung + Kunde' : trim($v('nummer')),
-        $kopfAkt);
-if (!$neu && !empty($p['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($p['angelegt'], 'd.m.Y H:i')) . (!empty($p['aktualisiert']) && $p['aktualisiert'] !== $p['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($p['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
-if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
-if (isset($_GET['angefragt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Anfrage an ' . (int)$_GET['angefragt'] . ' Lieferant(en) gestellt' . ((int)($_GET['gemailt'] ?? 0) > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per Mail' : '') . ' – Antworten unter <a href="?p=lief_anfragen">Lieferanten-Anfragen</a>.</div>';
-if (isset($_GET['anffehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Anfrage nicht gestellt – bitte mindestens einen Lieferanten wählen.</div>';
-if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
-$prodDelFehler = (string)($_SESSION['prod_del_fehler'] ?? '');
-if ($prodDelFehler !== '') { echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($prodDelFehler) . '</div>'; unset($_SESSION['prod_del_fehler']); }
-// Verwendungs-/Blocker-Übersicht NUR nach einem fehlgeschlagenen Löschversuch (sonst überflüssig).
-if (!$neu && $prodDelFehler !== '') { $prodVerw = produkt_verwendung((int)$id);
-  if ($prodVerw) {
-    echo '<div class="bx-panel" style="border-left:3px solid var(--warn)"><h2 style="margin-top:0;font-size:16px">Wo wird dieses Produkt verwendet? <span class="muted" style="font-weight:400;font-size:13px">(' . count($prodVerw) . ')</span></h2>'
-       . '<p class="muted" style="margin-top:0;font-size:13px">Zum Löschen zuerst diese Verweise entfernen/ersetzen. Ein Klick öffnet die Stelle.</p>'
-       . '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Typ</th><th>Eintrag</th><th></th></tr></thead><tbody>';
-    foreach ($prodVerw as $vv) {
-        $ein = $vv['url'] ? '<a href="' . h((string)$vv['url']) . '">' . h((string)$vv['label']) . '</a>' : h((string)$vv['label']);
-        $btn = $vv['url'] ? '<a class="btn btn-ghost btn-sm" href="' . h((string)$vv['url']) . '">öffnen</a>' : '<span class="muted" style="font-size:12px">kein eigener Link</span>';
-        echo '<tr><td>' . h((string)$vv['typ']) . (!empty($vv['blocker']) ? ' ' . bx_badge('Blocker', 'warn') : '') . '</td><td>' . $ein . '</td><td style="text-align:right">' . $btn . '</td></tr>';
-    }
-    echo '</tbody></table></div></div>';
-  }
-}
-?>
-<?php if (!$neu): ?>
-<div class="settabs" id="prodTabs" style="margin-bottom:16px">
-  <a href="#" class="on" data-tab="stamm">Stammdaten &amp; Verpackung</a>
-  <a href="#" data-tab="preise">Preise</a>
-  <a href="#" data-tab="dokumente">Dokumente</a>
-</div>
-<?php endif; ?>
-<form id="nfCheckForm" method="post"></form>
-<form method="post" class="bx-form" id="prodStamm" data-ppanel="stamm">
-  <div class="bx-panel">
-    <div style="font-weight:600;margin-bottom:8px">Identität</div>
-    <div class="bx-grid">
-    <div class="bx-field"><label>Produktname (intern) <?= bx_hint('unser Arbeitsname, z. B. „Zink". Gleiche Namen werden automatisch mit v2, v3 … fortlaufend nummeriert.') ?></label><input type="text" name="name" value="<?= $v('name') ?>" required placeholder="z. B. Zink"></div>
-    <div class="bx-field"><label>Synonyme / frühere Namen <?= bx_hint('Alternative oder alte Namen (z. B. wenn der Kunde umbenennt). Intern bekannt und überall mitsuchbar; laufende/abgeschlossene Aufträge behalten ihren Namen. Beim Umbenennen wird der alte Name automatisch ergänzt. Eine Zeile oder Komma je Name.') ?></label><textarea name="synonyme" rows="1" style="min-height:0;font-size:13px" placeholder="z. B. alter Produktname"><?= $v('synonyme') ?></textarea></div>
-    <?php if ($neu): // Neuanlage hat noch keinen Reiter „Preise" – der Fallback-Name bleibt dann hier. ?>
-    <div class="bx-field"><label>Standard-Name für den Kunden <?= bx_hint('Fallback-Name beim Kunden (Portal/Belege), wenn für einen Kunden KEIN eigener Name hinterlegt ist. Kundenspezifische Namen pflegst du unten im Block „Kundenspezifische Namen". Leer = interner Name.') ?></label><input type="text" name="kundenname" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
-    <?php endif; ?>
-    </div>
-  </div>
-  <?php // Art des Produkts: steuert, was angezeigt wird. „Nur Fulfillment" blendet Rezeptur/Produktion/Preise aus. ?>
-  <div class="bx-panel" style="padding:12px 16px">
-    <div class="bx-row" style="gap:14px;align-items:center;flex-wrap:wrap">
-      <span class="muted" style="font-size:13px">Art des Produkts</span>
-      <div class="prod-seg">
-        <label title="Rezeptur, Produktion, Preise"><input type="radio" name="extern" value="0" <?= $istExtern ? '' : 'checked' ?>><span>Eigenes Produkt</span></label>
-        <label title="Kundenware, wir lagern und versenden nur (ohne Rezeptur/Produktion)"><input type="radio" name="extern" value="1" <?= $istExtern ? 'checked' : '' ?>><span>Nur Fulfillment</span></label>
-      </div>
-      <label class="bx-check" id="handelswareBox" style="gap:8px;margin:0;cursor:pointer;font-size:13px<?= $istExtern ? ';display:none' : '' ?>">
-        <input type="checkbox" name="handelsware" value="1" <?= (int)($p['handelsware'] ?? 0) === 1 ? 'checked' : '' ?>>
-        <span>Handelsware <?= bx_hint('Als Fertigware zugekauft und weiterverkauft: kein Produktionsauftrag beim Bestellen, versendet aus dem Bestand.') ?></span>
-      </label>
-    </div>
-    <div class="muted bx-keepinfo" id="externHint" style="font-size:13px;margin-top:8px<?= $istExtern ? '' : ';display:none' ?>">Ware, die der Kunde woanders herstellen ließ und die wir nur lagern/versenden. Gehört dem gewählten Kunden (exklusiv) und ist danach im <a href="?p=lager2">Fremdlager</a> einbuchbar. Rezeptur, Stückliste, Kalkulation und Preise werden ausgeblendet.</div>
-  </div>
-  <style>
-    .prod-seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;background:var(--panel-2)}
-    .prod-seg label{margin:0;cursor:pointer}
-    .prod-seg input{position:absolute;opacity:0;pointer-events:none}
-    .prod-seg span{display:inline-block;padding:5px 14px;border-radius:999px;font-size:13px;color:var(--muted);white-space:nowrap}
-    .prod-seg input:checked + span{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line)}
-    .prod-seg input:focus-visible + span{outline:2px solid var(--gruen);outline-offset:1px}
-  </style>
-  <script>(function(){var rs=document.querySelectorAll('input[name=extern]'),hb=document.getElementById('handelswareBox');function upd(){var ext=document.querySelector('input[name=extern]:checked');if(hb)hb.style.display=(ext&&ext.value==='1')?'none':'';}rs.forEach(function(r){r.addEventListener('change',upd);});upd();})();</script>
-  <div class="bx-panel">
-    <div style="font-weight:600;margin-bottom:8px">Zuordnung</div>
-    <div class="bx-grid">
-    <div class="bx-field"><label>Kunde <?= bx_hint('nur bei exklusiven Produkten der Besitzer. Ohne Häkchen „exklusiv" bleibt das Produkt ein Katalogprodukt und der Kunde wird beim Speichern entfernt.') ?></label>
-      <select name="kunde_id">
-        <option value="">– Katalogprodukt –</option>
-        <?php foreach ($kunden as $k): ?><option value="<?= $k['id'] ?>" <?= (int)($p['kunde_id']??0)===(int)$k['id']?'selected':'' ?>><?= h($k['firma']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="bx-field"><label>Status</label>
-      <select name="status">
-        <?php foreach (['entwurf'=>'Entwurf','aktiv'=>'aktiv','inaktiv'=>'inaktiv'] as $key=>$lbl): ?>
-          <option value="<?= $key ?>" <?= ($p['status']??'')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="bx-field"><label>Novel-Food-Status <?= bx_hint('Novel-Food-Konformität: konform = kein/zugelassenes Novel Food; enthält Novel Food = nicht ohne Zulassung verkehrsfähig. „Automatisch prüfen" gleicht die Rezeptur-Zutaten mit dem EU-Novel-Food-Katalog ab.') ?></label>
-      <select name="novelfood_status">
-        <?php foreach (['unklar'=>'ungeklärt','konform'=>'Novel-Food-konform','novel_food'=>'enthält Novel Food (Zulassung nötig)','pruefung'=>'in Prüfung'] as $key=>$lbl): ?>
-          <option value="<?= $key ?>" <?= ($p['novelfood_status'] ?? 'unklar')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
-      </select>
-      <?php if (!$neu): ?>
-      <div style="margin-top:6px"><button type="submit" form="nfCheckForm" name="aktion" value="novelfood_pruefen" class="btn btn-ghost btn-sm">Automatisch prüfen (EU-Katalog)</button></div>
-      <?php if (isset($_GET['nfcheck']) && !empty($_SESSION['nf_ergebnis'])): $nf = $_SESSION['nf_ergebnis']; unset($_SESSION['nf_ergebnis']); ?>
-        <div class="muted" style="font-size:12px;margin-top:8px;line-height:1.6">
-          <?php if ($nf['grund']): ?><?= h($nf['grund']) ?>
-          <?php elseif (!$nf['treffer']): ?>Keine Zutat im Novel-Food-Katalog gefunden → als <strong>konform</strong> eingestuft.
-          <?php else: ?><strong>Treffer im Katalog:</strong><br>
-            <?php foreach ($nf['treffer'] as $t): ?>• <?= h($t['zutat']) ?> → <?= h($t['stoff']) ?> <em>(<?= h($t['status']) ?>)</em><br><?php endforeach; ?>
-          <?php endif; ?>
-        </div>
-      <?php endif; ?>
-      <?php endif; ?>
-    </div>
-    <div class="bx-field"><label>Katalog / Exklusiv <?= bx_hint('Standard: gemeinsamer Katalog (für alle Kunden mit Produkt-Freischaltung). Exklusiv = nur für den oben gewählten Kunden sichtbar.') ?></label>
-      <div class="bx-check" style="padding-top:8px">
-        <input type="checkbox" name="exklusiv" id="f_exkl" value="1" <?= (int)($p['exklusiv']??0)===1?'checked':'' ?>>
-        <label for="f_exkl" style="margin:0">exklusiv (nur für den Kunden)</label>
-      </div>
-    </div>
-    <?php if (has_role('admin')): ?>
-    <div class="bx-field"><label>MwSt-Satz <?= bx_hint('Produkte sind standardmäßig 19 %. Nur ändern, wenn für dieses Produkt ausnahmsweise ein anderer Satz gilt (z. B. 7 %). Hinweis: Glas & Etikett bleiben bei 19 % – eine getrennte Rate je Bestandteil kann bei Bedarf ergänzt werden. Nur Admin.') ?></label>
-      <?php $curMs = ($p['mwst_satz'] ?? null); $curMsS = ($curMs === null || $curMs === '') ? '' : (string)(float)$curMs; ?>
-      <select name="mwst_satz">
-        <option value="" <?= $curMsS===''?'selected':'' ?>>Standard (19 %)</option>
-        <?php foreach (['19'=>'19 %','7'=>'7 %','0'=>'0 %'] as $val=>$lbl): ?>
-          <option value="<?= $val ?>" <?= $curMsS===(string)(float)$val?'selected':'' ?>><?= $lbl ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <?php endif; ?>
-  </div></div>
-
-  <div class="bx-panel js-mfg">
-    <div style="font-weight:600;margin-bottom:8px">Rezeptur &amp; Verpackung</div>
-    <div class="bx-grid">
-    <div class="bx-field"><label>Rezeptur</label>
-      <select name="rezeptur_id" id="rezeptur">
-        <option value="">– wählen –</option>
-        <?php foreach ($rezepte as $rz): ?><option value="<?= $rz['id'] ?>" <?= (int)($p['rezeptur_id']??0)===(int)$rz['id']?'selected':'' ?>><?= h($rz['name']) ?> · <?= h($DFORM[$rz['darreichungsform']] ?? $rz['darreichungsform']) ?></option><?php endforeach; ?>
-      </select>
-      <?php $pRezId = (int)($p['rezeptur_id'] ?? 0); ?>
-      <a id="rezLink" target="_blank" rel="noopener" href="?p=rezeptur_detail&id=<?= $pRezId ?>" style="display:<?= $pRezId>0?'inline-block':'none' ?>;font-size:12px;margin-top:4px;color:var(--gruen)">Rezeptur ansehen &#8599;</a>
-      <script>(function(){var s=document.getElementById('rezeptur'),a=document.getElementById('rezLink');if(!s||!a)return;function u(){var v=parseInt(s.value||'0',10);if(v>0){a.href='?p=rezeptur_detail&id='+v;a.style.display='inline-block';}else{a.style.display='none';}}s.addEventListener('change',u);u();})();</script>
-    </div>
-    <?= verp_slot('Verpackung (Primär)', 'verpackung_id', $VERP_ROLLE['primaer'], $p['verpackung_id'] ?? '', 'Dose/Glas/Beutel, der das Produkt direkt hält') ?>
-    <?php
-      // Label/Hinweis formabhängig: bei Flüssig/Öl/Gel ist die Zahl der INHALT (ml), bei Pulver/Granulat die
-      // Füllmenge (g), bei Tablette/Kapsel die Stückzahl. recalc() unten schaltet #einhLabel beim Rezepturwechsel um.
-      $epF = strtolower((string)$pForm);
-      if (in_array($epF, ['fluessig','oel','gel'], true))   { $epLbl = 'Inhalt je Packung (ml)'; $epHint = 'z. B. 8 ml je Flasche'; }
-      elseif (in_array($epF, ['pulver','granulat'], true))  { $epLbl = 'Füllmenge je Packung (g)'; $epHint = 'z. B. 250 g je Dose'; }
-      elseif ($epF === 'tablette')                          { $epLbl = 'Tabletten je Packung'; $epHint = 'z. B. 60 Tabletten je Dose'; }
-      else                                                  { $epLbl = 'Einheiten je Packung'; $epHint = 'z. B. 120 Kapseln je Dose'; }
+if ($neu) {
+    $rezepte = all("SELECT id, name, darreichungsform FROM rezeptur ORDER BY name");
+    $glaeser = $verpListe('primaer');
+    $istExtern = isset($_GET['extern']);
+    render_header('produkte', 'Neues Produkt');
+    bx_head('Neues Produkt', 'Rezeptur × Menge je Packung × Behälter – danach alles weitere per Stift', bx_btn('Zurück zur Liste', '?p=produkte', 'ghost'));
+    if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
     ?>
-    <div class="bx-field"><label><span id="einhLabel"><?= h($epLbl) ?></span> <?= bx_hint($epHint) ?></label><input type="number" name="einheiten_pro_packung" id="einheiten" value="<?= $v('einheiten_pro_packung') ?>"></div>
-    <div class="bx-field" id="intakeFeld"><label>Verzehr je Tag <?= bx_hint('Empfehlung – Basis für % NRV pro Tag und Reichweite. Bei Pulver entfällt das Feld: die Rezeptur ist die Tagesdosis.') ?></label><input type="number" step="0.5" name="einnahme_pro_tag" id="intake" value="<?= $v('einnahme_pro_tag') ?>"></div>
-    <div class="bx-field" id="tdFeld" style="display:none"><label>Tagesdosis <?= bx_hint('Bei Pulver/Granulat ist die Rezeptur genau eine Tagesdosis. Der Kunde gibt die g je Packung an; wie viele Tagesdosen das sind, ist nur eine Info. Gerechnet wird nach Gewicht.') ?></label><div id="tdInfo" style="padding-top:8px">–</div></div>
-  </div>
+<form method="post" class="bx-form bx-panel" style="max-width:820px">
+  <input type="hidden" name="aktion" value="anlegen">
   <div class="bx-grid">
-    <div class="bx-field"><label>Haltbarkeit <?= bx_hint('Mindesthaltbarkeit des Fertigprodukts, z. B. „24 Monate". Kann per Spec-Upload automatisch gefüllt werden.') ?></label><input type="text" name="haltbarkeit" value="<?= $v('haltbarkeit') ?>" placeholder="z. B. 24 Monate"></div>
-    <div class="bx-field"><label>Allergene <?= bx_hint('Allergene des Fertigprodukts. Aus dem Spec übernehmbar.') ?></label><input type="text" name="allergene" value="<?= $v('allergene') ?>" placeholder="z. B. keine"></div>
+    <div class="bx-field"><label>Produktname (intern)</label><input type="text" name="name" required value="<?= h((string)($_POST['name'] ?? '')) ?>" placeholder="z. B. Zink"></div>
+    <div class="bx-field"><label>Art des Produkts</label>
+      <select name="art"><option value="eigen">Eigenes Produkt</option><option value="handelsware">Handelsware (fertig zugekauft)</option><option value="fulfillment"<?= $istExtern ? ' selected' : '' ?>>Nur Fulfillment (Kundenware)</option></select></div>
+    <div class="bx-field"><label>Rezeptur</label><select name="rezeptur_id"<?= $rscombo($rezepte) ?>><?= $optListe($rezepte, 0, '– wählen –', fn($r) => $r['name'] . ' · ' . ($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])) ?></select></div>
+    <div class="bx-field"><label>Glas/Behälter</label><select name="verpackung_id"<?= $rscombo($glaeser) ?>><?= $optListe($glaeser, 0) ?></select></div>
+    <div class="bx-field"><label>Menge je Packung <?= bx_hint('Kapseln/Tabletten je Packung, bei Pulver g, bei Flüssig ml.') ?></label><input type="text" inputmode="numeric" name="einheiten_pro_packung" placeholder="z. B. 90"></div>
+    <div class="bx-field"><label>Kunde <?= bx_hint('Nur bei exklusiven Produkten bzw. Kundenware der Besitzer.') ?></label><select name="kunde_id"<?= $rscombo($kunden) ?>><?= $optListe($kunden, (int)($_GET['kunde_id'] ?? 0), '– Katalogprodukt –', fn($r) => kunde_name_voll((int)$r['id'], (string)$r['firma'], false)) ?></select></div>
   </div>
-  <div class="bx-field"><label>Notiz</label><textarea name="notiz"><?= $v('notiz') ?></textarea></div>
-  </div>
-
-  <div class="bx-panel js-mfg">
-    <div style="font-weight:600;margin-bottom:8px">Stückliste</div>
-    <div class="bx-grid">
-      <?= verp_slot('Verschluss/Deckel', 'verschluss_id', $VERP_ROLLE['verschluss'], $p['verschluss_id'] ?? '') ?>
-      <?= verp_slot('Etikett', 'etikett_id', $VERP_ROLLE['etikett'], $p['etikett_id'] ?? '') ?>
-      <?php // Kein eigener Etikett-Slot, aber das Glas/der Behälter leitet ein Etikett ab -> das Produkt HAT ein Etikett.
-      if (empty($p['etikett_id']) && !empty($p['verpackung_id']) && ($__etAbl = etikett_id_fuer_behaelter((int)$p['verpackung_id']))):
-        $__etAblName = (string) scalar("SELECT name FROM item WHERE id=?", [(int)$__etAbl]); ?>
-      <div class="bx-field" style="align-self:end">
-        <div class="muted" style="font-size:12px;line-height:1.4">Automatisch aus dem Glas:<br><strong><?= h($__etAblName ?: 'Etikett aus Behälter') ?></strong><br>Nur ausfüllen, wenn ein abweichendes Etikett gewünscht ist.</div>
-      </div>
-      <?php endif; ?>
-      <?php if (!$neu && ($__etb = etikett_bestand_info((int)$id))['hat_etikett']): ?>
-      <div class="bx-field">
-        <label>Etiketten-Bestand <?= bx_hint('Physisch = unser Lagerbestand (inkl. Puffer, den wir oft zusätzlich ordern). Bezahlt = die vom Kunden gekauften Etiketten. Dem Kunden wird NIE mehr als „bezahlt" angezeigt. Beim Bestellen von Etiketten einfach die (höhere) physische Menge erfassen.') ?></label>
-        <div style="font-size:13px;padding-top:6px">
-          physisch <strong><?= number_format($__etb['physisch'], 0, ',', '.') ?></strong>
-          · bezahlt <strong><?= number_format($__etb['bezahlt'], 0, ',', '.') ?></strong>
-          <?php if ($__etb['puffer'] > 0): ?> · <span class="muted">Puffer <?= number_format($__etb['puffer'], 0, ',', '.') ?></span><?php endif; ?>
-          <?php if ($__etb['physisch'] < $__etb['kunde_rest']): ?><br><span style="color:var(--warn)">Zu wenig Etiketten für offene Aufträge (fehlen <?= number_format($__etb['kunde_rest'] - $__etb['physisch'], 0, ',', '.') ?>).</span><?php endif; ?>
-        </div>
-      </div>
-      <?php endif; ?>
-      <?php // Kundenetiketten JE KUNDE (Versionskette gilt je Produkt+Kunde): aktuelle Version, Design zum Herunterladen
-            // (z. B. für die Druckerei) und Bestand. Ein Katalogprodukt mit mehreren Kunden hat mehrere Etiketten.
-      if (!$neu):
-        $__kes = all("SELECT i.id, i.kunde_id, COALESCE(i.etikett_version,1) AS v, COALESCE(i.etikett_dokument_id,0) AS dok, k.firma
-                      FROM item i LEFT JOIN kunden k ON k.id=i.kunde_id
-                      WHERE i.verpackung_rolle='etikett' AND i.produkt_id=? AND COALESCE(i.gesperrt,0)=0
-                      ORDER BY k.firma, i.etikett_version DESC", [(int)$id]);
-        if ($__kes): ?>
-      <div class="bx-field" style="grid-column:1/-1;min-width:0">
-        <label>Kundenetiketten je Kunde <?= bx_hint('Das Etikett gehört zu Produkt + Kunde: jeder Kunde hat seine eigene Versionskette (v1, v2 …) und seinen eigenen Bestand. Eine neue Freigabe sperrt nur die Version desselben Kunden.') ?></label>
-        <div class="bx-tablewrap"><table class="bx-table">
-          <thead><tr><th>Kunde</th><th>Version</th><th>Design</th><th class="bx-num">physisch</th><th class="bx-num">bezahlt</th></tr></thead>
-          <tbody>
-          <?php foreach ($__kes as $__ke):
-              $__keBi = $__ke['kunde_id'] ? etikett_bestand_info((int)$id, (int)$__ke['kunde_id']) : ['physisch'=>(float)item_bestand((int)$__ke['id'], true), 'bezahlt'=>0];
-              $__keFn = $__ke['dok'] ? (string) scalar("SELECT COALESCE(NULLIF(datei_orig,''),'Etikett-Design') FROM dokument WHERE id=?", [(int)$__ke['dok']]) : ''; ?>
-            <tr>
-              <td><?= $__ke['kunde_id'] ? kunde_link($__ke['kunde_id'], (string)$__ke['firma']) : '<span class="muted">ohne Kunde (Altbestand)</span>' ?></td>
-              <td>v<?= (int)$__ke['v'] ?></td>
-              <td><?php if ($__ke['dok']): ?><a href="?p=dokument&id=<?= (int)$__ke['dok'] ?>" download target="_blank" rel="noopener"><?= h($__keFn) ?> &#8681;</a><?php else: ?><span class="muted">noch kein Design freigegeben</span><?php endif; ?></td>
-              <td class="bx-num"><?= number_format((float)$__keBi['physisch'], 0, ',', '.') ?> Stk</td>
-              <td class="bx-num"><?= number_format((float)$__keBi['bezahlt'], 0, ',', '.') ?> Stk</td>
-            </tr>
-          <?php endforeach; ?>
-          </tbody>
-        </table></div>
-      </div>
-      <?php endif; endif; ?>
-      <?= verp_slot('Faltschachtel/Karton', 'karton_id', $VERP_ROLLE['karton'], $p['karton_id'] ?? '') ?>
-      <div class="bx-field"><label>Packungen je Umkarton <?= bx_hint('Wie viele fertige Packungen in EINEN Umkarton passen. Grundlage für den Karton-Bestand: zeigt dem Kunden, wie viele Einheiten er mit seinen vorhandenen Kartons noch verpacken/bestellen kann.') ?></label>
-        <input type="number" name="karton_inhalt" min="0" step="1" value="<?= h((string)($p['karton_inhalt'] ?? '')) ?>" placeholder="z. B. 48"></div>
-      <?= verp_slot('Beipackzettel', 'beipack_id', $VERP_ROLLE['beipack'], $p['beipack_id'] ?? '') ?>
-      <div class="bx-field"><label>Leerkapsel <?= bx_hint('nur Kapselprodukte. Leer = automatisch nach Kapselgröße; nur wählen, wenn mehrere Kapseln gleicher Größe existieren (Material/Farbe).') ?></label>
-        <select name="leerkapsel_id">
-          <option value="">– automatisch nach Größe –</option>
-          <?php foreach ($leerkapseln as $lk): ?><option value="<?= (int)$lk['id'] ?>" <?= (int)($p['leerkapsel_id']??0)===(int)$lk['id']?'selected':'' ?>><?= h($lk['name']) ?></option><?php endforeach; ?>
-        </select>
-        <?php if (!$neu): ?>
-          <div class="muted" style="margin-top:4px;font-size:13px">
-          <?php if ((int)($p['leerkapsel_id']??0)): ?>manuell gewählt
-          <?php elseif ($kapEffektiv): ?>automatisch: <?= h((string)scalar("SELECT name FROM item WHERE id=?", [$kapEffektiv])) ?>
-          <?php elseif (count($kapKandidaten) > 1): ?><span style="color:var(--warn)">mehrere Kapseln dieser Größe – bitte wählen</span>
-          <?php elseif (count($kapKandidaten) === 0): ?><span class="muted">keine passende Leerkapsel dieser Größe im Lager</span>
-          <?php else: ?>–<?php endif; ?>
-          </div>
-        <?php endif; ?>
-      </div>
-    </div>
-  </div>
-
-  <?php if (has_role('admin')):
-    $weg = ['abfuellen' => $neu ? 1 : (int)($p['weg_abfuellen'] ?? 1),
-            'etikettieren' => $neu ? 1 : (int)($p['weg_etikettieren'] ?? 1),
-            'karton' => $neu ? 0 : (int)($p['weg_karton'] ?? 0),
-            'beipack' => $neu ? 0 : (int)($p['weg_beipack'] ?? 0)]; ?>
-  <div class="bx-panel js-mfg">
-    <div style="font-weight:600;margin-bottom:4px">Standard-Produktionsweg <?= bx_hint('Welche Ausbaustufen beim Anlegen eines Produktionsauftrags für dieses Produkt gesetzt werden. Reihenfolge: Verpacken → Etikettieren → Beipackzettel → Umkarton (vor der Qualitätsprüfung). Nur der Startzustand – im Produktions-Programm je Auftrag überschreibbar. Setzt nur Admin.') ?></div>
-    <div class="muted" style="font-size:12px;margin-bottom:10px">Gilt für neue Produktionsaufträge. Bestehende bleiben unverändert.</div>
-    <div class="bx-grid">
-      <?php foreach ([
-        'abfuellen'    => 'Abfüllen / Verpacken',
-        'etikettieren' => 'Etikettieren',
-        'beipack'      => 'Beipackzettel beilegen',
-        'karton'       => 'Umkarton / Umverpackung',
-      ] as $wk => $wl): ?>
-      <div class="bx-check" style="padding-top:4px">
-        <input type="checkbox" name="weg_<?= $wk ?>" id="weg_<?= $wk ?>" value="1" <?= $weg[$wk] ? 'checked' : '' ?>>
-        <label for="weg_<?= $wk ?>" style="margin:0"><?= h($wl) ?></label>
-      </div>
-      <?php endforeach; ?>
-    </div>
-  </div>
-  <?php endif; ?>
-
-  <div class="bx-panel js-mfg" id="ergebnis">
-    <h2>Kalkulation &amp; Tages-Deklaration</h2>
-    <div class="bx-cards" style="margin-bottom:16px">
-      <div class="bx-card"><div class="k">Kosten / Packung</div><div class="v" id="k_kosten">–</div></div>
-      <div class="bx-card"><div class="k" id="k_reichweite_lbl">Reichweite</div><div class="v" id="k_reichweite">–</div></div>
-      <div class="bx-card"><div class="k" id="k_gewicht_lbl">Gewicht / Einheit</div><div class="v" id="k_gewicht">–</div></div>
-      <div class="bx-card"><div class="k">Verpackung</div><div class="v" id="k_verp" style="font-size:15px">–</div></div>
-    </div>
-    <div class="muted" id="verp_hinweis" style="margin-bottom:16px"></div>
-    <div style="font-weight:600;margin-bottom:8px">Nährwerte pro Tagesdosis <span class="muted" style="font-weight:400" id="intakeLabel"></span></div>
-    <table class="bx-table"><thead><tr><th>Nährstoff</th><th class="bx-num">je Tag</th><th class="bx-num">% NRV</th></tr></thead>
-      <tbody id="deklaration"><tr><td colspan="3" class="muted">Rezeptur wählen …</td></tr></tbody>
-    </table>
-  </div>
-
-  <div class="bx-row" style="margin-top:var(--sp-4)">
-    <button class="btn btn-primary" type="submit"><?= $neu ? 'Produkt anlegen' : 'Speichern' ?></button>
-    <a class="btn btn-ghost" href="?p=produkte">Abbrechen</a>
-  </div>
+  <label class="bx-check" style="margin:6px 0 0"><input type="checkbox" name="exklusiv" value="1"> exklusiv (nur für den Kunden)</label>
+  <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Produkt anlegen</button><a class="btn btn-ghost" href="?p=produkte">Abbrechen</a></div>
 </form>
+<?php
+    render_footer();
+    return;
+}
 
-<?php if (!$neu): ?>
-<div class="bx-panel js-mfg" data-ppanel="preise">
-  <div class="bx-row" style="justify-content:space-between;align-items:center">
-    <h2 style="margin:0">Preis-Matrix <?= bx_hint('automatische VK-Kalkulation: Packungsgröße (Stk, Gramm bei Pulver, Milliliter bei Flüssig) × passende Verpackung × Bestellmenge. VK = EK (Rezeptur + Kapsel/Presshilfsstoffe/Trägerflüssigkeit) × Marge je Typ, ohne Kundenrabatt. Interne Sale-Auskunft.') ?></h2>
-    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="matrix"><button class="btn btn-primary btn-sm" type="submit">Matrix neu berechnen</button></form>
+$p = one("SELECT * FROM produkt WHERE id=?", [(int)$id]);
+if (!$p) { render_header('produkte', 'Produkt'); echo '<div class="bx-panel">Produkt nicht gefunden. <a href="?p=produkte">Zur Liste</a></div>'; render_footer(); return; }
+$pid = (int)$p['id'];
+$istExtern = (int)($p['extern'] ?? 0) === 1;
+$istHandel = (int)($p['handelsware'] ?? 0) === 1;
+$rid = (int)($p['rezeptur_id'] ?? 0);
+$rez = $rid ? one("SELECT id, nummer, name, darreichungsform, kapselgroesse_id FROM rezeptur WHERE id=?", [$rid]) : null;
+$pForm = (string)($rez['darreichungsform'] ?? 'kapsel');
+$schuett = form_groessen_einheit($pForm) !== '';
+$einh = (int)($p['einheiten_pro_packung'] ?? 0);
+$darf = has_role('admin') || has_role('einkauf') || has_role('sales') || has_role('production');
+$eur = function ($x) { $x = (float)$x; return number_format($x, $x > 0 && $x < 1 ? 4 : 2, ',', '.') . ' €'; };
+$eur2 = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
+$nf0 = fn($x) => number_format((float)$x, 0, ',', '.');
+$fehlt = fn(string $t = 'fehlt') => '<span style="color:var(--warn)">' . h($t) . '</span>';
+$itemName = fn($iid) => $iid ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$iid]) : '';
+
+// Kalkulationsmenge (Packungen) für Staffeln: ?km= (Reiter Kalkulation), Standard 1.000.
+$km = max(1, (int) str_replace('.', '', (string)($_GET['km'] ?? '1000')));
+$kalk = produkt_kalkulation($pid, $km);
+$stdWeg = $kalk['wege'][$kalk['standard']] ?? null;
+
+// ---- Kopf
+$kopfAkt = '';
+$anfDarf = $rid > 0 && (has_role('admin') || has_role('einkauf') || has_role('sales'));
+if ($anfDarf) $kopfAkt .= anfrage_produkt_badge($rid) . ' ' . anfrage_produkt_button($rid, (string)$p['name'], $pForm, 'Beim Lieferanten anfragen', 'btn btn-primary btn-sm') . ' ';
+$kopfAkt .= bx_btn('Zurück zur Liste', '?p=produkte', 'ghost');
+if (has_role('admin'))
+    $kopfAkt .= ' <form method="post" style="display:inline" onsubmit="return confirm(\'Dieses Produkt endgültig löschen? Geht nur, wenn es nicht mehr verwendet wird (Auftrag/Angebot/Produktion/Bestand).\');"><input type="hidden" name="aktion" value="loeschen"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Löschen</button></form>';
+$stLbl = ['entwurf' => ['Entwurf', 'warn'], 'aktiv' => ['aktiv', 'ok'], 'inaktiv' => ['inaktiv', '']][(string)$p['status']] ?? [(string)$p['status'], ''];
+$stiftIco = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+$stift = fn(string $dlg) => $darf ? '<button type="button" class="bx-stift" title="Bearbeiten" onclick="document.getElementById(\'' . $dlg . '\').showModal()">' . $stiftIco . '</button>' : '';
+$untertitel = h((string)$p['nummer']) . ' · ' . bx_badge($stLbl[0], $stLbl[1])
+            . ($rez ? ' · Rezeptur <a href="?p=rezeptur_detail&id=' . $rid . '">' . h((string)($rez['nummer'] ?: $rez['name'])) . '</a>' : '')
+            . ($istExtern ? ' · ' . bx_badge('Nur Fulfillment', 'info') : ($istHandel ? ' · ' . bx_badge('Handelsware', 'info') : ''));
+render_header('produkte', (string)$p['name']);
+// Kopf wie bx_head(), aber mit Stift am Namen und Badges/Links in der Unterzeile (bx_head escaped beides).
+echo '<div class="bx-head"><div><h1 style="display:flex;align-items:center;gap:10px">' . h((string)$p['name']) . ' ' . $stift('dlgName') . '</h1><p class="bx-sub">' . $untertitel . '</p></div><div class="bx-row">' . $kopfAkt . '</div></div>';
+foreach ([['gespeichert', 'Gespeichert.'], ['kpok', 'Kundenpreis gespeichert.'], ['knok', 'Kundenname gespeichert.'], ['zkok', 'Zukaufpreis gespeichert.'],
+          ['pib', 'PIB hochgeladen.'], ['pibweg', 'Hochgeladenes PIB entfernt – es gilt wieder das automatische.'], ['kigelesen', 'Dokument von der KI ausgelesen – Vorschlag unten.']] as [$g, $t])
+    if (isset($_GET[$g])) { echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h($t) . '</div>'; break; }
+if (isset($_GET['matrix'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['matrix'] . ' Preiszeilen berechnet.</div>';
+if (isset($_GET['specueb'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['specueb'] . ' Feld(er) ins Produkt übernommen.</div>';
+if (isset($_GET['angefragt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Anfrage an ' . (int)$_GET['angefragt'] . ' Lieferant(en) gestellt' . ((int)($_GET['gemailt'] ?? 0) > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per Mail' : '') . ' – Antworten im Reiter Beschaffung.</div>';
+if (isset($_GET['anffehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Anfrage nicht gestellt – bitte mindestens einen Lieferanten wählen.</div>';
+if (isset($_GET['kfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['kfehler']) . '</div>';
+$prodDelFehler = (string)($_SESSION['prod_del_fehler'] ?? '');
+if ($prodDelFehler !== '') {
+    unset($_SESSION['prod_del_fehler']);
+    echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($prodDelFehler) . '</div>';
+    if ($prodVerw = produkt_verwendung($pid)) {
+        echo '<div class="bx-panel" style="border-left:3px solid var(--warn)"><h2 style="margin-top:0;font-size:16px">Wo wird dieses Produkt verwendet? <span class="muted" style="font-weight:400;font-size:13px">(' . count($prodVerw) . ')</span></h2><div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Typ</th><th>Eintrag</th></tr></thead><tbody>';
+        foreach ($prodVerw as $vv) echo '<tr><td>' . h((string)$vv['typ']) . (!empty($vv['blocker']) ? ' ' . bx_badge('Blocker', 'warn') : '') . '</td><td>' . ($vv['url'] ? '<a href="' . h((string)$vv['url']) . '">' . h((string)$vv['label']) . '</a>' : h((string)$vv['label'])) . '</td></tr>';
+        echo '</tbody></table></div></div>';
+    }
+}
+
+// ---- Kacheln
+$kap = $rez && in_array($pForm, ['kapsel', 'softgel'], true) ? (((int)($rez['kapselgroesse_id'] ?? 0)) ? one("SELECT id, name, fuellmenge_mg FROM kapselgroesse WHERE id=?", [(int)$rez['kapselgroesse_id']]) : rezeptur_kapselgroesse($rid)) : null;
+$mengeLbl = $schuett ? 'Füllmenge je Packung' : ($pForm === 'tablette' ? 'Tabletten je Packung' : 'Menge je Packung');
+$mengeTxt = $einh > 0 ? ($schuett ? $nf0($einh) . ' ' . form_groessen_einheit($pForm) : $nf0($einh) . ' ' . ($pForm === 'kapsel' || $pForm === 'softgel' ? 'Kapseln' : 'Stk')) : $fehlt('nicht gesetzt');
+// Passt der Inhalt in das Glas? (Kapsel: Fassung je Kapselgröße; Schüttgut: max. Füllgewicht / Volumen)
+$passt = '';
+if (!empty($p['verpackung_id']) && $einh > 0) {
+    $vpi = one("SELECT max_fuellgewicht_g, volumen_ml FROM item WHERE id=?", [(int)$p['verpackung_id']]) ?: [];
+    if ($kap) { $cap = pack_kapazitaet_fuer((int)$p['verpackung_id'])[(int)$kap['id']] ?? 0;
+        $passt = $cap <= 0 ? '<span class="muted">Fassung für ' . h((string)$kap['name']) . ' nicht hinterlegt</span>' : ($cap >= $einh ? '<span style="color:var(--gruen)">passt (max. ' . $nf0($cap) . ')</span>' : '<span style="color:var(--err)">zu klein (max. ' . $nf0($cap) . ')</span>'); }
+    elseif (in_array($pForm, ['pulver', 'granulat'], true) && $vpi) { $mx = (float)($vpi['max_fuellgewicht_g'] ?? 0);
+        $passt = $mx <= 0 ? '<span class="muted">max. Füllgewicht nicht hinterlegt</span>' : ($mx >= $einh ? '<span style="color:var(--gruen)">passt (max. ' . $nf0($mx) . ' g)</span>' : '<span style="color:var(--err)">zu klein (max. ' . $nf0($mx) . ' g)</span>'); }
+    elseif (in_array($pForm, ['fluessig', 'gel'], true) && $vpi) { $mx = (float)($vpi['volumen_ml'] ?? 0);
+        $passt = $mx <= 0 ? '<span class="muted">Volumen nicht hinterlegt</span>' : ($mx >= $einh ? '<span style="color:var(--gruen)">passt</span>' : '<span style="color:var(--err)">zu klein (' . $nf0($mx) . ' ml)</span>'); }
+}
+$leerEff = $pForm === 'kapsel' ? produkt_leerkapsel_id($pid) : 0;
+$kosten = $stdWeg ? ($stdWeg['vollstaendig'] ? $eur2($stdWeg['summe']) : '<span style="color:var(--warn)">unvollständig</span>') : $fehlt('–');
+$nfL = ['unklar' => 'ungeklärt', 'konform' => 'konform', 'novel_food' => 'enthält Novel Food', 'pruefung' => 'in Prüfung'];
+$artTxt = $istExtern ? 'Nur Fulfillment' : ($istHandel ? 'Handelsware' : 'Eigenes Produkt');
+$katTxt = (int)($p['exklusiv'] ?? 0) === 1 ? 'exklusiv' . (!empty($p['kunde_id']) ? ' · ' . kunde_name_voll((int)$p['kunde_id'], (string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$p['kunde_id']])) : '') : 'Katalog';
+$msTxt = ($p['mwst_satz'] ?? null) === null || $p['mwst_satz'] === '' ? 'Standard (' . $nf0(meta_get('ust_inland', 19)) . ' %)' : $nf0($p['mwst_satz']) . ' %';
+$kachel = function (string $label, string $wert, string $dlg = '', string $unter = '', string $extra = '') use ($stift) {
+    return '<div class="bx-card"' . $extra . '><div class="k" style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' . h($label) . '</span>' . ($dlg !== '' ? $stift($dlg) : '') . '</div>'
+         . '<div class="v" style="font-size:15px">' . $wert . '</div>' . ($unter !== '' ? '<div class="muted" style="font-size:12px;margin-top:4px">' . $unter . '</div>' : '') . '</div>';
+};
+echo '<div class="bx-cards pr-kacheln">';
+if (!$istExtern) {
+    echo $kachel('Rezeptur', $rez ? '<a href="?p=rezeptur_detail&id=' . $rid . '">' . h((string)$rez['name']) . '</a>' : $fehlt('keine'), 'dlgRez');
+    echo $kachel('Darreichung', h($DFORM[$pForm] ?? $pForm) . ($kap ? ' · ' . h((string)$kap['name']) : ''), $kap || in_array($pForm, ['kapsel', 'softgel'], true) ? 'dlgKap' : '', $kap && empty($rez['kapselgroesse_id']) ? 'automatisch nach Füllgewicht' : '');
+    echo $kachel($mengeLbl, $mengeTxt, 'dlgMenge');
+}
+echo $kachel('Glas/Behälter', !empty($p['verpackung_id']) ? '<a href="?p=verpackung&id=' . (int)$p['verpackung_id'] . '">' . h($itemName($p['verpackung_id'])) . '</a>' : $fehlt('keiner'), 'dlgVerp', $passt);
+echo $kachel('Deckel', !empty($p['verschluss_id']) ? '<a href="?p=verpackung&id=' . (int)$p['verschluss_id'] . '">' . h($itemName($p['verschluss_id'])) . '</a>' : (!empty($p['verpackung_id']) && !verpackung_ist_bedruckt((int)$p['verpackung_id']) && stripos($itemName($p['verpackung_id']), 'beutel') === false ? $fehlt('keiner') : '<span class="muted">keiner</span>'), 'dlgDeckel');
+if (!$istExtern && $pForm === 'kapsel')
+    echo $kachel('Leerkapsel', $leerEff ? h($itemName($leerEff)) : $fehlt('nicht eindeutig'), 'dlgLeer', (int)($p['leerkapsel_id'] ?? 0) ? 'manuell gewählt' : ($leerEff ? 'automatisch nach Größe' : ''));
+if (!$istExtern && !$schuett) echo $kachel('Verzehr je Tag', h(rtrim(rtrim(number_format((float)$p['einnahme_pro_tag'], 1, ',', '.'), '0'), ',')) . ' ' . ($pForm === 'kapsel' || $pForm === 'softgel' ? ((float)$p['einnahme_pro_tag'] == 1.0 ? 'Kapsel' : 'Kapseln') : 'Stk'), 'dlgVerzehr', $einh > 0 && (float)$p['einnahme_pro_tag'] > 0 ? 'reicht ' . $nf0($einh / (float)$p['einnahme_pro_tag']) . ' Tage' : '');
+echo $kachel('Haltbarkeit', trim((string)($p['haltbarkeit'] ?? '')) !== '' ? h((string)$p['haltbarkeit']) : '<span class="muted">nicht gesetzt</span>', 'dlgHalt', trim((string)($p['allergene'] ?? '')) !== '' ? 'Allergene: ' . h((string)$p['allergene']) : '');
+echo $kachel('Status', bx_badge($stLbl[0], $stLbl[1]), 'dlgStatus');
+if (!$istExtern) echo $kachel('Novel Food', h($nfL[(string)($p['novelfood_status'] ?? 'unklar')] ?? 'ungeklärt'), 'dlgNf');
+echo $kachel('MwSt', h($msTxt), has_role('admin') ? 'dlgMwst' : '');
+echo $kachel('Katalog / exklusiv', $katTxt, 'dlgKat');
+echo $kachel('Art des Produkts', h($artTxt), 'dlgArt');
+if (!$istExtern) echo $kachel('Kosten je Packung', '<a href="#" data-goto="kalkulation">' . $kosten . '</a>', '', h($stdWeg['label'] ?? '') . ' · bei ' . $nf0($km) . ' Pkg');
+echo '</div>';
+
+// ---- Stift-Fenster (je Kachel genau ein Feld)
+$dlgKopf = fn(string $t, string $dlg) => '<div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><h2 style="margin:0;font-size:17px">' . h($t) . '</h2><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'' . $dlg . '\').close()" aria-label="schließen">&#10005;</button></div>';
+$dlg = function (string $idd, string $titel, string $feld, string $inhalt, string $hinweis = '') use ($dlgKopf) {
+    return '<dialog id="' . $idd . '" class="bx-dialog">' . $dlgKopf($titel, $idd) . '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="kachel"><input type="hidden" name="feld" value="' . h($feld) . '">'
+         . $inhalt . ($hinweis !== '' ? '<div class="muted" style="font-size:12px;margin-top:8px">' . $hinweis . '</div>' : '')
+         . '<div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div></form></dialog>';
+};
+$fld = fn(string $label, string $input) => '<div class="bx-field" style="margin:0 0 10px"><label>' . $label . '</label>' . $input . '</div>';
+if ($darf) {
+    echo $dlg('dlgName', 'Name', 'name',
+        $fld('Produktname (intern)', '<input type="text" name="name" required value="' . h((string)$p['name']) . '">')
+      . $fld('Synonyme / frühere Namen ' . bx_hint('Intern mitsuchbar. Beim Umbenennen wird der alte Name automatisch ergänzt.'), '<textarea name="synonyme" rows="2">' . h((string)($p['synonyme'] ?? '')) . '</textarea>')
+      . $fld('Standard-Name für Kunden (Fallback) ' . bx_hint('Gilt beim Kunden, wenn im Reiter Kunden kein eigener Name steht. Leer = interner Name.'), '<input type="text" name="kundenname" value="' . h((string)($p['kundenname'] ?? '')) . '">'),
+        'Gleiche Namen werden automatisch mit v2, v3 … nummeriert.');
+    if (!$istExtern) {
+        $rezepte = all("SELECT id, name, darreichungsform FROM rezeptur ORDER BY name");
+        echo $dlg('dlgRez', 'Rezeptur', 'rezeptur', '<select name="rezeptur_id"' . $rscombo($rezepte) . ' style="width:100%">' . $optListe($rezepte, $rid, '– keine –', fn($r) => $r['name'] . ' · ' . ($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])) . '</select>',
+                  'Die Zusammensetzung steht im Reiter Rezeptur. Ändern der Zutaten an der Rezeptur selbst.');
+        $kgr = all("SELECT id, name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg");
+        echo $dlg('dlgKap', 'Kapselgröße', 'kapsel', '<select name="kapselgroesse_id" style="width:100%">' . $optListe($kgr, (int)($rez['kapselgroesse_id'] ?? 0), '– automatisch nach Füllgewicht –', fn($r) => $r['name'] . ' (' . number_format((float)$r['fuellmenge_mg'], 0, ',', '.') . ' mg)') . '</select>',
+                  'Gilt an der Rezeptur – also für alle Produkte mit dieser Rezeptur. Füllgewicht laut Rezeptur: ' . number_format(rezeptur_gewicht_mg($rid), 0, ',', '.') . ' mg.');
+        echo $dlg('dlgMenge', $mengeLbl, 'menge', $fld($mengeLbl . ($schuett ? ' (' . form_groessen_einheit($pForm) . ')' : ''), '<input type="text" inputmode="numeric" name="einheiten_pro_packung" value="' . ($einh ? h($nf0($einh)) : '') . '">'),
+                  'Eine andere Packungsgröße für einen Kunden ist laut Handbuch ein eigenes Produkt.');
+        echo $dlg('dlgVerzehr', 'Verzehr je Tag', 'verzehr', $fld('Einheiten je Tag', '<input type="text" inputmode="decimal" name="einnahme_pro_tag" value="' . h(rtrim(rtrim(number_format((float)$p['einnahme_pro_tag'], 2, ',', ''), '0'), ',')) . '">'), 'Basis für % NRV pro Tag und Reichweite.');
+        if ($pForm === 'kapsel') {
+            $leer = all("SELECT id, name FROM item WHERE kategorie='rohstoff' AND form='kapselhuelle' AND gesperrt=0 ORDER BY name");
+            echo $dlg('dlgLeer', 'Leerkapsel', 'leerkapsel', '<select name="leerkapsel_id"' . $rscombo($leer) . ' style="width:100%">' . $optListe($leer, (int)($p['leerkapsel_id'] ?? 0), '– automatisch nach Größe –') . '</select>',
+                      'Nur wählen, wenn es mehrere Kapseln gleicher Größe gibt (Material/Farbe).');
+        }
+        echo $dlg('dlgNf', 'Novel Food', 'novelfood', '<select name="novelfood_status" style="width:100%">' . implode('', array_map(fn($k, $l) => '<option value="' . $k . '"' . (($p['novelfood_status'] ?? 'unklar') === $k ? ' selected' : '') . '>' . h($l) . '</option>', array_keys($nfL), $nfL)) . '</select>')
+           . '<script>document.getElementById("dlgNf").insertAdjacentHTML("beforeend",' . json_encode('<form method="post" style="margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)"><input type="hidden" name="aktion" value="novelfood_pruefen"><button class="btn btn-ghost btn-sm" type="submit">Automatisch prüfen (EU-Katalog)</button></form>') . ');</script>';
+    }
+    $glaeser = $verpListe('primaer'); $deckel = $verpListe('verschluss');
+    echo $dlg('dlgVerp', 'Glas/Behälter', 'verpackung', '<select name="verpackung_id"' . $rscombo($glaeser) . ' style="width:100%">' . $optListe($glaeser, (int)($p['verpackung_id'] ?? 0)) . '</select>',
+              'Nur Primärverpackungen (Gläser, Dosen, Beutel, Flaschen). Der Name „· 150 ml Glas" im Produktnamen zieht automatisch mit.');
+    echo $dlg('dlgDeckel', 'Deckel', 'deckel', '<select name="verschluss_id"' . $rscombo($deckel) . ' style="width:100%">' . $optListe($deckel, (int)($p['verschluss_id'] ?? 0)) . '</select>', 'Nur Verschlüsse.');
+    echo $dlg('dlgHalt', 'Haltbarkeit & Allergene', 'haltbarkeit', $fld('Haltbarkeit', '<input type="text" name="haltbarkeit" value="' . h((string)($p['haltbarkeit'] ?? '')) . '" placeholder="z. B. 24 Monate">') . $fld('Allergene', '<input type="text" name="allergene" value="' . h((string)($p['allergene'] ?? '')) . '" placeholder="z. B. keine">'),
+              'Kann aus einem hochgeladenen Spec übernommen werden (Reiter Dokumente).');
+    echo $dlg('dlgStatus', 'Status', 'status', '<select name="status" style="width:100%">' . implode('', array_map(fn($k, $l) => '<option value="' . $k . '"' . ($p['status'] === $k ? ' selected' : '') . '>' . $l . '</option>', ['entwurf', 'aktiv', 'inaktiv'], ['Entwurf', 'aktiv', 'inaktiv'])) . '</select>');
+    if (has_role('admin')) { $curMs = ($p['mwst_satz'] ?? null) === null || $p['mwst_satz'] === '' ? '' : (string)(float)$p['mwst_satz'];
+        echo $dlg('dlgMwst', 'MwSt-Satz', 'mwst', '<select name="mwst_satz" style="width:100%"><option value=""' . ($curMs === '' ? ' selected' : '') . '>Standard (19 %)</option>' . implode('', array_map(fn($v) => '<option value="' . $v . '"' . ($curMs === (string)(float)$v ? ' selected' : '') . '>' . $v . ' %</option>', ['19', '7', '0'])) . '</select>',
+                  'Nur ändern, wenn ausnahmsweise ein anderer Satz gilt. Glas & Etikett bleiben bei 19 %. Nur Admin.'); }
+    echo $dlg('dlgKat', 'Katalog / exklusiv', 'katalog',
+        '<label class="bx-check" style="margin:0 0 10px"><input type="checkbox" name="exklusiv" value="1"' . ((int)($p['exklusiv'] ?? 0) === 1 ? ' checked' : '') . '> exklusiv (nur für den Kunden)</label>'
+      . $fld('Kunde (Besitzer, nur bei exklusiv)', '<select name="kunde_id"' . $rscombo($kunden) . ' style="width:100%">' . $optListe($kunden, (int)($p['kunde_id'] ?? 0), '– Katalogprodukt –', fn($r) => kunde_name_voll((int)$r['id'], (string)$r['firma'], false)) . '</select>'),
+        'Ohne Häkchen ist das Produkt ein Katalogprodukt und gehört niemandem – der Kunde wird dann entfernt.');
+    $artCur = $istExtern ? 'fulfillment' : ($istHandel ? 'handelsware' : 'eigen');
+    echo $dlg('dlgArt', 'Art des Produkts', 'art',
+        implode('', array_map(fn($k, $l, $t) => '<label class="bx-check" style="margin:0 0 8px;align-items:flex-start"><input type="radio" name="art" value="' . $k . '"' . ($artCur === $k ? ' checked' : '') . '> <span>' . $l . '<br><span class="muted" style="font-size:12px">' . $t . '</span></span></label>',
+            ['eigen', 'handelsware', 'fulfillment'], ['Eigenes Produkt', 'Handelsware', 'Nur Fulfillment'],
+            ['Rezeptur, Produktion, Preise.', 'Fertig zugekauft und weiterverkauft – kein Produktionsauftrag, Versand aus dem Bestand.', 'Kundenware: wir lagern und versenden nur. Gehört dem Kunden, keine Rezeptur.']))
+      . $fld('Kunde (nur bei Nur Fulfillment nötig)', '<select name="kunde_id"' . $rscombo($kunden) . ' style="width:100%">' . $optListe($kunden, (int)($p['kunde_id'] ?? 0), '– wie bisher –', fn($r) => kunde_name_voll((int)$r['id'], (string)$r['firma'], false)) . '</select>'));
+}
+if (isset($_GET['nfcheck']) && !empty($_SESSION['nf_ergebnis'])) { $nf = $_SESSION['nf_ergebnis']; unset($_SESSION['nf_ergebnis']);
+    echo '<div class="bx-panel" style="font-size:13px;line-height:1.6">Novel-Food-Prüfung: ' . ($nf['grund'] ? h($nf['grund']) : (!$nf['treffer'] ? 'Keine Zutat im Novel-Food-Katalog gefunden – als konform eingestuft.' : 'Treffer: ' . h(implode(', ', array_map(fn($t) => $t['zutat'] . ' → ' . $t['stoff'] . ' (' . $t['status'] . ')', $nf['treffer']))))) . '</div>'; }
+
+// ---- Reiter
+$TABS = $istExtern ? ['kunden' => 'Kunden', 'produktion' => 'Produktion', 'dokumente' => 'Dokumente']
+                   : ['rezeptur' => 'Rezeptur', 'kunden' => 'Kunden', 'beschaffung' => 'Beschaffung', 'produktion' => 'Produktion', 'kalkulation' => 'Kalkulation', 'dokumente' => 'Dokumente'];
+$tab = isset($TABS[(string)($_GET['tab'] ?? '')]) ? (string)$_GET['tab'] : array_key_first($TABS);
+echo '<div class="settabs" id="prodTabs" style="margin:16px 0">';
+foreach ($TABS as $k => $l) echo '<a href="?p=produkt&id=' . $pid . '&tab=' . $k . '" data-tab="' . $k . '"' . ($k === $tab ? ' class="on"' : '') . '>' . h($l) . '</a>';
+echo '</div>';
+$panel = fn(string $k) => ' data-ppanel="' . $k . '"' . ($k !== $tab ? ' style="display:none"' : '');
+
+// ===================================================================== Reiter Rezeptur
+if (!$istExtern):
+    $ra = produkt_rezeptur_ansicht($pid);
+    $ohneN = array_filter($ra['zeilen'], fn($z) => !$z['naehrstoffe']);
+    $ohneMg = array_filter($ra['zeilen'], fn($z) => $z['mg'] <= 0); ?>
+<div<?= $panel('rezeptur') ?>>
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Zusammensetzung <?= $rez ? '<span class="muted" style="font-weight:400;font-size:14px">' . h((string)$rez['name']) . '</span>' : '' ?></h2>
+    <?php if ($rid): ?><a class="btn btn-ghost btn-sm" href="?p=rezeptur_detail&id=<?= $rid ?>">Rezeptur bearbeiten</a><?php endif; ?>
   </div>
-  <?php if (isset($_GET['matrix'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-top:10px"><?= (int)$_GET['matrix'] ?> Preiszeilen berechnet.</div><?php endif; ?>
-  <?php if (!$matrix): ?>
-    <p class="muted">Noch keine Matrix. „Matrix neu berechnen" erzeugt alle Kombinationen (Produkt mit Rezeptur + hinterlegter Behälter-Fassung: Kapseln je Größe, Füllgewicht in g bzw. Fassungsvermögen in ml).</p>
+  <?php if (!$rid): ?><p class="muted">Keine Rezeptur gewählt – oben in der Kachel „Rezeptur" per Stift wählen.</p>
+  <?php elseif (!$ra['zeilen']): ?><div class="badge-warn" style="padding:8px 12px;margin-top:10px">Die Rezeptur ist leer – keine Zutaten hinterlegt.</div>
   <?php else: ?>
+    <?php if ($ohneMg): ?><div class="badge-warn" style="padding:8px 12px;margin-top:10px"><?= count($ohneMg) ?> Zutat(en) ohne Menge.</div><?php endif; ?>
+    <?php if ($ohneN): ?><div class="muted" style="font-size:13px;margin-top:10px"><?= count($ohneN) ?> von <?= count($ra['zeilen']) ?> Rohstoffen ohne Nährstoff-Zuordnung (<?= h(implode(', ', array_map(fn($z) => $z['name'], $ohneN))) ?>) – sie zählen nicht zur Deklaration. Bei Füllstoffen richtig, bei Wirkstoffen am Rohstoff den Gehalt nachtragen.</div><?php endif; ?>
     <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
-      <thead><tr><th>Größe</th><th>Verpackung</th><?php foreach ($matrixMengen as $mn): ?><th class="bx-num"><?= number_format($mn,0,',','.') ?> Stk</th><?php endforeach; ?></tr></thead>
+      <thead><tr><th>Rohstoff</th><th class="bx-num">mg je <?= $schuett ? 'Tagesdosis' : 'Einheit' ?></th><?php if (!$schuett): ?><th class="bx-num">mg je Tagesdosis</th><?php endif; ?><th>liefert</th></tr></thead>
       <tbody>
-      <?php foreach ($matrixGrid as $row): ?>
-        <tr>
-          <td><?= h(form_groessen_label($pForm, (float)$row['stueck'])) ?></td>
-          <td><?= h($row['verp']) ?></td>
-          <?php foreach ($matrixMengen as $mn): $c = $row['cells'][$mn] ?? null; ?>
-            <td class="bx-num"><?php if ($c): ?><strong><?= number_format($c['vk'],2,',','.') ?> €</strong><div class="muted" style="font-size:11px">EK <?= number_format($c['ek'],2,',','.') ?></div><?php else: ?><span class="muted">–</span><?php endif; ?></td>
-          <?php endforeach; ?>
-        </tr>
+      <?php $sum = 0.0; foreach ($ra['zeilen'] as $z): $sum += $z['mg']; ?>
+        <tr><td><a href="?p=rohstoff&id=<?= (int)$z['item_id'] ?>"><?= h($z['name']) ?></a></td>
+          <td class="bx-num"><?= number_format($z['mg'], $z['mg'] < 10 ? 2 : 1, ',', '.') ?> mg</td>
+          <?php if (!$schuett): ?><td class="bx-num"><?= number_format($z['mg'] * $ra['faktor'], 1, ',', '.') ?> mg</td><?php endif; ?>
+          <td style="white-space:normal"><?= $z['naehrstoffe'] ? h(implode(' · ', array_map(fn($n) => $n['name'] . ($n['mg'] !== null ? ' ' . number_format($n['mg'], $n['mg'] < 1 ? 3 : 1, ',', '.') . ' mg' : ' (Gehalt fehlt)'), $z['naehrstoffe']))) : '<span class="muted">kein Nährstoff zugeordnet</span>' ?></td></tr>
       <?php endforeach; ?>
+        <tr><td class="muted">Summe Füllung</td><td class="bx-num"><?= number_format($sum, 1, ',', '.') ?> mg</td><?php if (!$schuett): ?><td class="bx-num"><?= number_format($sum * $ra['faktor'], 1, ',', '.') ?> mg</td><?php endif; ?><td></td></tr>
       </tbody>
     </table></div>
-    <div class="muted" style="margin-top:8px">VK je Packung (Basis, ohne Kundenrabatt). Stand: <?= h(fmt_zeit($matrix[0]['stand'])) ?>.</div>
   <?php endif; ?>
 </div>
-<div class="bx-panel js-mfg" id="zukauf" data-ppanel="preise">
-  <h2 style="margin-top:0">Lieferantenpreise (Zukauf) <?= bx_hint('Einkaufspreise für dieses Fertigprodukt je Lieferant/Versandweg (AIR/SEA), günstigster markiert. Kommen aus „EK-Preise (Import)" oder von Hand. Rein intern – nie in der Kundensicht.') ?></h2>
-  <?php if (isset($_GET['zkok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Preis gespeichert.</div><?php endif; ?>
-  <?php $VERSZ = versandart_liste();
-        $zkpreise = all("SELECT z.*, COALESCE(l.firma, z.lieferant_name) AS firma FROM produkt_lieferant_preis z LEFT JOIN lieferanten l ON l.id=z.lieferant_id WHERE z.produkt_id=? ORDER BY z.preis ASC, z.menge_ab ASC", [(int)$id]); ?>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Größe</th><th>Incoterm</th><th>Versand</th><th></th></tr></thead>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Tages-Deklaration <span class="muted" style="font-weight:400;font-size:14px"><?= $schuett ? '(1 Tagesdosis = Rezeptur)' : '(bei ' . h(rtrim(rtrim(number_format((float)$ra['faktor'], 1, ',', ''), '0'), ',')) . ' Einheiten je Tag)' ?></span></h2>
+  <?php if (!$ra['deklaration']): ?><div class="muted">Keine deklarierbaren Wirkstoffe – den Rohstoffen sind keine Nährstoffe zugeordnet.</div>
+  <?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Nährstoff</th><th class="bx-num">je Einheit</th><th class="bx-num">je Tag</th><th class="bx-num">% NRV</th></tr></thead><tbody>
+  <?php foreach ($ra['deklaration'] as $d): $lbl = $d['anzeige'] ?: $d['einheit']; $f = fn($mg) => $d['einheit'] === 'µg' ? number_format($mg * 1000, 1, ',', '.') . ' ' . $lbl : number_format($mg, 1, ',', '.') . ' ' . $lbl; ?>
+    <tr><td><?= h($d['name']) ?></td><td class="bx-num"><?= $f($d['mg_einheit']) ?></td><td class="bx-num"><?= $f($d['mg_tag']) ?><?= $d['ie_mg'] ? ' (' . number_format($d['mg_tag'] / (float)$d['ie_mg'], 0, ',', '.') . ' I.E.)' : '' ?></td>
+      <td class="bx-num"><?= $d['nrv_proz'] !== null ? number_format($d['nrv_proz'], 0, ',', '.') . ' %' : '<span class="muted">keine NRV</span>' ?></td></tr>
+  <?php endforeach; ?>
+  </tbody></table></div>
+  <?php endif; ?>
+</div>
+</div>
+<?php endif;
+
+// ===================================================================== Reiter Kunden
+$kundenRows = produkt_kunden($pid);
+$kpG = form_groessen_einheit($pForm);
+?>
+<div<?= $panel('kunden') ?> id="kundennamen">
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Kunden <span class="muted" style="font-weight:400;font-size:14px">(<?= count($kundenRows) ?>)</span></h2>
+    <div class="bx-row" style="gap:10px;align-items:center"><span class="muted" style="font-size:13px">Standard-Name: <?= trim((string)($p['kundenname'] ?? '')) !== '' ? h((string)$p['kundenname']) : 'wie intern' ?> <?= $stift('dlgName') ?></span>
+      <?php if ($darf): ?><button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('dlgKundeNeu').showModal()">Kunde hinzufügen</button><?php endif; ?></div>
+  </div>
+  <?php if (!$kundenRows): ?><p class="muted">Noch kein Kunde: kein Name, kein Kundenpreis, kein Angebot.</p><?php else: ?>
+  <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table pr-kunden">
+    <thead><tr><th>Kunde</th><th>Name beim Kunden</th><th>Etikett</th><th>Kundenpreis je Pkg</th><th>Letztes Angebot</th><th>Letzte Rechnung</th><th></th></tr></thead>
     <tbody>
-    <?php if (!$zkpreise): ?><tr><td colspan="7" class="muted">Noch keine Zukauf-Preise. Unten eintragen oder über „EK-Preise (Import)" (Fertigprodukte) zuordnen.</td></tr><?php endif; ?>
-    <?php $best = $zkpreise ? (float)$zkpreise[0]['preis'] : null; foreach ($zkpreise as $z): $isb = $best!==null && abs((float)$z['preis']-$best)<1e-9; ?>
-      <tr<?= $isb?' style="font-weight:600"':'' ?>>
-        <td><?= h($z['firma'] ?: '–') ?> <?= $isb?bx_badge('günstigster','ok'):'' ?></td>
-        <td class="bx-num"><?= (float)$z['menge_ab']>0 ? number_format((float)$z['menge_ab'],0,',','.') : '<span class="muted">–</span>' ?></td>
-        <td class="bx-num"><?= number_format((float)$z['preis'], (float)$z['preis']<1?4:2,',','.') ?> €<?= $z['einheit']==='kapsel'?'/Kapsel':($z['einheit']==='packung'?'/Packung':'/'.h((string)$z['einheit'])) ?></td>
-        <td><?= $z['groesse']?h($z['groesse']):'<span class="muted">–</span>' ?></td>
-        <td><?= $z['incoterm']?h($z['incoterm']):'<span class="muted">–</span>' ?></td>
-        <td><?= !empty($z['versandart']) ? h($VERSZ[$z['versandart']]??$z['versandart']) : '<span class="muted">–</span>' ?></td>
-        <td style="text-align:right"><form method="post" style="display:inline"><input type="hidden" name="aktion" value="zk_preis_del"><input type="hidden" name="preis_id" value="<?= (int)$z['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td>
+    <?php foreach ($kundenRows as $kr): $kid = (int)$kr['kunde_id']; $et = $kr['etikett']; ?>
+      <tr>
+        <td><a class="kundenlink" href="?p=kunde&id=<?= $kid ?>"><?= kunde_name_voll($kid, (string)$kr['firma']) ?></a><?= $kr['auftraege'] ? '<div class="muted" style="font-size:12px">' . $kr['auftraege'] . ' Auftrag/Aufträge</div>' : '' ?></td>
+        <td><?= $kr['name'] !== '' ? h($kr['name']) : '<span class="muted">wie Standard</span>' ?></td>
+        <td style="white-space:normal;min-width:180px"><?php if ($et): ?>v<?= $et['version'] ?> · <?= $et['dok'] ? '<a href="?p=dokument&id=' . $et['dok'] . '" target="_blank" rel="noopener">Design freigegeben</a>' : '<span style="color:var(--warn)">Design nicht freigegeben</span>' ?>
+            <div class="muted" style="font-size:12px">im Lager <?= $nf0($et['lager']) ?> Stk · unterwegs <?= $nf0($et['unterwegs']) ?> Stk · Bedarf offene Aufträge <?= $nf0($et['bedarf']) ?> Stk</div>
+          <?php else: ?><span class="muted">kein Kundenetikett</span><?php endif; ?></td>
+        <td style="white-space:normal;min-width:170px"><?php if (!$kr['preise']): ?><span class="muted">kein Kundenpreis</span><?php endif; foreach ($kr['preise'] as $kp):
+              $abw = $kp['menge_pro_vpe'] !== null && $einh > 0 && (int)$kp['menge_pro_vpe'] !== $einh; ?>
+            <div><?= $eur2((float)$kp['preis']) ?> <span class="muted" style="font-size:12px"><?= $kp['anzahl_vpe'] ? 'ab ' . $nf0($kp['anzahl_vpe']) : '' ?><?= $kp['menge_pro_vpe'] !== null ? ' · ' . h(form_groessen_label($pForm, (float)$kp['menge_pro_vpe'])) : '' ?></span><?= $abw ? ' ' . bx_badge('andere Packungsgröße', 'warn') : '' ?></div>
+          <?php endforeach; ?></td>
+        <td><?= $kr['angebot'] ? '<a href="?p=angebot&id=' . (int)$kr['angebot']['id'] . '">' . h((string)$kr['angebot']['nummer']) . '</a><div class="muted" style="font-size:12px">' . h(fmt_zeit((string)$kr['angebot']['angelegt'], 'd.m.Y')) . ' · ' . h(['offen' => 'Entwurf', 'gesendet' => 'gesendet', 'bestaetigt' => 'bestätigt', 'abgelehnt' => 'abgelehnt'][$kr['angebot']['status']] ?? $kr['angebot']['status']) . '</div>' : '<span class="muted">–</span>' ?></td>
+        <td><?= $kr['rechnung'] ? h((string)$kr['rechnung']['nummer']) . '<div class="muted" style="font-size:12px">' . ($kr['rechnung']['datum'] ? h(date('d.m.Y', strtotime((string)$kr['rechnung']['datum']))) . ' · ' : '') . $eur2($kr['rechnung']['je_pkg']) . '/Pkg</div>' : '<span class="muted">–</span>' ?></td>
+        <td style="text-align:right"><?= $stift('dlgKunde' . $kid) ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
   </table></div>
-  <form method="post" class="bx-row" style="margin-top:12px;align-items:flex-end;gap:10px;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="zk_preis_add">
-    <div class="bx-field" style="margin:0"><label>Lieferant</label>
-      <select name="zk_lieferant"><option value="">– Freitext –</option><?php foreach ($lieferanten as $l): ?><option value="<?= $l['id'] ?>"><?= h($l['firma']) ?></option><?php endforeach; ?></select></div>
-    <div class="bx-field" style="margin:0;width:140px"><label>oder frei</label><input type="text" name="zk_lieferant_name" placeholder="z. B. Wellgreen"></div>
-    <div class="bx-field" style="margin:0;width:100px"><label>ab Menge</label><input type="number" name="zk_menge_ab" value="0"></div>
-    <div class="bx-field" style="margin:0;width:110px"><label>Preis</label><input type="number" step="0.0001" name="zk_preis" required></div>
-    <?php $zkHw = (int)($p['handelsware'] ?? 0) === 1; ?>
-    <div class="bx-field" style="margin:0;width:150px"><label>je</label><select name="zk_einheit"><option value="packung" <?= $zkHw ? 'selected' : '' ?>>Packung (fertige Ware)</option><option value="kapsel" <?= $zkHw ? '' : 'selected' ?>>Kapsel / Stk (lose)</option></select></div>
-    <div class="bx-field" style="margin:0;width:120px"><label>Incoterm</label><select name="zk_incoterm"><option value="">–</option><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($k) ?></option><?php endforeach; ?></select></div>
-    <div class="bx-field" style="margin:0;width:120px"><label>Versand</label><select name="zk_versandart"><option value="">–</option><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
-    <button class="btn btn-ghost btn-sm" type="submit">Preis hinzufügen</button>
-  </form>
-  <p class="muted" style="font-size:12px;margin-top:8px">Interne Zukauf-Preise – erscheinen nie in der Kundensicht.</p>
-</div>
-<?php require_once BX_ROOT . '/core/pdf_pib.php'; $pibDok = pib_datei((int)$id); ?>
-<div class="bx-panel" id="pibfeld" data-ppanel="dokumente">
-  <h2 style="margin-top:0">Produktinformationsblatt (PIB) <?= bx_hint('Der Kunde bekommt beim Bestellen automatisch ein PIB aus den Produktdaten (Zutaten, Nährwerte, Darreichung) – als Grundlage für sein Etikett. Optional hier ein fertiges PIB hochladen (PDF/Bild); das hat dann Vorrang.') ?></h2>
-  <?php if (isset($_GET['pib'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">PIB hochgeladen.</div><?php endif; ?>
-  <?php if (isset($_GET['pibweg'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Hochgeladenes PIB entfernt – es gilt wieder das automatische.</div><?php endif; ?>
-  <p class="muted" style="margin-top:0">Aktuell: <strong><?= $pibDok ? 'hochgeladenes PIB (' . h($pibDok['datei_orig'] ?: 'Datei') . ')' : 'automatisch aus den Produktdaten erzeugt' ?></strong></p>
-  <?php if (!$pibDok && is_numeric($id) && produkt_etikettmass((int)$id) === null): ?>
-    <div class="badge-warn" style="padding:8px 12px;margin-bottom:10px">
-      <strong>Etikettmaß fehlt</strong> – das automatische PIB nennt dann „individuell – nach Rücksprache mit Ihrem bulkify-Ansprechpartner“ (z. B. Blanko-Beutel + Etikett).
-      Steht das Format fest, am <strong>Behälter</strong> (Verpackung) das Endformat (B × H) hinterlegen, oder dem Produkt bzw. Auftrag eine Verpackung mit Etikettmaß zuordnen.
-    </div>
+  <p class="muted" style="font-size:12px;margin-top:8px">Kundenpreis = VK je Packung <strong>ohne</strong> Verpackung (Glas/Deckel/Etikett kommen im Angebot dazu). Der Kunde sieht im Portal seinen niedrigsten Preis als „ab". Eine andere Packungsgröße ist laut Handbuch ein eigenes Produkt.</p>
   <?php endif; ?>
-  <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap">
-    <a class="btn btn-ghost btn-sm" href="?p=produkt_pib&id=<?= (int)$id ?>" target="_blank">PIB ansehen</a>
-    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0">
-      <input type="hidden" name="aktion" value="pib_upload"><input type="file" name="pib" required accept="application/pdf,image/*">
-      <button class="btn btn-primary btn-sm" type="submit"><?= $pibDok ? 'PIB ersetzen' : 'Eigenes PIB hochladen' ?></button>
-    </form>
-    <?php if ($pibDok): ?>
-    <form method="post" onsubmit="return confirm('Hochgeladenes PIB entfernen? Danach gilt wieder das automatische.')" style="margin:0">
-      <input type="hidden" name="aktion" value="pib_del"><button class="btn btn-ghost btn-sm" type="submit">Hochgeladenes PIB entfernen</button>
-    </form>
-    <?php endif; ?>
+</div>
+<?php
+// Stift je Kunde: Name + Kundenpreise dieses Kunden.
+if ($darf) foreach ($kundenRows as $kr): $kid = (int)$kr['kunde_id']; ?>
+<dialog id="dlgKunde<?= $kid ?>" class="bx-dialog">
+  <?= $dlgKopf(kunde_name_voll($kid, (string)$kr['firma'], false), 'dlgKunde' . $kid) ?>
+  <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin:0 0 14px;flex-wrap:wrap"><input type="hidden" name="aktion" value="kn_setzen"><input type="hidden" name="kn_kunde" value="<?= $kid ?>">
+    <div class="bx-field" style="margin:0;flex:1;min-width:220px"><label>Name beim Kunden <?= bx_hint('Der Kunde sieht überall diesen Namen. Leer = Standard-Name.') ?></label><input type="text" name="kn_name" value="<?= h($kr['name']) ?>"></div>
+    <button class="btn btn-primary btn-sm" type="submit">Name speichern</button></form>
+  <div style="font-size:13px;margin-bottom:6px" class="muted">Kundenpreise</div>
+  <?php foreach ($kr['preise'] as $kp): ?>
+    <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0 0 6px" onsubmit="return confirm('Kundenpreis löschen?');"><input type="hidden" name="aktion" value="kp_del"><input type="hidden" name="kp_id" value="<?= (int)$kp['id'] ?>">
+      <span><?= $eur2((float)$kp['preis']) ?> <span class="muted"><?= $kp['anzahl_vpe'] ? 'ab ' . $nf0($kp['anzahl_vpe']) . ' Pkg' : '' ?><?= $kp['menge_pro_vpe'] !== null ? ' · ' . h(form_groessen_label($pForm, (float)$kp['menge_pro_vpe'])) : '' ?><?= $kp['notiz'] ? ' · ' . h((string)$kp['notiz']) : '' ?></span></span>
+      <button class="btn btn-ghost btn-sm" type="submit">×</button></form>
+  <?php endforeach; ?>
+  <form method="post" class="bx-row" style="gap:8px;align-items:flex-end;margin-top:10px;flex-wrap:wrap"><input type="hidden" name="aktion" value="kp_add"><input type="hidden" name="kp_kunde" value="<?= $kid ?>">
+    <div class="bx-field" style="margin:0;width:110px"><label><?= $kpG !== '' ? $kpG . ' je Pkg' : 'Stk je Pkg' ?></label><input type="text" inputmode="numeric" name="kp_menge" value="<?= $einh ?: '' ?>"></div>
+    <div class="bx-field" style="margin:0;width:110px"><label>ab Pkg</label><input type="text" inputmode="numeric" name="kp_anzahl" placeholder="z. B. 1.000"></div>
+    <div class="bx-field" style="margin:0;width:110px"><label>Preis je Pkg (€)</label><input type="text" inputmode="decimal" name="kp_preis" required placeholder="z. B. 4,05"></div>
+    <div class="bx-field" style="margin:0;width:150px"><label>Notiz</label><input type="text" name="kp_notiz"></div>
+    <button class="btn btn-primary btn-sm" type="submit">Preis speichern</button></form>
+</dialog>
+<?php endforeach;
+if ($darf): ?>
+<dialog id="dlgKundeNeu" class="bx-dialog">
+  <?= $dlgKopf('Kunde hinzufügen', 'dlgKundeNeu') ?>
+  <form method="post" style="margin:0"><input type="hidden" name="aktion" value="kp_add">
+    <?= $fld('Kunde', '<select name="kp_kunde" required' . $rscombo($kunden) . ' style="width:100%">' . $optListe($kunden, 0, '– wählen –', fn($r) => kunde_name_voll((int)$r['id'], (string)$r['firma'], false)) . '</select>') ?>
+    <?= $fld('Name beim Kunden (optional)', '<input type="text" name="kn_name">') ?>
+    <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+      <div class="bx-field" style="margin:0;width:120px"><label><?= $kpG !== '' ? $kpG . ' je Pkg' : 'Stk je Pkg' ?></label><input type="text" inputmode="numeric" name="kp_menge" value="<?= $einh ?: '' ?>"></div>
+      <div class="bx-field" style="margin:0;width:120px"><label>ab Pkg</label><input type="text" inputmode="numeric" name="kp_anzahl"></div>
+      <div class="bx-field" style="margin:0;width:130px"><label>Preis je Pkg (€)</label><input type="text" inputmode="decimal" name="kp_preis" required></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
+  </form>
+</dialog>
+<?php endif;
+// Alle Angebote und Rechnungen mit dem Produkt (klappbar).
+$pAngebote = all("SELECT a.id, a.nummer, a.status, a.angelegt, k.firma AS kunde, a.kunde_id,
+                    (SELECT ap.menge FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id=? AND ?>0 ORDER BY ap.id LIMIT 1) AS pos_menge,
+                    (SELECT ap.preis_cent FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id=? AND ?>0 ORDER BY ap.id LIMIT 1) AS pos_preis
+                  FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id
+                  WHERE a.produkt_id=? OR a.id IN (SELECT angebot_id FROM angebot_produkt WHERE produkt_id=?) ORDER BY a.id DESC", [$rid, $rid, $rid, $rid, $pid, $pid]);
+$pRechnungen = all("SELECT b.id, b.nummer, b.netto, b.status, b.datum, k.firma AS kunde, b.kunde_id, a.menge FROM beleg b JOIN auftrag a ON a.id=b.auftrag_id LEFT JOIN kunden k ON k.id=b.kunde_id
+                    WHERE a.produkt_id=? AND b.typ='rechnung' ORDER BY b.id DESC", [$pid]); ?>
+<details class="bx-panel">
+  <summary style="cursor:pointer">Alle Angebote (<?= count($pAngebote) ?>) und Rechnungen (<?= count($pRechnungen) ?>) mit diesem Produkt</summary>
+  <?php if ($pAngebote): ?><div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table"><thead><tr><th>Angebot</th><th>Kunde</th><th class="bx-num">Menge</th><th class="bx-num">VK / Pkg</th><th>Status</th><th>Datum</th></tr></thead><tbody>
+    <?php foreach ($pAngebote as $a2): ?><tr><td><a href="?p=angebot&id=<?= (int)$a2['id'] ?>"><?= h((string)$a2['nummer']) ?></a></td><td><?= $a2['kunde_id'] ? kunde_name_voll((int)$a2['kunde_id'], (string)$a2['kunde']) : '–' ?></td>
+      <td class="bx-num"><?= $a2['pos_menge'] !== null ? $nf0($a2['pos_menge']) : '–' ?></td><td class="bx-num"><?= $a2['pos_preis'] !== null ? $eur((int)$a2['pos_preis'] / 100) : '–' ?></td>
+      <td><?= h(['offen' => 'Entwurf', 'gesendet' => 'gesendet', 'bestaetigt' => 'bestätigt', 'abgelehnt' => 'abgelehnt'][$a2['status']] ?? $a2['status']) ?></td><td><?= h(fmt_zeit((string)$a2['angelegt'], 'd.m.Y')) ?></td></tr><?php endforeach; ?>
+  </tbody></table></div><?php endif; ?>
+  <?php if ($pRechnungen): ?><div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table"><thead><tr><th>Rechnung</th><th>Kunde</th><th class="bx-num">Menge</th><th class="bx-num">je Pkg</th><th class="bx-num">Netto</th><th>Status</th><th>Datum</th></tr></thead><tbody>
+    <?php foreach ($pRechnungen as $b2): ?><tr><td><a target="_blank" href="/buchhaltung/?p=rechnung&id=<?= (int)$b2['id'] ?>"><?= h((string)$b2['nummer']) ?></a></td><td><?= $b2['kunde_id'] ? kunde_name_voll((int)$b2['kunde_id'], (string)$b2['kunde']) : '–' ?></td>
+      <td class="bx-num"><?= $nf0($b2['menge']) ?></td><td class="bx-num"><?= (int)$b2['menge'] > 0 ? $eur2((float)$b2['netto'] / (int)$b2['menge']) : '–' ?></td><td class="bx-num"><?= $eur2($b2['netto']) ?></td><td><?= h((string)$b2['status']) ?></td>
+      <td><?= $b2['datum'] ? h(date('d.m.Y', strtotime((string)$b2['datum']))) : '–' ?></td></tr><?php endforeach; ?>
+  </tbody></table></div><?php endif; ?>
+</details>
+</div>
+<?php
+// ===================================================================== Reiter Beschaffung
+if (!$istExtern):
+    $bs = produkt_beschaffung($pid, $km);
+    $lieferanten = all("SELECT id, firma FROM lieferanten WHERE gesperrt=0 ORDER BY firma"); ?>
+<div<?= $panel('beschaffung') ?>>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Bezugswege <span class="muted" style="font-weight:400;font-size:14px">je Packung bei <?= $nf0($km) ?> Pkg · die Wahl je Auftrag bleibt im Auftrag</span></h2>
+  <div class="bx-cards">
+  <?php foreach ($kalk['wege'] as $wk => $w): ?>
+    <div class="bx-card"<?= $wk === $kalk['standard'] ? ' style="box-shadow:0 0 0 2px var(--gruen)"' : '' ?>><div class="k"><?= h($w['label']) ?><?= $wk === $kalk['standard'] ? ' · Standard' : '' ?></div>
+      <div class="v" style="font-size:16px"><?= $w['inhalt_summe'] > 0 && $w['vollstaendig'] ? $eur2($w['summe']) : ($w['inhalt_summe'] > 0 ? $eur2($w['summe']) . ' <span style="color:var(--warn);font-size:12px">unvollständig</span>' : '<span class="muted">kein Preis</span>') ?></div>
+      <div class="muted" style="font-size:12px">Inhalt <?= $w['inhalt_summe'] > 0 ? $eur($w['inhalt_summe']) : '–' ?> + Verpackung</div></div>
+  <?php endforeach; ?>
   </div>
 </div>
-
-<div class="bx-panel" id="specfeld" data-ppanel="dokumente">
-  <h2 style="margin-top:0">Spezifikation &amp; CoA <?= bx_hint('Spec oder CoA (Analysenzertifikat) hochladen – die KI liest es aus. Spec füllt Haltbarkeit/Allergene ins Produkt; beim CoA werden Charge/MHD und die Analysewerte angezeigt. KI läuft nur auf beta.') ?></h2>
-  <?php if (isset($_GET['kigelesen'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Dokument von der KI ausgelesen – Vorschlag unten.</div><?php endif; ?>
-  <?php if (isset($_GET['specueb'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px"><?= (int)$_GET['specueb'] ?> Feld(er) ins Produkt übernommen.</div><?php endif; ?>
-  <?php if (!ki_bereit()): ?><div class="muted" style="font-size:12px;margin-bottom:8px">Automatisches Auslesen läuft nur auf beta. Hochladen geht überall; die Felder kannst du dann von Hand füllen.</div><?php endif; ?>
-  <div class="bx-row" style="gap:12px;flex-wrap:wrap;margin-bottom:6px">
-    <form method="post" enctype="multipart/form-data" style="margin:0"><input type="hidden" name="aktion" value="dok_upload"><input type="hidden" name="dok_typ" value="spec">
-      <label class="btn btn-primary btn-sm" style="cursor:pointer;margin:0">Spec hochladen (KI liest aus)<input type="file" name="dok" accept=".pdf,image/*" style="display:none" onchange="this.form.submit()"></label></form>
-    <form method="post" enctype="multipart/form-data" style="margin:0"><input type="hidden" name="aktion" value="dok_upload"><input type="hidden" name="dok_typ" value="coa">
-      <label class="btn btn-ghost btn-sm" style="cursor:pointer;margin:0">CoA hochladen (KI liest aus)<input type="file" name="dok" accept=".pdf,image/*" style="display:none" onchange="this.form.submit()"></label></form>
+<div class="bx-panel" id="zukauf">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Lieferanten für das Produkt <span class="muted" style="font-weight:400;font-size:14px">Zukauf fertig · Bulk · Premix</span></h2>
+    <div class="bx-row" style="gap:8px"><?php if ($anfDarf): ?><?= anfrage_produkt_button($rid, (string)$p['name'], $pForm, 'Preis anfragen', 'btn btn-ghost btn-sm') ?><?php endif; ?>
+      <?php if ($darf): ?><button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('dlgZk').showModal()">Preis hinzufügen</button><?php endif; ?></div>
   </div>
-  <?php $specDocs = all("SELECT id,typ,datei_orig,ki_daten,angelegt FROM dokument WHERE objekt_typ='produkt' AND objekt_id=? AND typ IN ('spec','coa','analyse') ORDER BY id DESC", [(int)$id]);
-        if (!$specDocs): ?><div class="muted">Noch kein Spec/CoA hochgeladen.</div>
-  <?php else: foreach ($specDocs as $d): $vor = $d['ki_daten'] ? json_decode((string)$d['ki_daten'], true) : null; ?>
-    <div class="bx-panel" style="background:var(--panel-2);margin-top:10px">
-      <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
-        <div><strong style="font-weight:600"><?= strtoupper(h($d['typ'])) ?></strong> · <a class="kundenlink" href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['datei_orig']) ?></a></div>
-        <span class="muted" style="font-size:12px"><?= h(fmt_zeit($d['angelegt'])) ?></span>
+  <?php if (!$bs['zukauf']): ?><p class="muted">Noch keine Zukaufpreise. „Preis hinzufügen" oder „Preis anfragen".</p><?php endif; ?>
+  <?php $VERSZ = versandart_liste(); foreach ($bs['zukauf'] as $i => $z): $l = $z['lief']; ?>
+    <div class="pr-lief">
+      <div class="bx-row" style="justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+        <div><?= $z['lieferant_id'] ? '<a href="?p=lieferant&id=' . $z['lieferant_id'] . '" style="font-size:15px">' . h($z['firma']) . '</a>' : '<span style="font-size:15px">' . h($z['firma']) . '</span> <span class="muted" style="font-size:12px">(nur Freitext, kein Lieferanten-Datensatz)</span>' ?>
+          <?= $i === 0 ? bx_badge('günstigster', 'ok') : '' ?></div>
+        <div class="muted" style="font-size:12px"><?= h(implode(' · ', array_filter([$l['land'] ?? '', $z['portal'] ? 'Portal-Account' : ($z['lieferant_id'] ? 'kein Portal-Account' : ''), !empty($l['lieferzeit_tage']) ? 'Lieferzeit ' . (int)$l['lieferzeit_tage'] . ' Tage' : '', !empty($l['mindestbestellwert']) ? 'Mindestbestellwert ' . $eur2($l['mindestbestellwert']) : '', $l['ansprechpartner'] ?? '']))) ?></div>
       </div>
-      <?php if (!is_array($vor)): ?><div class="muted" style="font-size:13px;margin-top:6px">Noch nicht ausgelesen (KI nur auf beta).</div>
-      <?php else: $stamm=(array)($vor['stamm']??[]); $charge=(array)($vor['charge']??[]); $werte=(array)($vor['werte']??[]); ?>
-        <div class="bx-grid" style="margin-top:8px;font-size:13px">
-          <?php foreach (['haltbarkeit'=>'Haltbarkeit','allergene'=>'Allergene','zertifikate'=>'Zertifikate','lagerbedingungen'=>'Lagerung'] as $k=>$lbl) if (!empty($stamm[$k])): ?>
-            <div><span class="muted"><?= $lbl ?>:</span> <?= h((string)$stamm[$k]) ?></div>
-          <?php endif; ?>
-          <?php foreach (['charge_nr'=>'Charge','mhd'=>'MHD','herstelldatum'=>'Herstelldatum','menge'=>'Menge'] as $k=>$lbl) if (!empty($charge[$k])): ?>
-            <div><span class="muted"><?= $lbl ?>:</span> <?= h((string)$charge[$k]) ?></div>
-          <?php endif; ?>
-        </div>
-        <?php if ($werte): ?>
-          <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table"><thead><tr><th>Parameter</th><th>Spezifikation</th><th>Ergebnis</th></tr></thead><tbody>
-          <?php foreach (array_slice($werte,0,40) as $w): ?><tr><td><?= h((string)($w['parameter']??'')) ?></td><td><?= h((string)($w['spezifikation']??'')) ?></td><td><?= h((string)($w['ergebnis']??'')) ?></td></tr><?php endforeach; ?>
-          </tbody></table></div>
-        <?php endif; ?>
-        <?php if (!empty($vor['hinweise'])): ?><div class="muted" style="font-size:12px;margin-top:6px"><?= h(implode(' · ', array_map('strval',(array)$vor['hinweise']))) ?></div><?php endif; ?>
-        <?php if ($d['typ']==='spec' && (!empty($stamm['haltbarkeit'])||!empty($stamm['allergene']))): ?>
-          <form method="post" style="margin-top:10px"><input type="hidden" name="aktion" value="spec_uebernehmen"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-primary btn-sm" type="submit" data-busy="…">Haltbarkeit/Allergene ins Produkt übernehmen</button></form>
-        <?php endif; ?>
+      <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table"><thead><tr><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th>Quelle</th><th></th></tr></thead><tbody>
+      <?php foreach ($z['staffeln'] as $s): ?><tr><td class="bx-num"><?= $s['ab'] > 0 ? $nf0($s['ab']) : '–' ?></td><td class="bx-num"><?= number_format($s['preis'], $s['preis'] < 1 ? 4 : 2, ',', '.') ?> <?= h($s['waehrung'] === 'EUR' ? '€' : $s['waehrung']) ?>/<?= h(['kapsel' => 'Kapsel', 'packung' => 'Pkg'][$s['einheit']] ?? $s['einheit']) ?></td>
+        <td><?= $s['incoterm'] !== '' ? h($s['incoterm']) : '–' ?></td><td><?= $s['versandart'] !== '' ? h($VERSZ[$s['versandart']] ?? $s['versandart']) : '–' ?></td><td><?= $s['stand'] ? h(date('d.m.Y', strtotime($s['stand']))) : '–' ?></td><td class="muted"><?= h($s['quelle']) ?></td>
+        <td style="text-align:right"><?php if ($s['id'] && $darf): ?><form method="post" style="display:inline" onsubmit="return confirm('Zukaufpreis löschen?');"><input type="hidden" name="aktion" value="zk_preis_del"><input type="hidden" name="preis_id" value="<?= $s['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form><?php endif; ?></td></tr><?php endforeach; ?>
+      </tbody></table></div>
+      <?php if ($z['doks']): ?><div style="font-size:12px;margin-top:4px">Dokumente: <?= implode(' · ', array_map(fn($d) => '<a href="?p=dokument&id=' . (int)$d['id'] . '" target="_blank">' . h(strtoupper((string)$d['typ']) . ' ' . $d['datei_orig']) . '</a>', $z['doks'])) ?></div><?php endif; ?>
+    </div>
+  <?php endforeach; ?>
+</div>
+<?php if ($darf): ?>
+<dialog id="dlgZk" class="bx-dialog">
+  <?= $dlgKopf('Zukaufpreis hinzufügen', 'dlgZk') ?>
+  <form method="post" style="margin:0"><input type="hidden" name="aktion" value="zk_preis_add">
+    <?= $fld('Lieferant', '<select name="zk_lieferant"' . $rscombo($lieferanten) . ' style="width:100%">' . $optListe($lieferanten, 0, '– Freitext unten –', fn($r) => (string)$r['firma']) . '</select>') ?>
+    <?= $fld('oder Name (Freitext)', '<input type="text" name="zk_lieferant_name" placeholder="z. B. Wellgreen">') ?>
+    <div class="bx-row" style="gap:8px;flex-wrap:wrap">
+      <div class="bx-field" style="margin:0;width:110px"><label>ab Menge</label><input type="text" inputmode="numeric" name="zk_menge_ab" value="0"></div>
+      <div class="bx-field" style="margin:0;width:110px"><label>Preis (€)</label><input type="text" inputmode="decimal" name="zk_preis" required placeholder="0,0228"></div>
+      <div class="bx-field" style="margin:0;width:150px"><label>je</label><select name="zk_einheit"><option value="kapsel"<?= $istHandel ? '' : ' selected' ?>>Kapsel / Stk (lose)</option><option value="packung"<?= $istHandel ? ' selected' : '' ?>>Packung (fertige Ware)</option><option value="kg">kg (Mischung/Pulver)</option></select></div>
+      <div class="bx-field" style="margin:0;width:110px"><label>Incoterm</label><select name="zk_incoterm"><option value="">–</option><?php foreach (incoterm_liste() as $k => $lbl): ?><option value="<?= $k ?>"><?= h($k) ?></option><?php endforeach; ?></select></div>
+      <div class="bx-field" style="margin:0;width:120px"><label>Versand</label><select name="zk_versandart"><option value="">–</option><?php foreach (versandart_liste() as $k => $lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+    </div>
+    <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
+  </form>
+</dialog>
+<?php endif; ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Rohstoffe der Rezeptur <span class="muted" style="font-weight:400;font-size:14px">für Eigenproduktion</span></h2>
+  <?php if (!$bs['rohstoffe']): ?><p class="muted">Keine Rezeptur-Zutaten.</p><?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Rohstoff</th><th class="bx-num">Bedarf je Pkg</th><th>Lieferanten (Preis ab Menge)</th><th class="bx-num">Lager frei</th></tr></thead><tbody>
+  <?php foreach ($bs['rohstoffe'] as $r): $mgP = $schuett ? 0 : (float)$r['menge_mg'] * $einh; ?>
+    <tr><td><a href="?p=rohstoff&id=<?= (int)$r['item_id'] ?>"><?= h((string)$r['name']) ?></a></td>
+      <td class="bx-num"><?= $schuett ? '<span class="muted">anteilig</span>' : number_format($mgP / 1000, 1, ',', '.') . ' g' ?></td>
+      <td style="white-space:normal"><?php if (!$r['preise']): ?><span style="color:var(--warn)">kein Lieferantenpreis</span><?= (float)$r['ek_preis'] > 0 ? ' <span class="muted">· EK am Rohstoff ' . $eur((float)$r['ek_preis']) . '/' . h((string)$r['bezug']) . '</span>' : '' ?>
+        <?php else: $j = 0; foreach ($r['preise'] as $pr): if ($j++ >= 4) break; ?><div><?= h((string)($pr['firma'] ?: 'ohne Namen')) ?> · <?= $eur((float)$pr['preis']) ?>/<?= h((string)$r['bezug']) ?><?= (float)$pr['menge_ab'] > 0 ? ' ab ' . $nf0($pr['menge_ab']) : '' ?><?= $j === 1 ? ' ' . bx_badge('günstigster', 'ok') : '' ?></div><?php endforeach; endif; ?></td>
+      <td class="bx-num"><?= $nf0($r['bestand']) ?> <?= h((string)($r['einheit'] ?: 'g')) ?></td></tr>
+  <?php endforeach; ?>
+  </tbody></table></div>
+  <?php endif; ?>
+</div>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Verpackung</h2>
+  <?php if (!$bs['verpackung']): ?><p class="muted">Keine Verpackung am Produkt.</p><?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Teil</th><th>Artikel</th><th>Lieferant</th><th class="bx-num">EK bei <?= $nf0($km) ?></th><th class="bx-num">Lager frei</th><th class="bx-num">unterwegs</th></tr></thead><tbody>
+  <?php foreach ($bs['verpackung'] as $v): ?><tr><td><?= h($v['rolle']) ?></td><td><a href="?p=verpackung&id=<?= (int)$v['item']['id'] ?>"><?= h((string)$v['item']['name']) ?></a></td>
+    <td><?= !empty($v['item']['firma']) ? h((string)$v['item']['firma']) : '<span class="muted">–</span>' ?></td><td class="bx-num"><?= $v['ek'] > 0 ? $eur($v['ek']) : $fehlt('Preis fehlt') ?></td>
+    <td class="bx-num"><?= $nf0($v['bestand']) ?> Stk</td><td class="bx-num"><?= $nf0($v['unterwegs']) ?> Stk</td></tr><?php endforeach; ?>
+  </tbody></table></div>
+  <?php endif; ?>
+</div>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Letzte Bestellungen <span class="muted" style="font-weight:400;font-size:14px">zu diesem Produkt und seinen Rohstoffen/Verpackungen</span></h2>
+  <?php if (!$bs['bestellungen']): ?><p class="muted">Noch keine Bestellungen.</p><?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Bestellung</th><th>Was</th><th>Lieferant</th><th class="bx-num">Menge</th><th class="bx-num">Preis</th><th>Datum</th><th>Status</th></tr></thead><tbody>
+  <?php foreach ($bs['bestellungen'] as $b): $dt = $b['bestelldatum'] ?: $b['angelegt']; ?><tr><td><a href="?p=bestellung&id=<?= (int)$b['id'] ?>"><?= h((string)($b['nummer'] ?: '#' . $b['id'])) ?></a></td><td><?= h((string)$b['was']) ?></td><td><?= h((string)$b['lieferant']) ?: '–' ?></td>
+    <td class="bx-num"><?= number_format((float)$b['menge'], (float)$b['menge'] == floor((float)$b['menge']) ? 0 : 2, ',', '.') ?> <?= h((string)$b['einheit']) ?></td><td class="bx-num"><?= (float)$b['ek_preis'] > 0 ? $eur((float)$b['ek_preis']) : '–' ?></td>
+    <td><?= $dt ? h(date('d.m.Y', strtotime((string)$dt))) : '–' ?></td><td><?php $stu = bestellung_stufe($b); echo bx_badge((string)$stu['label'], (string)$stu['kind']); ?></td></tr><?php endforeach; ?>
+  </tbody></table></div>
+  <?php endif; ?>
+</div>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Preisanfragen</h2>
+  <?php if (!$bs['anfragen']): ?><p class="muted">Keine Preisanfragen zu diesem Produkt oder seinen Rohstoffen.</p><?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Anfrage</th><th>Was</th><th>Lieferant</th><th>Status</th><th>Antwort</th><th>Datum</th></tr></thead><tbody>
+  <?php foreach ($bs['anfragen'] as $a): ?><tr><td><a href="?p=lief_anfrage_detail&id=<?= (int)$a['id'] ?>"><?= h((string)($a['nummer'] ?: '#' . $a['id'])) ?></a></td>
+    <td><?= $a['item'] !== '' ? h((string)$a['item']) : 'Fertigprodukt' ?></td><td><?= h((string)$a['firma']) ?></td><td><?= h((string)$a['status']) ?></td>
+    <td><?= $a['ang_preis'] !== null ? $eur((float)$a['ang_preis']) . '/' . h((string)$a['ang_einheit']) . ($a['ang_mm'] ? ' · ab ' . $nf0($a['ang_mm']) : '') . ($a['ang_lz'] ? ' · ' . (int)$a['ang_lz'] . ' Tage' : '') : '<span class="muted">offen</span>' ?></td>
+    <td><?= h(fmt_zeit((string)$a['angelegt'], 'd.m.Y')) ?></td></tr><?php endforeach; ?>
+  </tbody></table></div>
+  <?php endif; ?>
+</div>
+</div>
+<?php endif;
+
+// ===================================================================== Reiter Produktion
+$etAuto = (empty($p['etikett_id']) && !empty($p['verpackung_id'])) ? etikett_id_fuer_behaelter((int)$p['verpackung_id']) : 0;
+$etb = etikett_bestand_info($pid);
+$weg = ['abfuellen' => (int)($p['weg_abfuellen'] ?? 1), 'etikettieren' => (int)($p['weg_etikettieren'] ?? 1), 'beipack' => (int)($p['weg_beipack'] ?? 0), 'karton' => (int)($p['weg_karton'] ?? 0)];
+$kartons = $verpListe('karton'); $beipacks = $verpListe('beipack'); $etiketten = $verpListe('etikett', $pid); ?>
+<div<?= $panel('produktion') ?>>
+<form method="post" class="bx-form bx-panel">
+  <input type="hidden" name="aktion" value="kachel"><input type="hidden" name="feld" value="produktion">
+  <h2 style="margin-top:0">Stückliste</h2>
+  <div class="bx-grid">
+    <div class="bx-field"><label>Umkarton</label><select name="karton_id"<?= $rscombo($kartons) ?>><?= $optListe($kartons, (int)($p['karton_id'] ?? 0)) ?></select></div>
+    <div class="bx-field"><label>Packungen je Umkarton</label><input type="text" inputmode="numeric" name="karton_inhalt" value="<?= h((string)($p['karton_inhalt'] ?? '')) ?>" placeholder="z. B. 48"></div>
+    <div class="bx-field"><label>Beipackzettel</label><select name="beipack_id"<?= $rscombo($beipacks) ?>><?= $optListe($beipacks, (int)($p['beipack_id'] ?? 0)) ?></select></div>
+    <div class="bx-field"><label>Etikett <?= bx_hint('Leer = automatisch aus dem Glas. Nur füllen, wenn ein abweichendes Etikett gewünscht ist. Kundenetiketten (Design je Kunde) stehen im Reiter Kunden.') ?></label>
+      <select name="etikett_id"<?= $rscombo($etiketten) ?>><?= $optListe($etiketten, (int)($p['etikett_id'] ?? 0), $etAuto ? '– automatisch aus dem Glas –' : '– keines –') ?></select>
+      <?php if ($etAuto): ?><div class="muted" style="font-size:12px;margin-top:4px">automatisch aus dem Glas: <?= h($itemName($etAuto)) ?></div><?php endif; ?></div>
+  </div>
+  <?php if ($etb['hat_etikett']): ?><div class="muted" style="font-size:13px;margin:4px 0 8px">Kundenetiketten gesamt: im Lager <?= $nf0($etb['physisch']) ?> Stk · Bedarf offene Aufträge <?= $nf0($etb['kunde_rest']) ?> Stk<?= $etb['physisch'] < $etb['kunde_rest'] ? ' · <span style="color:var(--warn)">fehlen ' . $nf0($etb['kunde_rest'] - $etb['physisch']) . ' Stk</span>' : '' ?> (je Kunde im Reiter Kunden)</div><?php endif; ?>
+  <?php if (has_role('admin')): ?>
+  <h2>Standard-Produktionsweg <?= bx_hint('Welche Ausbaustufen beim Anlegen eines Produktionsauftrags gesetzt werden. Nur der Startzustand – je Auftrag im Produktions-Programm überschreibbar. Nur Admin.') ?></h2>
+  <div class="bx-row" style="gap:18px;flex-wrap:wrap">
+    <?php foreach (['abfuellen' => 'Abfüllen / Verpacken', 'etikettieren' => 'Etikettieren', 'beipack' => 'Beipackzettel beilegen', 'karton' => 'Umkarton / Umverpackung'] as $wk => $wl): ?>
+      <label class="bx-check" style="margin:0"><input type="checkbox" name="weg_<?= $wk ?>" value="1"<?= $weg[$wk] ? ' checked' : '' ?>> <?= h($wl) ?></label>
+    <?php endforeach; ?>
+  </div>
+  <?php else: ?><div class="muted" style="font-size:13px">Standard-Produktionsweg: <?= h(implode(' · ', array_keys(array_filter($weg)))) ?: '–' ?> (ändert nur Admin)</div><?php endif; ?>
+  <div class="bx-field" style="margin-top:12px"><label>Notiz</label><textarea name="notiz" rows="2"><?= h((string)($p['notiz'] ?? '')) ?></textarea></div>
+  <?php if ($darf): ?><button class="btn btn-primary btn-sm" type="submit">Speichern</button><?php endif; ?>
+</form>
+</div>
+<?php
+// ===================================================================== Reiter Kalkulation
+if (!$istExtern):
+    $wegKeys = array_keys($kalk['wege']);
+    $matrix = all("SELECT pp.*, i.name AS verp FROM produkt_preis pp JOIN item i ON i.id=pp.verpackung_id WHERE pp.produkt_id=? ORDER BY pp.stueck, i.name, pp.bestellmenge", [$pid]);
+    $matrixMengen = array_values(array_unique(array_map(fn($r) => (int)$r['bestellmenge'], $matrix))); sort($matrixMengen);
+    $matrixGrid = [];
+    foreach ($matrix as $r) { $key = $r['stueck'] . '|' . $r['verp']; $matrixGrid[$key]['stueck'] = (int)$r['stueck']; $matrixGrid[$key]['verp'] = $r['verp']; $matrixGrid[$key]['cells'][(int)$r['bestellmenge']] = ['ek' => (float)$r['ek_preis'], 'vk' => (float)$r['vk_preis']]; }
+    $zelle = fn($z) => $z === null ? '<span class="muted">–</span>' : ($z['preis'] === null ? '<span style="color:var(--warn)">Preis fehlt</span>' : $eur($z['preis'])); ?>
+<div<?= $panel('kalkulation') ?>>
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Kosten je Packung</h2>
+    <form method="get" class="bx-row" style="gap:6px;align-items:center;margin:0"><input type="hidden" name="p" value="produkt"><input type="hidden" name="id" value="<?= $pid ?>"><input type="hidden" name="tab" value="kalkulation">
+      <span class="muted" style="font-size:13px">Menge</span>
+      <?php foreach ([1000, 3000, 10000] as $mm): ?><a class="btn btn-<?= $km === $mm ? 'primary' : 'ghost' ?> btn-sm" href="?p=produkt&id=<?= $pid ?>&tab=kalkulation&km=<?= $mm ?>"><?= $nf0($mm) ?></a><?php endforeach; ?>
+      <input type="text" inputmode="numeric" name="km" value="<?= in_array($km, [1000, 3000, 10000], true) ? '' : h($nf0($km)) ?>" placeholder="andere" style="width:90px"><button class="btn btn-ghost btn-sm" type="submit">rechnen</button> <span class="muted" style="font-size:13px">Pkg</span></form>
+  </div>
+  <?php foreach ($kalk['hinweise'] as $hw): ?><div class="badge-warn" style="padding:8px 12px;margin-top:10px"><?= h($hw) ?></div><?php endforeach; ?>
+  <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table pr-kalk">
+    <thead><tr><th>Zeile</th><?php foreach ($kalk['wege'] as $wk => $w): ?><th class="bx-num"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>><?= h($w['label']) ?><?= $wk === $kalk['standard'] ? '<div class="muted" style="font-size:11px;font-weight:400">Standard · ' . h($kalk['standard_quelle']) . '</div>' : '' ?></th><?php endforeach; ?></tr></thead>
+    <tbody>
+      <tr><td>Inhalt</td><?php foreach ($kalk['wege'] as $wk => $w): $s = 0.0; $voll = true; foreach ($w['inhalt'] as $z) { if (in_array($z['text'], ['Leerkapseln', 'Presshilfsstoffe', 'Gummi-Grundmasse', 'Trägerflüssigkeit', 'Gel-Grundmasse'], true)) continue; if ($z['preis'] === null) $voll = false; else $s += $z['preis']; } ?>
+        <td class="bx-num"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>><?= !$voll && $s <= 0 ? '<span style="color:var(--warn)">Preis fehlt</span>' : $eur($s) . (!$voll ? '<div style="color:var(--warn);font-size:11px">teils Preis fehlt</div>' : '') ?>
+          <div class="muted" style="font-size:11px;white-space:normal;max-width:260px;margin-left:auto"><?= h($wk === 'rohstoffe' ? count(array_filter($w['inhalt'], fn($z) => !in_array($z['text'], ['Leerkapseln', 'Presshilfsstoffe', 'Gummi-Grundmasse', 'Trägerflüssigkeit', 'Gel-Grundmasse'], true))) . ' Rohstoffe – Aufstellung unten' : (string)($w['inhalt'][0]['detail'] ?? '')) ?></div></td><?php endforeach; ?></tr>
+      <?php $zus = ['Leerkapseln', 'Presshilfsstoffe', 'Gummi-Grundmasse', 'Trägerflüssigkeit', 'Gel-Grundmasse'];
+        foreach ($zus as $zn): $hat = false; foreach ($kalk['wege'] as $w) foreach ($w['inhalt'] as $z) if ($z['text'] === $zn) $hat = true; if (!$hat) continue; ?>
+        <tr><td><?= h($zn) ?></td><?php foreach ($kalk['wege'] as $wk => $w): $zz = null; foreach ($w['inhalt'] as $z) if ($z['text'] === $zn) $zz = $z; ?>
+          <td class="bx-num"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>><?= $zz ? $zelle($zz) : '<span class="muted">im Preis enthalten</span>' ?></td><?php endforeach; ?></tr>
+      <?php endforeach; ?>
+      <?php foreach ($kalk['verpackung'] as $v): ?>
+        <tr><td><?= h($v['text']) ?> <span class="muted" style="font-size:12px"><?= $v['link'] ? '<a href="' . h($v['link']) . '">' . h($v['detail']) . '</a>' : h($v['detail']) ?></span></td>
+          <?php foreach ($wegKeys as $wk): ?><td class="bx-num"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>><?= !empty($v['leer']) ? '<span class="muted">–</span>' : $zelle($v) ?></td><?php endforeach; ?></tr>
+      <?php endforeach; ?>
+      <tr><td>Herstellung <span class="muted" style="font-size:12px">kein Satz hinterlegt – nicht gerechnet</span></td><?php foreach ($wegKeys as $wk): ?><td class="bx-num muted"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>>–</td><?php endforeach; ?></tr>
+      <tr style="font-weight:600"><td>Summe je Packung</td><?php foreach ($kalk['wege'] as $wk => $w): ?><td class="bx-num"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>><?= $w['inhalt_summe'] > 0 ? $eur2($w['summe']) : '–' ?><?= !$w['vollstaendig'] ? '<div style="color:var(--warn);font-size:11px;font-weight:400">unvollständig</div>' : '' ?></td><?php endforeach; ?></tr>
+    </tbody>
+  </table></div>
+  <p class="muted" style="font-size:12px;margin-top:8px">Staffel nach Menge wie im Auftrag: je Lieferant die größte Staffel, deren Mindestmenge bei <?= $nf0($km) ?> Pkg erreicht ist; darunter gilt die kleinste Staffel (Hinweis Mindestmenge). Fehlt ein Preis, wird nicht mit 0 gerechnet – die Summe ist dann unvollständig. Bisher zeigte die Seite nur Rohstoff-EK am Rohstoff + EK aller Stücklisten-Artikel (ohne Zukauf, ohne Staffel).</p>
+  <?php if (!empty($kalk['wege']['rohstoffe'])): ?>
+  <details style="margin-top:8px"><summary style="cursor:pointer">Einzelrohstoffe im Detail</summary>
+    <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table"><thead><tr><th>Rohstoff</th><th>Menge · Preis</th><th class="bx-num">je Pkg</th></tr></thead><tbody>
+    <?php foreach ($kalk['wege']['rohstoffe']['inhalt'] as $z): ?><tr><td><?= $z['link'] ? '<a href="' . h($z['link']) . '">' . h($z['text']) . '</a>' : h($z['text']) ?></td><td class="muted"><?= h($z['detail']) ?></td><td class="bx-num"><?= $zelle($z) ?></td></tr><?php endforeach; ?>
+    </tbody></table></div></details>
+  <?php endif; ?>
+</div>
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:center">
+    <h2 style="margin:0">Preis-Matrix <?= bx_hint('VK-Kalkulation: Packungsgröße × passende Verpackung × Bestellmenge, VK = EK × Marge je Typ, ohne Kundenrabatt. Interne Sale-Auskunft.') ?></h2>
+    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="matrix"><button class="btn btn-primary btn-sm" type="submit">Matrix neu berechnen</button></form>
+  </div>
+  <?php if (!$matrix): ?><p class="muted">Noch keine Matrix. „Matrix neu berechnen" erzeugt alle Kombinationen (Rezeptur + hinterlegte Behälter-Fassung).</p>
+  <?php else: ?>
+    <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table"><thead><tr><th>Größe</th><th>Verpackung</th><?php foreach ($matrixMengen as $mn): ?><th class="bx-num"><?= $nf0($mn) ?> Stk</th><?php endforeach; ?></tr></thead><tbody>
+    <?php foreach ($matrixGrid as $row): ?><tr><td><?= h(form_groessen_label($pForm, (float)$row['stueck'])) ?></td><td><?= h((string)$row['verp']) ?></td>
+      <?php foreach ($matrixMengen as $mn): $c = $row['cells'][$mn] ?? null; ?><td class="bx-num"><?php if ($c): ?><?= $eur2($c['vk']) ?><div class="muted" style="font-size:11px">EK <?= $eur2($c['ek']) ?></div><?php else: ?><span class="muted">–</span><?php endif; ?></td><?php endforeach; ?></tr><?php endforeach; ?>
+    </tbody></table></div>
+    <div class="muted" style="margin-top:8px;font-size:12px">VK je Packung (Basis, ohne Kundenrabatt). Stand: <?= h(fmt_zeit($matrix[0]['stand'])) ?>.</div>
+  <?php endif; ?>
+</div>
+</div>
+<?php endif;
+
+// ===================================================================== Reiter Dokumente
+require_once BX_ROOT . '/core/pdf_pib.php';
+$pibDok = pib_datei($pid);
+$lieferantenDok = $lieferanten ?? all("SELECT id, firma FROM lieferanten WHERE gesperrt=0 ORDER BY firma");
+$specDocs = all("SELECT id, typ, datei_orig, ki_daten, angelegt FROM dokument WHERE objekt_typ='produkt' AND objekt_id=? AND typ IN ('spec','coa','analyse') AND ki_daten IS NOT NULL ORDER BY id DESC", [$pid]); ?>
+<div<?= $panel('dokumente') ?>>
+<div id="dok">
+  <?php if (!ki_bereit()): ?><div class="muted" style="font-size:12px;margin:0 0 8px">Spec/CoA/Laboranalyse werden nach dem Hochladen von der KI ausgelesen (nur auf beta). Hochladen geht überall.</div><?php endif; ?>
+  <?php dokument_panel('produkt', $pid, $lieferantenDok); ?>
+</div>
+<?php if ($specDocs): ?>
+<div class="bx-panel">
+  <h2 style="margin-top:0">Von der KI ausgelesen</h2>
+  <?php foreach ($specDocs as $d): $vor = json_decode((string)$d['ki_daten'], true); if (!is_array($vor)) continue; $stamm = (array)($vor['stamm'] ?? []); $charge = (array)($vor['charge'] ?? []); $werte = (array)($vor['werte'] ?? []); ?>
+    <div class="bx-panel" style="background:var(--panel-2);margin-top:10px">
+      <div class="bx-row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div><?= h(strtoupper((string)$d['typ'])) ?> · <a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h((string)$d['datei_orig']) ?></a></div><span class="muted" style="font-size:12px"><?= h(fmt_zeit((string)$d['angelegt'])) ?></span></div>
+      <div class="bx-grid" style="margin-top:8px;font-size:13px">
+        <?php foreach (['haltbarkeit' => 'Haltbarkeit', 'allergene' => 'Allergene', 'zertifikate' => 'Zertifikate', 'lagerbedingungen' => 'Lagerung'] as $k => $lbl) if (!empty($stamm[$k])) echo '<div><span class="muted">' . $lbl . ':</span> ' . h((string)$stamm[$k]) . '</div>'; ?>
+        <?php foreach (['charge_nr' => 'Charge', 'mhd' => 'MHD', 'herstelldatum' => 'Herstelldatum', 'menge' => 'Menge'] as $k => $lbl) if (!empty($charge[$k])) echo '<div><span class="muted">' . $lbl . ':</span> ' . h((string)$charge[$k]) . '</div>'; ?>
+      </div>
+      <?php if ($werte): ?><details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px"><?= count($werte) ?> Analysewerte</summary><div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Parameter</th><th>Spezifikation</th><th>Ergebnis</th></tr></thead><tbody>
+        <?php foreach (array_slice($werte, 0, 40) as $w): ?><tr><td><?= h((string)($w['parameter'] ?? '')) ?></td><td><?= h((string)($w['spezifikation'] ?? '')) ?></td><td><?= h((string)($w['ergebnis'] ?? '')) ?></td></tr><?php endforeach; ?>
+      </tbody></table></div></details><?php endif; ?>
+      <?php if ($d['typ'] === 'spec' && (!empty($stamm['haltbarkeit']) || !empty($stamm['allergene']))): ?>
+        <form method="post" style="margin-top:10px"><input type="hidden" name="aktion" value="spec_uebernehmen"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">Haltbarkeit/Allergene ins Produkt übernehmen</button></form>
       <?php endif; ?>
     </div>
-  <?php endforeach; endif; ?>
+  <?php endforeach; ?>
 </div>
-<div id="dok" data-ppanel="dokumente"><?php dokument_panel('produkt', (int)$id, $lieferanten); ?></div>
 <?php endif; ?>
-
-<script>
-var REZEPTE = <?= json_encode($REZEPTE, JSON_UNESCAPED_UNICODE) ?>;
-var VERP = <?= json_encode($VERP, JSON_UNESCAPED_UNICODE) ?>;
-var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
-var TAB_HILFSSTOFF = <?= json_encode(tablette_hilfsstoff_prozent()) ?>;   // Presshilfsstoffe % oben auf das Wirkstoffgewicht (Tablette)
-var GUMMI_GEWICHT = <?= json_encode(gummi_gewicht_mg()) ?>;   // Fertiggewicht je Gummi (mg)
-var SLOTS = ['verpackung_id','verschluss_id','etikett_id','karton_id','beipack_id'];
-function nf(x,d){ return x.toLocaleString('de-DE',{minimumFractionDigits:d,maximumFractionDigits:d}); }
-function getVerp(id){ var el=document.getElementById(id); return (el&&el.value)?VERP[el.value]:null; }
-
-// Verpackungs-Prüfung der Primärverpackung – je Darreichungsform über die richtige Kennzahl.
-function verpCheck(rz, vp, einh, kV, vh){
-  function set(t,c,hint){ kV.textContent=t; kV.style.color=c||''; vh.innerHTML=hint||''; }
-  if (!einh){ set('–','',''); return; }
-  var form = rz.form;
-  if (form==='kapsel' || form==='softgel'){
-    if (!rz.weight){ set('–','',''); return; }
-    var kg=null;
-    // Am Rezept gewählte Kapselgröße hat Vorrang, sonst kleinste passende nach Füllgewicht.
-    if (rz.kapselgroesse_id){ for (var j=0;j<KAPSELN.length;j++){ if ((+KAPSELN[j].id)===(+rz.kapselgroesse_id)){ kg=KAPSELN[j]; break; } } }
-    if (!kg){ for (var i=0;i<KAPSELN.length;i++){ if ((+KAPSELN[i].fuellmenge_mg)>=rz.weight){ kg=KAPSELN[i]; break; } } }
-    if (!kg){ set('aufteilen','var(--err)','Rezeptur '+nf(rz.weight,0)+' mg passt in keine Kapsel – auf mehrere Kapseln aufteilen.'); return; }
-    if (!vp){ set('– keine –','','Kapselgröße '+kg.name+' · '+einh+' Kapseln. Bitte Primärverpackung wählen.'); return; }
-    var cap = vp.kap ? vp.kap[kg.id] : null;
-    if (cap===undefined||cap===null||cap===0){ set('keine Fassung','var(--warn)','Für '+kg.name+' ist an dieser Verpackung keine Kapselzahl hinterlegt (Verpackung → Reiter „Kapsel-Fassung").'); return; }
-    if (cap>=einh){ set('passt','var(--gruen)',einh+' von max. '+cap+' Kapseln ('+kg.name+').'); return; }
-    var pa=[]; for (var k in VERP){ var a=VERP[k]; if (a.rolle==='primaer'&&a.kap&&a.kap[kg.id]>=einh) pa.push(a.name+' ('+a.kap[kg.id]+')'); }
-    set('zu klein','var(--err)','Fasst nur '+cap+' Kapseln, gebraucht '+einh+' ('+kg.name+'). '+(pa.length?'Passend: '+pa.join(', '):'Keine passende Verpackung hinterlegt.'));
-    return;
-  }
-  if (form==='pulver' || form==='granulat' || form==='stick'){
-    if (form==='stick' && !rz.weight){ set('–','',''); return; }
-    var g = form==='stick' ? rz.weight*einh/1000 : einh;   // Pulver/Granulat: Füllmenge in g je Packung (Nico 03.11.2026)
-    if (!vp){ set('– keine –','','Füllgewicht je Packung: '+nf(g,1)+' g. Bitte Verpackung wählen.'); return; }
-    if (vp.max_g===null||vp.max_g===undefined){ set('kein Füllgewicht','var(--warn)','Verpackung hat kein max. Füllgewicht hinterlegt (benötigt: '+nf(g,1)+' g).'); return; }
-    if (g<=vp.max_g){ set('passt','var(--gruen)',nf(g,1)+' g von max. '+nf(vp.max_g,0)+' g.'); return; }
-    var pb=[]; for (var kk in VERP){ var b=VERP[kk]; if (b.rolle==='primaer'&&b.max_g!==null&&b.max_g!==undefined&&b.max_g>=g) pb.push(b.name+' ('+nf(b.max_g,0)+' g)'); }
-    set('zu klein','var(--err)','Füllgewicht '+nf(g,1)+' g übersteigt max. '+nf(vp.max_g,0)+' g. '+(pb.length?'Passend: '+pb.join(', '):'Keine passende Verpackung hinterlegt.'));
-    return;
-  }
-  if (form==='tablette'){
-    // Tablettengewicht = Wirkstoffe + Presshilfsstoffe; geprüft wird wie bei Pulver gegen das max. Füllgewicht.
-    if (!rz.weight){ set('–','',''); return; }
-    var tg = rz.weight*(1+TAB_HILFSSTOFF/100)*einh/1000;
-    if (!vp){ set('– keine –','','Füllgewicht je Packung: '+nf(tg,1)+' g ('+einh+' Tabletten). Bitte Verpackung wählen.'); return; }
-    if (vp.max_g===null||vp.max_g===undefined){ set('kein Füllgewicht','var(--warn)','Verpackung hat kein max. Füllgewicht hinterlegt (benötigt: '+nf(tg,1)+' g).'); return; }
-    if (tg<=vp.max_g){ set('passt','var(--gruen)',nf(tg,1)+' g von max. '+nf(vp.max_g,0)+' g ('+einh+' Tabletten inkl. Presshilfsstoffe).'); return; }
-    var pt=[]; for (var mm in VERP){ var t=VERP[mm]; if (t.rolle==='primaer'&&t.max_g!==null&&t.max_g!==undefined&&t.max_g>=tg) pt.push(t.name+' ('+nf(t.max_g,0)+' g)'); }
-    set('zu klein','var(--err)','Füllgewicht '+nf(tg,1)+' g übersteigt max. '+nf(vp.max_g,0)+' g. '+(pt.length?'Passend: '+pt.join(', '):'Keine passende Verpackung hinterlegt.'));
-    return;
-  }
-  if (form==='gummi'){
-    // Gummi: Fertiggewicht je Gummi × Anzahl gegen das max. Füllgewicht.
-    var gg = Math.max(GUMMI_GEWICHT, rz.weight||0)*einh/1000;
-    if (!vp){ set('– keine –','','Füllgewicht je Packung: '+nf(gg,1)+' g ('+einh+' Gummis). Bitte Verpackung wählen.'); return; }
-    if (vp.max_g===null||vp.max_g===undefined){ set('kein Füllgewicht','var(--warn)','Verpackung hat kein max. Füllgewicht hinterlegt (benötigt: '+nf(gg,1)+' g).'); return; }
-    if (gg<=vp.max_g){ set('passt','var(--gruen)',nf(gg,1)+' g von max. '+nf(vp.max_g,0)+' g ('+einh+' Gummis).'); return; }
-    set('zu klein','var(--err)','Füllgewicht '+nf(gg,1)+' g übersteigt max. '+nf(vp.max_g,0)+' g.');
-    return;
-  }
-  if (form==='fluessig' || form==='gel'){
-    var ml=einh;
-    if (!vp){ set('– keine –','','Füllvolumen: '+nf(ml,0)+' ml. Bitte Gebinde wählen.'); return; }
-    if (vp.vol===null||vp.vol===undefined){ set('kein Volumen','var(--warn)','Verpackung hat kein Volumen hinterlegt (benötigt: '+nf(ml,0)+' ml).'); return; }
-    if (ml<=vp.vol){ set('passt','var(--gruen)',nf(ml,0)+' ml von '+nf(vp.vol,0)+' ml.'); return; }
-    set('zu klein','var(--err)','Füllvolumen '+nf(ml,0)+' ml übersteigt '+nf(vp.vol,0)+' ml.');
-    return;
-  }
-  set(vp?'ok':'– keine –','','');
-}
-
-function recalc(){
-  var rz = REZEPTE[document.getElementById('rezeptur').value];
-  // "Einheiten je Packung"-Label an die Darreichungsform der gewählten Rezeptur anpassen (ml/g/Stück).
-  (function(){ var lbl=document.getElementById('einhLabel'); if(!lbl) return; var f=rz?rz.form:'';
-    lbl.textContent = (f==='fluessig'||f==='oel'||f==='gel') ? 'Inhalt je Packung (ml)'
-      : ((f==='pulver'||f==='granulat') ? 'Füllmenge je Packung (g)'
-      : (f==='tablette' ? 'Tabletten je Packung' : 'Einheiten je Packung')); })();
-  var vp = getVerp('verpackung_id');
-  var einh = parseFloat((document.getElementById('einheiten').value||'').replace(',','.'))||0;
-  var intake = parseFloat((document.getElementById('intake').value||'').replace(',','.'))||0;
-  var kK=document.getElementById('k_kosten'), kR=document.getElementById('k_reichweite'), kG=document.getElementById('k_gewicht'), tb=document.getElementById('deklaration');
-  var kV=document.getElementById('k_verp'), vh=document.getElementById('verp_hinweis');
-  // Pulver/Granulat (Nico 03.11.2026): die Rezeptur IST die Tagesdosis, die Packung hat g. Kein „Verzehr je Tag",
-  // gerechnet wird nach Gewicht; „≈ N Tagesdosen je Packung" ist nur Info.
-  var pulv = !!rz && (rz.form==='pulver' || rz.form==='granulat');
-  var tdG = (pulv && rz.weight) ? nf(rz.weight/1000, (rz.weight%1000)?1:0)+' g' : '';
-  var tdN = (pulv && rz.weight && einh) ? Math.floor(einh*1000/rz.weight+1e-9) : 0;
-  if (pulv) intake = 1;
-  document.getElementById('intakeFeld').style.display = pulv ? 'none' : '';
-  document.getElementById('tdFeld').style.display = pulv ? '' : 'none';
-  document.getElementById('tdInfo').textContent = pulv ? ((tdG ? tdG+' (= Rezeptur)' : '–')+(tdN ? ' · ≈ '+nf(tdN,0)+' Tagesdosen je Packung' : '')) : '';
-  document.getElementById('k_gewicht_lbl').textContent = pulv ? 'Tagesdosis' : 'Gewicht / Einheit';
-  document.getElementById('k_reichweite_lbl').textContent = pulv ? 'Tagesdosen je Packung' : 'Reichweite';
-  document.getElementById('intakeLabel').textContent = pulv ? (tdG ? '(1 Tagesdosis = '+tdG+')' : '') : (intake ? '(bei '+nf(intake,intake%1?1:0)+' Einheiten/Tag)' : '');
-  // EK der ganzen Stückliste (alle Slots)
-  var ekVerp=0; SLOTS.forEach(function(id){ var s=getVerp(id); if(s) ekVerp+=s.ek; });
-  if (!rz){ kK.textContent='–'; kR.textContent='–'; kG.textContent='–'; kV.textContent='–'; kV.style.color=''; vh.textContent=''; tb.innerHTML='<tr><td colspan="3" class="muted">Rezeptur wählen …</td></tr>'; return; }
-  // Pulver: Kosten nach Gewicht = Kosten je g (Rezeptur-Kosten ÷ Rezeptur-Gewicht) × g je Packung.
-  var costPack = (pulv ? (rz.weight ? rz.cost/(rz.weight/1000)*einh : 0) : rz.cost*einh) + ekVerp;
-  kK.textContent = einh ? nf(costPack,2)+' €' : '–';
-  kR.textContent = pulv ? (tdN ? '≈ '+nf(tdN,0) : '–') : ((einh && intake) ? nf(einh/intake,0)+' Tage' : '–');
-  kG.textContent = rz.weight ? (pulv ? tdG : nf(rz.weight,0)+' mg') : '–';
-  verpCheck(rz, vp, einh, kV, vh);
-  if (!rz.nutrients.length){ tb.innerHTML='<tr><td colspan="3" class="muted">Diese Rezeptur hat keine deklarierbaren Wirkstoffe.</td></tr>'; return; }
-  tb.innerHTML = rz.nutrients.map(function(n){
-    var mgDay = n.mg * intake;
-    var lbl = (n.anzeige && n.anzeige!=='') ? n.anzeige : n.einheit;
-    var betrag = n.einheit==='µg' ? nf(mgDay*1000,1)+' '+lbl : nf(mgDay,1)+' '+lbl;
-    if (n.ie_mg && n.ie_mg>0) betrag += ' ('+nf(mgDay/n.ie_mg,0)+' I.E.)';
-    var pct = '<span class="muted">keine NRV</span>';
-    if (n.nrv!==null && n.nrv!==undefined) { var nrvMg = n.einheit==='µg'?parseFloat(n.nrv)/1000:parseFloat(n.nrv); if (nrvMg>0) pct = nf(mgDay/nrvMg*100,0)+' %'; }
-    return '<tr><td>'+n.name+'</td><td class="bx-num">'+betrag+'</td><td class="bx-num">'+pct+'</td></tr>';
-  }).join('');
-}
-['rezeptur','einheiten','intake'].concat(SLOTS).forEach(function(idn){
-  var el=document.getElementById(idn); if(el){ el.addEventListener('change',recalc); el.addEventListener('input',recalc); }
-});
-recalc();
-</script>
-<?php if (!$neu): ?>
-<?php // Kundenspezifische Produktnamen: dasselbe Produkt heißt bei jedem Kunden anders. Interner Name bleibt.
-      $kundennamen = $neu ? [] : produkt_kundennamen((int)$id); ?>
-<div class="bx-panel" id="kundennamen" data-ppanel="preise">
-  <h2 style="margin-top:0">Kundenspezifische Namen <?= bx_hint('Dasselbe Produkt heißt bei verschiedenen Kunden unterschiedlich (z. B. „MagnaVeda" / „Magnesium-Komplex"). Der Kunde sieht ÜBERALL seinen Namen (Angebot, AB, Rechnung, Lieferschein, Etikett, PIB, Portal). Der interne Produktname bleibt unverändert. Kein Eintrag = es gilt der „Standard-Name für den Kunden" bzw. der interne Name.') ?></h2>
-  <?php if (isset($_GET['knok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Kundenname gespeichert.</div><?php endif; ?>
-  <?php // Fallback-Name gehört zum Stammdaten-Formular (form="prodStamm"), steht aber hier bei den Kundennamen. ?>
-  <div class="bx-row" style="align-items:flex-end;gap:10px;flex-wrap:wrap;margin:0 0 14px">
-    <div class="bx-field" style="margin:0;min-width:240px;flex:1"><label>Standard-Name für alle Kunden (Fallback) <?= bx_hint('Gilt beim Kunden (Portal/Belege), wenn für ihn KEIN eigener Name unten hinterlegt ist. Leer = interner Name.') ?></label><input type="text" name="kundenname" form="prodStamm" value="<?= $v('kundenname') ?>" placeholder="z. B. Super Zink"></div>
-    <button class="btn btn-ghost btn-sm" type="submit" form="prodStamm">Standard-Name speichern</button>
+<div class="bx-panel" id="pibfeld">
+  <h2 style="margin-top:0">Produktinformationsblatt (PIB) <?= bx_hint('Der Kunde bekommt beim Bestellen automatisch ein PIB aus den Produktdaten. Ein hochgeladenes PIB hat Vorrang.') ?></h2>
+  <p class="muted" style="margin-top:0">Aktuell: <?= $pibDok ? 'hochgeladenes PIB (' . h((string)($pibDok['datei_orig'] ?: 'Datei')) . ')' : 'automatisch aus den Produktdaten erzeugt' ?></p>
+  <?php if (!$pibDok && produkt_etikettmass($pid) === null): ?><div class="badge-warn" style="padding:8px 12px;margin-bottom:10px">Etikettmaß fehlt – das automatische PIB nennt dann „individuell – nach Rücksprache". Am Behälter das Endformat (B × H) hinterlegen.</div><?php endif; ?>
+  <div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap">
+    <a class="btn btn-ghost btn-sm" href="?p=produkt_pib&id=<?= $pid ?>" target="_blank">PIB ansehen</a>
+    <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="pib_upload"><input type="file" name="pib" required accept="application/pdf,image/*"><button class="btn btn-primary btn-sm" type="submit"><?= $pibDok ? 'PIB ersetzen' : 'Eigenes PIB hochladen' ?></button></form>
+    <?php if ($pibDok): ?><form method="post" onsubmit="return confirm('Hochgeladenes PIB entfernen? Danach gilt wieder das automatische.')" style="margin:0"><input type="hidden" name="aktion" value="pib_del"><button class="btn btn-ghost btn-sm" type="submit">Hochgeladenes PIB entfernen</button></form><?php endif; ?>
   </div>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Kunde</th><th>Name beim Kunden</th><th></th></tr></thead>
-    <tbody>
-      <?php if (!$kundennamen): ?><tr><td colspan="3" class="muted">Noch keine kundenspezifischen Namen. Unten einen Kunden wählen und den gewünschten Namen eintragen.</td></tr><?php endif; ?>
-      <?php foreach ($kundennamen as $kn): ?>
-        <tr>
-          <td><?= kunde_link($kn['kunde_id'], $kn['firma']) ?></td>
-          <td><strong><?= h($kn['name']) ?></strong></td>
-          <td style="text-align:right"><form method="post" style="display:inline" onsubmit="return confirm('Kundennamen entfernen? Danach gilt wieder der Standard-/interne Name.');"><input type="hidden" name="aktion" value="kn_del"><input type="hidden" name="kn_kunde" value="<?= (int)$kn['kunde_id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td>
-        </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-  <form method="post" class="bx-row" style="margin-top:12px;align-items:flex-end;gap:10px;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="kn_setzen">
-    <div class="bx-field" style="margin:0;min-width:240px"><label>Kunde</label>
-      <select name="kn_kunde" class="rscombo" required><option value="">– wählen –</option><?php foreach ($kunden as $kc): ?><option value="<?= (int)$kc['id'] ?>"><?= h($kc['firma']) ?></option><?php endforeach; ?></select></div>
-    <div class="bx-field" style="margin:0;min-width:240px;flex:1"><label>Name beim Kunden</label><input type="text" name="kn_name" placeholder="z. B. MagnaVeda"></div>
-    <button class="btn btn-primary btn-sm" type="submit">Name speichern</button>
-  </form>
-  <p class="muted" style="font-size:12px;margin-top:8px">Leeres Namensfeld bei vorhandenem Kunden = Eintrag entfernen (Fallback greift). Direkt am Auftrag/Angebot lässt sich der Name ebenfalls ändern.</p>
 </div>
-<div class="bx-panel js-mfg" id="kundenpreise" data-ppanel="preise">
-  <h2 style="margin-top:0">Kundenpreise <?= bx_hint('Vereinbarter VK je Packung (ohne Verpackung) pro Kunde. Sobald hier ein Preis steht, sieht DIESER Kunde das Produkt in seinem Portal mit „ab xy €" statt „Preis auf Anfrage". Mehrere Zeilen je Kunde möglich – der günstigste Preis ist der „ab"-Preis.') ?></h2>
-  <?php if (isset($_GET['kpok'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin:0 0 10px">Kundenpreis gespeichert.</div><?php endif; ?>
-  <div class="bx-tablewrap"><table class="bx-table">
-    <?php $kpG = form_groessen_einheit((string)$pForm); // Pulver/Granulat: g je Packung, Flüssig/Gel: ml ?>
-    <thead><tr><th>Kunde</th><th class="bx-num"><?= $kpG !== '' ? 'Füllmenge je Verpackung' : 'Kapseln/Stk je Verpackung' ?></th><th class="bx-num">Anzahl Verpackungen</th><th class="bx-num">Preis je Verpackung</th><th>Notiz</th><th></th></tr></thead>
-    <tbody>
-      <?php if (!$kundenpreise): ?><tr><td colspan="6" class="muted">Noch keine Kundenpreise. Unten eintragen – danach sieht der Kunde „ab xy €" im Portal.</td></tr><?php endif; ?>
-      <?php foreach ($kundenpreise as $kp): ?>
-        <tr>
-          <td><?= kunde_link($kp['kunde_id'], $kp['firma']) ?></td>
-          <td class="bx-num"><?= $kp['menge_pro_vpe'] !== null ? h(form_groessen_label((string)$pForm, (float)$kp['menge_pro_vpe'])) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $kp['anzahl_vpe'] !== null ? number_format((int)$kp['anzahl_vpe'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $kp['preis'] !== null ? '<strong>' . number_format((float)$kp['preis'], 2, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
-          <td class="muted" style="font-size:12px"><?= $kp['notiz'] ? h($kp['notiz']) : ($kp['verpackung'] ? h($kp['verpackung']) : '') ?></td>
-          <td style="text-align:right"><form method="post" style="display:inline" onsubmit="return confirm('Kundenpreis löschen?');"><input type="hidden" name="aktion" value="kp_del"><input type="hidden" name="kp_id" value="<?= (int)$kp['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form></td>
-        </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table></div>
-  <form method="post" class="bx-row" style="margin-top:12px;align-items:flex-end;gap:10px;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="kp_add">
-    <div class="bx-field" style="margin:0;min-width:200px"><label>Kunde</label>
-      <select name="kp_kunde" required><option value="">– wählen –</option><?php foreach ($kunden as $kc): ?><option value="<?= (int)$kc['id'] ?>" <?= (int)($p['kunde_id'] ?? 0)===(int)$kc['id']?'selected':'' ?>><?= h($kc['firma']) ?></option><?php endforeach; ?></select></div>
-    <div class="bx-field" style="margin:0;width:150px"><label><?= $kpG !== '' ? 'Füllmenge je Verpackung (' . $kpG . ')' : 'Kapseln/Stk je Verpackung' ?></label><input type="number" min="0" step="1" name="kp_menge" placeholder="<?= $kpG === 'g' ? 'z. B. 275' : ($kpG === 'ml' ? 'z. B. 250' : 'z. B. 120') ?>"></div>
-    <div class="bx-field" style="margin:0;width:140px"><label>Anzahl Verpackungen</label><input type="text" name="kp_anzahl" placeholder="z. B. 1.490"></div>
-    <div class="bx-field" style="margin:0;width:130px"><label>Preis je Verpackung (€)</label><input type="text" name="kp_preis" required placeholder="z. B. 4,05"></div>
-    <div class="bx-field" style="margin:0;width:170px"><label>Notiz (optional)</label><input type="text" name="kp_notiz" placeholder="z. B. ohne Verpackung"></div>
-    <button class="btn btn-primary btn-sm" type="submit">Kundenpreis hinzufügen</button>
-  </form>
-  <p class="muted" style="font-size:12px;margin-top:8px">Preis ist der VK je Packung <strong>ohne Verpackung</strong> (Glas/Deckel/Etikett kommen beim Angebot dazu). Der niedrigste Preis dieses Kunden erscheint im Portal als „ab xy €".</p>
 </div>
-<?php endif; ?>
-<?php
-// ===== In Angeboten & Rechnungen (wo taucht dieses Produkt kommerziell auf) =====
-if (!$neu):
-    $pRezId = (int)($p['rezeptur_id'] ?? 0);
-    $eur2 = function($x){ $x=(float)$x; $d=(abs($x*100-round($x*100))<1e-6)?2:4; return number_format($x,$d,',','.').' €'; };
-    $stLblA = fn($s) => match ($s) { 'offen'=>'Entwurf','gesendet'=>'gesendet','bestaetigt'=>'bestätigt','abgelehnt'=>'abgelehnt', default=>$s };
-    $pAngebote = all("SELECT a.id, a.nummer, a.status, a.angelegt, k.firma AS kunde, a.kunde_id,
-                        (SELECT ap.menge FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id=? AND ?>0 ORDER BY ap.id LIMIT 1) AS pos_menge,
-                        (SELECT ap.preis_cent FROM angebot_position ap WHERE ap.angebot_id=a.id AND ap.rezeptur_id=? AND ?>0 ORDER BY ap.id LIMIT 1) AS pos_preis
-                      FROM angebot a LEFT JOIN kunden k ON k.id=a.kunde_id
-                      WHERE a.produkt_id=? OR a.id IN (SELECT angebot_id FROM angebot_produkt WHERE produkt_id=?)
-                      ORDER BY a.id DESC", [$pRezId, $pRezId, $pRezId, $pRezId, (int)$id, (int)$id]);
-    $pRechnungen = all("SELECT b.id, b.nummer, b.netto, b.status, b.datum, k.firma AS kunde, b.kunde_id, a.menge, a.vk_stueck
-                        FROM beleg b JOIN auftrag a ON a.id=b.auftrag_id LEFT JOIN kunden k ON k.id=b.kunde_id
-                        WHERE a.produkt_id=? AND b.typ='rechnung' ORDER BY b.id DESC", [(int)$id]);
-?>
-<div class="bx-panel" data-ppanel="preise">
-  <h2 style="margin-top:0">In Angeboten &amp; Rechnungen</h2>
-
-  <h3 style="margin:6px 0 6px;font-size:14px;font-weight:600">In Angeboten <span class="muted" style="font-weight:400">(<?= count($pAngebote) ?>)</span></h3>
-  <?php if (!$pAngebote): ?>
-    <div class="muted" style="font-size:13px">Dieses Produkt ist in keinem Angebot.</div>
-  <?php else: ?>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Angebot</th><th>Kunde</th><th class="bx-num">Menge</th><th class="bx-num">VK / Pkg</th><th>Status</th><th>Datum</th><th></th></tr></thead>
-      <tbody>
-      <?php foreach ($pAngebote as $a2): ?>
-        <tr>
-          <td><?= h($a2['nummer']) ?></td>
-          <td><?= kunde_link($a2['kunde_id'], $a2['kunde']) ?></td>
-          <td class="bx-num"><?= $a2['pos_menge'] !== null ? number_format((int)$a2['pos_menge'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $a2['pos_preis'] !== null ? $eur2(((int)$a2['pos_preis']) / 100) : '<span class="muted">–</span>' ?></td>
-          <td><?= h($stLblA($a2['status'])) ?></td>
-          <td><?= !empty($a2['angelegt']) ? h(fmt_zeit($a2['angelegt'], 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
-          <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=angebot&id=<?= (int)$a2['id'] ?>">öffnen</a></td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table></div>
-  <?php endif; ?>
-
-  <h3 style="margin:16px 0 6px;font-size:14px;font-weight:600">In Rechnungen <span class="muted" style="font-weight:400">(<?= count($pRechnungen) ?>)</span></h3>
-  <?php if (!$pRechnungen): ?>
-    <div class="muted" style="font-size:13px">Zu diesem Produkt gibt es keine Rechnungen.</div>
-  <?php else: ?>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Rechnung</th><th>Kunde</th><th class="bx-num">Menge</th><th class="bx-num">VK / Pkg</th><th class="bx-num">Netto</th><th>Datum</th><th></th></tr></thead>
-      <tbody>
-      <?php foreach ($pRechnungen as $b2): ?>
-        <tr>
-          <td><?= h($b2['nummer']) ?></td>
-          <td><?= kunde_link($b2['kunde_id'], $b2['kunde']) ?></td>
-          <td class="bx-num"><?= number_format((int)$b2['menge'], 0, ',', '.') ?></td>
-          <td class="bx-num"><?= (float)$b2['vk_stueck'] > 0 ? $eur2((float)$b2['vk_stueck']) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $eur2((float)$b2['netto']) ?></td>
-          <td><?= !empty($b2['datum']) ? h(date('d.m.Y', strtotime((string)$b2['datum']))) : '<span class="muted">–</span>' ?></td>
-          <td style="text-align:right"><a class="btn btn-ghost btn-sm" target="_blank" href="/buchhaltung/?p=rechnung&id=<?= (int)$b2['id'] ?>">öffnen</a></td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table></div>
-  <?php endif; ?>
-</div>
-<?php endif; ?>
+<style>
+.pr-kacheln{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+.pr-kacheln .bx-card a{color:inherit}
+.pr-lief{padding:12px 0;border-top:1px solid var(--line-2)}
+.pr-lief:first-of-type{border-top:0}
+.pr-kunden td{vertical-align:top}
+.pr-kalk td{vertical-align:top}
+</style>
 <script>
 (function(){
-  // Zwei getrennte Zustände: der aktive Reiter (data-ppanel) und „Nur Fulfillment" (.js-mfg).
-  // Ein Element ist sichtbar, wenn es zum aktiven Reiter gehört UND nicht durch Fulfillment ausgeblendet ist.
-  var nav = document.getElementById('prodTabs');
-  var tabs = nav ? nav.querySelectorAll('a[data-tab]') : [];
-  var panes = document.querySelectorAll('[data-ppanel]');
-  var mfg = document.querySelectorAll('.js-mfg');
-  var radios = document.querySelectorAll('input[name="extern"]');
-  var hint = document.getElementById('externHint');
-  var exkl = document.getElementById('f_exkl');
-  var aktiv = 'stamm';
-  function extern(){ var r = document.querySelector('input[name="extern"]:checked'); return !!r && r.value === '1'; }
-  function anwenden(){
-    var ext = extern();
-    if (nav) panes.forEach(function(p){ p.classList.toggle('bx-tab-aus', p.getAttribute('data-ppanel') !== aktiv); });
-    mfg.forEach(function(el){ el.classList.toggle('bx-mfg-aus', ext); });
-    tabs.forEach(function(t){ t.classList.toggle('on', t.getAttribute('data-tab') === aktiv); });
-    if (hint) hint.style.display = ext ? '' : 'none';
-  }
-  function zeigen(key){
-    var ok = false; tabs.forEach(function(t){ if (t.getAttribute('data-tab') === key) ok = true; });
-    aktiv = ok ? key : 'stamm';
-    try { localStorage.setItem('bx-prodtab', aktiv); } catch(e){}
-    anwenden();
-  }
+  // Reiter ohne Neuladen umschalten (Links funktionieren auch ohne JS). Alte Anker (#kundennamen, #zukauf …) öffnen ihren Reiter.
+  var tabs = document.querySelectorAll('#prodTabs a[data-tab]'), panes = document.querySelectorAll('[data-ppanel]');
+  function zeigen(k){ var ok=false; tabs.forEach(function(t){ var on=t.getAttribute('data-tab')===k; t.classList.toggle('on',on); if(on) ok=true; });
+    if(!ok) return; panes.forEach(function(p){ p.style.display = p.getAttribute('data-ppanel')===k ? '' : 'none'; });
+    try { var u=new URL(location.href); u.searchParams.set('tab',k); history.replaceState(null,'',u.toString()); } catch(e){} }
   tabs.forEach(function(t){ t.addEventListener('click', function(e){ e.preventDefault(); zeigen(t.getAttribute('data-tab')); }); });
-  radios.forEach(function(r){ r.addEventListener('change', function(){
-    // Fulfillment = Kundenware: exklusiv automatisch setzen (gehört dem Kunden).
-    if (extern() && exkl && !exkl.checked) exkl.checked = true;
-    anwenden();
-  }); });
-  var start = 'stamm';
-  try { var st = localStorage.getItem('bx-prodtab'); if (st) start = st; } catch(e){}
-  // Direktlinks mit Anker (z. B. #kundennamen nach dem Speichern) öffnen den passenden Reiter.
-  var h = (location.hash || '').replace('#', '');
-  var ziel = h ? document.getElementById(h) : null;
-  if (ziel) { var pp = ziel.closest('[data-ppanel]'); if (pp) start = pp.getAttribute('data-ppanel'); }
-  zeigen(start);
-  if (ziel) ziel.scrollIntoView();
+  document.querySelectorAll('[data-goto]').forEach(function(a){ a.addEventListener('click', function(e){ e.preventDefault(); zeigen(a.getAttribute('data-goto')); document.getElementById('prodTabs').scrollIntoView({behavior:'smooth'}); }); });
+  var h=(location.hash||'').replace('#',''), z=h?document.getElementById(h):null;
+  if (z) { var pp=z.closest('[data-ppanel]'); if (pp && !new URLSearchParams(location.search).get('tab')) zeigen(pp.getAttribute('data-ppanel')); z.scrollIntoView(); }
 })();
 </script>
-<style>.bx-tab-aus,.bx-mfg-aus{display:none !important}</style>
 <?php
-if ($anfDarf) anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=produkt&id=' . (int)$id);
+if ($anfDarf) anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=produkt&id=' . $pid . '&tab=beschaffung');
 render_footer();

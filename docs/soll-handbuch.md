@@ -257,6 +257,25 @@ Stand nach dem Umbau "Auftragsseite entschlacken" (live 08.11.2026):
 
 ---
 
+## 5a. Die Produktseite (je Sache eine Stelle)
+
+Stand nach dem Umbau "Produktseite aufräumen" (09.11.2026). Kopf: Name (Stift), P-Nummer, Status, Rezeptur-Link, "Beim Lieferanten anfragen", "Löschen".
+**Kacheln** wie beim Auftrag, **ändern per Stift → Pop-up → Speichern**, jede Kachel speichert für sich: Rezeptur, Darreichung/Kapselgröße, Menge je Packung, Glas/Behälter (nur Primärverpackungen), Deckel (nur Verschlüsse), Leerkapsel, Verzehr je Tag, Haltbarkeit, Status, Novel Food, MwSt, Katalog/exklusiv, Art des Produkts, Kosten je Packung (→ Kalkulation).
+
+| Reiter | Wofür (einzige Stelle) |
+|---|---|
+| **Rezeptur** | Zusammensetzung je Rohstoff (mg je Einheit/Tagesdosis, gelieferte Nährstoffe) + Tages-Deklaration. Nur lesen, "Rezeptur bearbeiten". Hinweis bei leerer Rezeptur, Zutat ohne Menge, Rohstoff ohne Nährstoff-Zuordnung. |
+| **Kunden** | Eine Tabelle, eine Zeile je Kunde: Kunde ("Kürzel (Firma)"), Name beim Kunden, Etikett (Version, Design freigegeben, im Lager / unterwegs / Bedarf offene Aufträge), Kundenpreise, letztes Angebot, letzte Rechnung. Stift je Zeile, "Kunde hinzufügen". Klappbar: alle Angebote und Rechnungen. |
+| **Beschaffung** | Bezugswege (Zukauf fertig / Premix / Einzelrohstoffe) mit Kosten je Packung – nur Anzeige, die Wahl je Auftrag bleibt im Auftrag. Lieferanten für das Produkt mit Staffeln, Bedingungen, Portal-Account, Dokumenten, "günstigster". Rohstoffe, Verpackung, letzte Bestellungen, Preisanfragen, "Preis anfragen". |
+| **Produktion** | Stückliste (Umkarton + Packungen je Karton, Beipackzettel, abweichendes Etikett), Standard-Produktionsweg, Notiz. |
+| **Kalkulation** | Kosten je Packung aufgeschlüsselt (Inhalt, Leerkapsel, Glas, Deckel, Etikett, Karton anteilig, Beipack, Herstellung), je Weg eine Spalte, Standard hervorgehoben, Staffel nach Menge (1.000 / 3.000 / 10.000 / frei). **Fehlt ein Preis: "Preis fehlt", Summe "unvollständig" – nie still 0.** Darunter die Preis-Matrix. |
+| **Dokumente** | Ein Upload für Spec, CoA, Laboranalyse, Zertifikat, Druckvorlage (KI liest Spec/CoA), Liste aller Dokumente, PIB. |
+
+- Rechnung: `produkt_kalkulation()` (core/produkt_kalkulation.php), gleiche Bausteine wie der Beschaffungsweg am Auftrag. Herstellung (Lohn) hat noch keinen Satz und wird nicht gerechnet.
+- Widersprüche am Produkt zeigt die Datenprüfung (Entwurf trotz Verwendung → Beheben auf "aktiv"; Glas ohne Deckel, Kundenpreis mit anderer Packungsgröße, starke Abweichung Kundenpreis/Rechnung nur Anzeige).
+
+---
+
 ## 6. "Zu erledigen" - die eine Aufgabenliste
 
 Alles, was ein Mensch im Büro anschauen oder entscheiden muss, landet hier - statt in verstreuten Freigabe-Seiten, die sich gegenseitig blockieren. Jede Zeile: **was**, **welcher Auftrag/welche Charge**, **seit wann**, **wer zuständig** (Nico / Tabea / Einkauf / Lager), **ein Knopf**, der direkt zur Stelle führt oder es erledigt.
@@ -401,3 +420,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 09.11.2026 | Nachbestellungen: im Portal unter Bestellungen sichtbar, solange sie auf die Preisprüfung warten; Hinweis in der Auftragsliste; ohne Preis am Vorauftrag gilt der Kundenpreis, Freigabe nie mit 0 € | Nico / Claude Code |
 | 09.11.2026 | Nachbestellungen prüfen: je Nachbestellung Info-Block mit Konfiguration (Behälter/Deckel/Etikett verlinkt, Vorauftrag, Etikett-Freigabe), Preis-Herkunft (Angebote, Vorauftrag, letzte Rechnung, Kundenpreis, EK + Marge) und früheren Aufträgen; Produkt verlinkt. |
 | 09.11.2026 | Produktseite: Knopf „Beim Lieferanten anfragen“ im Seitenkopf (Fertigprodukt-Anfrage der Rezeptur, gleiches Popup wie Angebot/Rezeptur) mit Status-Badge. |
+| 09.11.2026 | Produktseite aufgeräumt (neuer Abschnitt 5a): Kopf + Kacheln per Stift + Reiter Rezeptur/Kunden/Beschaffung/Produktion/Kalkulation/Dokumente; Kalkulation je Weg aufgeschlüsselt, "Preis fehlt" statt 0; Suchfelder; vier Prüfungen in der Datenprüfung. |

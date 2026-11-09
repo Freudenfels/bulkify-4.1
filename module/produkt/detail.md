@@ -1,108 +1,33 @@
-# produkt/detail.php – Produkt anlegen & bearbeiten (mit Kalkulation)
+# produkt/detail.php – Produktseite (Kopf + Kacheln + Reiter)
 
-**Zweck:** Führt die Stammdaten zum verkaufbaren **Produkt** zusammen: **Rezeptur × Einheiten je Packung + Verpackung**. Kundenneutral – ein Kunde steht nur bei exklusiven Produkten dran. Rechnet Kosten pro Packung, Reichweite und die Tages-Deklaration – die Vorstufe zum Angebot.
+Umbau 09.11.2026 (Nico, Vorbild Auftragsseite): **je Sache eine Stelle**. Das frühere lange Formular mit einem „Speichern" ganz unten ist weg.
 
-**Was passiert hier:**
-- **Speichern (POST):** schreibt das Produkt in `produkt` inkl. der **kompletten Verpackungs-Stückliste** (Primär `verpackung_id`, `verschluss_id`, `etikett_id`, `karton_id`, `beipack_id`); neu = INSERT + P-Nummer. Beim Anlegen ein Verlaufseintrag am Kunden (klickbar zum Produkt).
-- **Anzeige (GET):** lädt Kunden, Rezepturen, Verpackungen (nach Rolle gruppiert) und die Kapselgrößen. **Alle Rezepturen werden vorberechnet** (Nährstoffe je Einheit, Kosten je Einheit, Gewicht) und als JSON eingebettet; ebenso je Verpackung ihre **Kapsel-Fassung** (`pack_kapazitaet`), damit die Prüfung live im Browser läuft.
+## Neuanlage (`?p=produkt&id=neu`)
+Kurzes Formular: Name, Art (Eigenes / Handelsware / Nur Fulfillment), Rezeptur, Glas/Behälter, Menge je Packung, Kunde + exklusiv. `?extern=1&kunde_id=` belegt „Nur Fulfillment" vor. Danach geht es auf der Produktseite per Stift weiter.
 
-**Felder:** Produktname, Kunde (leer = Katalogprodukt), Status, **Rezeptur**, **Verzehr je Tag**, **Einheiten je Packung** (z. B. 120 Kapseln), Notiz – plus die **Stückliste**: Primärverpackung + Verschluss + Etikett + Faltschachtel + Beipackzettel (jede Auswahl zeigt nur Verpackungen ihrer Rolle) + **Leerkapsel** (nur Kapselprodukte: leer = automatisch nach Kapselgröße, Auswahl nur nötig, wenn mehrere Kapseln gleicher Größe existieren; beim Bearbeiten wird die effektive Kapsel als Hinweis gezeigt). **Etikett:** ist der eigene Slot leer, aber ein Glas/Behälter gesetzt, der ein Etikett ableitet (`etikett_id_fuer_behaelter`), steht neben dem Feld „Automatisch aus dem Glas: <Etikettname>" – das Produkt HAT also ein Etikett (Maß aus dem Behälter), der Slot muss nur bei einem abweichenden Etikett gefüllt werden.
+## Kopf
+Name (Stift: Name, Synonyme, Standard-Name für Kunden), P-Nummer, Status-Badge, Rezeptur-Link, Art. Knöpfe: Anfrage-Status + **„Beim Lieferanten anfragen"** (Pop-up `anfrage_modal`, Fertigprodukt-Anfrage der Rezeptur), Zurück, **Löschen** (nur Admin; Verwendungs-Liste nur nach fehlgeschlagenem Löschversuch).
 
-**Live-Kalkulation (rechnet sofort mit):**
-- **Kosten / Packung** = Rezepturkosten je Einheit × Einheiten + EK der **ganzen Stückliste** (Summe über alle Slots).
-- **Reichweite** = Einheiten ÷ Verzehr je Tag (Tage pro Packung).
-- **Gewicht je Einheit** (aus der Rezeptur).
-- **Verpackung (passt/zu klein):** prüft die **Primärverpackung** je Darreichungsform über die richtige Kennzahl:
-  - **Kapsel/Softgel** → bestimmt aus dem Gewicht je Einheit die kleinste passende Kapselgröße, liest die Kapsel-Fassung der Dose und vergleicht mit der gewünschten Kapselzahl. „passt" / „zu klein" (+ Vorschlag anderer Dosen) / „keine Fassung hinterlegt" / „aufteilen" (Rezeptur passt in keine Kapsel).
-  - **Pulver/Granulat/Stick** → Füllgewicht (g) gegen max. Füllgewicht der Verpackung.
-  - **Tablette** → Tablettengewicht (Wirkstoffe + Presshilfsstoffe, % aus den Einstellungen) × Stückzahl gegen max. Füllgewicht.
-  - **Flüssig** → Füllvolumen (ml, = Einheiten) gegen Volumen der Flasche.
-- **Nährwerte pro Tagesdosis:** je Nährstoff die Menge × Verzehr/Tag und **% NRV** (z. B. bei 2 Kapseln/Tag: Magnesium 240 mg = 64 %). I.E.-basierte Wirkstoffe (Vitamin D/A/E) werden über `wirkstoff_mg_je_mg()` mitgerechnet und zusätzlich in **I.E.** ausgewiesen; abweichende Etiketteinheiten (µg RE, mg α-TE …) erscheinen automatisch.
+## Kacheln (Stift → Fenster → Speichern, Aktion `kachel` mit `feld`)
+Rezeptur · Darreichung/Kapselgröße (gilt an der Rezeptur) · Menge je Packung · Glas/Behälter (nur Primärverpackungen; „passt / zu klein" aus Kapsel-Fassung bzw. max. Füllgewicht/Volumen; Produktname zieht mit) · Deckel (nur Verschlüsse) · Leerkapsel (Kapsel) · Verzehr je Tag · Haltbarkeit (+ Allergene) · Status · Novel Food (+ automatisch prüfen) · MwSt (nur Admin) · Katalog/exklusiv · Art des Produkts · **Kosten je Packung** (Standard-Weg bei 1.000 Pkg, Klick → Reiter Kalkulation). Jede Kachel speichert nur ihr Feld und schreibt einen Verlaufseintrag.
 
-**Standard-Produktionsweg (nur Admin):** Panel mit vier Checkboxen – **Abfüllen/Verpacken**, **Etikettieren**, **Beipackzettel beilegen**, **Umkarton/Umverpackung** (gespeichert als `produkt.weg_abfuellen|weg_etikettieren|weg_beipack|weg_karton`, Default 1/1/0/0). Legt fest, welche **Ausbaustufen** beim Anlegen eines Produktionsauftrags gesetzt werden (Reihenfolge Verpacken → Etikettieren → Beipackzettel → Umkarton, vor der Qualitätsprüfung – der „Vertrag" mit dem Produktions-Programm). Nur der **Startzustand** neuer PAs; bestehende bleiben unverändert, und im Produktions-Programm ist der Weg je Auftrag überschreibbar. Auflösung über `produktion_wege_aufloesen($produkt_id, $kunde_id)` (Kunde-Override `kunden.weg_*` NULL = erbt → Produkt → global). Die Checkboxen sieht/speichert **nur Admin** (`has_role('admin')`); der Kunde stellt nichts ein.
+## Reiter
+| Reiter | Inhalt |
+|---|---|
+| Rezeptur | Zusammensetzung je Rohstoff (mg je Einheit, je Tagesdosis, welche Nährstoffe er liefert) + Tages-Deklaration (% NRV). Nur lesen, Link „Rezeptur bearbeiten". Hinweise: leere Rezeptur, Zutat ohne Menge, Rohstoff ohne Nährstoff-Zuordnung. |
+| Kunden | Eine Zeile je Kunde (`produkt_kunden()`): „Kürzel (Firma)", Name beim Kunden, Etikett (Version, Design freigegeben, im Lager / unterwegs / Bedarf offene Aufträge), Kundenpreise (Badge „andere Packungsgröße"), letztes Angebot, letzte Rechnung je Pkg. Stift je Zeile: Name + Kundenpreise; Knopf „Kunde hinzufügen". Klappbar: alle Angebote und Rechnungen. Alter Anker `#kundennamen` öffnet diesen Reiter. |
+| Beschaffung | Bezugswege mit Kosten je Packung (Standard markiert); Lieferanten für das Produkt (Staffeln, Incoterm, Versand, Stand, Land, Portal-Account, Lieferzeit, Mindestbestellwert, Ansprechpartner, Dokumente, „günstigster"; Preis hinzufügen per Fenster, löschen mit ×); Rohstoffe der Rezeptur (Bedarf, Lieferantenpreise, Lager); Verpackung (Lieferant, EK, Lager, unterwegs); letzte Bestellungen; Preisanfragen. Knopf „Preis anfragen" → Pop-up. |
+| Produktion | Stückliste: Umkarton + Packungen je Umkarton, Beipackzettel, abweichendes Etikett (sonst automatisch aus dem Glas), Etiketten-Bestand gesamt, Standard-Produktionsweg (nur Admin), Notiz. Eigenes Speichern. |
+| Kalkulation | `produkt_kalkulation()`: Zeilen Inhalt, Leerkapseln, Glas, Deckel, Etikett, Umkarton anteilig, Beipack, Herstellung, Summe – je Weg eine Spalte, Standard hervorgehoben. Mengenwahl 1.000 / 3.000 / 10.000 / frei (`km`). „Preis fehlt" statt 0, Summe dann „unvollständig". Einzelrohstoffe im Detail klappbar. Darunter die Preis-Matrix. |
+| Dokumente | **Ein** Upload (`dokument_panel`, Aktion `dok_upload`) für CoA, Spezifikation, Laboranalyse, Zertifikat, Druckvorlage; bei Spec/CoA/Analyse liest die KI aus (nur beta), Ergebnisse unter „Von der KI ausgelesen" (+ Haltbarkeit/Allergene übernehmen). Darunter PIB ansehen / eigenes hochladen / entfernen. |
 
-**Katalog / Exklusiv:** Ein Produkt liegt standardmäßig im **gemeinsamen Katalog** (Häkchen `exklusiv` aus) und gehört niemandem. Exklusiv = nur für den gewählten Kunden sichtbar. Das Feld „Kunde" gilt **nur bei exklusiv** als Besitzer – ohne Häkchen wird `kunde_id` beim Speichern auf NULL gesetzt, sonst stünde in der Produktliste ein Kundenname bei einem Produkt, das jeder Kunde bestellen kann. Kundenspezifisch ist der **Preis** (Angebot + `kunden.rabatt_marge`), nicht das Produkt.
+Bei **Nur Fulfillment** gibt es nur Kunden, Produktion und Dokumente.
 
-**Preis-Matrix (Panel unten):** „Matrix neu berechnen" erzeugt über `produkt_matrix_generieren()` die VK-Tabelle **Packungsgröße × passende Verpackung × Bestellmenge** (Zeilen = Größe+Verpackung, Spalten = Bestellmengen; je Zelle VK + kleiner EK). Die Spalte **Größe** meint je Darreichungsform etwas anderes: Stückzahl bei Kapsel/Tablette/Softgel/Stick, **Gramm** bei Pulver/Granulat, **Milliliter** bei Flüssig (Beschriftung über `form_groessen_label()`). EK je Packung = Rezeptur + Leerkapsel (Kapsel), + Presshilfsstoffe (Tablette) bzw. + Trägerflüssigkeit (Flüssig); der Behälter kommt separat als eigene Angebotsposition. Basis-VK ohne Kundenrabatt – schnelle interne Sale-Auskunft. Voraussetzung: Rezeptur + hinterlegte Behälter-Fassung (Kapseln je Größe, Füllgewicht in g bzw. Fassungsvermögen in ml).
+## Suchfelder und Ladezeit
+Auswahllisten mit mehr als 10 Einträgen sind Suchfelder (`rscombo`) und stehen nur in den Fenstern. Die Seite rechnet nicht mehr alle Rezepturen im Browser vor (früher JSON aller Rezepturen + Live-Rechnung), sie lädt nur das eine Produkt.
 
-**Kundenpreise (Panel im Preise-Reiter):** editierbar (`id="kundenpreise"`). Je Zeile **Kunde + Kapseln/Stück je Verpackung (`menge_pro_vpe`) + Anzahl Verpackungen (`anzahl_vpe`) + Preis je Verpackung (`preis`, VK ohne Verpackung) + Notiz** → `produkt_kundenpreis`. Handler `kp_add` / `kp_del`. Zweck: Sobald hier für einen Kunden ein Preis steht, sieht **genau dieser Kunde** das Produkt im Portal mit **„ab xy €"** statt „Preis auf Anfrage" (der niedrigste Preis des Kunden ist der „ab"-Preis). Der eingetragene Preis ist final (im Portal **kein** zusätzlicher Kundenrabatt). Mehrere Zeilen je Kunde/Größe möglich. Beispiel: Kurkuma, 120 Kapseln, 1.490 Verpackungen, 4,05 € → Kunde sieht „ab 4,05 €". Portal-Logik in `module/portal/kunde.php` (`$kundenpreisAb`, `$abPreis`, `$prodPreise`).
+## Weitere Aktionen (unverändert)
+`matrix`, `pib_upload`/`pib_del`, `spec_uebernehmen`, `zk_preis_add`/`zk_preis_del`, `kp_add`/`kp_del`, `kn_setzen`/`kn_del`, `dok_frei`/`dok_del`, `novelfood_pruefen`, `loeschen`. Nach jeder Aktion geht es zurück in den passenden Reiter (`&tab=`).
 
-**Dokumente (CoA & Spezifikation):** Panel unter der Preis-Matrix (nur bei bestehendem Produkt) – gemeinsame Komponente `core/dokument_ui.php` (Tabelle `dokument`, objekt_typ=produkt): CoA/Spec/Analyse hochladen, je Dokument optional mit **Lieferant**; Download über Route `dokument`, Löschen inline.
-
-**Zwei Namen:** **Produktname (intern)** = `produkt.name` (unser Arbeitsname, z. B. „Zink") – heißen mehrere Produkte gleich, hängt `produkt_name_versioniert()` beim Speichern automatisch „ v2, v3 …" an (case-insensitiv, erster behält den Basisnamen). **Standard-Name für den Kunden** = `produkt.kundenname` (Fallback, leer = interner Name).
-
-**Kundenspezifische Namen (Block `id="kundennamen"`):** Dasselbe Produkt heißt bei jedem Kunden anders („MagnaVeda"/„Magnesium-Komplex"). Liste Kunde → Name + hinzufügen/entfernen (Handler `kn_setzen`/`kn_del` → `produkt_kundenname_setzen()`), Daten in `produkt_kunde_name`. Der Kunde sieht ÜBERALL seinen Namen; Reihenfolge: **kundenspezifischer Name → Standard-Name (`produkt.kundenname`) → interner `produkt.name`**. Auch am Auftrag („Name beim Kunden") und am Angebots-Kopf änderbar. Details: `bulkify-kundenspezifischer-produktname`.
-
-**Zusammenhang:** Die Produktkosten (inkl. kompletter Verpackung) sind die Basis, auf die im **Angebot** die Marge kommt. Die Tages-Deklaration ist die Etikett-Angabe „pro Tagesdosis".
-
-## Spezifikation & CoA (KI liest aus)
-Am Produkt (Panel „Spezifikation & CoA") lassen sich **Spec** und **CoA** hochladen (zwei
-Buttons, `dok_typ=spec`/`coa`, `objekt_typ='produkt'`). Nach dem Upload liest `spec_ki_nach_upload()`
-das Dokument aus (nur beta) und merkt den Vorschlag am Dokument (`dokument.ki_daten`). Das
-Panel zeigt je Dokument, was die KI gelesen hat: beim **Spec** Haltbarkeit/Allergene/
-Zertifikate/Lagerung, beim **CoA** Charge/MHD/Herstelldatum + die Analysewerte-Tabelle.
-„Haltbarkeit/Allergene ins Produkt übernehmen" (`aktion=spec_uebernehmen`) schreibt die
-Werte in die neuen Felder `produkt.haltbarkeit`/`produkt.allergene` (auch im Formular
-editierbar). Läuft die KI nicht (lokal), wird nur hochgeladen; Felder von Hand füllbar.
-
-## Lieferantenpreise (Zukauf) – Fertigprodukt-Preistabelle
-Panel „Lieferantenpreise (Zukauf)" (Tabelle `produkt_lieferant_preis`): mehrere Zukauf-Preise
-je Fertigprodukt (Lieferant · ab Menge · Preis/Kapsel · Größe · Incoterm · Versand),
-günstigster markiert, hinzufügen/löschen. Rein **intern** (nie Kundensicht). Preise kommen
-automatisch aus „EK-Preise (Import)" (Fertigprodukt bestätigen/neu anlegen →
-`produkt_zukauf_preis_schreiben()`, Versandart aus AIR/SEA/TRAIN im Namen) oder von Hand.
-Analog zu `lieferant_preis` beim Rohstoff.
-
-## Produkt löschen + Verwendungs-Übersicht (2026-10-06)
-Admin-Button „Löschen" im Kopf (nur bestehende Produkte). Aktion `loeschen` → `produkt_loeschen($id)` (core/schema.php): Blocker = Aufträge, Produktionsaufträge, Kontingente, Angebote (Kopf-Produkt + angebot_produkt), Fertigware-Bestand (Chargen am verkaufsfertigen Lagerartikel). Ohne Blocker werden eigene Nebendaten mitgelöscht (produkt_preis/_kundenpreis/_lieferant_preis, Produkt-Dokumente, leerer Lagerartikel) und lose Verweise (Anfragen/Fastaction/ek_import) entkoppelt (produkt_id=NULL). Panel „Wo wird dieses Produkt verwendet?" (`produkt_verwendung($id)`) listet alle Verweise klickbar mit Blocker-Badge – analog zur Rezeptur.
-
-## Verwendungs-Panel nur nach Löschversuch + „In Angeboten & Rechnungen"
-- Das Blocker-Panel „Wo wird dieses Produkt verwendet?" erscheint **nur nach einem fehlgeschlagenen Löschversuch** (`$_SESSION['prod_del_fehler']`), nicht dauerhaft.
-- Neuer Bereich **„In Angeboten & Rechnungen"** (immer sichtbar, bestehende Produkte): zeigt, wo das Produkt kommerziell auftaucht – Angebote (über `angebot.produkt_id`/`angebot_produkt`) mit Kunde, Menge/Vper Pkg (aus der Positions-Rezeptur), Status, Datum; Rechnungen (beleg via `auftrag.produkt_id`, typ='rechnung') mit Kunde, Menge, VK/Pkg, Netto, Datum. Jeweils „öffnen"-Link.
-
-## Auswahl „Art des Produkts" (Stand 2026-10-08)
-Oben im Formular eine Auswahl (Radio `extern`): „Eigenes Produkt – Herstellung bei bulkify" (0) vs. „Nur Fulfillment – Kundenware, wir versenden nur" (1). Bei Fulfillment blendet JS alle Fertigungs-/Preis-Bereiche aus (Klasse `.js-mfg`: Rezeptur-Panel inkl. Haltbarkeit/Allergene/Notiz, Stückliste, Standard-Produktionsweg, Kalkulation, Preis-Matrix, Zukauf-Panel, Kundenpreise; der Reiter Preise bleibt mit Kundennamen + Angeboten/Rechnungen) und setzt exklusiv automatisch. Server: `extern` ist jetzt value-basiert (0/1, vorher presence-basiert); bei extern wird `rezeptur_id=NULL` erzwungen und exklusiv=1. `?extern=1` wählt beim Anlegen direkt „Nur Fulfillment" vor.
-
-## Zukaufpreis je Packung (St-24)
-Im Panel „Lieferantenpreise (Zukauf)" wird beim Hinzufügen gewählt, ob der Preis **je Packung (fertige Ware)** oder **je Kapsel/Stück (lose)** gilt; bei Handelsware ist „Packung" vorausgewählt. Die Liste zeigt „/Packung" bzw. „/Kapsel".
-## Kundenetiketten je Kunde (Paket Etiketten)
-Im Reiter Verpackung steht unter dem Etikett-Slot die Tabelle **Kundenetiketten je Kunde**: je Kunde die aktuelle Version (v1, v2 ...), das freigegebene Design zum Herunterladen (Druckerei) sowie physischer und bezahlter Bestand. Das Etikett gehoert zu Produkt + Kunde, ein Katalogprodukt mit mehreren Kunden hat mehrere Etiketten (siehe `core/schema.md`). Der Block "Etiketten-Bestand" darueber ist die Summe ueber alle Kunden dieses Produkts.
-
-## Aufbau der Seite (UI-Aufräumung 03.11.2026)
-- **Reiter** im Standard-Stil wie am Auftrag (`.settabs`, `<a data-tab>`): Stammdaten & Verpackung · Preise · Dokumente. Jeder Bereich gehört über `data-ppanel` zu genau einem Reiter; der aktive Reiter wird in `localStorage` (`bx-prodtab`) gemerkt, ein Anker (z. B. `#kundennamen`) öffnet den passenden Reiter.
-- **Sichtbarkeit getrennt:** Reiter setzt die Klasse `bx-tab-aus`, „Nur Fulfillment" die Klasse `bx-mfg-aus` (an `.js-mfg`). Sichtbar ist nur, was zum Reiter gehört UND nicht durch Fulfillment ausgeblendet ist. Beides in einem Skript am Seitenende.
-- **Stammdaten-Reihenfolge:** Identität (interner Name, Synonyme schmal) → Art des Produkts (kompakte Umschaltung + Handelsware) → Zuordnung (Kunde, Status, Novel-Food, Katalog/Exklusiv, MwSt) → Rezeptur & Verpackung → Stückliste → Standard-Produktionsweg → Kalkulation & Tages-Deklaration → Speichern/Abbrechen (nur einmal, Formular `id="prodStamm"`).
-- **Reiter Preise:** Preis-Matrix, Lieferantenpreise (Zukauf), Kundenspezifische Namen mit dem **Standard-Namen für alle Kunden (Fallback)** ganz oben, Kundenpreise, In Angeboten & Rechnungen. Das Fallback-Feld `kundenname` gehört per `form="prodStamm"` weiter zum Stammdaten-Formular (gleicher POST); „Standard-Name speichern" schickt dieses Formular ab. Bei der Neuanlage (noch keine Reiter) steht das Feld im Block Identität.
-- **Reiter Dokumente:** PIB, Spezifikation & CoA (KI-Auswertung) und die Dokumentablage (`#dok`, stand vorher auf jedem Reiter).
-- Hinweis: Ändert sich der Fallback-Name, merkt die bestehende Umbenennen-Logik den bisherigen Anzeigenamen automatisch als Synonym.
-
-## Kundenpreis hinzufügen = gleiche Größe aktualisieren (03.11.2026)
-`kp_add` legt keine zweite Zeile derselben Größe mehr an: Gibt es für Produkt + Kunde schon eine Zeile mit dieser Menge je Packung, werden Anzahl, Preis und Notiz dort aktualisiert (gleicher Schlüssel wie `kundenpreis_setzen()`). Bei Pulver/Granulat heißen Spalte und Feld „Füllmenge je Verpackung (g)“, die Werte stehen mit Einheit (z. B. 275 g).
-
-## Pulver-Beschriftung in der Kalkulation (03.11.2026, nur Anzeige)
-Bei Pulver/Granulat (eine Rezeptur-Einheit = eine Portion):
-- „Verzehr je Tag“ heißt „Portionen pro Tag (à 9 g)“.
-- Die Kachel „Gewicht / Einheit“ heißt „Portionsgröße“ und zeigt g statt mg (9 g statt 9.000 mg).
-- Die Tagesdosis steht als „(bei 1 Portion/Tag à 9 g)“.
-- „Füllmenge je Packung (g)“ bleibt.
-
-Abgelöst durch den Abschnitt unten (Rezeptur = Tagesdosis).
-
-## Pulver/Granulat: Rezeptur = Tagesdosis, Rechnung nach Gewicht (03.11.2026, Nico)
-- Das Feld „Verzehr je Tag“ ist bei Pulver ausgeblendet; der gespeicherte Wert bleibt, wird aber nicht genutzt.
-- Stattdessen steht dort „Tagesdosis: 5 g (= Rezeptur) · ≈ 60 Tagesdosen je Packung“ (nur Info).
-- Kalkulation:
-  - Kosten/Packung = Kosten je g (Rezeptur-Kosten ÷ Rezeptur-Gewicht) × g je Packung.
-  - Kachel „Tagesdosen je Packung ≈ 60“ statt „Reichweite … Tage“.
-  - Kachel „Tagesdosis 5 g“.
-  - Füllgewicht-Prüfung mit den g je Packung selbst (vorher fälschlich Rezeptur-Gewicht × g).
-  - Nährwerte je 1 Tagesdosis.
-- Sticks/Kapseln/Tabletten unverändert.
-
-„Kundenpreis hinzufügen“ (03.11.2026): gleiche Größe UND gleiche Anzahl Verpackungen → vorhandene Zeile aktualisieren; andere Anzahl = eigene Staffel.
-
-Behälter gewechselt, Name nicht von Hand geändert (03.11.2026): Der Behälter-Teil im Namen zieht mit (`produkt_name_behaelter_nachziehen`), der alte Name wird Synonym. Vorher stand oben „100 ml Glas“, unten 150 ml.
-- Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
-
-## Beim Lieferanten anfragen (09.11.2026)
-Oben im Seitenkopf (nur wenn das Produkt eine Rezeptur hat, für Admin/Einkauf/Vertrieb): Status-Badge (nicht angefragt / angefragt / Angebote liegen vor) und Knopf **„Beim Lieferanten anfragen"**. Er öffnet das gemeinsame Anfrage-Popup (`core/anfrage_ui.php`, Fertigprodukt-Modus): Lieferanten wählen, Mengen-Staffel, CoA/Spezifikation, Incoterm/Versandart, Notiz. Gesendet wird über `?p=preis_anfragen` (Rezeptur als Fertigprodukt/Fremdfertigung); danach zurück aufs Produkt mit Hinweis und Link zu den Lieferanten-Anfragen.
+## Datenprüfung
+Widersprüche am Produkt stehen unter `?p=datenpruefung`: Entwurf trotz Verwendung, Glas ohne Deckel, Kundenpreis mit anderer Packungsgröße, Kundenpreis weicht stark von der letzten Rechnung ab.
