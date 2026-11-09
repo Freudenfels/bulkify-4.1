@@ -42,3 +42,11 @@ Siehe auch: Portal-Box in [../module/portal/_angebot_karte.php](../module/portal
 
 ## Mails (Paket Mails)
 `nachbestellung_anlegen*()` → `mail_nachbestellung($id,'eingang')` (Kunde: Eingang; Team: bitte Preis bestätigen), `nachbestellung_preis_anpassen()` → `'preis_neu'`, `nachbestellung_bestaetigen()` / `nachbestellung_kunde_preis_ok()` → `'bestaetigt'` (Auftragsbestätigung mit Nummer). Alle nach der Antwort (`nach_antwort`).
+
+## Nachbestellung ohne Preis (09.11.2026)
+
+- `nachbestellung_kundenpreis_vk($kunde, $produkt, $stueck, $menge, $verpackung_id)`: Preis-Fallback, wenn der Vorauftrag keinen Preis hat (Altaufträge mit 0 €). Nimmt den zentralen Kundenpreis (`produkt_kundenpreis`, passende Packungsgröße, Staffel nach Bestellmenge) plus Verpackung/Deckel/Etikett (`verpackung_cent_je_pack`) – gleiche Rechnung wie `?p=kundenpreise`. Kein Kundenpreis = 0.
+- Beim Anlegen (Angebot- und Auftrags-Weg) greift der Fallback automatisch; bleibt es bei 0, steht als Hinweis „Kein Preis hinterlegt – bitte Preis anpassen.“
+- `nachbestellung_bestaetigen()` lehnt 0 € ab (sonst Auftrag + Rechnung über 0 €).
+- `nachbestellung_kundenpreis_uebernehmen($id)`: Team übernimmt den Kundenpreis und gibt in einem Schritt frei.
+- `nachbestellung_offen_kunde($kunde)`: offene Nachbestellungen (Prüfung / neuer Preis) für das Portal „Bestellungen“.

@@ -113,6 +113,30 @@ function nachbestellung_preis_fuer(int $kunde_id, int $produkt_id, int $stueck, 
     return ['vk' => $tierVk, 'quelle' => 'staffel', 'ueber_max' => false, 'hinweis' => ''];
 }
 
+// Preis-Fallback (09.11.2026): Hat der Vorauftrag keinen Preis (z. B. importierte Altaufträge mit 0 €), gilt der zentrale
+// Kundenpreis (?p=kundenpreise: Herstellung je Pkg, passende Packungsgröße, Staffel nach Bestellmenge) plus Verpackung,
+// Deckel und Etikett bei dieser Menge – dieselbe Rechnung wie die Kundenpreis-Liste. Kein Kundenpreis = 0 („Preis folgt").
+function nachbestellung_kundenpreis_vk(int $kunde_id, int $produkt_id, int $stueck, int $menge, ?int $verpackung_id = null): float {
+    if ($kunde_id <= 0 || $produkt_id <= 0 || !table_exists('produkt_kundenpreis')) return 0.0;
+    $rows = all("SELECT COALESCE(menge_pro_vpe,0) AS stk, COALESCE(anzahl_vpe,0) AS bm, preis FROM produkt_kundenpreis
+                 WHERE produkt_id=? AND kunde_id=? AND preis>0", [$produkt_id, $kunde_id]);
+    if ($stueck > 0) $rows = array_values(array_filter($rows, fn($r) => (int)$r['stk'] === $stueck || (int)$r['stk'] === 0));
+    if (!$rows) return 0.0;
+    $preis = null; $best = -1;
+    foreach ($rows as $r) { $bm = (int)$r['bm']; if ($bm > 0 && $bm <= $menge && $bm > $best) { $best = $bm; $preis = (float)$r['preis']; } }
+    if ($preis === null) foreach ($rows as $r) if ((int)$r['bm'] === 0) { $preis = (float)$r['preis']; break; }
+    if ($preis === null) { usort($rows, fn($a, $b) => (int)$a['bm'] <=> (int)$b['bm']); $preis = (float)$rows[0]['preis']; }
+    if ($preis <= 0) return 0.0;
+    $verp = function_exists('verpackung_cent_je_pack') ? verpackung_cent_je_pack($produkt_id, max(1, $menge), $kunde_id, $verpackung_id ?: null) / 100 : 0.0;
+    return round($preis + $verp, 4);
+}
+
+// Offene Nachbestellungen eines Kunden (Portal „Bestellungen": eingegangen, aber noch kein Auftrag).
+function nachbestellung_offen_kunde(int $kunde_id): array {
+    nachbestellung_schema();
+    return all("SELECT * FROM nachbestellung WHERE kunde_id=? AND status IN ('pruefung','preis_neu') ORDER BY id DESC", [$kunde_id]);
+}
+
 // Kunde legt eine Nachbestellung an (verbindlich, wartet nur auf Preisprüfung). Rückgabe: ['id'=>..] oder ['fehler'=>..].
 function nachbestellung_anlegen(int $kunde_id, int $angebot_id, int $menge): array {
     nachbestellung_schema();
@@ -121,6 +145,8 @@ function nachbestellung_anlegen(int $kunde_id, int $angebot_id, int $menge): arr
     if ($menge <= 0)    return ['fehler' => 'Bitte eine Menge größer 0 angeben.'];
     // Preis nach Menge aus den früheren Angeboten (Fallback: zuletzt vereinbarter Preis).
     $preis = nachbestellung_preis_fuer($kunde_id, (int)$q['produkt_id'], (int)$q['stueck'], $menge, (float)$q['vk_stueck']);
+    if ((float)$preis['vk'] <= 0) $preis['vk'] = nachbestellung_kundenpreis_vk($kunde_id, (int)$q['produkt_id'], (int)$q['stueck'], $menge);
+    if ((float)$preis['vk'] <= 0 && $preis['hinweis'] === '') $preis['hinweis'] = 'Kein Preis hinterlegt – bitte Preis anpassen.';
     $cu = function_exists('current_user') ? current_user() : null;
     q("INSERT INTO nachbestellung (kunde_id,quelle_angebot_id,quelle_auftrag_id,produkt_id,rezeptur_id,stueck,menge,vk_stueck,grund,status,angelegt,angelegt_von)
        VALUES (?,?,?,?,?,?,?,?,?,'pruefung',?,?)",
@@ -141,7 +167,7 @@ function nachbestellung_anlegen(int $kunde_id, int $angebot_id, int $menge): arr
 // ohne klassisches bestätigtes Angebot mit Staffel). Nimmt Produkt/Packungsgröße/Menge/Preis vom Auftrag.
 function nachbestellung_quelle_auftrag(int $auftrag_id, int $kunde_id): ?array {
     if ($auftrag_id <= 0 || $kunde_id <= 0) return null;
-    $a = one("SELECT id, angebot_id, produkt_id, menge, stueck, vk_stueck, gesamt_netto
+    $a = one("SELECT id, angebot_id, produkt_id, menge, stueck, vk_stueck, gesamt_netto, verpackung_id
               FROM auftrag WHERE id=? AND kunde_id=? AND produkt_id IS NOT NULL AND COALESCE(kategorie,'produkt')<>'dienstleistung'
                 AND status<>'storniert'", [$auftrag_id, $kunde_id]);
     if (!$a) return null;
@@ -153,6 +179,7 @@ function nachbestellung_quelle_auftrag(int $auftrag_id, int $kunde_id): ?array {
         'rezeptur_id'=> $rezId ?: null,
         'stueck'     => (int)($a['stueck'] ?? 0),
         'menge'      => (int)($a['menge'] ?? 0),
+        'verpackung_id' => (int)($a['verpackung_id'] ?? 0) ?: null,
         'vk_stueck'  => auftrag_vk_gesamt($a),   // GESAMTpreis je Packung (inkl. Glas/Deckel/Etikett), nicht nur die Herstellung (S-19)
     ];
 }
@@ -169,6 +196,8 @@ function nachbestellung_anlegen_auftrag(int $kunde_id, int $auftrag_id, int $men
         return ['fehler' => 'Für dieses Produkt ist bereits eine Nachbestellung eingegangen – wir bestätigen den Preis kurz.'];
     $preis = nachbestellung_preis_fuer($kunde_id, (int)$q['produkt_id'], (int)$q['stueck'], $menge, (float)$q['vk_stueck']);
     $vk = (float)($preis['vk'] ?? 0); if ($vk <= 0) $vk = (float)$q['vk_stueck'];
+    if ($vk <= 0) $vk = nachbestellung_kundenpreis_vk($kunde_id, (int)$q['produkt_id'], (int)$q['stueck'], $menge, $q['verpackung_id']);   // Altauftrag ohne Preis
+    if ($vk <= 0 && $preis['hinweis'] === '') $preis['hinweis'] = 'Kein Preis hinterlegt – bitte Preis anpassen.';
     $cu = function_exists('current_user') ? current_user() : null;
     q("INSERT INTO nachbestellung (kunde_id,quelle_angebot_id,quelle_auftrag_id,produkt_id,rezeptur_id,stueck,menge,vk_stueck,grund,status,angelegt,angelegt_von)
        VALUES (?,?,?,?,?,?,?,?,?,'pruefung',?,?)",
@@ -229,6 +258,8 @@ function nachbestellung_bestaetigen(int $id): array {
     if (!$nb)                                  return ['fehler' => 'Nachbestellung nicht gefunden.'];
     if (!in_array((string)$nb['status'], ['pruefung','preis_neu'], true)) return ['fehler' => 'Schon bearbeitet.'];
     $vk  = (float)$nb['vk_stueck'];
+    // Ohne Preis kein Auftrag (sonst Auftrag + Rechnung über 0 €). Erst Preis anpassen oder Kundenpreis eintragen.
+    if ($vk <= 0) return ['fehler' => 'Kein Preis – bitte zuerst den Kundenpreis übernehmen oder „Preis anpassen".'];
     $aid = nachbestellung_order_erstellen($nb, $vk);
     if ($aid <= 0)                             return ['fehler' => 'Auftrag konnte nicht erzeugt werden.'];
     q("UPDATE nachbestellung SET status='bestaetigt', angebot_id=(SELECT angebot_id FROM auftrag WHERE id=?), auftrag_id=?, bearbeitet=? WHERE id=?",
@@ -237,6 +268,18 @@ function nachbestellung_bestaetigen(int $id): array {
         log_aktivitaet('kunde', (int)$nb['kunde_id'], 'team', 'Nachbestellung bestätigt & freigegeben – Auftrag erzeugt.', 'auftrag', 'auftrag', $aid);
     if (function_exists('mail_nachbestellung') && mail_bereit()) nach_antwort(fn() => mail_nachbestellung($id, 'bestaetigt'));   // Kunde: AB
     return ['auftrag_id' => $aid];
+}
+
+// Nachbestellung ohne Preis: zentralen Kundenpreis übernehmen und freigeben (Team, 09.11.2026).
+function nachbestellung_kundenpreis_uebernehmen(int $id): array {
+    nachbestellung_schema();
+    $nb = $id ? one("SELECT * FROM nachbestellung WHERE id=?", [$id]) : null;
+    if (!$nb || (string)$nb['status'] !== 'pruefung') return ['fehler' => 'Nachbestellung nicht mehr in Prüfung.'];
+    $verp = (int)($nb['quelle_auftrag_id'] ?? 0) ? (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE id=?", [(int)$nb['quelle_auftrag_id']]) : 0;
+    $vk = nachbestellung_kundenpreis_vk((int)$nb['kunde_id'], (int)$nb['produkt_id'], (int)$nb['stueck'], (int)$nb['menge'], $verp ?: null);
+    if ($vk <= 0) return ['fehler' => 'Für diesen Kunden und dieses Produkt ist kein Kundenpreis hinterlegt.'];
+    q("UPDATE nachbestellung SET vk_stueck=?, grund=NULL WHERE id=?", [$vk, $id]);
+    return nachbestellung_bestaetigen($id);
 }
 
 // Ausnahmefall (2%): Preis weicht ab -> zurück an den Kunden zur kurzen Freigabe des neuen Preises.

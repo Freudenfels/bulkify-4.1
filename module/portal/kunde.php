@@ -4047,7 +4047,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   // Nachbestellung: Preis/Pkg je nach eingetippter Menge aus den bisherigen Angebots-Staffeln (gleiche Regel wie
   // serverseitig – echte Staffel in beide Richtungen; über der größten Staffel = bester Preis + Hinweis „prüfen").
   (function(){
-    function eur(v){ return v.toFixed(2).replace('.', ',') + ' €'; }
+    function eur(v){ return v > 0 ? v.toFixed(2).replace('.', ',') + ' €' : 'Preis folgt'; }
     function nf(n){ return (n||0).toLocaleString('de-DE'); }
     document.querySelectorAll('.nb-form').forEach(function(f){
       var inp = f.querySelector('.nb-menge'), out = f.querySelector('.nb-preis'), warn = f.querySelector('.nb-warn');
@@ -4102,6 +4102,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         $pidK      = (int)$a['produkt_id']; $stk = (int)($a['stueck'] ?? 0);
         $defMenge  = (int)($a['menge'] ?? 0);
         $nbVk      = auftrag_vk_gesamt($a);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
+        if ($nbVk <= 0) $nbVk = nachbestellung_kundenpreis_vk($kid, $pidK, $stk, max(1, $defMenge), (int)($a['verpackung_id'] ?? 0) ?: null);   // Altauftrag ohne Preis
         $nbStaffel = nachbestellung_staffel($kid, $pidK, $stk);
         $nbInit    = nachbestellung_preis_fuer($kid, $pidK, $stk, $defMenge, $nbVk);
         // Läuft für dieses Produkt schon eine Nachbestellung? (per Produkt – robust ohne Angebot.)
@@ -4129,7 +4130,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0">
             <label style="display:flex;flex-direction:column;gap:3px;font-size:13px">Menge (Packungen)
               <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format($defMenge,0,',','.') ?>" style="min-width:130px"></label>
-            <div style="font-size:13px">Preis / Pkg: <strong class="nb-preis"><?= $eur($nbInit['vk']) ?></strong></div>
+            <div style="font-size:13px">Preis / Pkg: <strong class="nb-preis"><?= (float)$nbInit['vk'] > 0 ? $eur($nbInit['vk']) : 'Preis folgt' ?></strong></div>
           </div>
           <div class="muted nb-warn" style="font-size:12px;margin-top:6px;<?= empty($nbInit['ueber_max']) ? 'display:none' : '' ?>"><?= h((string)($nbInit['hinweis'] ?? '')) ?></div>
           <button class="btn btn-primary btn-sm" type="submit" style="margin-top:10px">Verbindlich nachbestellen</button>
@@ -4140,7 +4141,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <script>
   (function(){
-    function eur(v){ return v.toFixed(2).replace('.', ',') + ' €'; }
+    function eur(v){ return v > 0 ? v.toFixed(2).replace('.', ',') + ' €' : 'Preis folgt'; }
     function nf(n){ return (n||0).toLocaleString('de-DE'); }
     document.querySelectorAll('.nb-form').forEach(function(f){
       var inp=f.querySelector('.nb-menge'), out=f.querySelector('.nb-preis'), warn=f.querySelector('.nb-warn');
@@ -4221,6 +4222,28 @@ portal_head('Kundenportal · ' . $k['firma']);
     } ?>
   <h1 style="margin-bottom:4px">Ihre Bestellungen</h1>
   <p class="muted" style="margin:0 0 16px">Klicken Sie auf eine Bestellung, um alle Schritte, Rechnung und Details zu sehen.</p>
+  <?php // Nachbestellungen, die eingegangen sind, aber noch auf unsere Preisprüfung warten (noch kein Auftrag) – 09.11.2026.
+    $nbEingang = nachbestellung_offen_kunde((int)$k['id']);
+    if ($nbEingang): ?>
+  <div class="bx-panel" style="border-color:var(--gruen);margin-bottom:14px">
+    <h2 style="margin:0 0 8px;font-size:16px">Nachbestellung eingegangen</h2>
+    <?php foreach ($nbEingang as $nbE):
+        $nbName = produkt_kundenname((int)$nbE['produkt_id'], (int)$k['id']);
+        $nbStk  = (int)($nbE['stueck'] ?? 0); ?>
+      <div class="bx-row" style="justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line)">
+        <div><span style="font-weight:600"><?= h($nbName !== '' ? $nbName : 'Produkt') ?></span>
+          <span class="muted"> · <?= number_format((int)$nbE['menge'], 0, ',', '.') ?> Packungen<?= $nbStk ? ' · ' . h(inhalt_je_packung_txt(auftrag_darreichungsform(['produkt_id' => (int)$nbE['produkt_id']]), (float)$nbStk)) : '' ?> · am <?= h(fmt_zeit((string)$nbE['angelegt'], 'd.m.Y')) ?></span></div>
+        <div>
+          <?php if ((string)$nbE['status'] === 'preis_neu'): ?>
+            <a class="btn btn-primary btn-sm" href="<?= $portalLink('nachbestellen') ?>">Neuen Preis freigeben</a>
+          <?php else: ?>
+            <span class="muted" style="font-size:13px">Wir bestätigen den Preis kurz, dann startet die Produktion.</span>
+          <?php endif; ?>
+        </div>
+      </div>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
   <?php // Bestellkarte ist ein <a> (Default display:inline). Der Such-Filter setzt bei Treffern
         // r.style.display='' und würde damit ein Inline-`display:block` löschen -> die Karte fiele auf
         // inline zurück und Border/Box-Shadow rendern nur als kleiner Stummel („fehlerhafte Linien").
@@ -4302,6 +4325,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="nb-wrap muted" style="margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13px">Eine Nachbestellung zu diesem Produkt ist eingegangen – wir bestätigen den Preis kurz.</div>
   <?php else:
         $nbVk      = auftrag_vk_gesamt($a);   // Auftragspreis = bereits vereinbarter Preis (KEIN zweiter Kundenrabatt; Server speichert ihn ebenfalls unrabattiert)
+        if ($nbVk <= 0) $nbVk = nachbestellung_kundenpreis_vk($kid, $nbPid, $nbStk, max(1, $nbDef), (int)($a['verpackung_id'] ?? 0) ?: null);   // Altauftrag ohne Preis
         $nbStaffel = nachbestellung_staffel($kid, $nbPid, $nbStk);
         $nbInit    = nachbestellung_preis_fuer($kid, $nbPid, $nbStk, $nbDef, $nbVk); ?>
   <div class="nb-wrap" style="margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line)">
@@ -4317,7 +4341,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <div class="bx-row" style="gap:18px;align-items:flex-end;flex-wrap:wrap">
           <label style="display:flex;flex-direction:column;gap:6px;font-size:13px">Menge (Packungen)
             <input type="text" name="menge" class="nb-menge" inputmode="numeric" value="<?= number_format($nbDef,0,',','.') ?>" style="min-width:160px"></label>
-          <div style="font-size:14px">Preis / Pkg: <strong class="nb-preis"><?= $eur($nbInit['vk']) ?></strong></div>
+          <div style="font-size:14px">Preis / Pkg: <strong class="nb-preis"><?= (float)$nbInit['vk'] > 0 ? $eur($nbInit['vk']) : 'Preis folgt' ?></strong></div>
         </div>
         <div class="muted nb-warn" style="font-size:12px;margin-top:8px;<?= empty($nbInit['ueber_max']) ? 'display:none' : '' ?>"><?= h((string)($nbInit['hinweis'] ?? '')) ?></div>
         <div class="muted" style="font-size:12px;margin-top:12px">Gleiche Verpackung und gleiches Etikett (keine erneute Freigabe nötig). Der Preis richtet sich nach Ihrer Menge. Wir bestätigen den Preis kurz, dann startet die Produktion.</div>
@@ -4335,7 +4359,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <script>
   // Nachbestell-Preis live aus den bisherigen Angebots-Staffeln (gleiche Regel wie serverseitig).
   (function(){
-    function eur(v){ return v.toFixed(2).replace('.', ',') + ' €'; }
+    function eur(v){ return v > 0 ? v.toFixed(2).replace('.', ',') + ' €' : 'Preis folgt'; }
     function nf(n){ return (n||0).toLocaleString('de-DE'); }
     document.querySelectorAll('.nb-form').forEach(function(f){
       var inp=f.querySelector('.nb-menge'), out=f.querySelector('.nb-preis'), warn=f.querySelector('.nb-warn');

@@ -398,3 +398,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 08.11.2026 | 3: Menü "Einfach" flache Liste ohne Gruppen, größer, feste Reihenfolge, Linien-Icons | Nico / Claude Code |
 | 08.11.2026 | 3: Benachrichtigungen als erster Punkt in "Einfach" (Glocke mit Zähler), Eintrag unten entfällt dort | Nico / Claude Code |
 | 08.11.2026 | 3: Menüpunkt "Bestellt" (Bestellungen) in "Einfach" unter Einkauf | Nico / Claude Code |
+| 09.11.2026 | Nachbestellungen: im Portal unter Bestellungen sichtbar, solange sie auf die Preisprüfung warten; Hinweis in der Auftragsliste; ohne Preis am Vorauftrag gilt der Kundenpreis, Freigabe nie mit 0 € | Nico / Claude Code |

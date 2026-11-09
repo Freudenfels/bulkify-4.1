@@ -438,3 +438,5 @@ verfügbar, Ware versendet, Rechnung erstellt; max. 8, neueste zuerst). Leere Zu
 Teilmengen („Teilweise produziert · X von Y Stk", halber Punkt); Laboranalyse statt Qualitätsprüfung (Bericht-Download wie bisher);
 Energetisierung nicht mehr in der Kette, sondern als Kästchen (`portal_energ_html()`) neben „Fortschritt" bzw. in der Bestellkarte.
 In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. DL-Aufträge unverändert (eigene Schritte).
+
+**Nachbestellung eingegangen (09.11.2026):** Im Reiter „Bestellungen“ steht oben ein Block mit allen Nachbestellungen, die noch auf unsere Preisprüfung warten (Produkt mit Kundenname, Menge, Datum; bei neuem Preis Knopf „Neuen Preis freigeben“). Hat der Vorauftrag keinen Preis, rechnet das Nachbestell-Formular mit dem Kundenpreis; gibt es keinen, steht „Preis folgt“ statt 0,00 €.

@@ -10,3 +10,7 @@ Route `?p=nachbestellungen` (Rollen admin/sales/finance; Nav: Vertrieb · Nachbe
 
 Logik liegt vollständig in [../../core/nachbestellung.php](../../core/nachbestellung.php); diese Seite ist nur die Team-Oberfläche. Kein eigener Buchungs-/Preis-Code hier.
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## Ohne Preis (09.11.2026)
+
+Steht der Preis auf 0 (Vorauftrag ohne Preis), zeigt die Zeile „fehlt“ und darunter den Kundenpreis-Vorschlag. Knopf **„Kundenpreis x € übernehmen & freigeben“** erzeugt den Auftrag zu diesem Preis. Gibt es keinen Kundenpreis, ist „Preis anpassen“ offen (geht zur Freigabe an den Kunden) und ein Link führt zu den Kundenpreisen. „Preis bestätigen & freigeben“ gibt es nur mit Preis.

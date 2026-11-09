@@ -27,3 +27,5 @@ Reiter „Beschaffungsweg offen“ statt „Wartet auf Freigabe“ (04.11.2026).
 
 ## Spalte Stand (08.11.2026)
 Zeigt den aktuellen Schritt der neuen Fortschrittskette (`auftrag_fortschritt_stand()`): rot zuerst (z. B. „Etiketten Daten fehlen“), sonst laufend/teilweise, sonst zuletzt erledigt. DL-Aufträge wie bisher.
+
+**Nachbestellungen (09.11.2026):** Warten Portal-Nachbestellungen auf die Preisprüfung, steht oben ein Hinweis mit Anzahl und Knopf „Nachbestellungen prüfen“ (admin/sales/finance). Sie sind erst nach der Freigabe ein Auftrag.

@@ -208,6 +208,13 @@ $ohnePreis = (function_exists('has_role') && (has_role('admin') || has_role('fin
 $kopfAktion = $ohnePreis > 0 ? bx_btn('Aufträge ohne Preis (' . $ohnePreis . ')', '?p=auftrag_preise', 'ghost') . ' ' . bx_btn('Preise nachtragen', '?p=kundenpreise&ohne=1', 'ghost') : '';
 $tabWort = match ($tab) { 'freigabe' => 'ohne Beschaffungsweg', 'abgeschlossen' => 'abgeschlossene (versendet)', 'storniert' => 'stornierte', default => 'offene' };
 bx_head('Aufträge', $q !== '' ? count($rows) . ' Treffer unter „' . h((string)($TABS[$tab] ?? ucfirst($tab))) . '" (andere Reiter separat durchsuchen)' : count($rows) . ' ' . $tabWort, $kopfAktion);
+// Offene Nachbestellungen aus dem Portal sind noch KEIN Auftrag (erst nach Preisprüfung) – hier sichtbar machen (09.11.2026).
+if (function_exists('has_role') && (has_role('admin') || has_role('sales') || has_role('finance')) && table_exists('nachbestellung')) {
+    $nbOffenN = (int) scalar("SELECT COUNT(*) FROM nachbestellung WHERE status IN ('pruefung','preis_neu')");
+    if ($nbOffenN > 0) echo '<div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen);display:flex;gap:12px;align-items:center;flex-wrap:wrap">'
+        . '<span>' . $nbOffenN . ' Nachbestellung' . ($nbOffenN === 1 ? '' : 'en') . ' aus dem Kundenportal ' . ($nbOffenN === 1 ? 'wartet' : 'warten') . ' auf Preisprüfung – der Auftrag entsteht nach der Freigabe.</span>'
+        . bx_btn('Nachbestellungen prüfen', '?p=nachbestellungen', 'primary') . '</div>';
+}
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag' . (isset($_GET['nr']) ? ' ' . h((string)$_GET['nr']) : '') . ' gelöscht.</div>';
 ?>
 <div class="settabs">

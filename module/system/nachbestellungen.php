@@ -19,6 +19,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($r['fehler'])) { header('Location: ?p=nachbestellungen&fehler=' . urlencode($r['fehler'])); exit; }
         header('Location: ?p=nachbestellungen&ok=' . (int)$r['auftrag_id']); exit;
     }
+    if ($aktion === 'kp_uebernehmen') {
+        $r = nachbestellung_kundenpreis_uebernehmen($id);
+        if (isset($r['fehler'])) { header('Location: ?p=nachbestellungen&fehler=' . urlencode($r['fehler'])); exit; }
+        header('Location: ?p=nachbestellungen&ok=' . (int)$r['auftrag_id']); exit;
+    }
     if ($aktion === 'preis_anpassen') {
         $vk = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['vk_neu'] ?? '0'));
         $r = nachbestellung_preis_anpassen($id, $vk, trim((string)($_POST['grund'] ?? '')));
@@ -51,29 +56,43 @@ $paket = fn($stk, $pid = 0) => (int)$stk > 0 ? form_groessen_label(auftrag_darre
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Kunde</th><th>Produkt</th><th class="bx-num">Menge</th><th class="bx-num">Preis / Pkg</th><th class="bx-num">Gesamt netto</th><th>Status / Aktion</th></tr></thead>
     <tbody>
-    <?php foreach ($offen as $n): $menge = (int)$n['menge']; $vk = (float)$n['vk_stueck']; $netto = $menge * $vk; ?>
+    <?php foreach ($offen as $n): $menge = (int)$n['menge']; $vk = (float)$n['vk_stueck']; $netto = $menge * $vk;
+        // Ohne Preis (Altauftrag mit 0 €): Vorschlag aus den zentralen Kundenpreisen, Freigabe erst mit Preis.
+        $vor = 0.0;
+        if ($vk <= 0) {
+            $verpQ = (int)($n['quelle_auftrag_id'] ?? 0) ? (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE id=?", [(int)$n['quelle_auftrag_id']]) : 0;
+            $vor = nachbestellung_kundenpreis_vk((int)$n['kunde_id'], (int)$n['produkt_id'], (int)$n['stueck'], $menge, $verpQ ?: null);
+        } ?>
       <tr>
         <td><?= kunde_link($n['kunde_id'], (string)($n['kunde'] ?: ('Kunde #' . (int)$n['kunde_id']))) ?></td>
         <td><?= h((string)($n['produkt'] ?: '–')) ?> <span class="muted"><?= h($paket($n['stueck'], $n['produkt_id'] ?? 0)) ?></span></td>
         <td class="bx-num"><?= number_format($menge, 0, ',', '.') ?></td>
-        <td class="bx-num"><?= $eur($vk) ?></td>
-        <td class="bx-num"><?= $eur($netto) ?></td>
+        <td class="bx-num"><?= $vk > 0 ? $eur($vk) : '<span style="color:#8f231b">fehlt</span>' . ($vor > 0 ? '<div class="muted" style="font-size:12px">Kundenpreis ' . $eur($vor) . '</div>' : '') ?></td>
+        <td class="bx-num"><?= $vk > 0 ? $eur($netto) : ($vor > 0 ? '<span class="muted">' . $eur($menge * $vor) . '</span>' : '–') ?></td>
         <td>
           <?php if ((string)$n['status'] === 'preis_neu'): ?>
             <?= bx_badge('wartet auf Kundenfreigabe', 'warn') ?> <span class="muted" style="font-size:12px">neuer Preis <?= $eur((float)$n['vk_neu']) ?></span>
           <?php else: ?>
-          <?php if (!empty($n['grund'])): ?><div class="muted" style="font-size:12px;color:#8a6d00;margin-bottom:4px"><?= h((string)$n['grund']) ?></div><?php endif; ?>
+          <?php if ($vk <= 0): ?><div style="font-size:12px;color:#8f231b;margin-bottom:4px">Kein Preis am Vorauftrag – erst Preis festlegen, dann entsteht der Auftrag.<?= $vor <= 0 ? ' Kein Kundenpreis hinterlegt (<a href="?p=kundenpreise&ohne=1">Kundenpreise</a>).' : '' ?></div>
+          <?php elseif (!empty($n['grund'])): ?><div class="muted" style="font-size:12px;color:#8a6d00;margin-bottom:4px"><?= h((string)$n['grund']) ?></div><?php endif; ?>
           <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            <?php if ($vk > 0): ?>
             <form method="post" style="margin:0" onsubmit="return confirm('Preis bestätigen und Auftrag freigeben?');">
               <input type="hidden" name="aktion" value="bestaetigen"><input type="hidden" name="nb_id" value="<?= (int)$n['id'] ?>">
               <button class="btn btn-primary btn-sm" type="submit" data-busy="…">Preis bestätigen &amp; freigeben</button>
             </form>
-            <details>
+            <?php elseif ($vor > 0): ?>
+            <form method="post" style="margin:0" onsubmit="return confirm('Kundenpreis übernehmen und Auftrag freigeben?');">
+              <input type="hidden" name="aktion" value="kp_uebernehmen"><input type="hidden" name="nb_id" value="<?= (int)$n['id'] ?>">
+              <button class="btn btn-primary btn-sm" type="submit" data-busy="…">Kundenpreis <?= $eur($vor) ?> übernehmen &amp; freigeben</button>
+            </form>
+            <?php endif; ?>
+            <details<?= ($vk <= 0 && $vor <= 0) ? ' open' : '' ?>>
               <summary class="btn btn-ghost btn-sm" style="list-style:none;cursor:pointer">Preis anpassen</summary>
               <form method="post" class="bx-row" style="gap:6px;align-items:flex-end;margin:8px 0 0;flex-wrap:wrap">
                 <input type="hidden" name="aktion" value="preis_anpassen"><input type="hidden" name="nb_id" value="<?= (int)$n['id'] ?>">
                 <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Neuer Preis / Pkg (€)
-                  <input type="text" name="vk_neu" inputmode="decimal" value="<?= number_format($vk, 2, ',', '.') ?>" style="width:120px;text-align:right"></label>
+                  <input type="text" name="vk_neu" inputmode="decimal" value="<?= ($vk > 0 || $vor > 0) ? number_format($vk > 0 ? $vk : $vor, 2, ',', '.') : '' ?>" style="width:120px;text-align:right"></label>
                 <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Hinweis an den Kunden (optional)
                   <input type="text" name="grund" style="min-width:220px" placeholder="z. B. Rohstoffpreis gestiegen"></label>
                 <button class="btn btn-ghost btn-sm" type="submit">An Kunde zur Freigabe</button>
