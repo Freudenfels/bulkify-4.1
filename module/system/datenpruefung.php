@@ -751,6 +751,66 @@ UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftra
                         return $n > 0 ? 1 : 0;
                     }],
     ],
+    // ---- Produktseite (Nico 09.11.2026, Arbeitsanweisung Produktseite Teil 8): Widersprüche am Produkt ----
+    'prod_entwurf_verwendet' => [
+        'titel' => 'Produkt im Status „Entwurf", obwohl es in Angeboten/Aufträgen/Rechnungen steckt',
+        'info'  => 'Beispiel P-3170: Entwurf, aber in 4 Angeboten und einer Rechnung. Beheben setzt das Produkt auf „aktiv". Nichts sonst wird geändert.',
+        'sql'   => "SELECT p.id AS _id, CONCAT('?p=produkt&id=', p.id) AS _link, p.nummer, p.name, p.status,
+                           (SELECT COUNT(*) FROM angebot a WHERE a.produkt_id = p.id OR a.id IN (SELECT angebot_id FROM angebot_produkt WHERE produkt_id = p.id)) AS angebote,
+                           (SELECT COUNT(*) FROM auftrag au WHERE au.produkt_id = p.id AND au.status <> 'storniert') AS auftraege,
+                           (SELECT COUNT(*) FROM beleg b JOIN auftrag au ON au.id = b.auftrag_id WHERE au.produkt_id = p.id AND b.typ = 'rechnung' AND b.status <> 'storniert') AS rechnungen
+                    FROM produkt p
+                    WHERE p.status = 'entwurf'
+                      AND (EXISTS (SELECT 1 FROM angebot a WHERE a.produkt_id = p.id) OR EXISTS (SELECT 1 FROM angebot_produkt ap WHERE ap.produkt_id = p.id)
+                           OR EXISTS (SELECT 1 FROM auftrag au WHERE au.produkt_id = p.id AND au.status <> 'storniert'))
+                    ORDER BY p.id DESC",
+        'korrektur' => "UPDATE produkt SET status='aktiv' WHERE status='entwurf' AND id IN (...);",
+        'fix'   => ['tabelle' => 'produkt', 'typ' => 'produkt',
+                    'update' => "UPDATE produkt SET status='aktiv' WHERE status='entwurf' AND id IN ({IDS})"],
+    ],
+    'prod_glas_ohne_deckel' => [
+        'titel' => 'Glas/Dose/Flasche ohne Deckel am Produkt',
+        'info'  => 'Produkte mit Behälter, aber ohne Verschluss (Beutel, Sachets, Sticks und Blister ausgenommen). Beispiel P-3170: 150 ml Weithalsglas, Deckel „keine". Den Deckel am Produkt per Stift (Kachel Deckel) setzen.',
+        'sql'   => "SELECT p.id AS _id, CONCAT('?p=produkt&id=', p.id) AS _link, p.nummer, p.name, p.status, CONCAT('?p=verpackung&id=', i.id) AS _link_behaelter, i.name AS behaelter
+                    FROM produkt p JOIN item i ON i.id = p.verpackung_id
+                    WHERE p.verschluss_id IS NULL AND p.status <> 'inaktiv' AND COALESCE(p.extern, 0) = 0
+                      AND LOWER(i.name) NOT LIKE '%beutel%' AND LOWER(i.name) NOT LIKE '%sachet%' AND LOWER(i.name) NOT LIKE '%stick%' AND LOWER(i.name) NOT LIKE '%blister%'
+                    ORDER BY p.id DESC",
+        'korrektur' => '',
+        'ohne_fix'  => 'Kein automatisches Beheben: welcher Deckel passt, entscheidet das Team je Behälter.',
+        'fix'   => null,
+    ],
+    'kundenpreis_packgroesse' => [
+        'titel' => 'Kundenpreis mit anderer Menge je Packung als das Produkt',
+        'info'  => 'Beispiel Ikigai: Kundenpreis für 60 Kapseln an einem 90-Kapsel-Produkt. Laut Handbuch ist eine andere Packungsgröße ein eigenes Produkt – Nico entscheidet je Fall. Nur Anzeige.',
+        'sql'   => "SELECT kp.id AS _id, CONCAT('?p=produkt&id=', p.id, '&tab=kunden') AS _link, p.nummer, p.name, p.einheiten_pro_packung AS produkt_menge,
+                           kp.menge_pro_vpe AS kundenpreis_menge, k.firma AS kunde, kp.anzahl_vpe AS ab_pkg, kp.preis
+                    FROM produkt_kundenpreis kp JOIN produkt p ON p.id = kp.produkt_id JOIN kunden k ON k.id = kp.kunde_id
+                    WHERE kp.menge_pro_vpe IS NOT NULL AND kp.menge_pro_vpe > 0 AND p.einheiten_pro_packung > 0 AND kp.menge_pro_vpe <> p.einheiten_pro_packung
+                    ORDER BY p.id DESC, k.firma",
+        'korrektur' => '',
+        'ohne_fix'  => 'Nicht automatisch ändern (Entscheidung Nico je Fall: eigenes Produkt anlegen oder Kundenpreis korrigieren).',
+        'fix'   => null,
+    ],
+    'kundenpreis_abweichung' => [
+        'titel' => 'Kundenpreis weicht stark von der letzten Rechnung ab (nur Info)',
+        'info'  => 'Vergleicht den Kundenpreis (je Packung, ohne Verpackung) mit dem Betrag je Packung der letzten Rechnung dieses Kunden für dieses Produkt (inkl. Verpackung). Ein Abstand in Höhe der Verpackungskosten ist normal; gelistet wird ab 25 % Abweichung. Beispiel FuturaYou: 5,23 € Kundenpreis, 5,75 € auf RE-2766.',
+        'sql'   => "SELECT x._id, x._link, x.nummer, x.name, x.kunde, x.kundenpreis, x.rechnung, ROUND(x.re_je_pkg, 2) AS rechnung_je_pkg,
+                           ROUND((x.re_je_pkg - x.kundenpreis) / x.kundenpreis * 100) AS abweichung_prozent
+                    FROM (SELECT kp.id AS _id, CONCAT('?p=produkt&id=', p.id, '&tab=kunden') AS _link, p.nummer, p.name, k.firma AS kunde, kp.preis AS kundenpreis,
+                                 b.nummer AS rechnung, b.netto / NULLIF(a.menge, 0) AS re_je_pkg
+                          FROM produkt_kundenpreis kp JOIN produkt p ON p.id = kp.produkt_id JOIN kunden k ON k.id = kp.kunde_id
+                          JOIN beleg b ON b.id = (SELECT b2.id FROM beleg b2 JOIN auftrag a2 ON a2.id = b2.auftrag_id
+                                                  WHERE a2.produkt_id = kp.produkt_id AND a2.kunde_id = kp.kunde_id AND b2.typ = 'rechnung' AND b2.status <> 'storniert' AND a2.menge > 0
+                                                  ORDER BY b2.id DESC LIMIT 1)
+                          JOIN auftrag a ON a.id = b.auftrag_id
+                          WHERE kp.preis > 0) x
+                    WHERE x.re_je_pkg > 0 AND ABS(x.re_je_pkg - x.kundenpreis) / x.kundenpreis > 0.25
+                    ORDER BY ABS(x.re_je_pkg - x.kundenpreis) / x.kundenpreis DESC",
+        'korrektur' => '',
+        'ohne_fix'  => 'Nur Information – kein Beheben.',
+        'fix'   => null,
+    ],
 ];
 
 // Artikelnummer für ein Kundenetikett: dieselbe Logik wie kundenetikett_version_anlegen() (Aufräumen 17) –

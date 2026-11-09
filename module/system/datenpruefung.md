@@ -78,3 +78,9 @@ Prüfung `rohstoff_bestellt_ohne`: Aufträge mit manuell gesetzter Stufe `phase_
 Bestellung zum Auftrag (Position mit auftrag_id oder Verlaufseintrag ref_typ=bestellung; Bestellstatus gesendet/bestellt/geliefert
 oder angekommen). Beheben setzt `phase_override` auf NULL (protokolliert). Hintergrund: Arbeitsanweisung „Auftragsseite entschlacken“ Teil 0.3.
 - 08.11.2026 (Handbuch 10.2): neuer Punkt `rohstoff_bestellt_ohne_hoeher` – Aufträge mit von Hand gesetzter Stufe ab 2 (phase_override >= 2) ohne echte Bestellung, **nur Anzeige** (kein Beheben). Der bisherige Punkt `rohstoff_bestellt_ohne` (= 1) behebt wie gehabt.
+
+## Produktseite – Widersprüche (09.11.2026)
+- **prod_entwurf_verwendet:** Produkt im Status Entwurf, aber in Angeboten/Aufträgen/Rechnungen. Beheben setzt auf „aktiv" (Auswahl je Zeile, Protokoll).
+- **prod_glas_ohne_deckel:** Behälter ohne Verschluss (Beutel/Sachet/Stick/Blister ausgenommen). Nur Anzeige.
+- **kundenpreis_packgroesse:** Kundenpreis mit anderer Menge je Packung als das Produkt (z. B. 60 bei 90 Kapseln). Nur Anzeige – Nico entscheidet je Fall (andere Packungsgröße = eigenes Produkt).
+- **kundenpreis_abweichung:** Kundenpreis weicht mehr als 25 % vom Betrag je Packung der letzten Rechnung ab (Rechnung inkl. Verpackung). Nur Info.
