@@ -38,3 +38,15 @@ Widersprüche am Produkt stehen unter `?p=datenpruefung`: Entwurf trotz Verwendu
 - **Premix (fertige Mischung, lose)** – nur bei Kapsel/Tablette: Mischung der Rezeptur ohne Kapsel, Preis je kg. Die Antwort erscheint im Reiter Beschaffung mit „Premix je kg“, in der Kalkulation in der Spalte Premix und am Auftrag im Beschaffungsweg Premix.
 - **Rohstoffe einzeln** – Liste der Rezeptur-Rohstoffe (alle vorgewählt); einer → normale Preisanfrage, mehrere → Sammelanfrage (Preis je kg + CoA/Spezifikation).
 Danach das bekannte Anfrage-Fenster; die Lieferantenliste zeigt je Art nur passende Lieferanten.
+
+## Reiter Bestellungen (10.11.2026)
+Der Reiter steht zwischen Kunden und Beschaffung und zeigt, wer das Produkt gekauft hat. Je Auftrag eine Zeile:
+- Datum, Auftrag (Link), Kunde
+- Menge in Stk, bei Teillieferung zusätzlich die versendete Menge
+- Status: offen, in Produktion, versandbereit oder versendet
+- **Charge** (Link zur Chargenverfolgung) und **MHD**. Bei mehreren Chargen steht jede Charge mit Menge in einer eigenen Zeile. Ist das MHD vorbei, kommt der Hinweis „abgelaufen“, eine Charge in Quarantäne bekommt einen eigenen Hinweis.
+
+Ohne Charge steht „noch nicht produziert“ (bei offen oder in Produktion) bzw. „keine Charge zugeordnet“.
+
+Oben stehen die Summen (Aufträge, Kunden, Stk) und ein Suchfeld, das nach Kunde, Auftrag oder Charge filtert. „Auch stornierte zeigen“ (`&bst=alle`) blendet stornierte Aufträge grau ein. Die Daten kommen aus `core/produkt_bestellungen.php`.
+

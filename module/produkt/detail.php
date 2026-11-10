@@ -8,6 +8,7 @@ require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/spec_ki.php';             // Spec/CoA am Produkt per KI auslesen
 require_once BX_ROOT . '/core/anfrage_ui.php';          // „Beim Lieferanten anfragen" (Fertigprodukt-Anfrage)
 require_once BX_ROOT . '/core/produkt_kalkulation.php'; // Kosten je Packung, Beschaffung, Kunden (nur lesen)
+require_once BX_ROOT . '/core/produkt_bestellungen.php'; // Reiter Bestellungen: wer hat gekauft, Charge + MHD (nur lesen)
 
 $DFORM = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig','granulat'=>'Granulat'];
 $id  = $_GET['id'] ?? 'neu';
@@ -386,8 +387,8 @@ if (isset($_GET['nfcheck']) && !empty($_SESSION['nf_ergebnis'])) { $nf = $_SESSI
     echo '<div class="bx-panel" style="font-size:13px;line-height:1.6">Novel-Food-Prüfung: ' . ($nf['grund'] ? h($nf['grund']) : (!$nf['treffer'] ? 'Keine Zutat im Novel-Food-Katalog gefunden – als konform eingestuft.' : 'Treffer: ' . h(implode(', ', array_map(fn($t) => $t['zutat'] . ' → ' . $t['stoff'] . ' (' . $t['status'] . ')', $nf['treffer']))))) . '</div>'; }
 
 // ---- Reiter
-$TABS = $istExtern ? ['kunden' => 'Kunden', 'produktion' => 'Produktion', 'dokumente' => 'Dokumente']
-                   : ['rezeptur' => 'Rezeptur', 'kunden' => 'Kunden', 'beschaffung' => 'Beschaffung', 'produktion' => 'Produktion', 'kalkulation' => 'Kalkulation', 'dokumente' => 'Dokumente'];
+$TABS = $istExtern ? ['kunden' => 'Kunden', 'bestellungen' => 'Bestellungen', 'produktion' => 'Produktion', 'dokumente' => 'Dokumente']
+                   : ['rezeptur' => 'Rezeptur', 'kunden' => 'Kunden', 'bestellungen' => 'Bestellungen', 'beschaffung' => 'Beschaffung', 'produktion' => 'Produktion', 'kalkulation' => 'Kalkulation', 'dokumente' => 'Dokumente'];
 $tab = isset($TABS[(string)($_GET['tab'] ?? '')]) ? (string)$_GET['tab'] : array_key_first($TABS);
 echo '<div class="settabs" id="prodTabs" style="margin:16px 0">';
 foreach ($TABS as $k => $l) echo '<a href="?p=produkt&id=' . $pid . '&tab=' . $k . '" data-tab="' . $k . '"' . ($k === $tab ? ' class="on"' : '') . '>' . h($l) . '</a>';
@@ -731,6 +732,55 @@ if (!$istExtern):
 </div>
 <?php endif;
 
+// ===================================================================== Reiter Bestellungen (Nico 10.11.2026)
+// Wer hat das Produkt gekauft: je Auftrag Kunde, Menge, Status und die Fertigprodukt-Chargen mit MHD.
+$bstAlle = ($_GET['bst'] ?? '') === 'alle';
+$bstRows = produkt_bestellungen($pid, $bstAlle);
+$bstStatus = ['offen' => 'offen', 'in_produktion' => 'in Produktion', 'erledigt' => 'versandbereit', 'versendet' => 'versendet', 'storniert' => 'storniert'];
+$bstSum = array_sum(array_map(fn($a) => (int)$a['menge'], array_filter($bstRows, fn($a) => $a['status'] !== 'storniert')));
+$bstKunden = count(array_unique(array_map(fn($a) => (int)$a['kunde_id'], $bstRows)));
+$bstHeute = gmdate('Y-m-d'); ?>
+<div<?= $panel('bestellungen') ?> id="bestellungen">
+<div class="bx-panel">
+  <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Bestellungen <span class="muted" style="font-weight:400;font-size:14px">(<?= count($bstRows) ?> Aufträge · <?= $bstKunden ?> Kunde<?= $bstKunden === 1 ? '' : 'n' ?> · <?= $nf0($bstSum) ?> Stk)</span></h2>
+    <div class="bx-row" style="gap:10px;align-items:center">
+      <?php if ($bstRows): ?><input type="search" id="bstSuche" placeholder="Kunde, Auftrag oder Charge suchen" style="width:260px"><?php endif; ?>
+      <a class="muted" style="font-size:13px" href="?p=produkt&id=<?= $pid ?>&tab=bestellungen<?= $bstAlle ? '' : '&bst=alle' ?>"><?= $bstAlle ? 'Stornierte ausblenden' : 'Auch stornierte zeigen' ?></a>
+    </div>
+  </div>
+  <?php if (!$bstRows): ?><p class="muted">Noch keine Aufträge mit diesem Produkt.</p><?php else: ?>
+  <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table pr-bst" id="bstTab">
+    <thead><tr><th>Datum</th><th>Auftrag</th><th>Kunde</th><th class="bx-num">Menge</th><th>Status</th><th>Charge</th><th>MHD</th></tr></thead>
+    <tbody>
+    <?php foreach ($bstRows as $b): $st = (string)$b['status']; $vm = (int)($b['versendet_menge'] ?? 0); ?>
+      <tr<?= $st === 'storniert' ? ' style="opacity:.55"' : '' ?>>
+        <td style="white-space:nowrap"><?= h(date('d.m.Y', strtotime((string)$b['angelegt']))) ?></td>
+        <td style="white-space:nowrap"><a href="?p=auftrag&id=<?= (int)$b['id'] ?>"><?= h((string)$b['nummer']) ?></a></td>
+        <td><?= kunde_link($b['kunde_id'] ?? null, $b['firma'] !== null ? (string)$b['firma'] : null) ?></td>
+        <td class="bx-num" style="white-space:nowrap"><?= $nf0((int)$b['menge']) ?> Stk<?= $vm > 0 && $vm < (int)$b['menge'] ? '<div class="muted" style="font-size:12px">' . $nf0($vm) . ' versendet</div>' : '' ?></td>
+        <td><?= bx_badge($bstStatus[$st] ?? $st, $st === 'versendet' ? 'ok' : '') ?></td>
+        <?php if (!$b['chargen']): ?>
+          <td class="muted" colspan="2"><?= in_array($st, ['offen', 'in_produktion'], true) ? 'noch nicht produziert' : 'keine Charge zugeordnet' ?></td>
+        <?php else: ?>
+          <td style="white-space:nowrap"><?php foreach ($b['chargen'] as $i => $c): ?><div<?= $i ? ' style="margin-top:4px"' : '' ?>><a href="?p=chargen&id=<?= (int)$c['id'] ?>"><?= h((string)$c['charge_nr']) ?></a><?php if (count($b['chargen']) > 1): ?> <span class="muted" style="font-size:12px"><?= $nf0((float)$c['menge']) ?> Stk</span><?php endif; ?><?= $c['status'] === 'quarantaene' ? ' ' . bx_badge('Quarantäne', 'warn') : '' ?></div><?php endforeach; ?></td>
+          <td style="white-space:nowrap"><?php foreach ($b['chargen'] as $i => $c): $mhd = (string)($c['mhd'] ?? ''); ?><div<?= $i ? ' style="margin-top:4px"' : '' ?>><?= $mhd !== '' ? h(date('d.m.Y', strtotime($mhd))) . ($mhd < $bstHeute ? ' ' . bx_badge('abgelaufen', 'warn') : '') : '<span class="muted">nicht gesetzt</span>' ?></div><?php endforeach; ?></td>
+        <?php endif; ?>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <p class="muted" style="font-size:12px;margin:10px 0 0">Charge = Fertigprodukt-Charge aus der Produktion dieses Auftrags bzw. dem Auftrag fest zugeordnet. Ware, die ohne Zuordnung aus dem allgemeinen Lager ging, hat hier keine Charge.</p>
+  <?php endif; ?>
+</div>
+</div>
+<script>
+(function(){ var f=document.getElementById('bstSuche'), t=document.getElementById('bstTab'); if(!f||!t) return;
+  f.addEventListener('input', function(){ var q=f.value.trim().toLowerCase();
+    t.querySelectorAll('tbody tr').forEach(function(r){ r.style.display = (!q || r.textContent.toLowerCase().indexOf(q) >= 0) ? '' : 'none'; }); });
+})();
+</script>
+<?php
 // ===================================================================== Reiter Dokumente
 require_once BX_ROOT . '/core/pdf_pib.php';
 $pibDok = pib_datei($pid);
@@ -778,6 +828,7 @@ $specDocs = all("SELECT id, typ, datei_orig, ki_daten, angelegt FROM dokument WH
 .pr-lief{padding:12px 0;border-top:1px solid var(--line-2)}
 .pr-lief:first-of-type{border-top:0}
 .pr-kunden td{vertical-align:top}
+.pr-bst td{vertical-align:top}
 .pr-kalk td{vertical-align:top}
 </style>
 <script>
