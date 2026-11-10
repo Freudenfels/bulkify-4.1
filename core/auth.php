@@ -27,6 +27,7 @@ function route_rollen_map(): array {
         'kalender'           => ['production', 'labor', 'fulfillment'],
         'produktion_planung' => ['production'],   // Terminplanung – Admin (immer) + Produktionsleitung
         'maschinen'          => ['production'],   // Maschinenfuhrpark-Verwaltung (Admin immer + Produktion)
+        'weg_festlegen'      => [],          // Pop-up „Weg festlegen“ – nur Admin (wie der Reiter Beschaffungsweg)
         'produktion_vorbereitung' => [],          // Vor-Produktion/Freigabe – nur Admin (Eigen/Fremd + Freigabe sind Backend-Entscheidung)
         'easy_production'    => ['production'],    // Schnelle Produktionserfassung – Admin (immer) + Produktion
         'warenart_pruefung'  => [],                // Bulkware/Fertigprodukt prüfen+korrigieren – nur Admin (Stammdaten-Pflege)

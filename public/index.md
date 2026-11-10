@@ -31,3 +31,5 @@ Route `produktion_neu` → `module/produktion/neu.php` (Produktion (neu), im Auf
 ## Menü-Umschalter (08.11.2026)
 Nach dem Login-Check und der Routen-Auflösung: POST mit `bx_menu_modus` (`einfach`/`ausfuehrlich`) speichert `benutzer.menu_modus` des
 angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Rechte. Details: `core/layout.md`.
+
+- `weg_festlegen` → `module/auftrag/weg_festlegen.php` (Pop-up „Weg festlegen“, 10.11.2026).

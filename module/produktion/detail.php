@@ -455,7 +455,8 @@ ob_start(); ?>
   <h2 style="margin-top:0">Verkürzter Weg (Zukauf)</h2>
   <p style="margin-top:0">Hast du die <strong>Kapseln/Bulkware schon fertig</strong> (zugekauft, bereits im Lager)? Dann brauchst du keine Rohstoffe/Mischen/Verkapseln – der Weg verkürzt sich auf <strong>Fertigware bereitstellen · Verpacken · Etikettieren · Qualitätsprüfung · Freigaben</strong>.</p>
   <?php endif; ?>
-  <form method="post" style="margin:0"><input type="hidden" name="aktion" value="weg_zukauf"><button class="btn btn-primary" type="submit">Verkürzten Weg anwenden</button></form>
+  <?php if ($done === 0 && !empty($pa['auftrag_id'])): ?><button type="button" class="btn btn-primary" onclick="bxWegFestlegen(<?= (int)$pa['auftrag_id'] ?>)">Weg festlegen</button>
+  <?php else: ?><form method="post" style="margin:0"><input type="hidden" name="aktion" value="weg_zukauf"><button class="btn btn-primary" type="submit">Verkürzten Weg anwenden</button></form><?php endif; ?>
 </div>
 <?php elseif ($istVollerWeg && $herstOffen && !pa_ist_bulk($pa)): ?>
 <div class="bx-panel" style="padding:12px 16px">
@@ -468,10 +469,12 @@ ob_start(); ?>
 <div class="bx-panel" style="padding:12px 16px">
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
     <span class="muted">Dieser Auftrag läuft auf dem <strong>verkürzten Weg</strong> (zugekaufte Bulkware – ohne Mischen/Verkapseln).</span>
-    <form method="post" style="margin:0"><input type="hidden" name="aktion" value="weg_voll"><button class="btn btn-ghost btn-sm" type="submit">Auf vollen Produktionsweg umstellen</button></form>
+    <?php if ($done === 0 && !empty($pa['auftrag_id'])): ?><button type="button" class="btn btn-ghost btn-sm" onclick="bxWegFestlegen(<?= (int)$pa['auftrag_id'] ?>)">Weg festlegen</button>
+    <?php else: ?><form method="post" style="margin:0"><input type="hidden" name="aktion" value="weg_voll"><button class="btn btn-ghost btn-sm" type="submit">Auf vollen Produktionsweg umstellen</button></form><?php endif; ?>
   </div>
 </div>
 <?php endif; ?>
+<?php if (!empty($pa['auftrag_id'])) { require_once BX_ROOT . '/core/weg_festlegen.php'; echo weg_festlegen_dialog(); } ?>
 <?php
 // Rückabwicklung: Fremd-Bulk beim Lieferanten bestellt, soll aber doch selbst produziert werden.
 $bulkBestellOffen = $pa['auftrag_id'] ? (int) scalar(

@@ -457,6 +457,8 @@ $punkt = fn(string $farbe, string $titel) => '<span title="' . h($titel) . '" st
 render_header('produktion_vorbereitung', 'Beschaffungsweg offen');
 bx_head('Beschaffungsweg offen', count($rows) . ' Auftrag/Aufträge ohne festgelegten Beschaffungsweg' . ($q !== '' ? ' (gefiltert)' : '') . ' – offene Aufträge erscheinen automatisch; zum Bearbeiten anklicken.',
         bx_btn('Zu den Produktionsaufträgen', '?p=produktion', 'ghost'));
+if (isset($_GET['bwok']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['bwok']) . '</div>';
+if (isset($_GET['bwfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['bwfehler']) . '</div>';
 if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Beschaffungsweg festgelegt – der Auftrag ist in der Produktion.'
     . (isset($_GET['split']) ? ' ' . h((string)$_GET['split']) : '') . '</div>';
 if (isset($_GET['splitoffen'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">' . (int)$_GET['splitoffen'] . ' Pkg aus dem Lager-/Fremd-Anteil konnten (noch) nicht reserviert werden – es ist nicht genug vorhandene/bestellte Bulkware da. Bitte den Rest über den Einkauf als Bulk-Zukauf bestellen oder später am Auftrag reservieren.</div>';
@@ -475,7 +477,7 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr>
       <th>Prio</th><th>Bereit</th><th>Nummer</th><th>Kunde</th><th>Produkt</th><th class="bx-num">Pack.</th>
-      <th>Glas</th><th>Etikett</th><th>Rohstoffe / Bulk</th><th>Verpackung</th><th>Eigen/Fremd</th><th></th>
+      <th>Glas</th><th>Etikett</th><th>Rohstoffe / Bulk</th><th>Verpackung</th><th>Links</th><th></th>
     </tr></thead>
     <tbody>
     <?php foreach ($rows as $r):
@@ -516,12 +518,18 @@ if (isset($_GET['geholt'])) echo '<div class="bx-panel badge-ok" style="padding:
             <?php else: ?><span style="color:#d64545" title="<?= h(implode(', ', array_map(fn($f) => (string)$f['name'], $fehltMat))) ?>">fehlt: <?= $fmtFehlt($fehltMat) ?></span><?php endif; ?></td>
         <td><?= !$fehltVp ? $flagOk(true) . ' <span class="muted" style="font-size:12px">da</span>'
                           : '<span style="color:#d64545" title="' . h(implode(', ', array_map(fn($f) => (string)$f['name'], $fehltVp))) . '">fehlt: ' . h(implode(', ', $vpRollen)) . '</span>' ?></td>
-        <td><?= ($r['produktionsart'] ?? 'fremd') === 'eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info') ?></td>
-        <td style="text-align:right"><span class="muted" style="font-size:18px">&#8250;</span></td>
+        <?php $lk = $aid ? one("SELECT a.angebot_id, COALESCE(a.rezeptur_id, p.rezeptur_id) AS rid FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [(int)$aid]) : null; ?>
+        <td style="font-size:12px;white-space:nowrap" onclick="event.stopPropagation()">
+          <?php if ($aid): ?><a href="?p=auftrag&id=<?= (int)$aid ?>" target="_blank" rel="noopener">Auftrag</a><?php endif; ?>
+          <?php if (!empty($lk['angebot_id'])): ?> · <a href="?p=angebot&id=<?= (int)$lk['angebot_id'] ?>" target="_blank" rel="noopener">Angebot</a><?php endif; ?>
+          <?php if (!empty($lk['rid'])): ?> · <a href="?p=rezeptur_detail&id=<?= (int)$lk['rid'] ?>" target="_blank" rel="noopener">Rezeptur</a><?php endif; ?>
+        </td>
+        <td style="text-align:right" onclick="event.stopPropagation()"><?php if ($aid): ?><button type="button" class="btn btn-primary btn-sm" onclick="bxWegFestlegen(<?= (int)$aid ?>)">Weg festlegen</button><?php endif; ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
   </table></div>
 </div>
 <?php endif; ?>
+<?php require_once BX_ROOT . '/core/weg_festlegen.php'; echo weg_festlegen_dialog(); ?>
 <?php unset($GLOBALS['bx_stock_cache']); render_footer(); ?>

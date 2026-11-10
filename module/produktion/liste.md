@@ -49,3 +49,6 @@ Kachel und Hinweis „Wartet auf Freigabe“ führen seit 03.11.2026 zur Produkt
 Vorladen `fw:` je Auftrag enthält auch `quar` (Bulk-Chargen in Quarantäne, 04.11.2026).
 
 Kachel/Hinweis „Beschaffungsweg offen“ statt „Wartet auf Freigabe“ (04.11.2026).
+
+## 10.11.2026 (Teil 6)
+Die Sammel-Umstellung „auf Eigenproduktion / auf Fremdproduktion (Zukauf)“ für markierte Aufträge entfällt (Aktion `art_bulk`, Auswahlspalte). Der Weg wird je Auftrag im Pop-up „Weg festlegen“ bzw. im Reiter Beschaffungsweg festgelegt.

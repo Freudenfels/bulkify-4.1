@@ -25,15 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freib
     q("DELETE FROM freibedarf WHERE id=? AND status='offen'", [(int)($_POST['fb_id'] ?? 0)]);
     header('Location: ?p=einkaufsliste&typ=frei'); exit;
 }
-// Eigen/Fremd direkt im Einkauf festlegen: gibt den Vor-Produktionsauftrag zugleich ans Werk frei
-// (ein Klick je Auftrag). Danach erscheint der passende Bedarf im jeweiligen Typ-Reiter.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'festlegen') {
-    $paId = (int)($_POST['pa_id'] ?? 0);
-    $art  = ($_POST['art'] ?? '') === 'eigen' ? 'eigen' : 'fremd';
-    $wer  = trim((string)(current_user()['name'] ?? '')) ?: 'Einkauf';
-    $res  = $paId ? produktionsauftrag_freigeben($paId, $art, null, $wer) : ['ok'=>false, 'fehler'=>'Auftrag fehlt.'];
-    header('Location: ?p=einkaufsliste' . ($res['ok'] ? '&festgelegt=' . urlencode($art) : '&festlegfehler=1')); exit;
-}
+// Teil 6 (10.11.2026): Die Knöpfe „Eigenproduktion / Fremdproduktion (zukaufen)“ entfallen (kannten weder Premix noch Lager).
+// Festgelegt wird im Pop-up „Weg festlegen“ (core/weg_festlegen.php) – dieselben Karten wie im Reiter Beschaffungsweg am Auftrag.
 // Vorsorglich bestellen: einen VORHANDENEN Lagerartikel auf Vorrat bestellen – ohne aktuellen Bedarf, ohne
 // neuen Namen. Legt eine Bestellung ohne Auftragsbezug an (auftrag_id=0) und markiert sie sofort als bestellt.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsorglich') {
@@ -292,7 +285,8 @@ if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-colo
 if (isset($_GET['vorsorgportal'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Dieser Lieferant hat keinen aktiven Account oder keinen Preis – über das Portal nicht bestellbar. Bitte „Direkt bestellt (Telefon/Mail)" oder „Online bestellt" nutzen.</div>';
 if (isset($_GET['direktfehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Direkt bestellt" bitte einen Lieferanten wählen.</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
-if (isset($_GET['festgelegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ($_GET['festgelegt'] === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion') . ' festgelegt und freigegeben – der Bedarf steht jetzt im passenden Typ-Reiter.</div>';
+if (isset($_GET['bwok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['bwok']) . ' Der Bedarf steht jetzt im passenden Reiter.</div>';
+if (isset($_GET['bwfehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">' . h((string)$_GET['bwfehler']) . '</div>';
 if (isset($_GET['festlegfehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Festlegung nicht möglich – für diesen Auftrag wurde evtl. schon bestellt oder ein Produktionsschritt ist erledigt.</div>';
 if (isset($_GET['vorsorgfehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Vorsorgliche Bestellung nicht möglich – bitte einen vorhandenen Artikel und eine Menge größer 0 angeben.</div>';
 if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Die fehlenden Rohstoffe des Produktionsauftrags stehen jetzt hier – Bestand und bereits Bestelltes wurden übersprungen.</div>';
@@ -301,8 +295,8 @@ if (isset($_GET['aufgesetzt'])) echo '<div class="bx-panel badge-ok" style="padd
 // Festlegung passiert direkt hier im Einkauf (ein Klick je Auftrag -> gibt den Auftrag zugleich ans Werk frei).
 if ($ohneFestlegung): ?>
 <details class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px;margin-bottom:12px">
-  <summary style="cursor:pointer;font-weight:600"><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung „Eigen- oder Fremdproduktion" <span class="muted" style="font-weight:400;font-size:12px">(zum Aufklappen klicken)</span></summary>
-  <div class="muted" style="font-size:13px;margin:8px 0 10px">Ein Klick legt fest und gibt den Auftrag frei – danach erscheint der passende Einkaufsbedarf (Rohstoffe bei Eigen-, Bulk-Zukauf bei Fremdproduktion). „Letzte Festlegung" zeigt, wie dasselbe Produkt zuletzt entschieden wurde.</div>
+  <summary style="cursor:pointer;font-weight:600"><?= count($ohneFestlegung) ?> Auftrag/Aufträge warten auf die Festlegung des Wegs <span class="muted" style="font-weight:400;font-size:12px">(zum Aufklappen klicken)</span></summary>
+  <div class="muted" style="font-size:13px;margin:8px 0 10px">„Weg festlegen“ zeigt die Wege mit Kosten für genau diesen Auftrag (im Lager, Zukauf fertig, Premix, Einzelrohstoffe) und die Rezeptur mit den Mengen – danach erscheint der passende Einkaufsbedarf. „Letzte Festlegung“ zeigt, wie dasselbe Produkt zuletzt entschieden wurde.</div>
   <div class="bx-row" style="flex-direction:column;gap:8px;align-items:stretch">
     <?php foreach ($ohneFestlegung as $o):
         $letzte = produktionsart_letzte((int)$o['produkt_id'], (int)$o['kunde_id'], (int)$o['pa_id']);
@@ -310,7 +304,7 @@ if ($ohneFestlegung): ?>
     ?>
       <div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 12px">
         <span style="flex:1 1 240px;min-width:0">
-          <strong><?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?></strong><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' <span class="muted">· ' . kunde_anzeige($o['kunde_id'] ?? 0, $o['kunde'], true) . '</span>' : '' ?>
+          <a href="?p=auftrag&id=<?= (int)$o['auftrag_id'] ?>" target="_blank" rel="noopener" style="font-weight:600"><?= h($o['auftrag_nr'] ?: ('#' . (int)$o['auftrag_id'])) ?></a><?= $o['produkt'] ? ' · ' . h($o['produkt']) : '' ?><?= $o['kunde'] ? ' <span class="muted">· ' . kunde_anzeige($o['kunde_id'] ?? 0, $o['kunde'], true) . '</span>' : '' ?>
           <?php if ($letzte): ?>
             <div class="muted" style="font-size:12px;margin-top:2px">Letzte Festlegung: <strong><?= $letztArt === 'fremd' ? 'Fremdproduktion' : 'Eigenproduktion' ?></strong>
               <?= $letzte['auftrag_nr'] ? '· ' . h($letzte['auftrag_nr']) . ' ' : '' ?><?= $letzte['am'] ? '· ' . h(fmt_zeit($letzte['am'], 'd.m.Y')) . ' ' : '' ?><?= ((int)$letzte['kunde_id'] === (int)$o['kunde_id'] && $o['kunde']) ? '· selber Kunde' : ($letzte['kunde'] ? '· ' . kunde_anzeige($letzte['kunde_id'] ?? 0, $letzte['kunde'], true) : '') ?></div>
@@ -318,16 +312,17 @@ if ($ohneFestlegung): ?>
             <div class="muted" style="font-size:12px;margin-top:2px">Letzte Festlegung: – (erstmalig)</div>
           <?php endif; ?>
         </span>
-        <form method="post" style="margin:0;display:inline-flex;gap:8px;flex-wrap:wrap">
-          <input type="hidden" name="aktion" value="festlegen">
-          <input type="hidden" name="pa_id" value="<?= (int)$o['pa_id'] ?>">
-          <button class="btn <?= $letztArt === 'eigen' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" type="submit" name="art" value="eigen" title="<?= $letztArt === 'eigen' ? 'Wie zuletzt: ' : '' ?>Wir produzieren selbst – Rohstoffbedarf">Eigenproduktion<?= $letztArt === 'eigen' ? ' (wie zuletzt)' : '' ?></button>
-          <button class="btn <?= $letztArt === 'fremd' ? 'btn-primary' : 'btn-ghost' ?> btn-sm" type="submit" name="art" value="fremd" title="<?= $letztArt === 'fremd' ? 'Wie zuletzt: ' : '' ?>Fertiges Produkt (Bulk) zukaufen – Verpackung/Etiketten trotzdem">Fremdproduktion (zukaufen)<?= $letztArt === 'fremd' ? ' (wie zuletzt)' : '' ?></button>
-        </form>
+        <span class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;font-size:13px">
+          <a href="?p=auftrag&id=<?= (int)$o['auftrag_id'] ?>" target="_blank" rel="noopener">Auftrag</a>
+          <?php if (!empty($o['angebot_id'])): ?><a href="?p=angebot&id=<?= (int)$o['angebot_id'] ?>" target="_blank" rel="noopener">Angebot<?= !empty($o['angebot_nr']) ? ' ' . h((string)$o['angebot_nr']) : '' ?></a><?php endif; ?>
+          <?php if (!empty($o['rezeptur_id'])): ?><a href="?p=rezeptur_detail&id=<?= (int)$o['rezeptur_id'] ?>" target="_blank" rel="noopener">Rezeptur<?= !empty($o['rezeptur_nr']) ? ' ' . h((string)$o['rezeptur_nr']) : '' ?></a><?php endif; ?>
+          <button type="button" class="btn btn-primary btn-sm" onclick="bxWegFestlegen(<?= (int)$o['auftrag_id'] ?>)">Weg festlegen</button>
+        </span>
       </div>
     <?php endforeach; ?>
   </div>
 </details>
+<?php require_once BX_ROOT . '/core/weg_festlegen.php'; echo weg_festlegen_dialog(); ?>
 <?php endif; ?>
 <form method="post" class="bx-form" enctype="multipart/form-data">
 <div class="bx-panel">

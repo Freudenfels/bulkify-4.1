@@ -560,3 +560,5 @@ Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohs
 - Neue Spalten: `bestellung_position.rest_storniert_am`, `bestellung.nachtraeglich_grund`, `bestellung.nachtraeglich_geprueft_am`, `charge.we_grund`, `charge.we_grund_notiz`.
 
 - `item.synonyme` (TEXT): frühere bzw. alternative Namen, z. B. zusammengeführte Doppel-Artikel. Sie werden überall mitgesucht (Teil 5).
+
+- `auftraege_ohne_festlegung()` liefert zusätzlich `angebot_id`, `angebot_nr`, `rezeptur_id` und `rezeptur_nr` (Links im Block auf der Bestellen-Seite, Teil 6).

@@ -165,3 +165,6 @@ Das Kennzeichen heißt nur noch „alles vorhanden“, wenn wirklich nichts fehl
 
 ## Direkt bestellt (08.11.2026)
 Im Block Material neben „Bestellung(en) anlegen“ der Knopf „Direkt bestellt“: Entwürfe je Hauptlieferant werden sofort als bestellt + bestätigt abgeschlossen (ohne Lieferant bleibt Entwurf), keine Mail.
+
+## 10.11.2026 (Teil 6)
+Vor Produktionsbeginn öffnen „Verkürzter Weg“ und „voller Produktionsweg“ das Pop-up **„Weg festlegen“**. Nach Beginn (erledigte Schritte) bleiben „Auf fertige Kapseln umstellen“ bzw. „Auf vollen Produktionsweg umstellen“: Das ist ein Sonderfall mitten in der Produktion, den das Pop-up nicht abdeckt. Die Rückabwicklung bleibt.

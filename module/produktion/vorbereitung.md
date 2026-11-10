@@ -95,3 +95,6 @@ Soll-Kette 3 (04.11.2026): Die Einzelseite `?p=produktion_vorbereitung&id=…` l
 
 Liste heißt **Beschaffungsweg offen** (Soll-Kette 4c, 04.11.2026); eine Zeile öffnet den Auftrag im Reiter Beschaffungsweg.
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## Weg festlegen per Pop-up (10.11.2026, Teil 6)
+Die Liste „Beschaffungsweg offen“ hat je Zeile Links zu Auftrag, Angebot und Rezeptur (neuer Tab) und den Knopf **„Weg festlegen“** (Pop-up). Die Spalte Eigen/Fremd entfällt. Die erweiterte Ansicht „Auf Quellen aufteilen“ (`&voll=1`, Lager/Fremd/Eigen) bleibt, sie ist aus dem Reiter Beschaffungsweg verlinkt.

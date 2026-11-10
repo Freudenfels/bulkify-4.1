@@ -11,16 +11,8 @@ $dir  = $_GET['dir']  ?? 'asc';
 $tab  = $_GET['tab']  ?? 'laufend';
 if (!in_array($tab, ['laufend', 'bereit', 'wartet', 'bestellt', 'erledigt'], true)) $tab = 'laufend';
 
-// Sammel-Umstellung Eigen-/Fremdproduktion für markierte Aufträge.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'art_bulk') {
-    $art = ($_POST['art'] ?? '') === 'eigen' ? 'eigen' : 'fremd';
-    $ids = array_values(array_filter(array_map('intval', (array)($_POST['pa'] ?? [])), fn($x) => $x > 0));
-    $n = 0; $skip = 0;
-    foreach ($ids as $pid) { if (produktionsauftrag_art_setzen($pid, $art)) $n++; else $skip++; }
-    $_SESSION['prod_flash'] = $n . ' auf ' . ($art === 'eigen' ? 'Eigenproduktion' : 'Fremdproduktion') . ' gesetzt'
-        . ($skip ? ', ' . $skip . ' übersprungen (schon begonnen oder bereits bestellt)' : '') . '.';
-    header('Location: ?p=produktion&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : '')); exit;
-}
+// Teil 6 (10.11.2026): Sammel-Umstellung Eigen-/Fremdproduktion entfällt – der Weg wird je Auftrag im Pop-up „Weg festlegen“
+// bzw. im Reiter Beschaffungsweg festgelegt (eine Stelle, mit Premix und Lager).
 
 // Neuen Produktionsauftrag OHNE Kundenbezug anlegen (Lager-/Vorratsproduktion).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'neu') {
@@ -179,7 +171,6 @@ if ($paIdsP) { $in = implode(',', array_fill(0, count($paIdsP), '?'));
 $nfPkg = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
 $cols = [
-    '_sel'         => ['label' => '', 'render' => fn($r)=> '<input type="checkbox" name="pa[]" form="prodBulk" value="'.(int)$r['id'].'" onclick="event.stopPropagation()">'],
     // Prio kompakt: nur ein farbiger Punkt (Tooltip = Klartext), damit die Spalte schmal bleibt.
     'prio'         => ['label' => 'Prio', 'sort' => true, 'render' => function($r){
                         $p = (int)($r['prio'] ?? 2);
@@ -403,18 +394,7 @@ bx_table($cols, array_values($rows), [
     },
 ]);
 ?>
-<?php if ($rows && in_array($tab, ['bereit', 'wartet'], true)): ?>
-<form id="prodBulk" method="post" class="bx-row" style="gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap"
-      onsubmit="if(!document.querySelectorAll('input[name=&quot;pa[]&quot;]:checked').length){alert('Bitte zuerst Aufträge markieren.');return false;}">
-  <input type="hidden" name="aktion" value="art_bulk">
-  <input type="hidden" name="tab" value="<?= h($tab) ?>">
-  <label class="muted" style="font-size:13px;cursor:pointer"><input type="checkbox" onclick="document.querySelectorAll('input[name=&quot;pa[]&quot;]').forEach(function(c){c.checked=this.checked;}.bind(this))"> alle markieren</label>
-  <span class="muted" style="font-size:13px">· Markierte umstellen:</span>
-  <button class="btn btn-primary btn-sm" type="submit" name="art" value="eigen" data-busy="…">auf Eigenproduktion</button>
-  <button class="btn btn-ghost btn-sm" type="submit" name="art" value="fremd" data-busy="…">auf Fremdproduktion (Zukauf)</button>
-</form>
-<div class="muted" style="font-size:12px;margin-top:6px">Eigenproduktion = wir stellen selbst her (voller Weg mit Rohstoffen/Mischen/Verkapseln). Fremdproduktion = fertige Bulkware zukaufen (verkürzter Weg). Bereits begonnene Aufträge lassen sich nicht mehr umstellen.</div>
-<?php endif; ?>
+
 <?php
 unset($GLOBALS['bx_stock_cache']);   // Anzeige fertig -> Cache aus (falls danach noch etwas rechnet)
 render_footer();

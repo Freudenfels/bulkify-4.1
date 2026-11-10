@@ -344,3 +344,8 @@ Neben „Bestellen“ (Entwurf) je Lieferant der Knopf „Direkt bestellt“: le
 
 ## Reiter Beschaffungsweg: Bedarf und Rest (10.11.2026)
 Jede Karte zeigt immer „Bedarf für diesen Auftrag“ (volle Menge). Ist schon Ware zugeordnet, steht dahinter „noch zu beschaffen (Rest)“. Bei Einzelrohstoffen steht je Zeile der volle Bedarf und klein darunter „Rest …“; die Summe gilt „für den Rest“. Anlass: AB-3284 – 15.000 Kapseln zugeordnet, alle Wege zeigten 0 kg, man sah nicht, wie viel Rohstoff die Eigenproduktion bräuchte.
+
+## Weg festlegen – eine Stelle (10.11.2026, Einkauf gerade ziehen Teil 6)
+- Der Reiter Beschaffungsweg gibt `beschaffungsweg_karten()` aus `core/weg_festlegen.php` aus, also dieselben Karten wie das Pop-up „Weg festlegen“. Neu ist die vierte Karte „Haben wir schon im Lager“ (Stand der Zuordnung + passende freie Chargen).
+- Die Aktionen `beschaffungsweg_setzen`, `beschaffung_bedarf`, `beschaffung_bestellen` und `deckung_*` beachten `zurueck`, damit es nach dem Speichern aus dem Pop-up zurück auf die Bestellen-Seite bzw. „Beschaffungsweg offen“ geht.
+- Reiter Produktion: „Herstellen / Einkaufen“ entfällt. Ohne Produktionsauftrag gibt es nur noch „Produktionsauftrag anlegen“, der Weg folgt im Reiter Beschaffungsweg. Die Aktion `pa_freigeben` (Eigen/Fremd) entfällt.

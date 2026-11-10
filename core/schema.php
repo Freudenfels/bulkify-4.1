@@ -11210,10 +11210,13 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
 // („erst festlegen", mit Link in die Produktion). Ihre Bedarfspositionen erscheinen bewusst noch nicht.
 function auftraege_ohne_festlegung(): array {
     if (!table_exists('produktionsauftrag')) return [];
-    return all("SELECT pa.id AS pa_id, pa.auftrag_id, pa.produkt_id, pa.kunde_id, a.nummer AS auftrag_nr,
+    return all("SELECT pa.id AS pa_id, pa.auftrag_id, pa.produkt_id, pa.kunde_id, a.nummer AS auftrag_nr, a.angebot_id, ang.nummer AS angebot_nr,
+                       COALESCE(a.rezeptur_id, p.rezeptur_id, pa.rezeptur_id) AS rezeptur_id, rz2.nummer AS rezeptur_nr,
                        COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, rz.name) AS produkt, k.firma AS kunde
                 FROM produktionsauftrag pa
                 LEFT JOIN auftrag a   ON a.id=pa.auftrag_id
+                LEFT JOIN angebot ang ON ang.id=a.angebot_id
+                LEFT JOIN rezeptur rz2 ON rz2.id=COALESCE(a.rezeptur_id, (SELECT p2.rezeptur_id FROM produkt p2 WHERE p2.id=a.produkt_id), pa.rezeptur_id)
                 LEFT JOIN produkt p   ON p.id=pa.produkt_id
                 LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
                 LEFT JOIN kunden k    ON k.id=pa.kunde_id

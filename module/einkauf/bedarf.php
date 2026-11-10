@@ -8,11 +8,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     $paId = (int)($_POST['pa_id'] ?? 0);
     $tabRedir = ($_POST['tab'] ?? '') === 'uebergeben' ? '&tab=uebergeben' : '';
-    if ($aktion === 'produktionsart' && $paId) {
-        $art = ($_POST['produktionsart'] ?? 'eigen') === 'fremd' ? 'fremd' : 'eigen';
-        q("UPDATE produktionsauftrag SET produktionsart=? WHERE id=?", [$art, $paId]);
-        header('Location: ?p=bedarf' . $tabRedir); exit;   // frisch laden -> Seite startet oben
-    } elseif ($aktion === 'melden' && $paId) {
+    // Teil 6 (10.11.2026): Eigen/Fremd wird hier nicht mehr umgestellt – nur im Pop-up „Weg festlegen“ (eine Stelle).
+    if ($aktion === 'melden' && $paId) {
         q("UPDATE produktionsauftrag SET bedarf_gemeldet=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $paId]);
         $nr = scalar("SELECT a.nummer FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE pa.id=?", [$paId]);
         header('Location: ?p=bedarf&gemeldet=' . urlencode((string)$nr)); exit;
@@ -181,12 +178,8 @@ $BM_KAT = betriebsmittel_kategorien();
         <?= $gemeldet ? bx_badge('an Einkauf gemeldet','ok') : bx_badge('noch nicht gemeldet','warn') ?>
       </div>
       <div class="bx-row" style="gap:8px;align-items:center">
-        <form method="post" style="margin:0"><input type="hidden" name="aktion" value="produktionsart"><input type="hidden" name="pa_id" value="<?= (int)$pa['id'] ?>"><input type="hidden" name="tab" value="<?= h($tab) ?>">
-          <select name="produktionsart" onchange="this.form.submit()" title="Machen wir es selbst oder kaufen wir das fertige Produkt zu?">
-            <option value="eigen" <?= !$fremd ? 'selected' : '' ?>>Eigenproduktion</option>
-            <option value="fremd" <?= $fremd ? 'selected' : '' ?>>Fremdproduktion (zukaufen)</option>
-          </select>
-        </form>
+        <?= bx_badge(beschaffungswege()[pa_beschaffungsweg($pa)] ?? ($fremd ? 'Fremdproduktion' : 'Eigenproduktion'), 'info') ?>
+        <?php if (!empty($pa['auftrag_id'])): ?><button type="button" class="btn btn-ghost btn-sm" onclick="bxWegFestlegen(<?= (int)$pa['auftrag_id'] ?>)">Weg festlegen</button><?php endif; ?>
         <?php if (!$gemeldet): ?>
           <form method="post" style="margin:0"><input type="hidden" name="aktion" value="melden"><input type="hidden" name="pa_id" value="<?= (int)$pa['id'] ?>">
             <button class="btn btn-primary btn-sm" type="submit">An Einkauf melden</button></form>
@@ -230,4 +223,4 @@ $BM_KAT = betriebsmittel_kategorien();
     <?php endif; ?>
   </div>
 <?php endforeach; endif; ?>
-<?php unset($GLOBALS['bx_stock_cache']); render_footer(); ?>
+<?php unset($GLOBALS['bx_stock_cache']); require_once BX_ROOT . '/core/weg_festlegen.php'; echo weg_festlegen_dialog(); render_footer(); ?>

@@ -28,3 +28,6 @@ Spalte „Fehlt": liegt der fehlende Rest in Quarantäne, steht dort „N in Qua
 
 Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief. Dazu zählt auch `bedarf_aggregiert()` (Einkaufsliste) sie nicht mehr. Vorher hätte der Einkauf das Material für die volle Jahresmenge vorgeschlagen.
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## 10.11.2026 (Teil 6)
+Die Eigen/Fremd-Auswahl je Auftrag entfällt (Aktion `produktionsart`). Stattdessen gibt es den Weg als Badge und den Knopf „Weg festlegen“ (Pop-up). Melden an den Einkauf bleibt.
