@@ -593,6 +593,8 @@ function nwAddRow(){
            $rzDocs[(int)$d['item_id']][] = $d;
    }
    $docTypLbl = ['spec' => 'Spec', 'coa' => 'CoA', 'analyse' => 'Analyse']; ?>
+<?php // Nico 10.11.2026: welche Rohstoffe haben keine Lieferanten-Unterlagen (Spec/CoA)? Gezielt anfragen.
+  if (in_array((string)$status, ['entwurf', 'vorschlag'], true)) { require_once BX_ROOT . '/core/rohstoff_unterlagen.php'; echo rohstoff_unterlagen_panel(array_map(fn($z) => (int)$z['item_id'], $rzZutaten), 'diese Rezeptur'); } ?>
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
     <h2 style="margin:0">Rohstoffpreise</h2>

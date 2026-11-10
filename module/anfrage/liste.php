@@ -6,6 +6,7 @@
 // nur, wenn der Nutzer ?p=portal_anfragen sehen darf. Die alte Seite ?p=portal_anfragen bleibt erreichbar.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/rohstoff_unterlagen.php';
 
 seed_anfrage_if_empty();
 
@@ -45,6 +46,7 @@ foreach (all("SELECT a.*, k.firma AS kunde_firma, r.nummer AS rezeptur_nr, r.sta
         'text' => trim(((string)($r['produktname'] ?? '') ?: '–') . ($form !== '' ? ' · ' . $form : '') . (!empty($r['rezeptur_nr']) ? ' · Rezeptur ' . $r['rezeptur_nr'] : '')),
         'bucket' => $b, 'badge' => $badge, 'neu' => $as === 'neu' && $b === 'offen', 'oben' => $as === 'ueberarbeiten',
         'status' => $as, 'angelegt' => (string)($r['angelegt'] ?? ''), 'url' => '?p=anfrage&id=' . (int)$r['id'],
+        'rez_id' => (int)($r['rezeptur_id'] ?? 0),
     ];
 }
 
@@ -85,6 +87,7 @@ if (!function_exists('route_erlaubt') || route_erlaubt('portal_anfragen')) {
             'kunde_id' => $r['kunde_id'], 'kunde_firma' => (string)($r['firma'] ?? ''),
             'text' => $txt, 'bucket' => $b, 'badge' => $badge, 'neu' => $s === 'neu' && $b === 'offen', 'oben' => false,
             'status' => $s, 'angelegt' => (string)($r['angelegt'] ?? ''), 'url' => '?p=portal_anfrage&id=' . (int)$r['id'],
+            'rohstoff_id' => (int)($r['rohstoff_id'] ?? 0), 'rez_id' => (int)($r['rezeptur_id'] ?? 0),
         ];
     }
 }
@@ -107,6 +110,20 @@ $rows = array_values(array_filter($zeilen, function ($z) use ($art, $ansicht, $q
 }));
 foreach ($rows as &$z) $z['art_label'] = $ARTEN[$z['art']] ?? $z['art'];
 unset($z);
+// Nico 10.11.2026: fehlende Lieferanten-Unterlagen (Spec/CoA) der Rohstoffe je Anfrage – für alle angezeigten, nicht abgelehnten Zeilen.
+$unRez = []; $unPortal = [];
+foreach ($rows as $z) {
+    if ($z['bucket'] === 'abgelehnt') continue;
+    if ($z['art'] === 'rezeptur') $unRez[$z['id']] = true;
+    elseif (in_array($z['art'], ['rohstoff', 'produkt'], true)) $unPortal[$z['id']] = ['rohstoff_id' => $z['rohstoff_id'] ?? 0, 'rezeptur_id' => $z['rez_id'] ?? 0];
+}
+$unterlagen = ($unRez || $unPortal) ? anfragen_unterlagen_fehlen($unRez, $unPortal) : ['rezeptur' => [], 'portal' => []];
+foreach ($rows as &$z) {
+    $u = $z['art'] === 'rezeptur' ? ($unterlagen['rezeptur'][$z['id']] ?? null) : ($unterlagen['portal'][$z['id']] ?? null);
+    $z['unterlagen_fehlen'] = $u ? (int)$u['fehlen'] : -1;
+    $z['unterlagen_angefragt'] = $u ? (int)$u['angefragt'] : 0;
+}
+unset($z);
 $rows = bx_sort_rows($rows, $sort, $dir);
 // „Überarbeiten" (Kunde hat Vorschlag abgelehnt) und neue Anfragen zuoberst – da muss das Team zuerst ran.
 usort($rows, fn($a, $b) => [$b['oben'], $b['neu']] <=> [$a['oben'], $a['neu']]);
@@ -122,6 +139,9 @@ $cols = [
     'kunde_firma' => ['label'=>'Kunde', 'sort'=>true, 'render'=>fn($r)=> kunde_link($r['kunde_id'], $r['kunde_firma'])],
     'text'        => ['label'=>'Anfrage', 'sort'=>true, 'render'=>fn($r)=> h($r['text'])],
     'status'      => ['label'=>'Status', 'sort'=>true, 'render'=>fn($r)=> $r['badge']],
+    'unterlagen_fehlen' => ['label'=>'Unterlagen', 'sort'=>true, 'render'=>fn($r)=> $r['unterlagen_fehlen'] < 0 ? '<span class="muted">–</span>'
+        : ($r['unterlagen_fehlen'] === 0 ? '<span class="muted">vollständig</span>'
+        : bx_badge($r['unterlagen_fehlen'] . ' ohne Spec/CoA', 'warn') . ($r['unterlagen_angefragt'] ? ' <span class="muted" style="font-size:11px">' . (int)$r['unterlagen_angefragt'] . ' angefragt</span>' : ''))],
     'angelegt'    => ['label'=>'Angefragt', 'sort'=>true, 'render'=>fn($r)=> $r['angelegt'] ? h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) : '<span class="muted">–</span>'],
 ];
 

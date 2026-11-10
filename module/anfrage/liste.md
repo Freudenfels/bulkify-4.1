@@ -25,3 +25,6 @@
 
 **Menü:** Punkt „Anfragen" (`core/layout.php`). Zähler = offene Anfragen aller Arten, die der Nutzer sehen darf. Wer nur Portal-Anfragen
 sehen darf (Einkauf), wird vom Menüpunkt auf `?p=portal_anfragen` geführt. Die Seite `?p=portal_anfragen` bleibt erreichbar.
+
+## Spalte „Unterlagen“ (10.11.2026)
+Je nicht abgelehnter Anfrage (Rezeptur-, Produkt- und Rohstoff-Anfrage) steht „N ohne Spec/CoA“ (davon schon angefragt) bzw. „vollständig“. So sieht der Mitarbeiter schon beim Eingang, wo Lieferanten-Unterlagen fehlen. Grundlage: `anfragen_unterlagen_fehlen()`.

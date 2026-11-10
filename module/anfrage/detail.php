@@ -2,7 +2,8 @@
 // Rezepturanfrage bearbeiten: Kundenwunsch -> Rohstoff-Zuordnung + Kapsel-Check -> Rezeptur erstellen
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
-require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup (Lieferantenauswahl) für nicht vorhandene Rohstoffe
+require_once BX_ROOT . '/core/anfrage_ui.php';
+require_once BX_ROOT . '/core/rohstoff_unterlagen.php';   // Kasten „Unterlagen der Rohstoffe“ (Spec/CoA fehlen?)   // Preisanfrage-Popup (Lieferantenauswahl) für nicht vorhandene Rohstoffe
 
 // Team darf JEDE Darreichungsform setzen (nicht nur die 6, die der Kunde im Portal anbieten kann) – sonst
 // liesse sich eine als z. B. „Öl" angelegte/abgeleitete Anfrage im Dropdown gar nicht sehen oder auf „Pulver"
@@ -221,6 +222,8 @@ if (!$neu && ($a['status'] ?? '') === 'ueberarbeiten') {
        . '</div>';
 }
 ?>
+<?php // Nico 10.11.2026: gleich oben sehen, welche zugeordneten Rohstoffe keine Spezifikation/CoA haben – und gezielt anfragen.
+if (!$neu) echo rohstoff_unterlagen_panel(rezeptur_anfrage_rohstoff_ids((int)$id, array_map(fn($w) => (int)($w['item_id'] ?? 0), $wuensche)), 'diese Anfrage'); ?>
 <?php // Original-Anfrage & lückenloser Änderungsverlauf (unveränderlich, nur intern).
 if (!$neu): $snaps = function_exists('rezeptur_anfrage_snapshots') ? rezeptur_anfrage_snapshots((int)$id) : [];
   if ($snaps): ?>
