@@ -17,11 +17,17 @@ if (!$neu && isset($_GET['coa_stand'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
+    // Einkauf gerade ziehen (Teil 1, 10.11.2026): „Wareneingang buchen" führt in den EINEN Wareneingang mit vorgewählter Position
+    // (Charge, MHD, Menge echt erfasst) – kein pauschales Einbuchen „zu BE-…" mehr.
     if ($aktion === 'liefern' && !$neu) {
-        if (bestellung_freitext_positionen((int)$id) > 0) {   // Bulk-Freitext braucht den Wareneingang im Lager (Charge, MHD, Quarantäne)
-            header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode('Diese Bestellung enthält Bulkware ohne Lagerartikel. Bitte in der Lager-App unter Wareneingang einbuchen (Lieferung wählen) – dort bekommt sie Charge, MHD und hängt am Auftrag.')); exit;
-        }
-        bestellung_wareneingang((int)$id); header('Location: ?p=bestellung&id=' . $id . '&geliefert=1'); exit;
+        $bpErst = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND COALESCE(geliefert_menge,0) < menge AND rest_storniert_am IS NULL ORDER BY sort, id LIMIT 1", [(int)$id]);
+        header('Location: ?p=wareneingang' . ($bpErst ? '&bp=' . $bpErst : '')); exit;
+    }
+    // Teil 3: Rest einer Teillieferung stornieren – die Bestellung schließt, der Rest zählt nicht mehr als unterwegs.
+    if ($aktion === 'rest_storno' && !$neu) {
+        webe_rest_stornieren((int)$id, (string)(current_user()['name'] ?? ''));
+        log_aktivitaet('bestellung', (int)$id, 'team', 'Rest storniert – offene Restmengen zählen nicht mehr als unterwegs.', 'status');
+        header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
     }
     // Ablauf beim Lieferanten – dieselben Aktionen nutzt spaeter das Lieferantenportal.
     // Über das Portal gesendet, Lieferant hat aber telefonisch bestätigt: bestellt + bestätigt, ohne weitere Mail (08.11.2026).
@@ -302,7 +308,11 @@ if (!$neu) {
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
     if ($b['status'] === 'gesendet' && (int)($b['bestaetigt'] ?? 0) !== 1)
         echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung als telefonisch bestätigt markieren? Status bestellt, keine Mail.\');"><input type="hidden" name="aktion" value="telefonisch_bestaetigt"><button class="btn btn-primary btn-sm" type="submit" title="Lieferant hat am Telefon bestätigt – ohne weitere Mail">Telefonisch bestätigt</button></form>';
-    if ($b['status'] === 'bestellt') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit">Wareneingang buchen</button></form>';
+    if (in_array((string)$b['status'], ['bestellt', 'gesendet'], true) && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit" title="Öffnet den Wareneingang mit dieser Bestellung">Wareneingang buchen</button></form> ';
+    // Teil 3: Teillieferung -> „Rest storniert" schließt die Bestellung (Rest zählt nicht mehr als unterwegs).
+    $teilGel = (float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);
+    if ($teilGel > 0 && !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
+        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Rest stornieren? Die Bestellung wird geschlossen, die noch offene Menge zählt nicht mehr als unterwegs.\');"><input type="hidden" name="aktion" value="rest_storno"><button class="btn btn-ghost btn-sm" type="submit" title="Teillieferung: den Rest nicht mehr erwarten">Rest storniert</button></form> ';
     // Aufteilen: nur bei >= 2 verschiedenen Bulk-Produkten und solange nicht geliefert/storniert.
     $bulkProdGrp = (int) scalar("SELECT COUNT(DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING(bezeichnung,7),' (',1)))
                                  FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL AND bezeichnung LIKE 'Bulk%'", [(int)$id]);
@@ -321,7 +331,8 @@ if (!$neu) {
     // B6: Positionen-Überblick (bestellt / geliefert) mit Auftragsbezug – read-only, ganz oben.
     $posUeb = all("SELECT bp.id, bp.menge, bp.einheit, bp.item_id, bp.auftrag_id,
                           COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS pname, a.nummer AS auftrag_nr,
-                          GREATEST((SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.bestellung_position_id=bp.id), COALESCE(bp.geliefert_menge,0)) AS geliefert   -- + Teillieferung (Nacht 1c)
+                          COALESCE(bp.geliefert_menge,0) AS geliefert, bp.rest_storniert_am,   -- Summe der verknüpften Chargen (webe_position_neu_rechnen)
+                          (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_chargen
                    FROM bestellung_position bp
                    LEFT JOIN item i ON i.id=bp.item_id
                    LEFT JOIN auftrag a ON a.id=bp.auftrag_id
@@ -334,25 +345,32 @@ if (!$neu) {
             $istBulk = empty($p['item_id']) && strncmp((string)$p['pname'], 'Bulk', 4) === 0;
             $name = $istBulk ? $basis((string)$p['pname']) : (string)$p['pname'];
             $key = $istBulk ? 'b:' . mb_strtolower($name) : 'p:' . (int)$p['id'];
-            if (!isset($zeilen[$key])) $zeilen[$key] = ['name'=>$name, 'einheit'=>(string)$p['einheit'], 'bestellt'=>0.0, 'geliefert'=>0.0, 'auftraege'=>[]];
+            if (!isset($zeilen[$key])) $zeilen[$key] = ['name'=>$name, 'einheit'=>(string)$p['einheit'], 'bestellt'=>0.0, 'geliefert'=>0.0, 'auftraege'=>[], 'storno'=>false, 'chargen'=>0, 'bp'=>(int)$p['id']];
             $zeilen[$key]['bestellt']  += (float)$p['menge'];
             $zeilen[$key]['geliefert'] += (float)$p['geliefert'];
+            $zeilen[$key]['chargen']   += (int)$p['n_chargen'];
+            if (!empty($p['rest_storniert_am'])) $zeilen[$key]['storno'] = true;
             if (!empty($p['auftrag_nr'])) $zeilen[$key]['auftraege'][(string)$p['auftrag_nr']] = (int)$p['auftrag_id'];
         }
         $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         echo '<div class="bx-panel"><h2 style="margin-top:0">Positionen</h2>';
-        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Position</th><th>Für Auftrag</th><th class="bx-num">bestellt</th><th class="bx-num">geliefert</th></tr></thead><tbody>';
+        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Position</th><th>Für Auftrag</th><th class="bx-num">bestellt</th><th class="bx-num">geliefert</th><th class="bx-num">offen</th></tr></thead><tbody>';
+        $bOffen = !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']);
         foreach ($zeilen as $z) {
             $auf = '<span class="muted">Lager / allgemein</span>';
             if ($z['auftraege']) { $parts = []; foreach ($z['auftraege'] as $nr => $aid) $parts[] = '<a href="?p=auftrag&id=' . (int)$aid . '">' . h((string)$nr) . '</a>'; $auf = implode(', ', $parts); }
             $gel = (float)$z['geliefert'];
             $gelHtml = $gel > 0.0001 ? $mz($gel) . ' ' . h($z['einheit']) : '<span class="muted">–</span>';
             if ($gel + 0.0001 >= (float)$z['bestellt'] && (float)$z['bestellt'] > 0) $gelHtml = '<span class="bx-ok">' . $mz($gel) . ' ' . h($z['einheit']) . '</span>';
-            echo '<tr><td>' . h($z['name']) . '</td><td style="font-size:13px">' . $auf . '</td>'
+            $rest = max(0.0, (float)$z['bestellt'] - $gel);
+            if ($gel > (float)$z['bestellt'] * 1.02 && (float)$z['bestellt'] > 0) $gelHtml .= ' <span class="muted" style="font-size:11px">Mehrlieferung</span>';
+            $restHtml = $z['storno'] && $rest > 0.0001 ? '<span class="muted">' . $mz($rest) . ' ' . h($z['einheit']) . ' storniert</span>'
+                      : ($rest > 0.0001 ? ($bOffen ? '<a href="?p=wareneingang&bp=' . (int)$z['bp'] . '" title="Wareneingang zu dieser Position buchen">' . $mz($rest) . ' ' . h($z['einheit']) . '</a>' : $mz($rest) . ' ' . h($z['einheit'])) : '<span class="muted">–</span>');
+            echo '<tr><td>' . h($z['name']) . ($z['chargen'] ? ' <span class="muted" style="font-size:11px">' . (int)$z['chargen'] . ' Charge(n)</span>' : '') . '</td><td style="font-size:13px">' . $auf . '</td>'
                . '<td class="bx-num">' . $mz($z['bestellt']) . ' ' . h($z['einheit']) . '</td>'
-               . '<td class="bx-num">' . $gelHtml . '</td></tr>';
+               . '<td class="bx-num">' . $gelHtml . '</td><td class="bx-num">' . $restHtml . '</td></tr>';
         }
-        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. bereits gelieferte Menge je Position (geliefert = eingebuchte Chargen). Bei einer Teillieferung bleibt die Bestellung offen, der Rest zählt weiter als unterwegs. Bearbeiten unten im Formular.</p></div>';
+        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. gelieferte Menge je Position (geliefert = Summe der verknüpften Chargen). Ist alles da, schließt sich die Bestellung selbst. Bei einer Teillieferung bleibt sie offen, der Rest zählt weiter als unterwegs – „Rest storniert“ schließt sie. Bearbeiten unten im Formular.</p></div>';
     }
 
     // Chargen & Dokumente je Position: Charge, MHD, CoA, Spezifikation – Team und Lieferant (Portal) pflegen dieselbe Liste.

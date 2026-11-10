@@ -63,3 +63,8 @@ Nach einem CoA-Upload im Block „Chargen & Dokumente“ springt die Seite auf `
 
 ## Liefertermin bei „direkt bestellt“ (08.11.2026)
 Kopf und Ablauf sagen bei `bestellart='direkt'` „erwartet am“ statt „zugesagter Termin“ (kein Lieferant hat zugesagt). Das Team kann den Termin im Ablauf-Block setzen/ändern (Aktion `eta_setzen`, muss nach dem Bestelltag liegen, leer = kein Termin, protokolliert). `bestellung_direkt_abschliessen()` übernimmt „Erwartet am“ nur, wenn es nach dem Bestelltag liegt (Anlass BE-2924: bestellt und „erwartet“ am selben Tag).
+
+## Wareneingang und Rest storniert (10.11.2026, Einkauf gerade ziehen Teil 1/3)
+- „Wareneingang buchen“ öffnet den Dashboard-Wareneingang mit der ersten offenen Position (`?p=wareneingang&bp=…`). Ein pauschales Einbuchen „zu BE-…“ gibt es nicht mehr.
+- Positionen: bestellt, geliefert (Summe der verknüpften Chargen), offen (Link zum Wareneingang dieser Position), Anzahl Chargen, Hinweis Mehrlieferung, „storniert“ beim Rest.
+- Knopf **„Rest storniert“** bei Teillieferung: schließt die Bestellung, der Rest zählt nicht mehr als unterwegs.

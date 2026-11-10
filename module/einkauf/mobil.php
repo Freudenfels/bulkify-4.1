@@ -16,9 +16,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=einkauf_mobil&ok=bestellt#b' . $id); exit;
     }
     if ($id && $aktion === 'liefern' && $st === 'bestellt') {
-        if (bestellung_freitext_positionen($id) > 0) { header('Location: ?p=einkauf_mobil&ok=lager#b' . $id); exit; }   // Bulk-Freitext: im Lager einbuchen
-        bestellung_wareneingang($id);
-        header('Location: ?p=einkauf_mobil&ok=eingang#b' . $id); exit;
+        // Einkauf gerade ziehen (Teil 1): EIN Wareneingang mit vorgewählter Position (Charge, MHD, Menge echt erfasst).
+        $bpErst = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND COALESCE(geliefert_menge,0) < menge ORDER BY sort, id LIMIT 1", [$id]);
+        header('Location: ?p=wareneingang' . ($bpErst ? '&bp=' . $bpErst : '')); exit;
     }
     header('Location: ?p=einkauf_mobil'); exit;
 }
