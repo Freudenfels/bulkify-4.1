@@ -900,6 +900,15 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     }
     header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&gesendet=1'); exit;
 }
+// Alternative zu einer Rohstoff-Anfrage (Nico 10.11.2026): Kunde wählt eine vorgeschlagene Alternative oder bleibt beim Original.
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rohstoff_alt_waehlen') {
+    $ok = rohstoff_alternative_waehlen((int)$k['id'], (int)($_POST['alt_id'] ?? 0));
+    header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&oatab=offen&' . ($ok ? 'altgewaehlt=1' : 'altfehler=1')); exit;
+}
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rohstoff_alt_ablehnen') {
+    $ok = rohstoff_alternativen_ablehnen((int)$k['id'], (int)($_POST['anfrage_id'] ?? 0));
+    header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&oatab=offen&' . ($ok ? 'altabgelehnt=1' : 'altfehler=1')); exit;
+}
 // Dienstleistungsanfrage (Freitext) – Typen/Labortest folgen separat
 // Dienstleistungs-Typen (für Lohnhersteller). Labortest bezieht sich auf ein oder mehrere Produkte.
 $DIENST_TYPEN = [
@@ -1696,6 +1705,8 @@ $portalAnfragen = all("SELECT pa.*, p.name AS produkt_name, i.name AS verp_name,
     LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN item i ON i.id=pa.verpackung_id
     LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
     WHERE pa.kunde_id=? ORDER BY pa.angelegt DESC", [$kid]);
+// Offene Alternativ-Vorschläge zu Rohstoff-Anfragen (vom Team „dem Kunden gezeigt“, noch nicht entschieden) -> „Zu bestätigen“.
+$rohAltOffen = rohstoff_alternativen_offen_kunde($kid);
 // Staffel-Positionen je Anfrage (mehrere Mengen pro Produktanfrage) – für das „Ansehen"-Detailpopup.
 $anfPosMap = [];
 $pafIds = array_values(array_filter(array_map(fn($p) => (int)$p['id'], $portalAnfragen)));
@@ -2091,6 +2102,12 @@ foreach ($portalAnfragen as $p) {
     // Stufe: erledigt (bestellt) bzw. abgeschlossen (versendet) · abgelehnt (nicht machbar) · offen (in Prüfung/Angebot erhalten).
     $stufe = $erledigt ? ($aufSt === 'versendet' ? 'abgeschlossen' : 'erledigt')
            : (($p['status'] === 'abgelehnt') ? 'abgelehnt' : 'offen');
+    // Alternative vorgeschlagen: wartet auf den Kunden -> nicht „In Prüfung“, sondern „Zu bestätigen“ (eigener Block).
+    if (!$erledigt && isset($rohAltOffen[(int)$p['id']])) {
+        $stufe = 'alternative';
+        $st = bx_badge('Alternative vorgeschlagen', 'warn');
+        $zeilenLink = $portalLink('meine_anfragen') . '&oatab=zubestaetigen#alt' . (int)$p['id'];
+    }
     // Detail: bei Produkt Menge/Stück/Verpackung, sonst Notiz-Auszug – zeigt, was angefragt wurde.
     $detailParts = [];
     if ($p['typ'] === 'produkt') {
@@ -2109,7 +2126,7 @@ usort($meineAnfRows, fn($x,$y) => strcmp((string)$y['datum'], (string)$x['datum'
 $pending      = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id']) && ($r['stufe'] ?? '') === 'offen'));
 $erledigtRows = array_values(array_filter($meineAnfRows, fn($r) => empty($r['angebot_id']) && in_array($r['stufe'] ?? '', ['erledigt','abgeschlossen','abgelehnt'], true)));
 // Menü-Badge „Meine Anfragen": offene Angebote + Vorschläge zum Prüfen + Anfragen in Prüfung.
-$navBadges['meine_anfragen'] = $offenAngebote + count($anfPruef) + count($pending);
+$navBadges['meine_anfragen'] = $offenAngebote + count($anfPruef) + count($pending) + count($rohAltOffen);
 $anfTabs = ['alle'=>'Alle'];
 if ($k['portal_rezeptur'])       $anfTabs['rezeptur']='Rezepturen';
 if ($k['portal_produkte'])       $anfTabs['produkt']='Produkte';
@@ -2759,7 +2776,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     $abglRows = array_values(array_filter($erledigtRows, fn($r) => in_array($r['stufe'] ?? '', ['abgelehnt','abgeschlossen'], true)));
     // Nico 10.11.2026: Rezeptur-Vorschläge warten auf die Entscheidung des Kunden -> gehören zu „Zu bestätigen“ (nicht in einen
     // eingeklappten Extra-Kasten „Wartet auf Sie“ und nicht zu „In Prüfung“).
-    $nZuBest = count($offen_ang) + count($anfPruef);     // Angebote mit Preis + Rezeptur-Vorschläge – „Zu bestätigen"
+    $nZuBest = count($offen_ang) + count($anfPruef) + count($rohAltOffen);   // Angebote mit Preis + Rezeptur-Vorschläge + Rohstoff-Alternativen – „Zu bestätigen"
     $nOffen  = count($pending);                          // in Prüfung bei uns – noch ohne Preis
     $sumBest  = count($best_ang) + count($bestRows);     // bestätigt (in Arbeit/versendet) + Rezeptur angelegt
     $sumAbgel = count($abgel_ang) + count($abglRows);    // abgelehnt / nicht machbar
@@ -2786,6 +2803,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         foreach ($pending as $r)    $typsInTab[] = $r['typ'] ?? '';
     } elseif ($oatab === 'zubestaetigen') {
         foreach ($anfPruef as $x)   $typsInTab[] = 'rezeptur';
+        foreach ($rohAltOffen as $x) $typsInTab[] = 'rohstoff';
         foreach ($offen_ang as $a)  $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
     } else { /* archiv: angenommen + abgelehnt */
         foreach ($best_ang as $a)   $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
@@ -2803,6 +2821,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     $bestRows  = array_values(array_filter($bestRows,  fn($r) => $mt($r['typ'] ?? '')));
     $abglRows  = array_values(array_filter($abglRows,  fn($r) => $mt($r['typ'] ?? '')));
     $anfPruefShow = ($atab === 'alle' || $atab === 'rezeptur') ? $anfPruef : [];  // Vorschläge = Rezepturen
+    $rohAltShow   = ($atab === 'alle' || $atab === 'rohstoff') ? $rohAltOffen : [];
   ?>
 
 
@@ -2845,7 +2864,33 @@ portal_head('Kundenportal · ' . $k['firma']);
       </table></div>
     </div>
   <?php }; ?>
+  <?php if (isset($_GET['altgewaehlt'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Danke – wir prüfen Ihre Anfrage jetzt mit der gewählten Alternative und melden uns mit einem Angebot.</div><?php endif; ?>
+  <?php if (isset($_GET['altabgelehnt'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Verstanden – Ihre Anfrage bleibt beim ursprünglichen Rohstoff. Wir melden uns, sobald er wieder verfügbar ist.</div><?php endif; ?>
+  <?php if (isset($_GET['altfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Das hat nicht geklappt – der Vorschlag ist nicht mehr offen.</div><?php endif; ?>
   <?php if ($oatab === 'zubestaetigen'): ?>
+    <?php foreach ($rohAltShow as $ra): $hinweisSt = rohstoff_lieferstatus_text($ra); ?>
+    <div class="bx-panel" id="alt<?= (int)$ra['id'] ?>">
+      <h2 style="margin:0 0 4px">Alternative zu Ihrer Rohstoff-Anfrage <?= h((string)$ra['nummer']) ?></h2>
+      <p style="margin:0 0 4px">Angefragt: <?= h((string)$ra['betreff']) ?><?= $ra['wunsch_menge'] ? ' · ' . rtrim(rtrim(number_format((float)$ra['wunsch_menge'], 3, ',', '.'), '0'), ',') . ' ' . h((string)$ra['wunsch_einheit']) : '' ?></p>
+      <?php if ($hinweisSt !== ''): ?><p class="muted" style="margin:0 0 12px"><?= h($hinweisSt) ?></p><?php endif; ?>
+      <p class="muted" style="margin:0 0 12px;font-size:13px">Wir schlagen Ihnen <?= count($ra['alternativen']) === 1 ? 'diese Alternative' : 'diese Alternativen' ?> vor. Mit „Diese Alternative anfragen“ läuft Ihre Anfrage mit dem neuen Rohstoff weiter; Sie erhalten danach ein Angebot.</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Rohstoff</th><th>Warum</th><th class="bx-num">Richtpreis</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($ra['alternativen'] as $al): ?>
+          <tr>
+            <td><?php if (!empty($k['portal_rohstoffe'])): ?><a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$al['item_id'] ?>"><?= h(rohstoff_anzeige_name($al)) ?></a><?php else: ?><?= h(rohstoff_anzeige_name($al)) ?><?php endif; ?></td>
+            <td style="white-space:normal;max-width:380px"><?= $al['hinweis'] ? h((string)$al['hinweis']) : '<span class="muted">–</span>' ?></td>
+            <td class="bx-num"><?= $al['richtpreis'] !== null ? h(number_format((float)$al['richtpreis'], 2, ',', '.')) . ' € / ' . h((string)($al['preis_bezug'] ?: 'kg')) . ' <span class="muted" style="font-size:12px">netto</span>' : '<span class="muted">auf Anfrage</span>' ?></td>
+            <td style="text-align:right"><form method="post" style="margin:0"><input type="hidden" name="aktion" value="rohstoff_alt_waehlen"><input type="hidden" name="alt_id" value="<?= (int)$al['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">Diese Alternative anfragen</button></form></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <form method="post" style="margin:12px 0 0"><input type="hidden" name="aktion" value="rohstoff_alt_ablehnen"><input type="hidden" name="anfrage_id" value="<?= (int)$ra['id'] ?>">
+        <button class="btn btn-ghost btn-sm" type="submit">Nein danke, beim ursprünglichen Rohstoff bleiben</button></form>
+    </div>
+    <?php endforeach; ?>
     <?php if ($anfPruefShow): ?>
     <div class="bx-panel">
       <h2 style="margin:0 0 4px">Rezeptur-Vorschläge</h2>
@@ -2869,7 +2914,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php if ($offen_ang): ?>
     <p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p>
     <?php foreach ($offen_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
-    <?php elseif (!$anfPruefShow): ?><div class="bx-panel"><div class="muted">Aktuell liegt nichts zum Bestätigen vor.</div></div><?php endif; ?>
+    <?php elseif (!$anfPruefShow && !$rohAltShow): ?><div class="bx-panel"><div class="muted">Aktuell liegt nichts zum Bestätigen vor.</div></div><?php endif; ?>
 
   <?php elseif ($oatab === 'offen'): ?>
     <?php if ($pending): ?>
@@ -3967,7 +4012,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <tr><td><?= h($a['nummer']) ?></td><td><?= h($a['betreff'] ?: '–') ?></td>
           <td class="bx-num"><?= $a['wunsch_menge'] ? rtrim(rtrim(number_format((float)$a['wunsch_menge'],3,',','.'),'0'),',').' '.h($a['wunsch_einheit'] ?: '') : '–' ?></td>
           <td class="bx-num"><?= !empty($a['zielpreis']) ? $eur($a['zielpreis']) : '–' ?></td>
-          <td><?= $pafBadge($a['status']) ?><?php if ($a['status']==='abgelehnt' && !empty($a['absage_grund'])): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h($a['absage_grund']) ?></div><?php endif; ?></td></tr>
+          <td><?php if (isset($rohAltOffen[(int)$a['id']])): ?><a href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen#alt<?= (int)$a['id'] ?>"><?= bx_badge('Alternative vorgeschlagen – bitte entscheiden', 'warn') ?></a><?php else: ?><?= $pafBadge($a['status']) ?><?php endif; ?><?php if ($a['status']==='abgelehnt' && !empty($a['absage_grund'])): ?><div class="muted" style="font-size:12px;white-space:normal"><?= h($a['absage_grund']) ?></div><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>

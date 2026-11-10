@@ -4,6 +4,7 @@
 // Nie Spalten loeschen. Alles UTF-8 (utf8mb4).
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/charge_norm.php';
+require_once __DIR__ . '/rohstoff_alternative.php';   // Alternative zu einer Rohstoff-Anfrage (Dashboard + Kundenportal)
 require_once __DIR__ . '/wareneingang_bestellung.php';   // Wareneingang gegen Bestellung (Einkauf gerade ziehen, Teil 1-3) – eine Stelle für Dashboard + Lager-App   // toleranter Chargen-Vergleich (Handbuch 4.5/4.12) – eine Stelle für alle Programme
 
 // Master-/Test-Scan: in der Produktion überspringt dieser Code Charge-Prüfung und Bestandsabbuchung
@@ -1591,6 +1592,27 @@ function init_schema(): void {
     ensure_column('portal_anfrage', 'rezeptur_id', "INT NULL");
     ensure_column('portal_anfrage', 'absage_grund', "VARCHAR(500) NULL");   // wenn wir NICHT anbieten koennen: Begruendung fuer den Kunden
     ensure_column('portal_anfrage', 'zielpreis', "DECIMAL(12,2) NULL");     // Rohstoff-Anfrage: gewuenschter Zielpreis (optional)
+    // Alternative zu einem angefragten Rohstoff (Nico 10.11.2026, z. B. Creapure gerade nicht lieferbar): Lieferstatus des
+    // angefragten Rohstoffs mit Hinweis für den Kunden, Alternativen in portal_anfrage_alternative. Der Kunde sieht sie erst nach
+    // „Dem Kunden zeigen“ (alternativen_gesendet_am) und entscheidet im Portal; bei Wahl wechselt die Anfrage auf die Alternative,
+    // der ursprüngliche Rohstoff bleibt in original_rohstoff_id/original_betreff stehen.
+    ensure_column('portal_anfrage', 'lieferstatus', "VARCHAR(20) NULL");               // NULL = lieferbar | nicht_lieferbar | eingestellt
+    ensure_column('portal_anfrage', 'lieferstatus_hinweis', "VARCHAR(255) NULL");      // für den Kunden, z. B. „wieder ab Ende Januar“
+    ensure_column('portal_anfrage', 'alternativen_gesendet_am', "DATETIME NULL");
+    ensure_column('portal_anfrage', 'alternativen_entschieden_am', "DATETIME NULL");
+    ensure_column('portal_anfrage', 'original_rohstoff_id', "INT NULL");
+    ensure_column('portal_anfrage', 'original_betreff', "VARCHAR(255) NULL");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS portal_anfrage_alternative (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        anfrage_id INT NOT NULL,
+        item_id INT NOT NULL,
+        hinweis VARCHAR(500) NULL,                       -- Begründung für den Kunden (sieht er im Portal)
+        richtpreis DECIMAL(12,4) NULL,                   -- optionaler Richtpreis je Einheit für den Kunden
+        status VARCHAR(20) NOT NULL DEFAULT 'vorgeschlagen',   -- vorgeschlagen | gewaehlt | abgelehnt
+        angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        angelegt_von_id INT NULL,
+        KEY idx_anfrage (anfrage_id), KEY idx_item (item_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('portal_anfrage', 'dienstleistung_typ', "VARCHAR(30) NULL"); // Dienstleistungsanfrage: Typ (labortest|abfuellung|sourcing|…)
     ensure_column('portal_anfrage', 'umkarton', "TINYINT(1) NOT NULL DEFAULT 0"); // Kunde wünscht einen Umkarton (nur wenn app_meta portal_umkarton=1); Details in der Notiz
     // Verbindliche Freigabe durch den Kunden: Name gilt als Unterschrift, Zeitpunkt daneben.

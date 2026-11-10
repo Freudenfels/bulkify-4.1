@@ -23,3 +23,7 @@ Leerkapseln und Premix-Artikel zählen nicht dazu.
 - Rohstoffe anhaken und auf **„Ausgewählte beim Lieferanten anfragen“** klicken. Das öffnet das bekannte Anfrage-Fenster im Modus Preis; Spezifikation/CoA sind bei der Preisabgabe Pflicht
 
 Die Seite ändert keine Daten. Die Kästen auf der Anfrage- und Rezepturseite (`core/rohstoff_unterlagen.php`) und die Prüfungen in der Datenprüfung bleiben unverändert.
+
+## Ergänzung 10.11.2026
+- Jede Zeile hat den Knopf **„Preis / Unterlage“**. Er öffnet das Fenster für Preis ab Menge und CoA/Spec-Upload; die KI füllt die Infos (siehe `rohstoff_erfassen.md`).
+- Vorgeschlagene **Alternativen** zu Rohstoff-Anfragen zählen als Quelle mit („PAF-… · Alternative“), solange der Kunde noch nicht entschieden hat.

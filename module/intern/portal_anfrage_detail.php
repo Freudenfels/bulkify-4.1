@@ -3,8 +3,48 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Rohstoffpreise + Preisanfrage-Popup
+require_once BX_ROOT . '/core/rohstoff_unterlagen.php';   // Pop-up „Preis & Unterlagen“ (Preis ab Menge, CoA/Spec mit KI)
 
 $id = (int)($_GET['id'] ?? 0);
+// Alternative zu einem angefragten Rohstoff (Nico 10.11.2026; core/rohstoff_alternative.php). Lieferstatus + Hinweis für den
+// Kunden, Alternativen vorschlagen, dann „Dem Kunden zeigen“ (Portal „Zu bestätigen“ + Mail). Der Kunde wählt im Portal.
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && str_starts_with((string)($_POST['aktion'] ?? ''), 'alt_')) {
+    $akt = (string)$_POST['aktion'];
+    $paA = one("SELECT id, nummer, kunde_id, typ, rohstoff_id, alternativen_entschieden_am FROM portal_anfrage WHERE id=?", [$id]);
+    $flash = '';
+    if ($paA && $paA['typ'] === 'rohstoff') {
+        if ($akt === 'alt_lieferstatus') {
+            $st = (string)($_POST['lieferstatus'] ?? '');
+            $st = isset(ROHSTOFF_LIEFERSTATUS[$st]) && $st !== '' ? $st : null;
+            q("UPDATE portal_anfrage SET lieferstatus=?, lieferstatus_hinweis=? WHERE id=?", [$st, mb_substr(trim((string)($_POST['lieferstatus_hinweis'] ?? '')), 0, 255) ?: null, $id]);
+            $flash = 'altstatus=1';
+        } elseif ($akt === 'alt_add') {
+            $iid = (int)($_POST['alt_item_id'] ?? 0);
+            $rp  = zahl_lesen((string)($_POST['alt_richtpreis'] ?? ''));
+            if ($iid && $iid !== (int)$paA['rohstoff_id'] && one("SELECT id FROM item WHERE id=? AND kategorie='rohstoff'", [$iid])
+                && !one("SELECT id FROM portal_anfrage_alternative WHERE anfrage_id=? AND item_id=? AND status='vorgeschlagen'", [$id, $iid])) {
+                q("INSERT INTO portal_anfrage_alternative (anfrage_id,item_id,hinweis,richtpreis,angelegt_von_id) VALUES (?,?,?,?,?)",
+                  [$id, $iid, mb_substr(trim((string)($_POST['alt_hinweis'] ?? '')), 0, 500) ?: null, $rp > 0 ? $rp : null, (int)($_SESSION['uid'] ?? 0) ?: null]);
+                // Neuer Vorschlag nach einer Entscheidung: Runde wieder öffnen (Kunde muss erneut entscheiden).
+                q("UPDATE portal_anfrage SET alternativen_entschieden_am=NULL, alternativen_gesendet_am=NULL WHERE id=? AND alternativen_entschieden_am IS NOT NULL", [$id]);
+            }
+            $flash = 'altadd=1';
+        } elseif ($akt === 'alt_del') {
+            q("DELETE FROM portal_anfrage_alternative WHERE id=? AND anfrage_id=? AND status='vorgeschlagen'", [(int)($_POST['alt_id'] ?? 0), $id]);
+            $flash = 'altdel=1';
+        } elseif ($akt === 'alt_senden') {
+            $n = (int) scalar("SELECT COUNT(*) FROM portal_anfrage_alternative WHERE anfrage_id=? AND status='vorgeschlagen'", [$id]);
+            if ($n > 0) {
+                q("UPDATE portal_anfrage SET alternativen_gesendet_am=UTC_TIMESTAMP(), alternativen_entschieden_am=NULL, status=IF(status='neu','in_bearbeitung',status) WHERE id=?", [$id]);
+                if ($paA['kunde_id']) log_aktivitaet('kunde', (int)$paA['kunde_id'], 'team', 'Zur Anfrage ' . $paA['nummer'] . ' ' . $n . ' Alternative(n) vorgeschlagen.', 'anfrage', 'portal_anfrage', $id);
+                $f = ($paA['kunde_id'] && mail_bereit()) ? mail_kunde_rohstoff_alternative($id) : 'Mailversand ist nicht eingerichtet.';
+                $flash = 'altgesendet=1' . ($f !== '' ? '&altmail=' . urlencode($f) : '');
+            } else $flash = 'altleer=1';
+        }
+    }
+    header('Location: ?p=portal_anfrage&id=' . $id . ($flash !== '' ? '&' . $flash : '') . '#alternative'); exit;
+}
+
 $TYP = ['produkt'=>'Produktanfrage', 'rohstoff'=>'Rohstoffanfrage', 'dienstleistung'=>'Dienstleistungsanfrage'];
 $VTYPEN = ['glas'=>'Glas', 'pet'=>'PET-Dose', 'pla'=>'PLA-Becher', 'beutel'=>'Standbodenbeutel', 'stick'=>'Stick', 'blister'=>'Blister'];
 $DLTYP = ['labortest'=>'Labortest / Analyse', 'abfuellung'=>'Reine Abfüllung', 'sourcing'=>'Sourcing / Beschaffung', 'konfektionierung'=>'Konfektionierung / Verpackung', 'lagerung'=>'Lagerung / Fulfillment', 'beratung'=>'Beratung / Regulatorik', 'sonstiges'=>'Sonstiges'];
@@ -311,6 +351,7 @@ if ($darfAbsage && $pa['typ'] === 'rohstoff'): ?>
 <?php endif; ?>
 
 <?php if ($pa['typ'] === 'rohstoff'):
+    echo rohstoff_erfassen_meldung();
     $rid   = (int)($pa['rohstoff_id'] ?? 0);
     $menge = (float)($pa['wunsch_menge'] ?? 0);
     $bezug = $pa['rohstoff_bezug'] ?: ($pa['wunsch_einheit'] ?: 'Einheit');
@@ -377,7 +418,79 @@ if ($darfAbsage && $pa['typ'] === 'rohstoff'): ?>
   <?php else: ?>
     <div class="muted">Ordne oben einen Rohstoff zu, dann rechnet das System EK, Aufschlag und VK aus.</div>
   <?php endif; ?>
+  <?php if ($rid): ?><div style="margin-top:10px"><?= rohstoff_erfassen_knopf($rid, (string)$pa['rohstoff_name'], 'Preis ab Menge / CoA / Spec erfassen') ?></div><?php endif; ?>
 </div>
+
+<?php // Alternative anbieten (Nico 10.11.2026): angefragter Rohstoff nicht lieferbar -> Alternativen vorschlagen, Kunde entscheidet im Portal.
+    $alts   = rohstoff_alternativen((int)$pa['id']);
+    $origId = (int)($pa['original_rohstoff_id'] ?? 0) ?: $rid;
+    $bisher = rohstoff_alternativen_bisher($origId, (int)$pa['id']);
+    $altBadge = fn($s) => match ($s) { 'gewaehlt' => bx_badge('vom Kunden gewählt', 'ok'), 'abgelehnt' => bx_badge('nicht gewählt'), default => bx_badge('vorgeschlagen', 'info') };
+    $offeneAlt = array_values(array_filter($alts, fn($a) => $a['status'] === 'vorgeschlagen'));
+?>
+<div class="bx-panel" id="alternative">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+    <h2 style="margin:0">Alternative anbieten</h2>
+    <?php if (!empty($pa['alternativen_entschieden_am'])): ?><span class="muted" style="font-size:13px">Kunde hat am <?= h(fmt_zeit((string)$pa['alternativen_entschieden_am'])) ?> entschieden</span>
+    <?php elseif (!empty($pa['alternativen_gesendet_am'])): ?><span><?= bx_badge('beim Kunden seit ' . fmt_zeit((string)$pa['alternativen_gesendet_am']), 'info') ?></span><?php endif; ?>
+  </div>
+  <?php if (isset($_GET['altgesendet'])): ?><div class="bx-panel <?= isset($_GET['altmail']) ? 'badge-warn' : 'badge-ok' ?>" style="padding:8px 12px;margin:10px 0 0">Der Kunde sieht die Alternative(n) jetzt im Portal unter „Zu bestätigen“.<?= isset($_GET['altmail']) ? ' Keine Mail: ' . h((string)$_GET['altmail']) : ' Mail ist raus.' ?></div><?php endif; ?>
+  <?php if (isset($_GET['altleer'])): ?><div class="bx-panel badge-warn" style="padding:8px 12px;margin:10px 0 0">Erst eine Alternative hinzufügen.</div><?php endif; ?>
+  <?php if (!empty($pa['original_betreff'])): ?><p style="margin:10px 0 0">Ursprünglich angefragt: <?= h((string)$pa['original_betreff']) ?><?= (int)($pa['original_rohstoff_id'] ?? 0) ? ' · <a href="?p=rohstoff&id=' . (int)$pa['original_rohstoff_id'] . '" target="_blank" rel="noopener">Rohstoff</a>' : '' ?> – der Kunde hat auf die Alternative gewechselt.</p><?php endif; ?>
+  <p class="muted" style="margin:8px 0 12px;font-size:13px">Ist der angefragte Rohstoff nicht lieferbar, hier den Stand für den Kunden eintragen und eine oder mehrere Alternativen vorschlagen. Mit „Dem Kunden zeigen“ erscheinen sie im Portal unter „Zu bestätigen“ (plus Mail); wählt der Kunde eine Alternative, läuft die Anfrage mit diesem Rohstoff weiter.</p>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+    <input type="hidden" name="aktion" value="alt_lieferstatus">
+    <div class="bx-field" style="margin:0"><label>Angefragter Rohstoff ist</label>
+      <select name="lieferstatus"><?php foreach (ROHSTOFF_LIEFERSTATUS as $k => $l): ?><option value="<?= h($k) ?>" <?= (string)($pa['lieferstatus'] ?? '') === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?></select></div>
+    <div class="bx-field" style="margin:0;flex:1;min-width:240px"><label>Hinweis für den Kunden</label>
+      <input type="text" name="lieferstatus_hinweis" maxlength="255" value="<?= h((string)($pa['lieferstatus_hinweis'] ?? '')) ?>" placeholder="z. B. wieder ab Ende Januar lieferbar"></div>
+    <button class="btn btn-ghost btn-sm" type="submit">Speichern</button>
+  </form>
+  <?php if ($alts): ?>
+  <div class="bx-tablewrap"><table class="bx-table" style="font-size:13px">
+    <thead><tr><th>Alternative</th><th>Hinweis für den Kunden</th><th class="bx-num">VK Kunde je <?= h($bezug) ?></th><th class="bx-num">Richtpreis</th><th>Unterlagen</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($alts as $a):
+        $vkA = rohstoff_vk_bei_menge((int)$a['item_id'], $menge > 0 ? $menge : 1);
+        $vkAK = $vkA !== null ? vk_fuer_kunde($vkA, (int)$pa['kunde_id']) : null; ?>
+      <tr>
+        <td><a href="?p=rohstoff&id=<?= (int)$a['item_id'] ?>" target="_blank" rel="noopener"><?= h(rohstoff_anzeige_name($a)) ?></a></td>
+        <td style="white-space:normal;max-width:300px"><?= $a['hinweis'] ? h((string)$a['hinweis']) : '<span class="muted">–</span>' ?></td>
+        <td class="bx-num"><?= $vkAK !== null ? $prz($vkAK) : bx_badge('Preis fehlt', 'err') ?></td>
+        <td class="bx-num"><?= $a['richtpreis'] !== null ? $prz((float)$a['richtpreis']) : '<span class="muted">–</span>' ?></td>
+        <td><?= $a['hat_dok'] ? bx_badge('vorhanden', 'ok') : bx_badge('fehlt', 'warn') ?></td>
+        <td><?= $altBadge((string)$a['status']) ?></td>
+        <td style="text-align:right;white-space:nowrap"><?= rohstoff_erfassen_knopf((int)$a['item_id'], (string)$a['name']) ?>
+          <?php if ($a['status'] === 'vorgeschlagen'): ?><form method="post" style="display:inline;margin:0"><input type="hidden" name="aktion" value="alt_del"><input type="hidden" name="alt_id" value="<?= (int)$a['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">entfernen</button></form><?php endif; ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+  <?php $altListe = all("SELECT id, name, artikelnummer, beschaffenheit, dev FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND COALESCE(form,'') NOT IN ('kapselhuelle','premix') AND id<>? ORDER BY name", [$rid]); ?>
+  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:12px">
+    <input type="hidden" name="aktion" value="alt_add">
+    <div class="bx-field" style="margin:0;min-width:280px"><label>Alternative aus dem Katalog</label>
+      <select name="alt_item_id" class="rscombo" required><option value="">– Rohstoff wählen –</option>
+        <?php foreach ($altListe as $ri): ?><option value="<?= (int)$ri['id'] ?>" data-such="<?= h((string)$ri['artikelnummer']) ?>"><?= h(rohstoff_anzeige_name($ri)) ?><?= $ri['artikelnummer'] ? ' · ' . h((string)$ri['artikelnummer']) : '' ?></option><?php endforeach; ?>
+      </select></div>
+    <div class="bx-field" style="margin:0;flex:1;min-width:240px"><label>Warum diese Alternative (sieht der Kunde)</label>
+      <input type="text" name="alt_hinweis" maxlength="500" placeholder="z. B. Kreatin-Monohydrat 200 mesh, gleiche Reinheit, sofort lieferbar"></div>
+    <div class="bx-field" style="margin:0;width:150px"><label>Richtpreis je <?= h($bezug) ?> <span class="muted">(optional)</span></label>
+      <input type="text" inputmode="decimal" name="alt_richtpreis" placeholder="z. B. 18,90"></div>
+    <button class="btn btn-ghost" type="submit">Hinzufügen</button>
+  </form>
+  <?php if ($bisher): ?>
+    <div class="muted" style="font-size:12px;margin-top:8px">Bisher zu diesem Rohstoff angeboten:
+      <?php foreach ($bisher as $b): ?><span style="margin-right:10px"><?= h((string)$b['name']) ?> (<?= (int)$b['n'] ?>×<?= (int)$b['gewaehlt'] ? ', ' . (int)$b['gewaehlt'] . '× gewählt' : '' ?>)</span><?php endforeach; ?></div>
+  <?php endif; ?>
+  <?php if ($offeneAlt && empty($pa['alternativen_gesendet_am']) && $pa['status'] !== 'abgelehnt'): ?>
+  <form method="post" style="margin-top:14px"><input type="hidden" name="aktion" value="alt_senden">
+    <button class="btn btn-primary" type="submit">Dem Kunden zeigen (<?= count($offeneAlt) ?> Alternative<?= count($offeneAlt) === 1 ? '' : 'n' ?>)</button>
+    <span class="muted" style="font-size:12px;margin-left:8px">Kunde sieht Lieferstatus, Hinweis und Alternativen im Portal und bekommt eine Mail.</span></form>
+  <?php endif; ?>
+</div>
+<?= rohstoff_erfassen_dialog('?p=portal_anfrage&id=' . (int)$pa['id']) ?>
 <?php endif; ?>
 
 <?php // Dienstleistungsanfrage -> DL-Angebot (DA-) erstellen, bepreisen und senden (im DL-Editor).

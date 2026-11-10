@@ -105,3 +105,12 @@ Für `typ='dienstleistung'` gibt es jetzt (wie bei Produktanfragen) einen Weg in
 Für Dienstleistungs-Anfragen (z. B. Laboranalyse) zeigt die Info-Tabelle eine Zeile **Produkt** mit dem
 zugehörigen Produkt (verlinkt), aufgelöst aus `pa.produkt_id` oder – bei älteren Labor-Upsell-Anfragen – aus der
 ersten `portal_anfrage_pos.produkt_id`. So lässt sich die Laboranalyse eindeutig dem Produkt zuordnen.
+
+## Alternative anbieten (Rohstoff-Anfragen, 10.11.2026)
+- Unter „Rohstoff-Preis berechnen“ steht der Knopf **„Preis ab Menge / CoA / Spec erfassen“** (Pop-up, siehe `module/anfrage/rohstoff_erfassen.md`).
+- Block **„Alternative anbieten“**:
+  - Lieferstatus des angefragten Rohstoffs (lieferbar / derzeit nicht lieferbar / nicht mehr erhältlich) mit Hinweis für den Kunden.
+  - Alternativen aus dem Katalog mit Begründung und optionalem Richtpreis. Je Zeile stehen VK für den Kunden, Unterlagen-Stand und Status; der Knopf „Preis / Unterlage“ ist auch hier.
+  - „Bisher zu diesem Rohstoff angeboten“ als Merkhilfe.
+  - **„Dem Kunden zeigen“** schaltet die Vorschläge im Portal frei und schickt die Mail `rohstoff_alternative`. Ist kein Mailversand möglich, wird der Grund angezeigt.
+- Aktionen: `alt_lieferstatus`, `alt_add`, `alt_del` (nur offene Vorschläge), `alt_senden`. Logik in `core/rohstoff_alternative.php`.

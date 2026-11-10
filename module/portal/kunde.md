@@ -448,3 +448,10 @@ In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. D
   - **„Ihre Anfrage“**: gewünschte Form (rot, wenn der Vorschlag abweicht), Wunschname, Hinweise und die gewünschten Inhaltsstoffe mit Wunschmenge.
   - **„Nährstoffe je …“**: elementare Gehalte mit % NRV aus `rezeptur_naehrwerte()` (gleiche Werte wie im Dashboard). Fehlen Wirkstoffdaten, steht ein Hinweis.
   - Bei Vorschlag bzw. angenommener Rezeptur gibt es keinen „Löschen“-Knopf mehr, sondern Annehmen bzw. Ablehnen.
+
+## Alternativen zu Rohstoff-Anfragen (10.11.2026)
+- Hat das Team zu einer Rohstoff-Anfrage Alternativen „dem Kunden gezeigt“, steht im Reiter **„Zu bestätigen“** je Anfrage ein Kasten. Er enthält:
+  - den angefragten Rohstoff und Lieferstatus mit Hinweis,
+  - die Alternativen mit Begründung, Richtpreis (sonst „auf Anfrage“) und Link zum Rohstoff-Infoblatt.
+- Knöpfe: **„Diese Alternative anfragen“** (`rohstoff_alt_waehlen`, die Anfrage läuft mit dem neuen Rohstoff weiter) oder **„Nein danke, beim ursprünglichen Rohstoff bleiben“** (`rohstoff_alt_ablehnen`).
+- Solche Anfragen zählen bei „Zu bestätigen“ und im Menü-Zähler mit, nicht bei „In Prüfung“. In „Meine Rohstoffanfragen“ steht „Alternative vorgeschlagen – bitte entscheiden“ mit Link.

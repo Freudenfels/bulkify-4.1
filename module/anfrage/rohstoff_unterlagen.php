@@ -6,6 +6,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';
+require_once BX_ROOT . '/core/rohstoff_unterlagen.php';   // Pop-up „Preis & Unterlagen“
 
 $DFORM = function_exists('anfrage_formen') ? anfrage_formen() : [];
 $filter = (string)($_GET['f'] ?? 'offen');
@@ -37,6 +38,12 @@ foreach (all("SELECT pa.id, pa.nummer, pa.typ, pa.rohstoff_id, pa.rezeptur_id, p
     if (!empty($r['rohstoff_id'])) $add((int)$r['rohstoff_id'], 'pa' . $r['id'], $v);
     if (!empty($r['rezeptur_id'])) foreach (all("SELECT item_id FROM rezeptur_zutat WHERE rezeptur_id=? AND item_id IS NOT NULL", [(int)$r['rezeptur_id']]) as $z) $add((int)$z['item_id'], 'pa' . $r['id'], $v);
 }
+
+// e) vorgeschlagene Alternativen zu Rohstoff-Anfragen (Nico 10.11.2026) – brauchen genauso Preis und Unterlagen
+foreach (all("SELECT a.item_id, pa.id, pa.nummer, pa.betreff, k.firma FROM portal_anfrage_alternative a JOIN portal_anfrage pa ON pa.id=a.anfrage_id
+              LEFT JOIN kunden k ON k.id=pa.kunde_id WHERE a.status='vorgeschlagen' AND pa.status NOT IN ('abgelehnt')") as $r)
+    $add((int)$r['item_id'], 'alt' . $r['id'], ['label' => $r['nummer'] . ' · Alternative', 'titel' => 'statt ' . (string)($r['betreff'] ?? ''),
+                                               'href' => '?p=portal_anfrage&id=' . (int)$r['id'] . '#alternative', 'kunde' => (string)($r['firma'] ?? ''), 'art' => 'Alternative']);
 
 // --- Stand je Rohstoff: Preis, Dokument, Wirkstoff/NRV, Lieferanten-Anfragen ----------------------------------------
 $zeilen = [];
@@ -82,6 +89,7 @@ render_header('rohstoff_unterlagen', 'Rohstoff-Unterlagen');
 bx_head('Rohstoff-Unterlagen', count($rows) . ' Rohstoff(e) aus laufenden Anfragen und Rezepturen – was fehlt: Preis, Dokument (Spezifikation/CoA) oder Wirkstoffdaten für die NRV.', bx_btn('Zu den Anfragen', '?p=anfragen', 'ghost'));
 if (isset($_GET['angefragt'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . (int)$_GET['angefragt'] . ' Preisanfrage(n) verschickt' . (isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '') . '. Spezifikation/CoA kommen mit der Antwort.</div>';
 $lnk = fn(array $o) => '?' . http_build_query(array_merge(['p' => 'rohstoff_unterlagen', 'f' => $filter, 'q' => $q], $o));
+echo rohstoff_erfassen_meldung();
 ?>
 <div class="settabs" style="margin:0 0 10px">
   <?php foreach ($FILTER as $k => $lbl): ?><a href="<?= h($lnk(['f' => $k])) ?>" class="<?= $filter === $k ? 'on' : '' ?>"><?= h($lbl) ?><?= $cnt[$k] ? ' (' . $cnt[$k] . ')' : '' ?></a><?php endforeach; ?>
@@ -96,10 +104,10 @@ $lnk = fn(array $o) => '?' . http_build_query(array_merge(['p' => 'rohstoff_unte
   <div class="bx-tablewrap"><table class="bx-table" style="font-size:13px">
     <thead><tr>
       <th style="width:28px"><input type="checkbox" title="alle" onclick="document.querySelectorAll('.ruWahl').forEach(function(c){c.checked=this.checked;}.bind(this))"></th>
-      <th>Rohstoff</th><th>Wo angefragt</th><th>Preis</th><th>Dokument</th><th>Wirkstoff / NRV</th><th>Beim Lieferanten</th>
+      <th>Rohstoff</th><th>Wo angefragt</th><th>Preis</th><th>Dokument</th><th>Wirkstoff / NRV</th><th>Beim Lieferanten</th><th></th>
     </tr></thead>
     <tbody>
-    <?php if (!$rows): ?><tr><td colspan="7" class="muted" style="padding:14px">Nichts in dieser Ansicht.</td></tr><?php endif; ?>
+    <?php if (!$rows): ?><tr><td colspan="8" class="muted" style="padding:14px">Nichts in dieser Ansicht.</td></tr><?php endif; ?>
     <?php foreach ($rows as $z): ?>
       <tr>
         <td><input type="checkbox" class="ruWahl" value="<?= (int)$z['id'] ?>"></td>
@@ -114,6 +122,7 @@ $lnk = fn(array $o) => '?' . http_build_query(array_merge(['p' => 'rohstoff_unte
         <td style="white-space:normal"><?= (int)$z['la_n'] > 0
               ? ((int)$z['la_antw'] > 0 ? bx_badge('beantwortet', 'ok') : bx_badge('angefragt', 'info')) . ' <span class="muted" style="font-size:11px">' . (int)$z['la_n'] . '× · ' . h(date('d.m.Y', strtotime((string)$z['la_letzte']))) . '</span>'
               : '<span class="muted">noch nicht</span>' ?></td>
+        <td style="text-align:right"><?= rohstoff_erfassen_knopf((int)$z['id'], (string)$z['name']) ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
@@ -126,4 +135,5 @@ $lnk = fn(array $o) => '?' . http_build_query(array_merge(['p' => 'rohstoff_unte
   <span class="muted" style="font-size:12px">Preis je kg + Spezifikation/CoA (bei der Preisabgabe Pflicht). „NRV nachtragen“ = am Rohstoff unter Wirkstoffe den Gehalt eintragen (z. B. Kalium 38 %), sonst fehlen elementare Werte und % NRV in Rezeptur, PIB und Kundenportal.</span>
 </div>
 <?php anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=rohstoff_unterlagen&f=' . rawurlencode($filter)); ?>
+<?= rohstoff_erfassen_dialog($lnk([])) ?>
 <?php render_footer(); ?>

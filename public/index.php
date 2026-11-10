@@ -221,6 +221,7 @@ $routes = [
     'dl_split_bereinigung' => 'system/dl_split_bereinigung.php', // Einmal-Bereinigung: faelschlich gesplittete Material-DL-Auftraege (Beutel/Glas/Etikett) entfernen
     'anfragen'           => 'anfrage/liste.php',
     'rohstoff_unterlagen' => 'anfrage/rohstoff_unterlagen.php',
+    'rohstoff_erfassen'   => 'anfrage/rohstoff_erfassen.php',
     'anfrage'            => 'anfrage/detail.php',
     'portal_anfragen'    => 'intern/portal_anfragen.php',
     'portal_anfrage'     => 'intern/portal_anfrage_detail.php',

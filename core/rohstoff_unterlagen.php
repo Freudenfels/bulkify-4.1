@@ -71,9 +71,11 @@ function rohstoff_unterlagen_panel(array $item_ids, string $kontext = 'diese Anf
     if (!$st) return '';
     $fehlt = array_values(array_filter($st, fn($r) => !$r['dok']));
     $ok = count($st) - count($fehlt);
-    if (!$fehlt) return '<div class="bx-panel" style="padding:10px 14px;border-left:3px solid var(--gruen,#1D9E75)"><strong style="font-weight:600">Unterlagen:</strong> alle ' . count($st) . ' Rohstoffe haben Spezifikation oder CoA.</div>';
+    $zurueck = '?' . (string)($_SERVER['QUERY_STRING'] ?? '');
+    $meld = rohstoff_erfassen_meldung();
+    if (!$fehlt) return $meld . '<div class="bx-panel" style="padding:10px 14px;border-left:3px solid var(--gruen,#1D9E75)"><strong style="font-weight:600">Unterlagen:</strong> alle ' . count($st) . ' Rohstoffe haben Spezifikation oder CoA.</div>';
     usort($fehlt, fn($a, $b) => [$a['anfragen'] > 0, $a['name']] <=> [$b['anfragen'] > 0, $b['name']]);   // noch nie angefragt zuerst
-    $h = '<div class="bx-panel" id="rsUnterlagen" style="border-left:3px solid var(--warn,#C9821A)">'
+    $h = $meld . '<div class="bx-panel" id="rsUnterlagen" style="border-left:3px solid var(--warn,#C9821A)">'
        . '<div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px"><h2 style="margin:0">Unterlagen der Rohstoffe ' . bx_badge(count($fehlt) . ' ohne Spezifikation/CoA', 'warn') . '</h2>'
        . '<span class="muted" style="font-size:13px">' . $ok . ' von ' . count($st) . ' mit Unterlagen</span></div>'
        . '<p class="muted" style="margin:6px 0 10px;font-size:13px">Für ' . h($kontext) . ' fehlen bei diesen Rohstoffen Spezifikation bzw. CoA des Lieferanten. Anhaken und beim Lieferanten anfragen – Spec/CoA sind bei der Preisabgabe Pflicht und landen automatisch am Rohstoff. Die bulkify-Spezifikation zählt hier nicht.</p>'
@@ -86,12 +88,65 @@ function rohstoff_unterlagen_panel(array $item_ids, string $kontext = 'diese Anf
         $h .= '<tr><td><input type="checkbox" class="rsUnterlagenWahl" value="' . (int)$r['id'] . '"' . ($r['anfragen'] === 0 ? ' checked' : '') . '></td>'
             . '<td><a href="?p=rohstoff&id=' . (int)$r['id'] . '" target="_blank" rel="noopener">' . h($r['name']) . '</a>' . ($r['nr'] !== '' ? ' <span class="muted" style="font-size:11px">' . h($r['nr']) . '</span>' : '') . '</td>'
             . '<td>' . $stand . '</td>'
-            . '<td style="text-align:right"><a class="btn btn-ghost btn-sm" href="?p=rohstoff&id=' . (int)$r['id'] . '" target="_blank" rel="noopener">Unterlage hochladen</a></td></tr>';
+            . '<td style="text-align:right">' . rohstoff_erfassen_knopf((int)$r['id'], $r['name']) . '</td></tr>';
     }
     $h .= '</tbody></table></div>'
         . '<div style="margin-top:10px"><button type="button" class="btn btn-primary btn-sm" onclick="(function(){var ids=[].map.call(document.querySelectorAll(\'.rsUnterlagenWahl:checked\'),function(c){return parseInt(c.value,10);});'
         . 'if(!ids.length){alert(\'Bitte mindestens einen Rohstoff anhaken.\');return;}if(typeof bxAnfrageBulkOeffnen!==\'function\'){alert(\'Anfrage-Fenster fehlt auf dieser Seite.\');return;}'
         . 'bxAnfrageBulkOeffnen(ids, ids.length+\' Rohstoff(e) – bei welchen Lieferanten anfragen? (Preis je kg, CoA/Spezifikation)\');if(typeof bxAnfrageModus===\'function\')bxAnfrageModus(\'preis\');})()">Ausgewählte beim Lieferanten anfragen</button></div>'
-        . '</div>';
+        . '</div>' . rohstoff_erfassen_dialog($zurueck);
     return $h;
+}
+
+// --- Pop-up „Preis & Unterlagen“ (Nico 10.11.2026) ------------------------------------------------------------------
+// Direkt aus einer Liste heraus: Lieferantenpreis ab Menge eintragen und/oder CoA/Spezifikation hochladen. Die KI liest die
+// Unterlage aus und füllt Kennwerte, Grenzwerte, Wirkstoffe (für die NRV) und leere Stammdaten. Ziel: ?p=rohstoff_erfassen
+// (module/anfrage/rohstoff_erfassen.php), danach zurück auf die aufrufende Seite. Dialog einmal je Seite ausgeben.
+function rohstoff_erfassen_knopf(int $item_id, string $name, string $label = 'Preis / Unterlage'): string {
+    return '<button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="bxRohErfassen(' . $item_id . ',' . h(json_encode($name, JSON_UNESCAPED_UNICODE)) . ')">' . h($label) . '</button>';
+}
+function rohstoff_erfassen_dialog(string $zurueck): string {
+    static $done = false; if ($done) return ''; $done = true;
+    $o = '<option value="">– Lieferant wählen –</option>';
+    foreach (all("SELECT id, firma, land FROM lieferanten WHERE gesperrt=0 ORDER BY firma") as $l)
+        $o .= '<option value="' . (int)$l['id'] . '">' . h((string)$l['firma']) . ($l['land'] ? ' · ' . h((string)$l['land']) : '') . '</option>';
+    $ki = function_exists('ki_bereit') && ki_bereit();
+    return '<div id="bxRohErfassen" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9998;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display=\'none\'">'
+      . '<form method="post" action="?p=rohstoff_erfassen" enctype="multipart/form-data" class="bx-panel" style="max-width:560px;width:100%;max-height:92vh;overflow:auto;margin:0">'
+      . '<input type="hidden" name="item_id" value=""><input type="hidden" name="zurueck" value="' . h($zurueck) . '">'
+      . '<div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px"><h2 style="margin:0">Preis &amp; Unterlagen</h2>'
+      . '<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'bxRohErfassen\').style.display=\'none\'">Schließen</button></div>'
+      . '<div class="muted" id="bxRohErfassenName" style="margin:4px 0 14px"></div>'
+      . '<div class="bx-field"><label>Lieferant</label><select name="lieferant_id" class="rscombo" style="min-width:300px">' . $o . '</select></div>'
+      . '<div class="bx-grid">'
+      . '<div class="bx-field"><label>Preis je kg (EUR, netto)</label><input type="text" inputmode="decimal" name="preis" placeholder="z. B. 24,50"></div>'
+      . '<div class="bx-field"><label>ab Menge (kg)</label><input type="text" inputmode="decimal" name="menge_ab" placeholder="z. B. 25"></div>'
+      . '</div>'
+      . '<div class="muted" style="font-size:12px;margin:-4px 0 14px">Weitere Staffel: Fenster erneut öffnen und die nächste Menge eintragen. Der EK des Rohstoffs folgt dem günstigsten Lieferantenpreis.</div>'
+      . '<div class="bx-grid">'
+      . '<div class="bx-field"><label>Unterlage</label><input type="file" name="dok" accept=".pdf,.jpg,.jpeg,.png"></div>'
+      . '<div class="bx-field"><label>Art</label><select name="dok_typ"><option value="spec">Spezifikation</option><option value="coa">CoA (Analysenzertifikat)</option><option value="analyse">Laboranalyse</option></select></div>'
+      . '</div>'
+      . ($ki ? '<label style="display:flex;gap:8px;align-items:center;margin:4px 0 14px;font-weight:400"><input type="checkbox" name="ki_fuellen" value="1" checked> Infos automatisch aus der Unterlage füllen (Kennwerte, Grenzwerte, Wirkstoffe für die NRV, leere Stammdaten)</label>'
+             : '<div class="muted" style="font-size:12px;margin:4px 0 14px">KI ist nicht eingerichtet – die Unterlage wird nur abgelegt.</div>')
+      . '<button class="btn btn-primary" type="submit">Speichern</button>'
+      . '</form></div>'
+      . '<script>function bxRohErfassen(id,name){var d=document.getElementById("bxRohErfassen");if(!d)return;var f=d.querySelector("form");'
+      . 'f.preis.value="";f.menge_ab.value="";f.dok.value="";f.item_id.value=id;document.getElementById("bxRohErfassenName").textContent=name;d.style.display="flex";}</script>';
+}
+// Rückmeldung nach dem Speichern (auf der aufrufenden Seite oben ausgeben).
+function rohstoff_erfassen_meldung(): string {
+    if (!isset($_GET['re_ok'])) return '';
+    $t = []; $warn = false;
+    if (!empty($_GET['re_preis'])) $t[] = 'Preis gespeichert';
+    if (!empty($_GET['re_ohnelief'])) { $t[] = 'Preis NICHT gespeichert – bitte einen Lieferanten wählen'; $warn = true; }
+    if (!empty($_GET['re_dok'])) $t[] = 'Unterlage abgelegt';
+    if (!empty($_GET['re_dokfehler'])) { $t[] = 'Datei konnte nicht gespeichert werden'; $warn = true; }
+    if (!empty($_GET['re_ki'])) $t[] = 'KI hat ausgelesen: Wirkstoffe, Kennwerte und Grenzwerte ergänzt, ' . (int)($_GET['re_kin'] ?? 0) . ' leere Stammdatenfeld(er) gefüllt';
+    if (!empty($_GET['re_kioff'])) { $t[] = 'KI konnte die Datei nicht auslesen – bitte am Rohstoff prüfen'; $warn = true; }
+    $id = (int)$_GET['re_ok'];
+    $name = $id ? (string) scalar("SELECT name FROM item WHERE id=?", [$id]) : '';
+    return '<div class="bx-panel ' . ($warn ? 'badge-warn' : 'badge-ok') . '" style="padding:10px 14px">' . ($name !== '' ? h($name) . ': ' : '')
+         . ($t ? h(implode(' · ', $t)) : 'nichts geändert (weder Preis noch Datei angegeben)') . '.'
+         . ($id ? ' <a href="?p=rohstoff&id=' . $id . '&tab=spec" target="_blank" rel="noopener">Rohstoff ansehen</a>' : '') . '</div>';
 }

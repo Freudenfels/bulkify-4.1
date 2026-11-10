@@ -567,3 +567,8 @@ Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohs
 - `anfrage_ist_premix($a)`: Eine Fertigprodukt-Anfrage an einer Stück-Rezeptur mit Form Pulver/Granulat ist eine Premix-Anfrage (lose Mischung je kg).
 - `lieferant_angebot_speichern()`: Die Antwort auf eine Premix-Anfrage wird als **Lieferantenpreis am Premix-Artikel** der Rezeptur gespeichert (`lieferant_preis`, je kg, Grundpreis + Staffeln, ersetzt die Zeilen dieses Lieferanten). Sie wird nicht mehr an der Rezeptur gespiegelt (`rezeptur_lief_angebot` = nur Stückpreise). Der Behelf von heute früh (Pulver-Anfrage als kg-Zeile an der Rezeptur) entfällt.
 - `rezeptur_premixitem()`: Neue Premix-Artikel heißen „Premix · <Rezepturname>“ (Einheit kg). Bestehende behalten ihren Namen.
+
+## Alternative zu Rohstoff-Anfragen (10.11.2026)
+- Neue Spalten an `portal_anfrage`: `lieferstatus`, `lieferstatus_hinweis`, `alternativen_gesendet_am`, `alternativen_entschieden_am`, `original_rohstoff_id`, `original_betreff`
+- Neue Tabelle `portal_anfrage_alternative`
+- Die Logik steht in `core/rohstoff_alternative.php`; schema.php bindet die Datei ein.

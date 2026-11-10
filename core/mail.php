@@ -558,6 +558,37 @@ function mail_vorlagen(): array {
                 'absender'       => 'Ihr Firmenname (Absender)',
             ],
         ],
+        'rohstoff_alternative' => [
+            'titel'        => 'Alternative zu angefragtem Rohstoff',
+            'beschreibung' => 'Geht an den Kunden, wenn wir zu seiner Rohstoff-Anfrage eine Alternative vorschlagen (z. B. weil der Rohstoff gerade nicht lieferbar ist).',
+            'betreff'      => 'Ihre Anfrage {nummer}: Vorschlag für eine Alternative',
+            'text'         => "Guten Tag {anrede},
+
+"
+                            . "zu Ihrer Anfrage {nummer}{betreff_hinweis} haben wir eine Rückmeldung:
+{lieferstatus}
+
+"
+                            . "Wir schlagen Ihnen folgende Alternative vor:
+{alternativen}
+
+"
+                            . "Im Kundenportal unter „Angebote & Anfragen“ → „Zu bestätigen“ können Sie die Alternative mit einem Klick anfragen oder beim ursprünglichen Rohstoff bleiben:
+{link}
+
+"
+                            . "Viele Grüße
+{absender}",
+            'platzhalter'  => [
+                'anrede'         => 'Ansprechpartner des Kunden (sonst Firma)',
+                'nummer'         => 'Nummer der Anfrage',
+                'betreff_hinweis'=> 'Angefragter Rohstoff in Klammern – oder leer',
+                'lieferstatus'   => 'z. B. „Creapure ist derzeit nicht lieferbar (wieder ab Januar).“',
+                'alternativen'   => 'Liste der Alternativen mit Begründung',
+                'link'           => 'Link ins Kundenportal',
+                'absender'       => 'Ihr Firmenname (Absender)',
+            ],
+        ],
     ];
 }
 
@@ -875,6 +906,33 @@ function mail_kunde_absage(int $anfrage_id): string {
         'grund'          => trim((string)$p['absage_grund']),
         'link'           => $link,
         'absender'       => $fa['name'],
+    ]);
+    return mail_senden((string)$p['email'], $m['betreff'], $m['text']);
+}
+
+// Alternative(n) zu einer Rohstoff-Anfrage an den Kunden melden. '' = verschickt, sonst Grund.
+function mail_kunde_rohstoff_alternative(int $anfrage_id): string {
+    $p = one("SELECT p.nummer, p.betreff, p.kunde_id, p.lieferstatus, p.lieferstatus_hinweis, k.firma, k.ansprechpartner, k.email
+              FROM portal_anfrage p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$anfrage_id]);
+    if (!$p) return 'Anfrage oder Kunde nicht gefunden.';
+    if (kunde_mails_aus((int)$p['kunde_id'])) return 'Benachrichtigungen für diesen Kunden sind ausgeschaltet.';
+    if (trim((string)$p['email']) === '') return 'Für diesen Kunden ist keine E-Mail-Adresse hinterlegt.';
+    $alt = [];
+    foreach (all("SELECT a.hinweis, i.name, i.beschaffenheit, i.dev FROM portal_anfrage_alternative a JOIN item i ON i.id=a.item_id
+                  WHERE a.anfrage_id=? AND a.status='vorgeschlagen' ORDER BY a.id", [$anfrage_id]) as $r)
+        $alt[] = '- ' . (function_exists('rohstoff_anzeige_name') ? rohstoff_anzeige_name($r) : $r['name']) . (trim((string)$r['hinweis']) !== '' ? ': ' . trim((string)$r['hinweis']) : '');
+    if (!$alt) return 'Keine Alternative hinterlegt.';
+    $bet = trim((string)($p['betreff'] ?? ''));
+    $fa  = beleg_firma();
+    $m = mail_render('rohstoff_alternative', [
+        'anrede'          => mail_kunde_anrede($p),
+        'nummer'          => (string)$p['nummer'],
+        'betreff_hinweis' => $bet !== '' ? ' („' . $bet . '")' : '',
+        'lieferstatus'    => rohstoff_lieferstatus_text($p),
+        'alternativen'    => implode("
+", $alt),
+        'link'            => mail_link_kundenportal((int)$p['kunde_id'], 'meine_anfragen'),
+        'absender'        => $fa['name'],
     ]);
     return mail_senden((string)$p['email'], $m['betreff'], $m['text']);
 }

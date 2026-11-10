@@ -17,3 +17,10 @@ Als Unterlage zählen Spezifikation, CoA und Analyse des Lieferanten am Rohstoff
 - Anfrage-Seite (`module/anfrage/detail.php`, ganz oben),
 - Rezepturseite bei Entwurf/Vorschlag (vor „Rohstoffpreise“),
 - Anfragen-Liste (Spalte „Unterlagen“).
+
+## Pop-up „Preis & Unterlagen“ (10.11.2026)
+- `rohstoff_erfassen_knopf($item_id, $name)` gibt einen Knopf aus, der das Fenster für diesen Rohstoff öffnet.
+- `rohstoff_erfassen_dialog($zurueck)` gibt das Fenster einmal je Seite aus. Darin: Lieferant (Suche), Preis je kg ab Menge, Upload Spec/CoA/Analyse und der Haken „Infos automatisch füllen“. Es sendet an `?p=rohstoff_erfassen`.
+- `rohstoff_erfassen_meldung()` zeigt die Rückmeldung nach dem Speichern.
+
+Der Kasten „Unterlagen der Rohstoffe“ hat je Zeile diesen Knopf statt des Links „Unterlage hochladen“. Siehe `module/anfrage/rohstoff_erfassen.md`.

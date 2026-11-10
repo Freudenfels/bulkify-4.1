@@ -102,3 +102,6 @@ Bei Lieferung (`auftrag_rechnung_bei_lieferung`) geht keine eigene Rechnungsmail
 
 ## Kunden-Registrierung (05.11.2026)
 `mail_kunde_registrierung_eingang($kid, $dublette)` schickt die Team-Meldung (`mail_team`: Dashboard-Benachrichtigung immer, Mail an Admins und CC) und die Eingangsbestätigung an den Kunden. `mail_kunde_registrierung_freigegeben($kid)` schickt „Konto freigeschaltet“ mit Link `?p=portal_login`.
+
+## Vorlage `rohstoff_alternative` (10.11.2026)
+`mail_kunde_rohstoff_alternative($anfrage_id)` schreibt dem Kunden, dass es zu seiner Rohstoff-Anfrage eine Alternative gibt. Der Text enthält Lieferstatus mit Hinweis, die Liste der Alternativen mit Begründung und den Portal-Link. Die Vorlage ist in den Einstellungen änderbar wie alle anderen. Die Funktion gibt `''` zurück, wenn die Mail verschickt wurde, sonst den Grund.
