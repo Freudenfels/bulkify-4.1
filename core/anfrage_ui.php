@@ -14,7 +14,9 @@ function lieferanten_fuer_anfrage(string $kat = ''): array {
         // eingeordnet, z. B. interne „Lieferanten" wie die eigene Produktion) tauchen NICHT auf –
         // die Preisanfrage soll nur sinnvolle Adressaten zeigen.
         // Synonyme: das Formular nutzt 'fertigprodukt', der v3-Import 'fertig'/'verkaufsfertig' (= dasselbe).
-        $syn = ['fertigprodukt' => ['fertigprodukt', 'fertig', 'verkaufsfertig'], 'rohstoff' => ['rohstoff']];
+        // Leerkapseln (Nico 10.11.2026): eigene Kategorie für Lieferanten, die nur Leerkapseln verkaufen. Bei einer
+        // Rohstoff-Anfrage tauchen diese NICHT auf; bei einer Leerkapsel-Anfrage kommen Leerkapsel- und Rohstoff-Lieferanten.
+        $syn = ['fertigprodukt' => ['fertigprodukt', 'fertig', 'verkaufsfertig'], 'rohstoff' => ['rohstoff'], 'leerkapsel' => ['leerkapsel', 'rohstoff']];
         $toks = $syn[$kat] ?? [$kat];
         $or = [];
         foreach ($toks as $t) { $or[] = "FIND_IN_SET(?, REPLACE(kategorien,' ',''))"; $args[] = $t; }

@@ -6,7 +6,7 @@ require_once BX_ROOT . '/core/schema.php';
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
-$KATS   = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','maschine'=>'Maschine','labor'=>'Labor','fertigprodukt'=>'Fertige Produkte'];
+$KATS   = ['rohstoff'=>'Rohstoff','leerkapsel'=>'Leerkapseln','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','maschine'=>'Maschine','labor'=>'Labor','fertigprodukt'=>'Fertige Produkte'];
 $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 
 $fehler = '';

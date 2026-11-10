@@ -7,7 +7,7 @@ require_once BX_ROOT . '/module/lieferant/portal_layout.php';
 // Sprache: Besucherwahl, sonst Standard Englisch (internationale Lieferanten).
 if (empty($_SESSION['lp_lang']) && ($_GET['lang'] ?? '') === '') $_SESSION['lp_lang'] = 'en';
 
-$KATS = ['rohstoff','verpackung','verbrauch','maschine','labor','fertigprodukt'];
+$KATS = ['rohstoff','leerkapsel','verpackung','verbrauch','maschine','labor','fertigprodukt'];
 $fehler = ''; $ok = false; $v = fn($f) => h((string)($_POST[$f] ?? ''));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

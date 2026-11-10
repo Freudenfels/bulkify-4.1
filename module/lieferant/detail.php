@@ -10,7 +10,7 @@ require_once BX_ROOT . '/core/nachricht.php';
 require_once BX_ROOT . '/core/lieferant_dateien.php';
 require_once BX_ROOT . '/core/labor_auftrag.php';   // Labor: Formular-Vorlagen (labor_formulare)
 
-$KATS = ['rohstoff'=>'Rohstoff','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','maschine'=>'Maschine','labor'=>'Labor','fertigprodukt'=>'Fertige Produkte'];
+$KATS = ['rohstoff'=>'Rohstoff','leerkapsel'=>'Leerkapseln','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','maschine'=>'Maschine','labor'=>'Labor','fertigprodukt'=>'Fertige Produkte'];
 $FORMEN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','pulver'=>'Pulver','fluessig'=>'Flüssig'];
 
 $fehler = '';

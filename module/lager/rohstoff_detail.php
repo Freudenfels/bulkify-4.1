@@ -1791,7 +1791,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
   <?php endif; ?>
   <?php endif; ?>
 </section>
-<?php anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=rohstoff&id=' . (int)$id . '&tab=ek'); ?>
+<?php anfrage_modal(lieferanten_fuer_anfrage(($it['form'] ?? '') === 'kapselhuelle' ? 'leerkapsel' : 'rohstoff'), '?p=rohstoff&id=' . (int)$id . '&tab=ek'); ?>
 <?php endif; ?>
 
 <script>

@@ -238,7 +238,7 @@ function init_schema(): void {
         telefon VARCHAR(60) NULL,
         gesperrt TINYINT(1) NOT NULL DEFAULT 0,
         sprache VARCHAR(5) NOT NULL DEFAULT 'de',         -- de | en | zh
-        kategorien VARCHAR(190) NULL,                     -- CSV: rohstoff,verpackung,verbrauch,maschine,labor,fertigprodukt
+        kategorien VARCHAR(190) NULL,                     -- CSV: rohstoff,leerkapsel,verpackung,verbrauch,maschine,labor,fertigprodukt
         fertig_formen VARCHAR(190) NULL,                  -- CSV bei Fertige Produkte: kapsel,tablette,softgel,stick,pulver,fluessig
         webseite VARCHAR(190) NULL,
         strasse VARCHAR(190) NULL,
@@ -1731,7 +1731,7 @@ function init_schema(): void {
     // item-Kategorien 'fertig'/'verkaufsfertig' in lieferanten.kategorien, das Formular kennt dort aber nur
     // 'fertigprodukt' („Fertige Produkte"). Beides -> 'fertigprodukt'; nur gültige Keys behalten; dedupen.
     if (meta_get('fix_lief_kategorien_v1', '') !== '1') {
-        $erlaubt = ['rohstoff','verpackung','verbrauch','maschine','labor','fertigprodukt'];
+        $erlaubt = ['rohstoff','leerkapsel','verpackung','verbrauch','maschine','labor','fertigprodukt'];
         $map = ['fertig'=>'fertigprodukt', 'verkaufsfertig'=>'fertigprodukt'];
         foreach (['lieferanten','partner'] as $tab) {
             if (!table_exists($tab)) continue;

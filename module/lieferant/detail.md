@@ -94,3 +94,7 @@ Ist die Kategorie **Labor** angehakt, erscheint im Reiter Stammdaten der Block �
 - Haken „Erste Proben“.
 
 Ansprechpartner beim Labor ist das normale Feld Ansprechpartner. Gespeichert wird nur bei gesetzter Kategorie Labor. Genutzt von „Ans Labor senden“ ([core/labor_auftrag.md](../../core/labor_auftrag.md)).
+
+## Kategorie Leerkapseln (10.11.2026)
+Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur Leerkapseln verkaufen. Sie steht neben Rohstoff, Verpackung, Verbrauch, Maschine, Labor und Fertige Produkte und wird wie diese in `lieferanten.kategorien` gespeichert.
+Die Checkbox steht bei den Liefer-Kategorien.

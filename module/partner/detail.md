@@ -21,3 +21,7 @@
 **Kennzahlen-Kacheln:** Status · SubKunden (Anzahl) · Umsatz als Kunde · Einkauf als Lieferant · Offene Rechnungen (die drei Geldwerte folgen mit den Modulen).
 
 **Technik-Hinweis:** Alle Reiter in einem Formular; ein kleines JavaScript blendet Reiter ein, fügt SubKunden-Zeilen per „+" hinzu und klappt die Formen-Auswahl auf, wenn „Fertige Produkte" gewählt ist.
+
+## Kategorie Leerkapseln (10.11.2026)
+Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur Leerkapseln verkaufen. Sie steht neben Rohstoff, Verpackung, Verbrauch, Maschine, Labor und Fertige Produkte und wird wie diese in `lieferanten.kategorien` gespeichert.
+Bei Partnern ist es dieselbe Liste wie beim Lieferanten.

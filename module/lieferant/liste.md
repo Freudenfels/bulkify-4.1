@@ -19,3 +19,7 @@
 Die Prüfung selbst (Anlegen / ablehnen) passiert im Lieferantenkonto, Reiter **Katalog** (siehe `detail.md`, `core/lieferant_katalog.md`). Quelle der Zähler: `SELECT lieferant_id, COUNT(*) FROM lieferant_katalog WHERE status='neu' GROUP BY lieferant_id`.
 
 **Muster:** identisch zur Kundenliste – Daten holen → suchen → sortieren → `bx_table()`.
+
+## Kategorie Leerkapseln (10.11.2026)
+Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur Leerkapseln verkaufen. Sie steht neben Rohstoff, Verpackung, Verbrauch, Maschine, Labor und Fertige Produkte und wird wie diese in `lieferanten.kategorien` gespeichert.
+Die Spalte Kategorien zeigt jetzt Klartext statt der Schlüssel, z. B. „Rohstoff, Leerkapseln“. Die Suche findet „leerkapsel“.

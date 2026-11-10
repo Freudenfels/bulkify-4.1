@@ -27,7 +27,8 @@ $statusBadge = function($r) {
     return (int)$r['gesperrt'] === 1 ? bx_badge('gesperrt', 'err') : bx_badge('aktiv', 'ok');
 };
 $sprache = fn($r) => h(strtoupper($r['sprache'] ?? ''));
-$kats = fn($r) => $r['kategorien'] ? h(str_replace(',', ', ', $r['kategorien'])) : '<span class="muted">–</span>';
+$KAT_LBL = ['rohstoff'=>'Rohstoff','leerkapsel'=>'Leerkapseln','verpackung'=>'Verpackung','verbrauch'=>'Verbrauch','maschine'=>'Maschine','labor'=>'Labor','fertigprodukt'=>'Fertige Produkte'];
+$kats = fn($r) => $r['kategorien'] ? h(implode(', ', array_map(fn($k) => $KAT_LBL[trim($k)] ?? trim($k), explode(',', (string)$r['kategorien'])))) : '<span class="muted">–</span>';
 
 // Offene Katalog-Zeilen je Lieferant (vom Lieferanten hinzugefügt, warten auf unsere Prüfung).
 $katMap = [];

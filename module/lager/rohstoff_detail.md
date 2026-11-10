@@ -185,3 +185,6 @@ Im Reiter Dokumente unter „Unsere Dokumente“: CoA und Spezifikationen des Li
 
 ## Dublettenwarnung (10.11.2026, Teil 5)
 Beim Anlegen (`id=neu`) zeigt das Namensfeld während des Tippens „Meintest du …?“ mit ähnlichen vorhandenen Artikeln (Warenart, Kapselgröße, Einheit, Link). Der Hinweis lautet: gleiche Qualität von einem anderen Lieferanten als Lieferantenpreis am vorhandenen Artikel erfassen.
+
+## Preisanfrage bei Leerkapseln (10.11.2026)
+Hat der Artikel die Form `kapselhuelle`, holt der Anfrage-Dialog die Lieferanten über `lieferanten_fuer_anfrage('leerkapsel')`. Angezeigt werden dann Leerkapsel- und Rohstoff-Lieferanten. Bei allen anderen Rohstoffen erscheinen nur Rohstoff-Lieferanten, reine Leerkapsel-Lieferanten nicht.

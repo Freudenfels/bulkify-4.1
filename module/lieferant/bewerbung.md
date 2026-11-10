@@ -24,3 +24,7 @@ Einstieg für Lieferanten: Button „Jetzt bewerben" auf der Login-Seite (`lp_t(
 
 ## Mails (Paket Mails)
 Nach erfolgreicher Bewerbung: `mail_lieferant_bewerbung_eingang()` – Team-Mail „Neue Lieferanten-Bewerbung" + Eingangsbestätigung an den Lieferanten in seiner Sprache.
+
+## Kategorie Leerkapseln (10.11.2026)
+Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur Leerkapseln verkaufen. Sie steht neben Rohstoff, Verpackung, Verbrauch, Maschine, Labor und Fertige Produkte und wird wie diese in `lieferanten.kategorien` gespeichert.
+Bei der Bewerbung kann der Lieferant „Leerkapseln“ ankreuzen. Die Übersetzungen kommen aus `kat_leerkapsel` in `portal_layout.php`.

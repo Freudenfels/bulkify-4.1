@@ -110,6 +110,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'bew_waehrung'    => ['de'=>'Währung',                 'en'=>'Currency', 'zh'=>'货币'],
         'bew_kategorien'  => ['de'=>'Was bieten Sie an?',      'en'=>'What do you offer?', 'zh'=>'您提供什么？'],
         'kat_rohstoff'    => ['de'=>'Rohstoffe',               'en'=>'Raw materials', 'zh'=>'原料'],
+        'kat_leerkapsel'  => ['de'=>'Leerkapseln',             'en'=>'Empty capsules', 'zh'=>'空心胶囊'],
         'kat_verpackung'  => ['de'=>'Verpackung',              'en'=>'Packaging', 'zh'=>'包装'],
         'kat_verbrauch'   => ['de'=>'Verbrauchsmaterial',      'en'=>'Consumables', 'zh'=>'耗材'],
         'kat_maschine'    => ['de'=>'Maschinen',               'en'=>'Machines', 'zh'=>'机械设备'],
@@ -489,7 +490,7 @@ function lp_shell_start(string $aktiv): void {
     $lfId        = (int)($lf['id'] ?? 0);
     $lfKat       = array_filter(array_map('trim', explode(',', (string)($lf['kategorien'] ?? ''))));
     $hatFertig   = trim((string)($lf['fertig_formen'] ?? '')) !== '';
-    $hatMaterial = (bool) array_intersect($lfKat, ['rohstoff', 'verpackung', 'verbrauch', 'maschine', 'labor']);
+    $hatMaterial = (bool) array_intersect($lfKat, ['rohstoff', 'leerkapsel', 'verpackung', 'verbrauch', 'maschine', 'labor']);
     // Wer schon Preise gepflegt hat, behaelt die Liste – auch wenn Formen/Kategorien (noch) nicht gesetzt sind.
     if ($lfId && !$hatFertig)   $hatFertig   = (bool) scalar("SELECT 1 FROM rezeptur_lief_angebot WHERE lieferant_id=? LIMIT 1", [$lfId]);
     if ($lfId && !$hatMaterial) $hatMaterial = (bool) scalar("SELECT 1 FROM lieferant_preisliste WHERE lieferant_id=? LIMIT 1", [$lfId])

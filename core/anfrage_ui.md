@@ -41,3 +41,6 @@ Der Live-Formatter des Mengen-Staffel-Felds (`#bxAnfMenge`, Tausenderpunkte je k
 - `bxAnfragePremixOeffnen(rezId, btn)`: wie die Fertigprodukt-Anfrage, aber mit verstecktem Feld `premix=1` und Mengen-Staffel in kg.
 
 - `anfrage_premix_button($rezeptur_id, $name)`: Knopf „Premix anfragen“ (öffnet `bxAnfragePremixOeffnen`), Teil 7.
+
+## Leerkapseln (10.11.2026)
+`lieferanten_fuer_anfrage('leerkapsel')` liefert Lieferanten mit der Kategorie `leerkapsel` oder `rohstoff`. Eine Rohstoff-Anfrage (`'rohstoff'`) bleibt streng. Ein Lieferant, der nur Leerkapseln führt, taucht dort also nicht auf.
