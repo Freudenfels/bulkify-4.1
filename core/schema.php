@@ -1945,7 +1945,8 @@ function init_schema(): void {
     // versenden nur. Gehört ins Fremdlager (Lager 2); Bestand wird dem Besitzer-Kunden zugeschrieben (charge.fremd_kunde_id),
     // zählt NICHT zu unserem Bestand und geht nicht in Produktion/Angebote/Einkauf ein. Kategorie dahinter: verkaufsfertig.
     ensure_column('item', 'fremdprodukt', "TINYINT(1) NOT NULL DEFAULT 0");
-    ensure_column('item', 'zusammengefuehrt_in', "INT NULL");   // Doppel-Artikel wurde hierher zusammengeführt (deaktiviert, nicht gelöscht)
+    ensure_column('item', 'zusammengefuehrt_in', "INT NULL");
+    ensure_column('item', 'synonyme', "TEXT NULL");   // frühere/alternative Namen (z. B. zusammengeführte Doppel-Artikel) – überall mitsuchbar (Teil 5, 10.11.2026)   // Doppel-Artikel wurde hierher zusammengeführt (deaktiviert, nicht gelöscht)
     ensure_column('item', 'fremd_besitzer_id', "INT NULL");   // Besitzer-Kunde (kunden.id) des Fremdprodukts
     // Kundenetikett gehört zu (Produkt + KUNDE): item.kunde_id (nur an Etikett-Artikeln mit produkt_id gesetzt). Die Versionen
     // v1/v2/… zählen je Produkt+Kunde und verdrängen sich nicht mehr gegenseitig. Siehe kundenetikett_je_kunde_migrieren().

@@ -26,3 +26,6 @@
 | `webe_kapsel_label(item)` | „Größe 0 · 450 mg“ zur Anzeige bei jedem Schritt |
 
 Aufrufer: `bestellung_lieferung_erfassen()` (core/schema.php), `erp_bestellung_lieferung_erfassen()` (lager/core/erp.php), `module/lager/wareneingang.php`, `lager/module/bestand/wareneingang.php`, `module/einkauf/detail.php`.
+
+## Als geliefert schließen (Teil 4)
+`webe_als_geliefert_schliessen($bid)`: Die Ware kam, ist aber nicht einzeln eingebucht. Offene Positionen bekommen `rest_storniert_am`, die Bestellung wird geliefert/angekommen, dazu ein Vermerk in der Notiz. Es wird keine Charge angelegt.

@@ -84,3 +84,17 @@ oder angekommen). Beheben setzt `phase_override` auf NULL (protokolliert). Hinte
 - **prod_glas_ohne_deckel:** Behälter ohne Verschluss (Beutel/Sachet/Stick/Blister ausgenommen). Nur Anzeige.
 - **kundenpreis_packgroesse:** Kundenpreis mit anderer Menge je Packung als das Produkt (z. B. 60 bei 90 Kapseln). Nur Anzeige – Nico entscheidet je Fall (andere Packungsgröße = eigenes Produkt).
 - **kundenpreis_abweichung:** Kundenpreis weicht mehr als 25 % vom Betrag je Packung der letzten Rechnung ab (Rechnung inkl. Verpackung). Nur Info.
+
+## Einkauf-Altlasten (10.11.2026, Einkauf gerade ziehen Teil 4)
+Neue Prüfpunkte ganz oben:
+- **offene Bestellung ohne Wareneingang**: älter als 14 Tage, mit Spalte „Vorschläge“.
+- **Bestellung „eingegangen“ ohne verknüpfte Charge**: mit „Vorschläge“.
+
+Bearbeitet werden beide an der Bestellung im Block „Wareneingang zuordnen“.
+
+Weitere Prüfpunkte:
+- **nachträglich angelegte Bestellung prüfen**: Beheben = als geprüft markieren.
+- **alte Entwürfe**: Beheben = stornieren.
+- **ohne Lieferant / „extern“**: nur Anzeige.
+- **ohne Position**: Beheben = stornieren.
+- **Wareneingang ohne Bestellung** (Muster/Sonstiges/Kundenware): nur Anzeige.

@@ -23,6 +23,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $bpErst = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND COALESCE(geliefert_menge,0) < menge AND rest_storniert_am IS NULL ORDER BY sort, id LIMIT 1", [(int)$id]);
         header('Location: ?p=wareneingang' . ($bpErst ? '&bp=' . $bpErst : '')); exit;
     }
+    // Teil 4 (Altlasten, nur auf Klick): vorhandene Charge mit einer Position verknüpfen bzw. ohne Charge als geliefert schließen.
+    if ($aktion === 'abgl_verknuepfen' && !$neu) {
+        $bpA = (int)($_POST['bp_id'] ?? 0); $cA = (int)($_POST['charge_id'] ?? 0);
+        $okA = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE id=? AND bestellung_id=?", [$bpA, (int)$id]) === 1
+            && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND bestellung_position_id IS NULL", [$cA]) === 1;
+        if ($okA) {
+            webe_charge_verknuepfen($cA, $bpA, false);
+            aenderung_protokollieren('charge', $cA, ['bestellung_position_id' => null], ['bestellung_position_id' => $bpA], 'bestellung_abgleich');
+            log_aktivitaet('bestellung', (int)$id, 'team', 'Charge ' . (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#', id)) FROM charge WHERE id=?", [$cA]) . ' mit der Bestellung verknüpft (Altlasten-Abgleich).', 'status');
+        }
+        header('Location: ?p=bestellung&id=' . $id . ($okA ? '&ok=1' : '&fehler=' . urlencode('Charge oder Position nicht (mehr) passend – nichts geändert.')) . '#abgleich'); exit;
+    }
+    if ($aktion === 'abgl_geliefert' && !$neu) {
+        webe_als_geliefert_schliessen((int)$id, (string)(current_user()['name'] ?? ''));
+        log_aktivitaet('bestellung', (int)$id, 'team', 'Als geliefert geschlossen ohne eingebuchte Charge (Altlasten-Abgleich).', 'status');
+        header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
+    }
     // Teil 3: Rest einer Teillieferung stornieren – die Bestellung schließt, der Rest zählt nicht mehr als unterwegs.
     if ($aktion === 'rest_storno' && !$neu) {
         webe_rest_stornieren((int)$id, (string)(current_user()['name'] ?? ''));
@@ -373,6 +390,9 @@ if (!$neu) {
         echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. gelieferte Menge je Position (geliefert = Summe der verknüpften Chargen). Ist alles da, schließt sich die Bestellung selbst. Bei einer Teillieferung bleibt sie offen, der Rest zählt weiter als unterwegs – „Rest storniert“ schließt sie. Bearbeiten unten im Formular.</p></div>';
     }
 
+    // Teil 4: Wareneingang zuordnen (Altlasten) – Vorschläge vorhandener Chargen je offener Position, nur auf Klick.
+    require_once BX_ROOT . '/core/bestellung_abgleich.php';
+    echo bestellung_abgleich_panel($b);
     // Chargen & Dokumente je Position: Charge, MHD, CoA, Spezifikation – Team und Lieferant (Portal) pflegen dieselbe Liste.
     require_once BX_ROOT . '/core/bestellung_chargen.php';
     echo bestellung_chargen_panel($b, 'team', 'de');

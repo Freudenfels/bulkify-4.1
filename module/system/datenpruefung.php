@@ -24,7 +24,87 @@ $bl1Frei = false;
 // fix:     null = nur Anzeige. Sonst: tabelle/typ fürs Protokoll, update mit {IDS} (die Bedingungen der Prüfung stehen
 //          IMMER mit in der WHERE, damit eine veraltete Auswahl nichts Falsches ändert), waehlbar = Zeile behebbar?
 // leer_ok: false = keine Treffer ist das Problem (z. B. niemand hat die QM-Rolle).
+require_once BX_ROOT . '/core/bestellung_abgleich.php';
 $CHECKS = [
+    // Einkauf gerade ziehen, Teil 4 (10.11.2026): Altlasten. Verknüpfen/Schließen passiert an der Bestellung (Block „Wareneingang zuordnen").
+    'be_ohne_we' => [
+        'titel' => 'Einkauf: offene Bestellung ohne Wareneingang (mit Vorschlägen)',
+        'info'  => 'Bestellt bzw. gesendet, älter als 14 Tage, an keiner Position hängt eine eingebuchte Charge. Spalte „Vorschläge“ = Positionen, zu denen es eine passende vorhandene Charge gibt (gleicher Lieferant, gleicher oder ähnlicher Artikel, passende Menge, Eingang nach dem Bestelldatum). Öffnen führt zur Bestellung, Block „Wareneingang zuordnen“: verknüpfen, als geliefert schließen oder stornieren – je Position, auch bei Bündel-Bestellungen.',
+        'sql'   => "SELECT b.id AS _id, CONCAT('?p=bestellung&id=', b.id, '#abgleich') AS _link, b.nummer, COALESCE(l.firma, b.online_haendler) AS lieferant, b.status, b.station,
+                           COALESCE(b.bestelldatum, DATE(b.angelegt)) AS bestellt_am,
+                           (SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0) AS positionen
+                    FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                    WHERE b.status IN ('gesendet','bestellt') AND b.angekommen_am IS NULL
+                      AND COALESCE(b.bestelldatum, DATE(b.angelegt)) < DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+                      AND NOT EXISTS (SELECT 1 FROM bestellung_position bp JOIN charge c ON c.bestellung_position_id=bp.id WHERE bp.bestellung_id=b.id)
+                    ORDER BY COALESCE(b.bestelldatum, DATE(b.angelegt))",
+        'zeilen' => function (array $rows): array { foreach ($rows as &$r) $r['vorschlaege'] = bestellung_abgleich_treffer((int)$r['_id']); unset($r); return $rows; },
+        'ohne_fix' => 'Bearbeiten an der Bestellung (Öffnen) – dort je Position verknüpfen, als geliefert schließen oder stornieren.',
+    ],
+    'be_eingegangen_ohne_charge' => [
+        'titel' => 'Einkauf: Bestellung „eingegangen“ ohne verknüpfte Charge',
+        'info'  => 'Status geliefert bzw. angekommen, aber an keiner Position hängt eine eingebuchte Charge (z. B. „Als angekommen markieren“ ohne Einbuchen). Die Ware zählt dann weder als unterwegs noch sicher als Bestand dieser Bestellung. Spalte „Vorschläge“ wie oben. Öffnen → „Wareneingang zuordnen“.',
+        'sql'   => "SELECT b.id AS _id, CONCAT('?p=bestellung&id=', b.id, '#abgleich') AS _link, b.nummer, COALESCE(l.firma, b.online_haendler) AS lieferant, b.status, b.angekommen_am,
+                           (SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0) AS positionen
+                    FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                    WHERE (b.status='geliefert' OR b.angekommen_am IS NOT NULL) AND b.status<>'storniert' AND b.nachtraeglich_grund IS NULL
+                      AND EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0 AND bp.rest_storniert_am IS NULL)
+                      AND NOT EXISTS (SELECT 1 FROM bestellung_position bp JOIN charge c ON c.bestellung_position_id=bp.id WHERE bp.bestellung_id=b.id)
+                    ORDER BY b.id DESC",
+        'zeilen' => function (array $rows): array { foreach ($rows as &$r) $r['vorschlaege'] = bestellung_abgleich_treffer((int)$r['_id']); unset($r); return $rows; },
+        'ohne_fix' => 'Bearbeiten an der Bestellung (Öffnen) – Charge verknüpfen oder „als geliefert schließen“.',
+    ],
+    'be_nachtraeglich' => [
+        'titel' => 'Einkauf: nachträglich angelegte Bestellung prüfen (Wareneingang ohne Bestellung)',
+        'info'  => 'Beim Wareneingang ohne Bestellung mit Grund „alte Bestellung“ automatisch angelegt (direkt bestellt, geliefert, Menge = Eingang). Bitte Preis und Daten an der Bestellung prüfen. Beheben = als geprüft markieren.',
+        'sql'   => "SELECT b.id AS _id, CONCAT('?p=bestellung&id=', b.id) AS _link, b.nummer, l.firma AS lieferant, DATE(b.angelegt) AS angelegt,
+                           (SELECT GROUP_CONCAT(COALESCE(i.name, bp.bezeichnung) SEPARATOR ', ') FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id WHERE bp.bestellung_id=b.id) AS artikel,
+                           (SELECT SUM(bp.menge * COALESCE(bp.ek_preis,0)) FROM bestellung_position bp WHERE bp.bestellung_id=b.id) AS wert
+                    FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                    WHERE b.nachtraeglich_grund IS NOT NULL AND b.nachtraeglich_geprueft_am IS NULL ORDER BY b.id DESC",
+        'korrektur' => "UPDATE bestellung SET nachtraeglich_geprueft_am=UTC_TIMESTAMP() WHERE nachtraeglich_grund IS NOT NULL AND id IN (...);",
+        'fix'   => ['tabelle' => 'bestellung', 'typ' => 'bestellung',
+                    'update' => "UPDATE bestellung SET nachtraeglich_geprueft_am=UTC_TIMESTAMP() WHERE nachtraeglich_grund IS NOT NULL AND nachtraeglich_geprueft_am IS NULL AND id IN ({IDS})"],
+    ],
+    'be_entwurf_alt' => [
+        'titel' => 'Einkauf: alte Bestell-Entwürfe (älter als 14 Tage)',
+        'info'  => 'Entwürfe zählen in der Bestellliste als „unterwegs“ und senken damit den Bedarf, obwohl nichts bestellt ist. Beheben = stornieren (nicht löschen, bleibt in der Liste der stornierten).',
+        'sql'   => "SELECT b.id AS _id, CONCAT('?p=bestellung&id=', b.id) AS _link, b.nummer, COALESCE(l.firma, b.online_haendler) AS lieferant, DATE(b.angelegt) AS angelegt,
+                           (SELECT GROUP_CONCAT(COALESCE(i.name, bp.bezeichnung) SEPARATOR ', ') FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id WHERE bp.bestellung_id=b.id) AS artikel
+                    FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                    WHERE b.status='offen' AND b.angelegt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 14 DAY) ORDER BY b.angelegt",
+        'korrektur' => "UPDATE bestellung SET status='storniert' WHERE status='offen' AND id IN (...);",
+        'fix'   => ['tabelle' => 'bestellung', 'typ' => 'bestellung',
+                    'update' => "UPDATE bestellung SET status='storniert' WHERE status='offen' AND angelegt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 14 DAY) AND id IN ({IDS})"],
+    ],
+    'be_ohne_lieferant' => [
+        'titel' => 'Einkauf: Bestellung ohne Lieferant oder mit Lieferant „extern“',
+        'info'  => 'Offene oder gelieferte Bestellungen ohne echten Lieferanten (Online-Bestellungen mit Händler ausgenommen). Ohne Lieferant fehlen Preise, CoA-Zuordnung und der Vorschlag beim Wareneingang. Bitte an der Bestellung den Lieferanten setzen.',
+        'sql'   => "SELECT b.id AS _id, CONCAT('?p=bestellung&id=', b.id) AS _link, b.nummer, COALESCE(l.firma, '–') AS lieferant, b.status, b.bestellart, DATE(b.angelegt) AS angelegt
+                    FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                    WHERE b.status<>'storniert' AND NOT (b.bestellart='online' AND COALESCE(b.online_haendler,'')<>'')
+                      AND (b.lieferant_id IS NULL OR l.id IS NULL OR LOWER(TRIM(l.firma)) IN ('extern','externer lieferant','unbekannt'))
+                    ORDER BY b.id DESC",
+        'ohne_fix' => 'Nur Anzeige: den richtigen Lieferanten an der Bestellung wählen.',
+    ],
+    'be_ohne_position' => [
+        'titel' => 'Einkauf: Bestellung ohne Position',
+        'info'  => 'Bestellungen ohne eine einzige Position (Menge > 0). Sie tauchen in Listen auf, bringen aber nichts. Beheben = stornieren.',
+        'sql'   => "SELECT b.id AS _id, CONCAT('?p=bestellung&id=', b.id) AS _link, b.nummer, COALESCE(l.firma, b.online_haendler) AS lieferant, b.status, DATE(b.angelegt) AS angelegt
+                    FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                    WHERE b.status<>'storniert' AND NOT EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0)
+                    ORDER BY b.id DESC",
+        'korrektur' => "UPDATE bestellung SET status='storniert' WHERE id IN (...) AND keine Position;",
+        'fix'   => ['tabelle' => 'bestellung', 'typ' => 'bestellung',
+                    'update' => "UPDATE bestellung b SET b.status='storniert' WHERE b.status<>'storniert' AND NOT EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0) AND b.id IN ({IDS})"],
+    ],
+    'we_ohne_bestellung' => [
+        'titel' => 'Lager: Wareneingang ohne Bestellung (Muster, Sonstiges, Kundenware)',
+        'info'  => 'Seit 10.11.2026 nur mit Grund möglich. Zur Kontrolle: Grund, Notiz und Charge. „Alte Bestellung“ steht nicht hier, sondern bei den nachträglichen Bestellungen.',
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=chargen&id=', c.id) AS _link, c.charge_nr, i.name AS artikel, c.menge, c.einheit, c.wareneingang, c.we_grund AS grund, c.we_grund_notiz AS notiz
+                    FROM charge c JOIN item i ON i.id=c.item_id WHERE c.we_grund IS NOT NULL AND c.we_grund<>'alt_bestellung' ORDER BY c.id DESC LIMIT 300",
+        'ohne_fix' => 'Nur Anzeige.',
+    ],
     's02' => [
         'titel' => 'S-02: exklusive Produkte im Katalog sichtbar',
         'info'  => 'Produkte aus einer exklusiven Kunden-Rezeptur, die selbst noch nicht exklusiv sind und damit im Portal-Katalog für alle sichtbar.',

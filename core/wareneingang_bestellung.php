@@ -170,6 +170,19 @@ function webe_rest_stornieren(int $bestellung_id, string $wer = ''): bool {
     return true;
 }
 
+// Altlasten (Teil 4): Ware ist gekommen, aber nicht einzeln eingebucht -> Bestellung schließen, offene Positionen zählen nicht
+// mehr als unterwegs (rest_storniert_am + Vermerk). Es wird keine Charge angelegt.
+function webe_als_geliefert_schliessen(int $bestellung_id, string $wer = ''): bool {
+    webe_spalten();
+    if (!one("SELECT id FROM bestellung WHERE id=? AND status<>'storniert'", [$bestellung_id])) return false;
+    q("UPDATE bestellung_position SET rest_storniert_am=CURDATE() WHERE bestellung_id=? AND rest_storniert_am IS NULL AND COALESCE(geliefert_menge,0) < menge", [$bestellung_id]);
+    q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+    q("UPDATE bestellung SET status='geliefert' WHERE id=? AND status IN ('offen','gesendet','bestellt')", [$bestellung_id]);
+    q("UPDATE bestellung SET notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", ["\n[" . gmdate('d.m.Y') . '] Als geliefert geschlossen ohne eingebuchte Charge' . ($wer !== '' ? ' (' . $wer . ')' : '') . '.', $bestellung_id]);
+    webe_bedarf_bump();
+    return true;
+}
+
 function webe_naechste_nummer(string $prefix): string {
     if (function_exists('naechste_nummer')) return naechste_nummer($prefix);
     if (function_exists('erp_naechste_nummer')) return erp_naechste_nummer($prefix);

@@ -558,3 +558,5 @@ Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohs
 ## Wareneingang gegen Bestellung (10.11.2026, Einkauf gerade ziehen Teil 1-3)
 - `bestellung_lieferung_erfassen($bid, $charge_ids, $bp_je_charge = [])`: Jede Charge hängt an genau einer Position. Das ist die gewählte, sonst die erste offene mit demselben Artikel, sonst eine Freitext-Position, die dabei den Artikel bekommt. Abschluss über `webe_bestellung_stand()` in `core/wareneingang_bestellung.php`, gemeinsam mit der Lager-App.
 - Neue Spalten: `bestellung_position.rest_storniert_am`, `bestellung.nachtraeglich_grund`, `bestellung.nachtraeglich_geprueft_am`, `charge.we_grund`, `charge.we_grund_notiz`.
+
+- `item.synonyme` (TEXT): frühere bzw. alternative Namen, z. B. zusammengeführte Doppel-Artikel. Sie werden überall mitgesucht (Teil 5).

@@ -68,3 +68,6 @@ Kopf und Ablauf sagen bei `bestellart='direkt'` „erwartet am“ statt „zuges
 - „Wareneingang buchen“ öffnet den Dashboard-Wareneingang mit der ersten offenen Position (`?p=wareneingang&bp=…`). Ein pauschales Einbuchen „zu BE-…“ gibt es nicht mehr.
 - Positionen: bestellt, geliefert (Summe der verknüpften Chargen), offen (Link zum Wareneingang dieser Position), Anzahl Chargen, Hinweis Mehrlieferung, „storniert“ beim Rest.
 - Knopf **„Rest storniert“** bei Teillieferung: schließt die Bestellung, der Rest zählt nicht mehr als unterwegs.
+
+## Wareneingang zuordnen (10.11.2026, Teil 4 Altlasten)
+Block „Wareneingang zuordnen“ (`#abgleich`, aus `core/bestellung_abgleich.php`), wenn Positionen ohne eingebuchte Charge offen sind. Je Position gibt es Vorschläge vorhandener Chargen mit „verknüpfen“. Darunter stehen „als geliefert schließen“ (ohne Charge, der Rest zählt nicht mehr als unterwegs) und „stornieren“. Aktionen: `abgl_verknuepfen`, `abgl_geliefert`.
