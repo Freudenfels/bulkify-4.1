@@ -341,3 +341,6 @@ Neben „Bestellen“ (Entwurf) je Lieferant der Knopf „Direkt bestellt“: le
 - 08.11.2026 (Handbuch 10.3): Hinweis „Druckdatei fehlt" im Reiter Produktion führt jetzt zum Reiter Details und öffnet direkt das Pop-up der Kachel Etikett (`data-goto="details" data-dlg="dlgEtikett"`; `data-dlg` öffnet nach dem Reiterwechsel ein Pop-up).
 - 08.11.2026 (Handbuch 10.4/12.4): Erklärtext „Zu Kontingent machen" zeigt den Preis, den das Kontingent wirklich bekommt – voller Packungspreis aus `kontingent_preis_aus_auftrag()` (gesamt_netto / Menge), nicht mehr `vk_stueck` (nur Herstellung).
 - 08.11.2026 (Handbuch 4.12): Labor-Upload prüft die Charge tolerant gegen die Chargen des Auftrags (nur Hinweis), meldet „auffällig" (`labor_befund_melden`). Bei auffälligem neuestem Bericht: roter Hinweis oben am Auftrag, Badge „Befund auffällig" im Labor-Block, Schritt-Karte mit Link zum Labor. „Ans Labor senden" bleibt unverändert (zurückgestellt).
+
+## Reiter Beschaffungsweg: Bedarf und Rest (10.11.2026)
+Jede Karte zeigt immer „Bedarf für diesen Auftrag“ (volle Menge). Ist schon Ware zugeordnet, steht dahinter „noch zu beschaffen (Rest)“. Bei Einzelrohstoffen steht je Zeile der volle Bedarf und klein darunter „Rest …“; die Summe gilt „für den Rest“. Anlass: AB-3284 – 15.000 Kapseln zugeordnet, alle Wege zeigten 0 kg, man sah nicht, wie viel Rohstoff die Eigenproduktion bräuchte.

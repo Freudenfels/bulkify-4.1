@@ -1421,15 +1421,17 @@ if ($pa): $bw = auftrag_beschaffungswege((int)$a['id']); $bwWahl = $bw['gewaehlt
         <div style="font-weight:600"><?= h($w['label']) ?></div>
         <div><?= $ist ? bx_badge('festgelegt', 'ok') : '' ?> <?= $bwBest === $k ? bx_badge('günstigster', 'info') : '' ?></div>
       </div>
-      <div class="muted" style="font-size:12px;margin-bottom:8px"><?= !empty($dk['ok']) && $dk['summe_gekoppelt'] > 0 ? 'Noch zu beschaffen (Rest)' : 'Bedarf für diesen Auftrag' ?>: <span style="color:var(--text)"><?= h($bwM($w['menge'], $w['einheit'])) ?></span></div>
+      <?php $bwVoll = (float)($w['menge_voll'] ?? $w['menge']); $bwTeil = $bwVoll - (float)$w['menge'] > 0.0005; ?>
+      <div class="muted" style="font-size:12px;margin-bottom:8px">Bedarf für diesen Auftrag: <span style="color:var(--text)"><?= h($bwM($bwVoll, $w['einheit'])) ?></span><?php if ($bwTeil): ?> · noch zu beschaffen (Rest): <span style="color:var(--text)"><?= h($bwM($w['menge'], $w['einheit'])) ?></span><?php endif; ?></div>
       <?php if ($k === 'rohstoffe'): ?>
         <table class="bx-table" style="font-size:13px"><tbody>
         <?php foreach ($w['positionen'] as $ps): ?>
-          <tr><td style="white-space:normal"><?= $bwLink($ps) ?></td><td class="bx-num"><?= h($bwM($ps['menge'], $ps['einheit'])) ?></td>
+          <tr><td style="white-space:normal"><?= $bwLink($ps) ?></td>
+              <td class="bx-num"><?php if ($bwTeil && $ps['voll'] !== null): ?><?= h($bwM($ps['voll'], $ps['einheit'])) ?><div class="muted" style="font-size:11px">Rest <?= h($bwM($ps['menge'], $ps['einheit'])) ?></div><?php else: ?><?= h($bwM($ps['menge'], $ps['einheit'])) ?><?php endif; ?></td>
               <td class="bx-num"><?= $ps['gesamt'] !== null ? h($bwE($ps['gesamt'])) : '<span class="muted">kein Preis</span>' ?><?php if (!empty($ps['mindest'])): ?><div class="muted" style="font-size:11px">Mindestmenge <?= h($bwM($ps['mindest'], $ps['bezug'] ?? $ps['einheit'])) ?></div><?php endif; ?></td></tr>
         <?php endforeach; ?>
         </tbody></table>
-        <div style="margin-top:8px"><?= $w['gesamt'] > 0 ? 'Summe ' . h($bwE($w['gesamt'])) : '' ?><?= $w['luecke'] ? ' <span class="muted" style="font-size:12px">(nicht vollständig: Preise fehlen)</span>' : '' ?></div>
+        <div style="margin-top:8px"><?= $w['gesamt'] > 0 ? 'Summe ' . h($bwE($w['gesamt'])) . ($bwTeil ? ' <span class="muted" style="font-size:12px">für den Rest</span>' : '') : '' ?><?= $w['luecke'] ? ' <span class="muted" style="font-size:12px">(nicht vollständig: Preise fehlen)</span>' : '' ?></div>
         <div class="muted" style="font-size:12px;margin-top:4px">Beschaffung über die Bedarfsliste (meist mehrere Lieferanten).</div>
       <?php else: ?>
         <?php if (!$w['angebote']): ?>

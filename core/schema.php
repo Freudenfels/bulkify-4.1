@@ -8371,8 +8371,23 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
     $roh = produktion_materialbedarf((int)$pa['id'], true);
     $rohBasis = max(0.0, $einh - (float)($dk['res_bulk'] ?? 0));
     $fRoh = $rohBasis > 0 ? min(1.0, $rest / $rohBasis) : 0.0;
-    foreach ($roh as &$rr) $rr['benoetigt'] = (float)$rr['benoetigt'] * $fRoh;
+    // Voller Bedarf je Rohstoff (ohne Abzug zugeordneter Ware) – Anzeige „Bedarf für diesen Auftrag“ neben dem Rest (Nico 10.11.2026):
+    // sonst steht bei voll zugeordneter Bulkware überall 0 kg und man sieht nicht, wie viel man für die Eigenproduktion bräuchte.
+    $einhVoll = $einh; $vollMg = []; $sumMgV = 0.0;
+    $ridRoh = pa_ist_bulk($pa) ? (int)$pa['rezeptur_id'] : ((int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]) ?: $rid);
+    foreach (all("SELECT item_id, menge_mg FROM rezeptur_zutat WHERE rezeptur_id=?", [$ridRoh]) as $zv) {
+        $vollMg[(int)$zv['item_id']] = ($vollMg[(int)$zv['item_id']] ?? 0.0) + (float)$zv['menge_mg']; $sumMgV += (float)$zv['menge_mg'];
+    }
+    foreach ($roh as &$rr) {
+        $mgE_ = $vollMg[(int)$rr['item_id']] ?? null;
+        $mgG_ = $mgE_ === null ? null : ($schuett ? ($sumMgV > 0 ? $einhVoll * 1000.0 * $mgE_ / $sumMgV : 0.0) : $mgE_ * $einhVoll);
+        $rr['voll'] = $mgG_ === null ? null : $mgG_ / ((($rr['einheit'] ?? '') === 'g') ? 1e3 : 1e6);
+        $rr['benoetigt'] = (float)$rr['benoetigt'] * $fRoh;
+    }
     unset($rr);
+    $kgVoll = 0.0;
+    foreach ($roh as $r) $kgVoll += (float)($r['voll'] ?? 0) * (($r['einheit'] ?? '') === 'g' ? 0.001 : 1.0);
+    $out['kg_voll'] = $kgVoll;
     $einh = $rest;
     $kg = 0.0;
     foreach ($roh as $r) $kg += (float)$r['benoetigt'] * (($r['einheit'] ?? '') === 'g' ? 0.001 : 1.0);
@@ -8387,7 +8402,7 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         elseif ($kn > 1) { $kapHinweis = $kn . ' Leerkapseln ' . (string)$kgr['name'] . ' – am Produkt eine wählen'; $kapLink = '?p=produkt&id=' . (int)$a['produkt_id']; }
         else { $kapHinweis = 'keine Leerkapsel ' . (string)$kgr['name'] . ' angelegt'; $kapLink = '?p=rohstoffe&kat=leerkapsel'; }
     }
-    $kapZeile = $form === 'kapsel' ? ['item_id' => $kapId, 'link' => $kapLink, 'hinweis' => $kapHinweis, 'name' => 'Leerkapseln', 'menge' => $einh, 'einheit' => 'Stk', 'preis' => $kapEk > 0 ? $kapEk : null, 'gesamt' => $kapEk > 0 ? $kapEk * $einh : null] : null;
+    $kapZeile = $form === 'kapsel' ? ['item_id' => $kapId, 'link' => $kapLink, 'hinweis' => $kapHinweis, 'name' => 'Leerkapseln', 'menge' => $einh, 'voll' => $einhVoll, 'einheit' => 'Stk', 'preis' => $kapEk > 0 ? $kapEk : null, 'gesamt' => $kapEk > 0 ? $kapEk * $einh : null] : null;
     $angebote = function (array $preise, float $menge) use ($lief) {
         $l = [];
         foreach ($preise as $lid => $p) if ($p > 0) $l[] = ['lieferant_id' => (int)$lid, 'lieferant' => $lief((int)$lid), 'preis' => $p, 'gesamt' => $p * $menge];
@@ -8402,7 +8417,7 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
     foreach ($angRows as $r) if ($schuett ? in_array($r['einheit'], ['kg'], true) : !in_array($r['einheit'], ['kg', 'g', 'l'], true)) $za[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
     $pa_ = staffel_je_lieferant($za, $mengeA);
     if (!$schuett) foreach (produkt_lieferant_preise((int)$a['produkt_id'], $einh) as $lid => $p) if (!isset($pa_[$lid]) || $p < $pa_[$lid]) $pa_[$lid] = (float)$p;
-    $out['wege']['kapsel'] = ['menge' => $mengeA, 'einheit' => $schuett ? 'kg' : 'Stk', 'angebote' => $angebote($pa_, $mengeA),
+    $out['wege']['kapsel'] = ['menge' => $mengeA, 'menge_voll' => $schuett ? $einhVoll / 1000 : $einhVoll, 'einheit' => $schuett ? 'kg' : 'Stk', 'angebote' => $angebote($pa_, $mengeA),
                               'label' => $schuett ? 'Zukauf fertige Mischung' : 'Zukauf fertige Kapsel/Tablette'];
     // (b) Premix: Angebote je kg (Rezeptur-Angebot in kg oder Lieferantenpreis am Premix-Artikel). Bei Schüttgut = Weg (a).
     if (!$schuett) {
@@ -8411,7 +8426,7 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         foreach ($angRows as $r) if ($r['einheit'] === 'kg') $zb[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
         if ($pm) foreach (all("SELECT lieferant_id, menge_ab, preis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]) as $r)
             $zb[] = [(int)$r['lieferant_id'], (float)$r['menge_ab'], (float)$r['preis']];
-        $out['wege']['premix'] = ['menge' => $kg, 'einheit' => 'kg', 'angebote' => $angebote(staffel_je_lieferant($zb, $kg), $kg), 'zusatz' => $kapZeile, 'item_id' => $pm, 'label' => 'Premix (fertige Mischung)'];
+        $out['wege']['premix'] = ['menge' => $kg, 'menge_voll' => $kgVoll, 'einheit' => 'kg', 'angebote' => $angebote(staffel_je_lieferant($zb, $kg), $kg), 'zusatz' => $kapZeile, 'item_id' => $pm, 'label' => 'Premix (fertige Mischung)'];
     }
     // (c) Einzelrohstoffe: Rezeptur × Menge, Staffelpreis zur Menge (sonst EK am Rohstoff), ohne Preis nur die Menge.
     $pos = []; $summe = 0.0; $luecke = false;
@@ -8425,11 +8440,11 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         $g = $p !== null ? $p * $mBezug : null;
         if ($g === null) $luecke = true; else $summe += $g;
         // Mindestmenge des gewählten Lieferanten: Bedarf unter seiner kleinsten Staffel -> Hinweis (der Preis gilt trotzdem).
-        $pos[] = ['item_id' => (int)$r['item_id'], 'name' => (string)$r['name'], 'menge' => $m, 'einheit' => $e, 'preis' => $p, 'gesamt' => $g,
+        $pos[] = ['item_id' => (int)$r['item_id'], 'name' => (string)$r['name'], 'menge' => $m, 'voll' => $r['voll'] ?? null, 'einheit' => $e, 'preis' => $p, 'gesamt' => $g,
                   'mindest' => $ekD['mindest'] ?? null, 'bezug' => (string)($it['preis_bezug'] ?? $e)];
     }
     if ($kapZeile) { $pos[] = $kapZeile; if ($kapZeile['gesamt'] === null) $luecke = true; else $summe += $kapZeile['gesamt']; }
-    $out['wege']['rohstoffe'] = ['menge' => $kg, 'einheit' => 'kg', 'positionen' => $pos, 'gesamt' => $summe, 'luecke' => $luecke, 'label' => 'Einzelrohstoffe (Eigenproduktion)'];
+    $out['wege']['rohstoffe'] = ['menge' => $kg, 'menge_voll' => $kgVoll, 'einheit' => 'kg', 'positionen' => $pos, 'gesamt' => $summe, 'luecke' => $luecke, 'label' => 'Einzelrohstoffe (Eigenproduktion)'];
     return $out;
 }
 // --- Beschaffungsweg: vorhandenen Bestand & offene Bestellungen koppeln (Nico 05.11.2026) -----------------------
