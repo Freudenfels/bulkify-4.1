@@ -100,3 +100,5 @@ Weitere Prüfpunkte:
 - **Wareneingang ohne Bestellung** (Muster/Sonstiges/Kundenware): nur Anzeige.
 
 - Prüfpunkt **„Artikel: ähnliche Artikel (Dubletten-Gruppen)“**: Liste der Gruppen. Öffnen führt zur Seite „Artikel zusammenführen“ (Teil 5).
+
+- Prüfpunkt **„Rohstoff: klingt nach Mineral/Vitamin, aber ohne Wirkstoffdaten“** (10.11.2026): in Rezepturen verwendete Rohstoffe mit Salz- bzw. Mineral- oder Vitaminnamen ohne `item_wirkstoff`. Ohne diese Daten fehlen elementare Werte und NRV in Rezeptur, PIB und Portal. Nur Anzeige.

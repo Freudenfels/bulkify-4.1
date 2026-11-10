@@ -115,6 +115,21 @@ $CHECKS = [
         },
         'ohne_fix' => 'Bearbeiten auf der Seite „Artikel zusammenführen“ (Öffnen).',
     ],
+    'rohstoff_ohne_wirkstoff' => [
+        'titel' => 'Rohstoff: klingt nach Mineral/Vitamin, aber ohne Wirkstoffdaten (in Rezepturen verwendet)',
+        'info'  => 'Ohne Wirkstoffdaten (z. B. „Kalium 38 %“ an Kaliumcitrat) fehlen in Rezeptur, PIB und Kundenportal die elementaren Werte und die % NRV – der Kunde sieht dann nur die Salz-Menge. Bitte am Rohstoff unter Wirkstoffe den Gehalt eintragen (Nico 10.11.2026, RZ-4166 Basen-Modul: Kalium, Zink, Natrium fehlten).',
+        'sql'   => "SELECT i.id AS _id, CONCAT('?p=rohstoff&id=', i.id) AS _link, i.artikelnummer, i.name,
+                           (SELECT COUNT(DISTINCT z.rezeptur_id) FROM rezeptur_zutat z WHERE z.item_id=i.id) AS rezepturen,
+                           (SELECT GROUP_CONCAT(DISTINCT r.nummer ORDER BY r.id DESC SEPARATOR ', ') FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id WHERE z.item_id=i.id AND r.status IN ('entwurf','vorschlag')) AS offene_vorschlaege
+                    FROM item i
+                    WHERE i.kategorie='rohstoff' AND COALESCE(i.gesperrt,0)=0 AND COALESCE(i.form,'') NOT IN ('kapselhuelle','premix')
+                      AND EXISTS (SELECT 1 FROM rezeptur_zutat z WHERE z.item_id=i.id)
+                      AND NOT EXISTS (SELECT 1 FROM item_wirkstoff iw WHERE iw.item_id=i.id)
+                      AND (LOWER(i.name) REGEXP 'citrat|bisglycinat|glycinat|gluconat|oxid|carbonat|chlorid|sulfat|picolinat|malat|orotat|lactat|aspartat|taurat|threonat|phosphat|fumarat'
+                           OR LOWER(i.name) REGEXP '(^|[^a-z])(kalium|natrium|zink|zinc|magnesium|calcium|kalzium|eisen|selen|jod|chrom|kupfer|mangan|molybdän|vitamin|folsäure|biotin|niacin|riboflavin|thiamin|cobalamin)')
+                    ORDER BY rezepturen DESC, i.name",
+        'ohne_fix' => 'Nur Anzeige: Gehalt am Rohstoff unter Wirkstoffe eintragen (Öffnen).',
+    ],
     'we_ohne_bestellung' => [
         'titel' => 'Lager: Wareneingang ohne Bestellung (Muster, Sonstiges, Kundenware)',
         'info'  => 'Seit 10.11.2026 nur mit Grund möglich. Zur Kontrolle: Grund, Notiz und Charge. „Alte Bestellung“ steht nicht hier, sondern bei den nachträglichen Bestellungen.',
