@@ -72,3 +72,6 @@ Gilt vor den älteren Absätzen oben (Anfragen-Gruppe mit 4 Punkten und Lager-Gr
 - Alte Bedarfsliste `?p=bedarf` war schon nicht im Menü; die Seite bleibt bis Schritt 5 unverändert. Jede ausgeblendete Seite bleibt per Link erreichbar.
 
 - `bx_rscombo_script()` (10.11.2026): Die Suche berücksichtigt zusätzlich `data-such` an der Option, z. B. Synonyme eines Artikels.
+
+## Rohstoff-Unterlagen (10.11.2026)
+Unter der Gruppe **Anfragen** steht neu `rohstoff_unterlagen` („Rohstoff-Unterlagen“, Seite `module/anfrage/rohstoff_unterlagen.php`). Im Menü „Einfach“ steht der Punkt direkt nach Anfragen, mit eigenem Icon (Dokument mit Ausrufezeichen). In gespeicherten Menü-Layouts landet er automatisch hinter „Anfragen“.

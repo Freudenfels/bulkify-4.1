@@ -64,6 +64,7 @@ function route_rollen_map(): array {
         'kontingent'         => ['sales', 'finance'],
         'fasttrack'          => ['sales', 'finance', 'production', 'fulfillment'],
         'anfragen'           => ['sales', 'production'],
+        'rohstoff_unterlagen' => ['sales', 'production'],
         'anfrage'            => ['sales', 'production'],
         'portal_anfragen'    => ['sales', 'production', 'einkauf'],
         'portal_anfrage'     => ['sales', 'production', 'einkauf'],

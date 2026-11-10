@@ -220,6 +220,7 @@ $routes = [
     'labor_bereinigung'  => 'system/labor_bereinigung.php', // Einmal-Bereinigung: Laboranalyse-Altlasten (Alt-Upsell) auf Auftrag buchen + Alt-Angebot zurueckziehen
     'dl_split_bereinigung' => 'system/dl_split_bereinigung.php', // Einmal-Bereinigung: faelschlich gesplittete Material-DL-Auftraege (Beutel/Glas/Etikett) entfernen
     'anfragen'           => 'anfrage/liste.php',
+    'rohstoff_unterlagen' => 'anfrage/rohstoff_unterlagen.php',
     'anfrage'            => 'anfrage/detail.php',
     'portal_anfragen'    => 'intern/portal_anfragen.php',
     'portal_anfrage'     => 'intern/portal_anfrage_detail.php',
