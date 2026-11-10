@@ -126,7 +126,7 @@ function bx_nav_einfach(): array {
     $reg = bx_nav_registry();
     // Benachrichtigungen ganz oben (Nico 08.11.2026; später unter „Zu erledigen"), Zähler = ungelesene des Nutzers.
     $plan = ['benachrichtigungen' => null, 'anfragen' => null, 'angebote' => null, 'auftraege' => null, 'einkaufsliste' => 'Einkauf', 'einkauf' => 'Bestellt', 'produktion' => null,
-             'lager' => 'Lager', 'produkte' => null, 'rezeptur' => null, 'rohstoffe' => null];
+             'lager' => 'Lager', 'produkte' => null, 'rezeptur' => null, 'rohstoffe' => null, 'd3k2_rechner' => 'D3K2-Rechner'];
     $nav = [];
     foreach ($plan as $key => $label) {
         if (!isset($reg[$key])) continue;
@@ -155,6 +155,7 @@ function bx_nav_icon(string $key): string {
         'produkte'      => '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
         'rezeptur'      => '<path d="M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>',
         'rohstoffe'     => '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
+        'd3k2_rechner'  => '<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/>',
         'buchhaltung'   => '<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/>',
     ];
     if (!isset($p[$key])) return '';

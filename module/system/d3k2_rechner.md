@@ -28,6 +28,7 @@ Man gibt vor, wie viel Vitamin D3 (in IE) und Vitamin K2 (in µg) in **einem Tro
 - Styling über die Haus-Klassen (`bx-panel`, `bx-table`, `bx-field`, `bx-num`) + wenige seiten-lokale `.d3k2-*`-Regeln,
   die nur Theme-Variablen nutzen -> Dark Mode greift automatisch.
 - Registriert in `public/index.php` (Route `d3k2_rechner`) und `core/auth.php` → `route_rollen_map()`
-  (Rollen: production, labor, sales; admin immer). Im Menü unter **Produkt**; zusätzlich verlinkt in
-  **Einstellungen → Produktion** neben dem Nachschlagewerk Kapselgrößen.
+  (Rollen: production, labor, sales; admin immer). Im Ausführlich-Menü unter **Produkt** und im
+  **Einfach-Menü** als eigener Punkt mit Taschenrechner-Icon (`bx_nav_einfach()` + `bx_nav_icon()`);
+  zusätzlich verlinkt in **Einstellungen → Produktion** neben dem Nachschlagewerk Kapselgrößen.
 - Herkunft: aus dem eigenständigen `d3k2-rechner/index.html` ins Dashboard übernommen und auf den bulkify-Look umgebaut.
