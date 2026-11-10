@@ -98,6 +98,23 @@ $CHECKS = [
         'fix'   => ['tabelle' => 'bestellung', 'typ' => 'bestellung',
                     'update' => "UPDATE bestellung b SET b.status='storniert' WHERE b.status<>'storniert' AND NOT EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0) AND b.id IN ({IDS})"],
     ],
+    'artikel_dubletten' => [
+        'titel' => 'Artikel: ähnliche Artikel (Dubletten-Gruppen)',
+        'info'  => 'Gruppen aktiver Artikel mit gleicher Normalform des Namens (mit Synonymen, ohne Gehalt/Bio). Gleiche Qualität = ein Artikel mit mehreren Lieferanten; andere Spezifikation, Kapselgröße, Füllgewicht oder Material bleibt getrennt. Zusammenführen auf der Seite „Artikel zusammenführen“ (je Gruppe, Nico wählt den Hauptartikel).',
+        'sql'   => "SELECT 1 AS x",
+        'zeilen' => function (array $rows): array {
+            require_once BX_ROOT . '/core/artikel_dubletten.php';
+            $out = [];
+            foreach (artikel_dubletten_gruppen() as $ids) {
+                $n = all("SELECT id, name, kategorie FROM item WHERE id IN (" . implode(',', array_map('intval', $ids)) . ") ORDER BY name");
+                $out[] = ['_id' => (int)$n[0]['id'], '_link' => '?p=artikel_zusammenfuehren&kat=alle&q=' . rawurlencode((string)$n[0]['name']) . '#g' . (int)$n[0]['id'],
+                          'gruppe' => (string)$n[0]['name'], 'warenart' => kategorie_label((string)$n[0]['kategorie']), 'artikel' => count($ids),
+                          'namen' => mb_substr(implode(' · ', array_column($n, 'name')), 0, 300)];
+            }
+            return $out;
+        },
+        'ohne_fix' => 'Bearbeiten auf der Seite „Artikel zusammenführen“ (Öffnen).',
+    ],
     'we_ohne_bestellung' => [
         'titel' => 'Lager: Wareneingang ohne Bestellung (Muster, Sonstiges, Kundenware)',
         'info'  => 'Seit 10.11.2026 nur mit Grund möglich. Zur Kontrolle: Grund, Notiz und Charge. „Alte Bestellung“ steht nicht hier, sondern bei den nachträglichen Bestellungen.',

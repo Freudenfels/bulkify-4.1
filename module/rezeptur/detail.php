@@ -194,7 +194,7 @@ $kundenpreise = ($neu || !table_exists('rezeptur_kundenpreis')) ? [] : all(
 
 // Rohstoffe für die Auswahl – nach passender Form für die Darreichungsform sortiert (flüssig zuerst bei flüssig)
 $prefForms = in_array($df, ['fluessig','softgel'], true) ? ['fluessig','oel'] : ['pulver','granulat','kristallin'];
-$items = all("SELECT id,artikelnummer,name,form,ek_preis,preis_bezug,dichte FROM item WHERE kategorie='rohstoff' AND gesperrt=0");
+$items = all("SELECT id,artikelnummer,name,form,ek_preis,preis_bezug,dichte,CONCAT_WS(' ',NULLIF(synonym,''),NULLIF(synonyme,'')) AS syn FROM item WHERE kategorie='rohstoff' AND gesperrt=0");
 usort($items, function($a,$b) use ($prefForms) {
     $pa = in_array($a['form'],$prefForms,true) ? 0 : 1;
     $pb = in_array($b['form'],$prefForms,true) ? 0 : 1;
@@ -745,6 +745,8 @@ var ITEMS = <?= json_encode($ITEMS, JSON_UNESCAPED_UNICODE) ?>;
 var KAPSELN = <?= json_encode($KAPSELN, JSON_UNESCAPED_UNICODE) ?>;
 // Rohstoff-Label -> id (für das tippbare Zutatenfeld mit datalist)
 var ZMAP = <?= json_encode((function($items,$FORMLBL,$gehaltSet){ $m=[]; foreach($items as $it){ $lbl=(!empty($gehaltSet[(int)$it['id']]) ? '✓ ' : '') . implode(' · ', array_filter([$it['name'], ($FORMLBL[$it['form']]??$it['form']), $it['artikelnummer']??''])); $m[$lbl]=(int)$it['id']; } return $m; })($items,$FORMLBL,$gehaltSet), JSON_UNESCAPED_UNICODE) ?>;
+// Synonyme je Rohstoff (Teil 5, 10.11.2026): auch alte Namen zusammengeführter Artikel finden den Hauptartikel.
+var ZSYN = <?= json_encode((function($items){ $m=[]; foreach($items as $it) if (trim((string)($it['syn'] ?? '')) !== '') $m[(int)$it['id']] = (string)$it['syn']; return $m; })($items), JSON_UNESCAPED_UNICODE) ?>;
 function zsync(row){ var t=row.querySelector('.zitem-txt'), h=row.querySelector('.zitem'); if(!t||!h) return; var id=ZMAP[(t.value||'').trim()]; h.value = id ? id : ''; }
 // Durchsuchbares, LESBARES Zutaten-Dropdown (wie rscombo): volle Rohstoffnamen, Tooltip + Text wandert beim
 // Hover (langes Label wird so ganz lesbar). Anders als rscombo bleibt FREITEXT erlaubt – ein getippter Name,
@@ -764,7 +766,7 @@ function zcombo(input){
     o.addEventListener('mouseenter',function(){ var ov=t.scrollWidth-(o.clientWidth-22); if(ov>2){ var d=Math.min(6,Math.max(1.2,ov/70)); t.style.transition='transform '+d+'s linear'; t.style.transform='translateX(-'+ov+'px)'; } });
     o.addEventListener('mouseleave',function(){ t.style.transition='transform .25s ease'; t.style.transform=''; }); }
   function render(){ var q=znorm((input.value||'').trim());
-    shown=ZOPTS.filter(function(o){ return !q||znorm(o.t).indexOf(q)>=0; }).slice(0,100);
+    shown=ZOPTS.filter(function(o){ return !q||znorm(o.t+' '+(ZSYN[o.v]||'')).indexOf(q)>=0; }).slice(0,100);
     if(!shown.length){ list.innerHTML='<div class="rs-empty">Kein Katalog-Treffer – Freitext bleibt stehen.</div>'; }
     else { list.innerHTML=shown.map(function(o,i){ return '<div class="rs-opt" data-i="'+i+'" title="'+zesc(o.t)+'"><span class="rs-opt-t">'+zesc(o.t)+'</span></div>'; }).join('');
       Array.prototype.forEach.call(list.querySelectorAll('.rs-opt'),mq); }

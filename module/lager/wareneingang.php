@@ -107,7 +107,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Etiketten bringen für den Abgleich ihr freigegebenes Design (Kundenetikett), Version, Kunde und Material mit;
 // fehlen Maße/Material am Kundenetikett, gelten die der Maß-Vorlage (etikett_vorlage_id).
-$items = all("SELECT i.id, i.name, i.kategorie, i.einheit, i.verpackung_rolle,
+$items = all("SELECT i.id, i.name, i.kategorie, i.einheit, i.verpackung_rolle, CONCAT_WS(' ', NULLIF(i.synonym,''), NULLIF(i.synonyme,'')) AS syn,
+                     CONCAT_WS(' · ', IF(COALESCE(kgi.name,kgr.name) IS NULL, NULL, CONCAT('Größe ', REPLACE(REPLACE(COALESCE(kgi.name,kgr.name),'Größe ',''),'Gr. ',''))),
+                               IF(r.darreichungsform IN ('kapsel','softgel','tablette') AND r.einheit_fuellmenge>0, CONCAT(TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM FORMAT(r.einheit_fuellmenge,1,'de_DE'))), ' mg'), NULL)) AS kapsel,
                      COALESCE(i.breite_mm, v.breite_mm) AS breite_mm, COALESCE(i.hoehe_mm, v.hoehe_mm) AS hoehe_mm,
                      COALESCE(NULLIF(i.etikett_format,''), v.etikett_format) AS etikett_format,
                      COALESCE(NULLIF(i.material,''), v.material) AS material, i.produkt_id, COALESCE(i.etikett_version,1) AS etikett_version,
@@ -116,6 +118,7 @@ $items = all("SELECT i.id, i.name, i.kategorie, i.einheit, i.verpackung_rolle,
               LEFT JOIN item v ON v.id=i.etikett_vorlage_id
               LEFT JOIN dokument d ON d.id=i.etikett_dokument_id
               LEFT JOIN kunden k ON k.id=i.kunde_id
+              LEFT JOIN kapselgroesse kgi ON kgi.id=i.kapselgroesse_id LEFT JOIN rezeptur r ON r.id=i.rezeptur_id LEFT JOIN kapselgroesse kgr ON kgr.id=r.kapselgroesse_id
               WHERE i.kategorie IN ('rohstoff','verpackung','fertig','verkaufsfertig') AND i.gesperrt=0 ORDER BY i.name");
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
 $bpListe = webe_offene_positionen('', 800);   // Teil 1: erwartete Lieferungen je Position (Artikel fest aus der Bestellung)
@@ -303,7 +306,7 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
 </form>
 <script>
 (function(){
-  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'r'=>(string)($it['verpackung_rolle'] ?? ''),'w'=>$it['breite_mm']!==null?(float)$it['breite_mm']:null,'h'=>$it['hoehe_mm']!==null?(float)$it['hoehe_mm']:null,'f'=>(string)($it['etikett_format'] ?? ''),
+  var items = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'s'=>(string)($it['syn'] ?? ''),'kl'=>(string)($it['kapsel'] ?? ''),'r'=>(string)($it['verpackung_rolle'] ?? ''),'w'=>$it['breite_mm']!==null?(float)$it['breite_mm']:null,'h'=>$it['hoehe_mm']!==null?(float)$it['hoehe_mm']:null,'f'=>(string)($it['etikett_format'] ?? ''),
         'mat'=>(string)($it['material'] ?? ''),'ke'=>(int)($it['produkt_id'] ?? 0) > 0,'v'=>(int)$it['etikett_version'],'kd'=>(string)($it['et_kunde'] ?? ''),'dok'=>(int)$it['et_dok'],
         'pdf'=>(string)$it['et_datei'] === '' || strtolower(pathinfo((string)$it['et_datei'], PATHINFO_EXTENSION)) === 'pdf'], $items), JSON_UNESCAPED_UNICODE) ?>;
   var aufEtikett = <?= json_encode($aufEtikett, JSON_FORCE_OBJECT) ?>;   // auftrag_id => dokument_id (Etikett-Design)
@@ -341,10 +344,10 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function render(q){
     q=(q||'').trim().toLowerCase();
-    shown = items.filter(function(it){ return (!curKat || it.k===curKat) && (!q || it.n.toLowerCase().indexOf(q)>=0); }).slice(0,50);
+    shown = items.filter(function(it){ return (!curKat || it.k===curKat) && (!q || (it.n+' '+(it.s||'')).toLowerCase().indexOf(q)>=0); }).slice(0,50);
     if(!shown.length){ list.innerHTML='<div class="bx-combo-empty">Kein Artikel gefunden.</div>'; }
     else list.innerHTML = shown.map(function(it,i){
-      return '<div class="opt" data-i="'+i+'">'+esc(it.n)+' <span class="muted">('+esc(it.e||'')+(it.k&&katLbl[it.k]?' · '+katLbl[it.k]:'')+')</span></div>';
+      return '<div class="opt" data-i="'+i+'">'+esc(it.n)+(it.kl?' <strong style="font-weight:600">· '+esc(it.kl)+'</strong>':'')+' <span class="muted">('+esc(it.e||'')+(it.k&&katLbl[it.k]?' · '+katLbl[it.k]:'')+')</span></div>';
     }).join('');
     hl=-1; list.hidden=false; box.setAttribute('aria-expanded','true');
   }

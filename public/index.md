@@ -33,3 +33,5 @@ Nach dem Login-Check und der Routen-Auflösung: POST mit `bx_menu_modus` (`einfa
 angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Rechte. Details: `core/layout.md`.
 
 - `weg_festlegen` → `module/auftrag/weg_festlegen.php` (Pop-up „Weg festlegen“, 10.11.2026).
+
+- `artikel_zusammenfuehren` → `module/lager/artikel_zusammenfuehren.php` (Dubletten zusammenführen, 10.11.2026).

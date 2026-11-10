@@ -130,3 +130,5 @@ Reihenfolge: Lieferschein scannen · Sendungsnummer · Aus Liste wählen (Zähle
 - **Ohne Bestellung** (Kachel statt „Manuell“, oder eine gelöste Zeile): Pflicht-Grund im Kopf, nämlich alte Bestellung (mit Lieferant: nachträgliche Bestellung wird angelegt und verknüpft), Muster oder Sonstiges (Notiz Pflicht). Lager 2 gilt als Kundenware. Ohne Grund wird die Zeile nicht gebucht.
 - Nach dem Buchen je Bestellung: Meldung „vollständig eingegangen und geschlossen“, „Teillieferung … der Rest zählt weiter als unterwegs“ oder „Mehrlieferung“.
 - Die Artikelauswahl zeigt Warenart, Kapselgröße/Füllgewicht und Synonyme.
+
+- Der Ähnlichkeits-Hinweis bei neuen Namen vergleicht auch die Synonyme vorhandener Artikel (Teil 5).

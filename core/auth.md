@@ -41,3 +41,5 @@ Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) ode
 `produktion_neu` => `[admin]` – neue Produktionsübersicht im Aufbau, erst nur Admin.
 
 - `weg_festlegen` (10.11.2026): nur Admin, Inhalt des Pop-ups „Weg festlegen“.
+
+- `artikel_zusammenfuehren` (10.11.2026): production, einkauf, labor für die „Meintest du …?“-Suche. Die Seite selbst prüft Admin.

@@ -182,3 +182,6 @@ Oben steht die Summe „noch unterwegs“ je Einheit. Entwürfe (Status offen, n
 
 ## Unterlagen aus Bestellungen (08.11.2026)
 Im Reiter Dokumente unter „Unsere Dokumente“: CoA und Spezifikationen des Lieferanten, die an Bestellungen dieses Rohstoffs hochgeladen wurden (`bch_item_dokumente`, `core/bestellung_chargen.php`) – mit Charge, Bestellung (Link), Datum und Prüfstatus. Sie ändern die Spezifikation nicht; beim Prüfen wird nur Fehlendes ergänzt.
+
+## Dublettenwarnung (10.11.2026, Teil 5)
+Beim Anlegen (`id=neu`) zeigt das Namensfeld während des Tippens „Meintest du …?“ mit ähnlichen vorhandenen Artikeln (Warenart, Kapselgröße, Einheit, Link). Der Hinweis lautet: gleiche Qualität von einem anderen Lieferanten als Lieferantenpreis am vorhandenen Artikel erfassen.

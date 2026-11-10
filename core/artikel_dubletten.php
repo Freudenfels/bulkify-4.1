@@ -83,13 +83,13 @@ function artikel_merge_sperren(array $haupt, array $quelle): array {
     return $g;
 }
 
-// Gruppen ähnlicher Artikel (mind. 2 aktive Artikel mit gleicher Normalform). Rückgabe [key => [item-Zeilen]].
+// Gruppen ähnlicher Artikel (mind. 2 aktive Artikel derselben Warenart mit gleicher Normalform). Rückgabe [kategorie|key => [item-ids]].
 function artikel_dubletten_gruppen(): array {
     $gr = [];
     foreach (all("SELECT id, name, kategorie FROM item WHERE COALESCE(gesperrt,0)=0 AND kategorie IN ('rohstoff','fertig','verkaufsfertig','verpackung','verbrauch')") as $r) {
         $k = artikel_norm_key((string)$r['name'], (string)$r['kategorie']);
         if (mb_strlen($k) < 4) continue;
-        $gr[$k][] = (int)$r['id'];
+        $gr[(string)$r['kategorie'] . '|' . $k][] = (int)$r['id'];   // je Warenart: Bulk 0/00 stehen zusammen, Rohstoff getrennt
     }
     return array_filter($gr, fn($ids) => count($ids) >= 2);
 }

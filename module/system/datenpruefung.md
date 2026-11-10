@@ -98,3 +98,5 @@ Weitere Prüfpunkte:
 - **ohne Lieferant / „extern“**: nur Anzeige.
 - **ohne Position**: Beheben = stornieren.
 - **Wareneingang ohne Bestellung** (Muster/Sonstiges/Kundenware): nur Anzeige.
+
+- Prüfpunkt **„Artikel: ähnliche Artikel (Dubletten-Gruppen)“**: Liste der Gruppen. Öffnen führt zur Seite „Artikel zusammenführen“ (Teil 5).

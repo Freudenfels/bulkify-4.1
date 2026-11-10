@@ -66,3 +66,5 @@ Beim Buchen mit „Zur Bestellung“ setzt `bestellung_lieferung_erfassen()` an 
 - Freitext-Positionen (Bulk-Zukauf zum Auftrag) bekommen den Bulk- bzw. Fertigartikel des Auftrags.
 - **Ohne Bestellung** (Haken): Grund Pflicht. Alte Bestellung braucht den Lieferanten und legt eine nachträgliche Bestellung an. Muster/Sonstiges brauchen eine Notiz. Sonst wird nicht gebucht (`grundfehler`). Gilt auch für „Fertigware zum Auftrag“.
 - Das Feld „Zur Bestellung“ entfällt. Mengen werden deutsch eingegeben (`7.000`).
+
+- Artikelsuche (ohne Bestellung) findet auch Synonyme. Die Kapselgröße bzw. das Füllgewicht steht fett im Treffer (Teil 5).

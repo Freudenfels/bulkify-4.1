@@ -28,3 +28,5 @@
   - Wirkstoffe, Grenzwerte und Kennwerte nur, wenn der Hauptartikel keine hat.
   - Der alte Artikel wird gesperrt (`zusammengefuehrt_in`, Vermerk), sein Name wandert in `item.synonyme` des Hauptartikels.
   - Protokoll in `aenderung_log` und in den Aktivitäten beider Artikel. Gelöscht wird nichts.
+
+- `artikel_dubletten_gruppen()` gruppiert je **Warenart**. Bulk-Kapseln Größe 0 und 00 stehen so in einer Gruppe, gesperrt mit „andere Kapselgröße“. Rohstoffe stehen getrennt.

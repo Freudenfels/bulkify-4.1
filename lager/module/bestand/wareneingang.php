@@ -1129,7 +1129,7 @@ if ($gebucht):
   function aehnlichItems(nm){
     var nt=wtoks(nm); if(!nt.length) return [];
     var min = nt.length===1 ? 1 : 2;
-    return ITEMS.map(function(it){ var itt=wtoks(it.n);
+    return ITEMS.map(function(it){ var itt=wtoks(it.n+' '+(it.s||''));
         var sh=nt.filter(function(w){return itt.indexOf(w)!==-1;}).length; return {it:it,s:sh}; })
       .filter(function(x){ return x.s>=min && x.it.n.toLowerCase()!==nm.trim().toLowerCase(); })
       .sort(function(a,b){return b.s-a.s;}).slice(0,3).map(function(x){return x.it;});

@@ -1858,5 +1858,25 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
   });
 })();
 </script>
+<?php if ($neu): // Teil 5 (10.11.2026): Dublettenwarnung „Meintest du …?“ beim Anlegen ?>
+<script>
+(function(){
+  var f=document.querySelector('input[name="name"]'); if(!f) return;
+  var box=document.createElement('div'); box.className='muted'; box.style.cssText='font-size:12px;margin-top:6px'; f.parentNode.appendChild(box);
+  var t=null, kat=document.querySelector('select[name="kategorie"]');
+  function esc(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function pruefen(){
+    var v=(f.value||'').trim(); if(v.length<4){ box.innerHTML=''; return; }
+    fetch('?p=artikel_zusammenfuehren&treffer='+encodeURIComponent(v)+'&kat='+encodeURIComponent(kat?kat.value:'')).then(function(r){return r.json();}).then(function(j){
+      var tr=(j&&j.treffer)||[];
+      box.innerHTML = tr.length ? '<span style="color:#8f231b">Meintest du …?</span> ' + tr.map(function(x){ return '<a href="?p=rohstoff&id='+x.id+'" target="_blank" rel="noopener">'+esc(x.name)+'</a> <span class="muted">('+esc(x.kat)+(x.kapsel?' · '+esc(x.kapsel):'')+', '+esc(x.einheit)+')</span>'; }).join(' · ')
+        + '<div>Gleiche Qualität von einem anderen Lieferanten bitte als Lieferantenpreis am vorhandenen Artikel erfassen – neu anlegen nur bei anderer Spezifikation, Kapselgröße oder Füllgewicht.</div>' : '';
+    }).catch(function(){});
+  }
+  f.addEventListener('input', function(){ clearTimeout(t); t=setTimeout(pruefen, 350); });
+  if(kat) kat.addEventListener('change', pruefen);
+})();
+</script>
+<?php endif; ?>
 <?php
 render_footer();

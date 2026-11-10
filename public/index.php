@@ -114,6 +114,7 @@ $routes = [
     'rohstoffe'      => 'lager/rohstoffe_liste.php',
     'rohstoff_website' => 'lager/rohstoff_website.php', // Massen-Freigabe öffentliche Rohstoff-DB (Website)
     'rohstoff'       => 'lager/rohstoff_detail.php',
+    'artikel_zusammenfuehren' => 'lager/artikel_zusammenfuehren.php',   // Dubletten zusammenführen (Einkauf gerade ziehen, Teil 5)
     'rohstoff_split' => 'lager/rohstoff_split.php',   // lange Namen (Varianten) aufschluesseln
     'freigaben'      => 'lager/freigaben.php',       // offene Kundenfreigaben (Spec/CoA)
     'rohstoffe_papiere' => 'lager/rohstoffe_ohne_papiere.php', // Rohstoffe in angebotenen Rezepturen ohne Papiere (CoA/Spec)
