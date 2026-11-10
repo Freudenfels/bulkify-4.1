@@ -102,3 +102,8 @@ Weitere Prüfpunkte:
 - Prüfpunkt **„Artikel: ähnliche Artikel (Dubletten-Gruppen)“**: Liste der Gruppen. Öffnen führt zur Seite „Artikel zusammenführen“ (Teil 5).
 
 - Prüfpunkt **„Rohstoff: klingt nach Mineral/Vitamin, aber ohne Wirkstoffdaten“** (10.11.2026): in Rezepturen verwendete Rohstoffe mit Salz- bzw. Mineral- oder Vitaminnamen ohne `item_wirkstoff`. Ohne diese Daten fehlen elementare Werte und NRV in Rezeptur, PIB und Portal. Nur Anzeige.
+- Prüfpunkt **„Rohstoff: beim Lieferanten angefragt, aber keine Dokumente“** (10.11.2026): Rohstoffe mit Preisanfrage (`lieferant_anfrage.item_id`), aber ohne Spezifikation, CoA oder Analyse am Rohstoff. Spalten:
+  - Anfragen, Lieferanten, Antworten (Angebote), letzte Anfrage,
+  - CoA angefordert, Rezepturen, CoA an Bestellung.
+
+  Sortiert: in Rezepturen verwendete und beantwortete zuerst. Nur Anzeige.

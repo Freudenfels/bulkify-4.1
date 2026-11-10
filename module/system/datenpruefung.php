@@ -115,6 +115,28 @@ $CHECKS = [
         },
         'ohne_fix' => 'Bearbeiten auf der Seite „Artikel zusammenführen“ (Öffnen).',
     ],
+    'rohstoff_angefragt_ohne_dok' => [
+        'titel' => 'Rohstoff: beim Lieferanten angefragt, aber keine Dokumente (Spezifikation/CoA)',
+        'info'  => 'Rohstoffe mit mindestens einer Preisanfrage an einen Lieferanten, an denen weder Spezifikation noch CoA noch Analyse hängt (Nico 10.11.2026). „Antworten“ = abgegebene Angebote; „CoA an Bestellung“ = es liegt zumindest an einer Bestellung ein CoA. Sortiert: in Rezepturen verwendete und beantwortete zuerst.',
+        'sql'   => "SELECT i.id AS _id, CONCAT('?p=rohstoff&id=', i.id) AS _link, i.artikelnummer, i.name,
+                           COUNT(DISTINCT la.id) AS anfragen,
+                           GROUP_CONCAT(DISTINCT l.firma ORDER BY l.firma SEPARATOR ', ') AS lieferanten,
+                           COUNT(DISTINCT ag.id) AS antworten,
+                           DATE(MAX(la.angelegt)) AS letzte_anfrage,
+                           MAX(la.coa_gewuenscht) AS coa_angefordert,
+                           (SELECT COUNT(DISTINCT z.rezeptur_id) FROM rezeptur_zutat z WHERE z.item_id=i.id) AS rezepturen,
+                           (SELECT COUNT(*) FROM dokument d JOIN bestellung_position bp ON bp.id=d.bestellung_position_id
+                             WHERE d.objekt_typ='bestellung' AND d.typ='coa' AND bp.item_id=i.id) AS coa_an_bestellung
+                    FROM item i
+                    JOIN lieferant_anfrage la ON la.item_id=i.id
+                    LEFT JOIN lieferanten l ON l.id=la.lieferant_id
+                    LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id
+                    WHERE i.kategorie='rohstoff' AND COALESCE(i.form,'') NOT IN ('kapselhuelle','premix')
+                      AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id AND d.typ IN ('spec','coa','beides','analyse'))
+                    GROUP BY i.id, i.artikelnummer, i.name
+                    ORDER BY ((SELECT COUNT(*) FROM rezeptur_zutat z2 WHERE z2.item_id=i.id) > 0) DESC, (COUNT(DISTINCT ag.id) > 0) DESC, MAX(la.angelegt) DESC, i.name",
+        'ohne_fix' => 'Nur Anzeige: beim Lieferanten nachfordern oder am Rohstoff hochladen (Öffnen).',
+    ],
     'rohstoff_ohne_wirkstoff' => [
         'titel' => 'Rohstoff: klingt nach Mineral/Vitamin, aber ohne Wirkstoffdaten (in Rezepturen verwendet)',
         'info'  => 'Ohne Wirkstoffdaten (z. B. „Kalium 38 %“ an Kaliumcitrat) fehlen in Rezeptur, PIB und Kundenportal die elementaren Werte und die % NRV – der Kunde sieht dann nur die Salz-Menge. Bitte am Rohstoff unter Wirkstoffe den Gehalt eintragen (Nico 10.11.2026, RZ-4166 Basen-Modul: Kalium, Zink, Natrium fehlten).',
