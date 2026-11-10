@@ -252,7 +252,7 @@ $stdWeg = $kalk['wege'][$kalk['standard']] ?? null;
 // ---- Kopf
 $kopfAkt = '';
 $anfDarf = $rid > 0 && (has_role('admin') || has_role('einkauf') || has_role('sales'));
-if ($anfDarf) $kopfAkt .= anfrage_produkt_badge($rid) . ' ' . anfrage_produkt_button($rid, (string)$p['name'], $pForm, 'Beim Lieferanten anfragen', 'btn btn-primary btn-sm') . ' ';
+if ($anfDarf) $kopfAkt .= anfrage_produkt_badge($rid) . ' ' . '<button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById(\'dlgAnfWahl\').showModal()">Beim Lieferanten anfragen</button>' . ' ';
 $kopfAkt .= bx_btn('Zurück zur Liste', '?p=produkte', 'ghost');
 if (has_role('admin'))
     $kopfAkt .= ' <form method="post" style="display:inline" onsubmit="return confirm(\'Dieses Produkt endgültig löschen? Geht nur, wenn es nicht mehr verwendet wird (Auftrag/Angebot/Produktion/Bestand).\');"><input type="hidden" name="aktion" value="loeschen"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Löschen</button></form>';
@@ -553,7 +553,7 @@ if (!$istExtern):
 <div class="bx-panel" id="zukauf">
   <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
     <h2 style="margin:0">Lieferanten für das Produkt <span class="muted" style="font-weight:400;font-size:14px">Zukauf fertig · Bulk · Premix</span></h2>
-    <div class="bx-row" style="gap:8px"><?php if ($anfDarf): ?><?= anfrage_produkt_button($rid, (string)$p['name'], $pForm, 'Preis anfragen', 'btn btn-ghost btn-sm') ?><?php endif; ?>
+    <div class="bx-row" style="gap:8px"><?php if ($anfDarf): ?><?= '<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'dlgAnfWahl\').showModal()">Preis anfragen</button>' ?><?php endif; ?>
       <?php if ($darf): ?><button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('dlgZk').showModal()">Preis hinzufügen</button><?php endif; ?></div>
   </div>
   <?php if (!$bs['zukauf']): ?><p class="muted">Noch keine Zukaufpreise. „Preis hinzufügen" oder „Preis anfragen".</p><?php endif; ?>
@@ -561,7 +561,7 @@ if (!$istExtern):
     <div class="pr-lief">
       <div class="bx-row" style="justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
         <div><?= $z['lieferant_id'] ? '<a href="?p=lieferant&id=' . $z['lieferant_id'] . '" style="font-size:15px">' . h($z['firma']) . '</a>' : '<span style="font-size:15px">' . h($z['firma']) . '</span> <span class="muted" style="font-size:12px">(nur Freitext, kein Lieferanten-Datensatz)</span>' ?>
-          <?= $i === 0 ? bx_badge('günstigster', 'ok') : '' ?></div>
+          <?= !empty($z['premix']) ? bx_badge('Premix je kg', 'info') : ($i === 0 ? bx_badge('günstigster', 'ok') : '') ?></div>
         <div class="muted" style="font-size:12px"><?= h(implode(' · ', array_filter([$l['land'] ?? '', $z['portal'] ? 'Portal-Account' : ($z['lieferant_id'] ? 'kein Portal-Account' : ''), !empty($l['lieferzeit_tage']) ? 'Lieferzeit ' . (int)$l['lieferzeit_tage'] . ' Tage' : '', !empty($l['mindestbestellwert']) ? 'Mindestbestellwert ' . $eur2($l['mindestbestellwert']) : '', $l['ansprechpartner'] ?? '']))) ?></div>
       </div>
       <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table"><thead><tr><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th>Quelle</th><th></th></tr></thead><tbody>
@@ -629,7 +629,7 @@ if (!$istExtern):
   <?php if (!$bs['anfragen']): ?><p class="muted">Keine Preisanfragen zu diesem Produkt oder seinen Rohstoffen.</p><?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Anfrage</th><th>Was</th><th>Lieferant</th><th>Status</th><th>Antwort</th><th>Datum</th></tr></thead><tbody>
   <?php foreach ($bs['anfragen'] as $a): ?><tr><td><a href="?p=lief_anfrage_detail&id=<?= (int)$a['id'] ?>"><?= h((string)($a['nummer'] ?: '#' . $a['id'])) ?></a></td>
-    <td><?= $a['item'] !== '' ? h((string)$a['item']) : 'Fertigprodukt' ?></td><td><?= h((string)$a['firma']) ?></td><td><?= h((string)$a['status']) ?></td>
+    <td><?= $a['item'] !== '' ? h((string)$a['item']) : (!$schuett && in_array((string)($a['form'] ?? ''), ['pulver', 'granulat'], true) ? 'Premix (je kg)' : 'Fertigprodukt') ?></td><td><?= h((string)$a['firma']) ?></td><td><?= h((string)$a['status']) ?></td>
     <td><?= $a['ang_preis'] !== null ? $eur((float)$a['ang_preis']) . '/' . h((string)$a['ang_einheit']) . ($a['ang_mm'] ? ' · ab ' . $nf0($a['ang_mm']) : '') . ($a['ang_lz'] ? ' · ' . (int)$a['ang_lz'] . ' Tage' : '') : '<span class="muted">offen</span>' ?></td>
     <td><?= h(fmt_zeit((string)$a['angelegt'], 'd.m.Y')) ?></td></tr><?php endforeach; ?>
   </tbody></table></div>
@@ -794,5 +794,54 @@ $specDocs = all("SELECT id, typ, datei_orig, ki_daten, angelegt FROM dokument WH
 })();
 </script>
 <?php
-if ($anfDarf) anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=produkt&id=' . $pid . '&tab=beschaffung');
+if ($anfDarf):
+    // Anfrage-Auswahl (Nico 10.11.2026): fertige Kapseln/Tabletten, Premix (lose Mischung je kg) oder einzelne Rohstoffe.
+    $awZut = all("SELECT DISTINCT z.item_id, i.name FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.menge_mg DESC", [$rid]);
+    $awFertig = $schuett ? 'Fertige Mischung (Bulk, je ' . ($pForm === 'fluessig' || $pForm === 'gel' ? 'L' : 'kg') . ')'
+              : ($pForm === 'tablette' ? 'Fertige Tabletten (Bulk)' : ($pForm === 'kapsel' || $pForm === 'softgel' ? 'Fertige Kapseln (Bulk)' : 'Fertiges Produkt (Bulk)'));
+    $awFormLbl = (string)(anfrage_formen()[$pForm] ?? $pForm); ?>
+<dialog id="dlgAnfWahl" class="bx-dialog" data-rid="<?= (int)$rid ?>" data-name="<?= h((string)$p['name']) ?>" data-form="<?= h($awFormLbl) ?>">
+  <?= $dlgKopf('Beim Lieferanten anfragen', 'dlgAnfWahl') ?>
+  <div class="muted" style="font-size:13px;margin-bottom:10px">Was soll angefragt werden?</div>
+  <label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0"><input type="radio" name="anfWas" value="fertig" checked>
+    <span><?= h($awFertig) ?><span class="muted" style="display:block;font-size:12px">Ein Lieferant stellt das ganze Produkt her<?= $schuett ? '' : ', Preis je ' . h($awFormLbl) ?>.</span></span></label>
+  <?php if (!$schuett): ?>
+  <label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0"><input type="radio" name="anfWas" value="premix">
+    <span>Premix (fertige Mischung, lose)<span class="muted" style="display:block;font-size:12px">Die Mischung der Rezeptur ohne <?= $pForm === 'tablette' ? 'Pressen' : 'Kapsel' ?>, Preis je kg – wir <?= $pForm === 'tablette' ? 'pressen' : 'verkapseln' ?> selbst.</span></span></label>
+  <?php endif; ?>
+  <label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0"><input type="radio" name="anfWas" value="rohstoff" <?= $awZut ? '' : 'disabled' ?>>
+    <span>Rohstoffe einzeln<span class="muted" style="display:block;font-size:12px"><?= $awZut ? 'Preis je kg für die gewählten Rohstoffe der Rezeptur.' : 'Die Rezeptur hat keine Rohstoffe.' ?></span></span></label>
+  <div id="anfWahlRoh" style="display:none;margin:4px 0 0 26px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 10px">
+    <?php foreach ($awZut as $z): ?>
+      <label style="display:flex;gap:8px;align-items:center;padding:3px 0"><input type="checkbox" class="anfWahlItem" value="<?= (int)$z['item_id'] ?>" data-name="<?= h((string)$z['name']) ?>" checked> <span><?= h((string)$z['name']) ?></span></label>
+    <?php endforeach; ?>
+  </div>
+  <div style="margin-top:14px"><button type="button" class="btn btn-primary btn-sm" onclick="bxAnfWahlWeiter()">Weiter</button></div>
+</dialog>
+<script>
+(function(){
+  var d = document.getElementById('dlgAnfWahl');
+  d.querySelectorAll('input[name=anfWas]').forEach(function(r){ r.addEventListener('change', function(){
+    document.getElementById('anfWahlRoh').style.display = (d.querySelector('input[name=anfWas]:checked') || {}).value === 'rohstoff' ? '' : 'none';
+  }); });
+})();
+function bxAnfWahlWeiter(){
+  var d = document.getElementById('dlgAnfWahl'), rid = parseInt(d.getAttribute('data-rid'), 10);
+  var w = (d.querySelector('input[name=anfWas]:checked') || {}).value;
+  if (w === 'rohstoff') {
+    var it = Array.prototype.slice.call(d.querySelectorAll('.anfWahlItem:checked'));
+    if (!it.length) { alert('Bitte mindestens einen Rohstoff wählen.'); return; }
+    d.close();
+    if (it.length === 1) { bxAnfrageOeffnen(parseInt(it[0].value, 10), it[0]); return; }
+    bxAnfrageBulkOeffnen(it.map(function(c){ return parseInt(c.value, 10); }),
+      it.length + ' Rohstoffe aus ' + d.getAttribute('data-name') + ' \u2013 bei welchen Lieferanten anfragen? (Preis je kg, CoA/Spezifikation)');
+    bxAnfrageModus('preis');
+    return;
+  }
+  d.close();
+  if (w === 'premix') bxAnfragePremixOeffnen(rid, d); else bxAnfrageProduktOeffnen(rid, d);
+}
+</script>
+<?php anfrage_modal(lieferanten_fuer_anfrage_mehrere(['rohstoff', 'fertigprodukt']), '?p=produkt&id=' . $pid . '&tab=beschaffung');
+endif;
 render_footer();

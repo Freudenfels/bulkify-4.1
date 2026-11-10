@@ -271,6 +271,7 @@ Stand nach dem Umbau "Produktseite aufräumen" (09.11.2026). Kopf: Name (Stift),
 | **Kalkulation** | Kosten je Packung aufgeschlüsselt (Inhalt, Leerkapsel, Glas, Deckel, Etikett, Karton anteilig, Beipack, Herstellung), je Weg eine Spalte, Standard hervorgehoben, Staffel nach Menge (1.000 / 3.000 / 10.000 / frei). **Fehlt ein Preis: "Preis fehlt", Summe "unvollständig" – nie still 0.** Darunter die Preis-Matrix. |
 | **Dokumente** | Ein Upload für Spec, CoA, Laboranalyse, Zertifikat, Druckvorlage (KI liest Spec/CoA), Liste aller Dokumente, PIB. |
 
+- "Beim Lieferanten anfragen": erst Auswahl **Fertige Kapseln/Tabletten**, **Premix** (lose Mischung je kg, nur Kapsel/Tablette) oder **Rohstoffe einzeln**; Premix-Antworten stehen als Preis je kg an der Rezeptur und zählen im Beschaffungsweg Premix.
 - Rechnung: `produkt_kalkulation()` (core/produkt_kalkulation.php), gleiche Bausteine wie der Beschaffungsweg am Auftrag. Herstellung (Lohn) hat noch keinen Satz und wird nicht gerechnet.
 - Widersprüche am Produkt zeigt die Datenprüfung (Entwurf trotz Verwendung → Beheben auf "aktiv"; Glas ohne Deckel, Kundenpreis mit anderer Packungsgröße, starke Abweichung Kundenpreis/Rechnung nur Anzeige).
 
@@ -422,3 +423,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 09.11.2026 | Produktseite: Knopf „Beim Lieferanten anfragen“ im Seitenkopf (Fertigprodukt-Anfrage der Rezeptur, gleiches Popup wie Angebot/Rezeptur) mit Status-Badge. |
 | 09.11.2026 | Produktseite aufgeräumt (neuer Abschnitt 5a): Kopf + Kacheln per Stift + Reiter Rezeptur/Kunden/Beschaffung/Produktion/Kalkulation/Dokumente; Kalkulation je Weg aufgeschlüsselt, "Preis fehlt" statt 0; Suchfelder; vier Prüfungen in der Datenprüfung. |
 | 10.11.2026 | Beschaffungsweg am Auftrag: jede Karte zeigt den vollen Bedarf (kg/Stk je Rohstoff) und, wenn schon Ware zugeordnet ist, zusätzlich den Rest. Kosten weiter für den Rest. |
+| 10.11.2026 | Produktseite "Beim Lieferanten anfragen": Auswahl Fertige Kapseln/Tabletten, Premix (je kg) oder Rohstoffe; Premix-Antwort wird an der Rezeptur als Preis je kg gespeichert und nie als Stückpreis gelesen. |

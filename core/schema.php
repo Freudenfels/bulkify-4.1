@@ -7189,6 +7189,8 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
         // Flüssig/Gel je L – nie „Stk" (St-13). Hat der Lieferant je g bzw. ml angeboten, wird auf kg/L umgerechnet
         // (Preis × 1000, Staffelmenge / 1000). Die Bulk-Bestellung fragt den Preis in kg/L ab (bulk_bestell_menge).
         $fuellE = form_groessen_einheit($rform);
+        // Premix-Anfrage (Form Pulver/Granulat) an einer Stück-Rezeptur: Preis gilt je kg der losen Mischung.
+        if ($fuellE === '' && in_array((string)($a['form'] ?? ''), ['pulver', 'granulat'], true)) $fuellE = 'g';
         $rEinheit = $fuellE === 'g' ? 'kg' : ($fuellE === 'ml' ? 'L'
                   : (in_array($rform, ['kapsel','softgel'], true) ? 'Kapsel' : ($rform === 'tablette' ? 'Tablette' : ($rform === 'stick' ? 'Stick' : 'Stk'))));
         $le = strtolower(trim($einheit));
@@ -10374,8 +10376,11 @@ function auftrag_zukauf_fertig(int $auftrag_id): bool {
 function rezeptur_fremd_lieferant_preise(int $rezeptur_id, float $stueck = 0): array {
     if ($rezeptur_id <= 0 || !table_exists('rezeptur_lief_angebot')) return [];
     $out = [];
+    // Stück-Rezeptur (Kapsel/Tablette): Zeilen in kg/g/L sind Premix-Preise (je kg Mischung) - nie als Stückpreis lesen.
+    $stueckForm = form_groessen_einheit((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id])) === '';
     foreach (all("SELECT lieferant_id, menge, preis FROM rezeptur_lief_angebot
-                  WHERE rezeptur_id = ? AND lieferant_id IS NOT NULL AND preis IS NOT NULL AND preis > 0
+                  WHERE rezeptur_id = ? AND lieferant_id IS NOT NULL AND preis IS NOT NULL AND preis > 0"
+                  . ($stueckForm ? " AND LOWER(TRIM(COALESCE(einheit,''))) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm')" : "") . "
                   ORDER BY menge ASC", [$rezeptur_id]) as $r) {
         $lid = (int)$r['lieferant_id']; $m = (float)$r['menge']; $p = (float)$r['preis'];
         if ($stueck <= 0 || $m <= $stueck + 1e-9) $out[$lid] = $p;   // größte passende Staffel gewinnt

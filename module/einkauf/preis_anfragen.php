@@ -55,10 +55,18 @@ if ($art === 'fertigprodukt' && $rez_id > 0) {
     if (!$rez) { header('Location: ' . $back . '&anffehler=1'); exit; }
     $form    = (string)($rez['darreichungsform'] ?: 'kapsel');
     $betreff = 'Fertigprodukt (Bulk): ' . (string)$rez['name'];
+    // Premix (Produktseite, 10.11.2026): die Mischung lose je kg statt fertiger Kapseln/Tabletten. Form = Pulver, Einheit kg,
+    // keine Kapselgröße; die Antwort wird an der Rezeptur als Preis je kg gespeichert (Beschaffungsweg Premix).
+    $premix  = !empty($_POST['premix']) && form_groessen_einheit($form) === '';
+    if ($premix) {
+        $form = 'pulver';
+        $betreff = 'Premix (fertige Mischung, lose): ' . (string)$rez['name'];
+        $notiz = trim('Premix: fertige Mischung der Rezeptur, lose (nicht verkapselt), Preis je kg. ' . $notiz);
+    }
     // Fertigprodukt: mehrere Mengen (Staffel) kommagetrennt möglich – der Lieferant bekommt sie vorausgefüllt.
     $mengen  = array_values(array_filter(array_map(fn($x) => (int) str_replace('.', '', (string)$x), preg_split('/[,;\s]+/', (string)($_POST['anf_menge'] ?? ''))), fn($m) => $m > 0));
     // Kapselgröße gibt die Rezeptur vor – fest gewählt oder automatisch (kleinste passende nach Füllgewicht).
-    $kgRow   = in_array($form, ['kapsel', 'softgel'], true) ? rezeptur_kapselgroesse($rez_id) : null;
+    $kgRow   = !$premix && in_array($form, ['kapsel', 'softgel'], true) ? rezeptur_kapselgroesse($rez_id) : null;
     $kgId    = $kgRow ? (int)$kgRow['id'] : 0;
     $opt     = ['art' => 'fertigprodukt', 'form' => $form, 'rezeptur_id' => $rez_id, 'kapselgroesse_id' => $kgId, 'menge_staffel' => $mengen] + $lieferOpt;
     $einh    = anfrage_einheit_fuer_form($form);

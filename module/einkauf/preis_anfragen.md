@@ -11,3 +11,6 @@ Nimmt aus dem Anfrage-Popup (`core/anfrage_ui.php`) eine Liste `anf_lieferant[]`
 Legt je gesperrt-freiem Lieferanten eine `lieferant_anfrage` an und – wenn der E-Mail-Versand eingerichtet ist – verschickt die Anfrage direkt (`mail_lieferant_anfrage`). Danach zurück zu `back` mit `&angefragt=N&gemailt=M`.
 
 `back` wird auf interne relative Ziele beschränkt (kein Open-Redirect). Ohne Lieferanten – bzw. im Rohstoff-Modus ohne Artikel, im Fertigprodukt-Modus ohne gültige Rezeptur – kommt `&anffehler=1` zurück.
+
+## Premix (10.11.2026)
+Kommt `premix=1` mit einer Fertigprodukt-Anfrage an einer Kapsel-/Tabletten-Rezeptur, wird die Anfrage als Form Pulver, Einheit kg, ohne Kapselgröße gestellt. Betreff „Premix (fertige Mischung, lose): …“, die Notiz beginnt mit „Premix: fertige Mischung der Rezeptur, lose (nicht verkapselt), Preis je kg.“

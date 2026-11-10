@@ -30,3 +30,6 @@ Eine Zeile je Kunde aus Name beim Kunden, Kundenpreisen, Kundenetikett (Version,
 
 ## kunde_name_voll($kunde_id, $firma)
 Einheitliche Kundenanzeige auf der Produktseite: „Kürzel (Firma)", z. B. „FuturaYou (Bio Medical Company GmbH)". Ohne Kürzel nur die Firma. Das Kürzel kommt aus `kunden.kuerzel`; `kunde_link()` zeigt sonst nur das Kürzel, andere Stellen nur die Firma – daher bisher zwei Schreibweisen.
+
+## Premix in der Beschaffung (10.11.2026)
+`produkt_beschaffung()`: bei Kapsel/Tablette sind Rezeptur-Preise in kg Premix-Preise – eigene Gruppe je Lieferant (`premix=true`, Quelle „Premix (Rezeptur)“), nach den Stückpreisen sortiert, nie „günstigster“. Preisanfragen tragen `form` (Anzeige „Premix (je kg)“).

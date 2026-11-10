@@ -31,3 +31,10 @@ Auswahllisten mit mehr als 10 Einträgen sind Suchfelder (`rscombo`) und stehen 
 
 ## Datenprüfung
 Widersprüche am Produkt stehen unter `?p=datenpruefung`: Entwurf trotz Verwendung, Glas ohne Deckel, Kundenpreis mit anderer Packungsgröße, Kundenpreis weicht stark von der letzten Rechnung ab.
+
+## Beim Lieferanten anfragen: Auswahl (10.11.2026)
+„Beim Lieferanten anfragen“ (Kopf) und „Preis anfragen“ (Reiter Beschaffung) öffnen zuerst ein Fenster „Was soll angefragt werden?“:
+- **Fertige Kapseln / Tabletten (Bulk)** – Lohnhersteller fertigt das Produkt, Preis je Kapsel/Tablette (bei Pulver: „Fertige Mischung (Bulk, je kg)“).
+- **Premix (fertige Mischung, lose)** – nur bei Kapsel/Tablette: Mischung der Rezeptur ohne Kapsel, Preis je kg. Die Antwort erscheint im Reiter Beschaffung mit „Premix je kg“, in der Kalkulation in der Spalte Premix und am Auftrag im Beschaffungsweg Premix.
+- **Rohstoffe einzeln** – Liste der Rezeptur-Rohstoffe (alle vorgewählt); einer → normale Preisanfrage, mehrere → Sammelanfrage (Preis je kg + CoA/Spezifikation).
+Danach das bekannte Anfrage-Fenster; die Lieferantenliste zeigt je Art nur passende Lieferanten.

@@ -35,3 +35,7 @@ Wenn der E-Mail-Versand eingerichtet ist, geht direkt eine Mail (`mail_lieferant
 
 ## Mengen-Staffel: flüssiges Tippen (Stand 2026-10-08)
 Der Live-Formatter des Mengen-Staffel-Felds (`#bxAnfMenge`, Tausenderpunkte je kommagetrennter Menge) setzte den Cursor nur hinter die letzte Ziffer – beim Tippen eines Kommas sprang er hinter das Komma zurück. Fix: Der Cursor-Anker zählt jetzt Ziffern UND Kommas vor dem Cursor und überspringt danach das Trenn-Leerzeichen, sodass man direkt die nächste Menge weitertippen kann (z. B. „60.000, 90.000, 120.000").
+
+## Premix-Anfrage und Lieferanten je Art (10.11.2026)
+- `lieferanten_fuer_anfrage_mehrere(['rohstoff','fertigprodukt'])`: eine Liste für mehrere Arten, je Zeile `kat`. Das Popup zeigt dann je Anfrage-Art nur die passenden Lieferanten (`bxAnfrageKat()`): Rohstoff → Rohstoff-Lieferanten, Kapsel/Tablette → Fertigprodukt-Lieferanten, Premix → beide. Seiten ohne `kat` (z. B. Rezeptur) bleiben unverändert.
+- `bxAnfragePremixOeffnen(rezId, btn)`: wie die Fertigprodukt-Anfrage, aber mit verstecktem Feld `premix=1` und Mengen-Staffel in kg.

@@ -23,6 +23,18 @@ function lieferanten_fuer_anfrage(string $kat = ''): array {
     return all("SELECT id, firma, land FROM lieferanten WHERE $w ORDER BY firma", $args);
 }
 
+// Lieferanten für mehrere Arten in EINER Liste, je Zeile 'kat' (z. B. "rohstoff fertigprodukt") - das Popup blendet je
+// Anfrage-Art nur die passenden ein (Produktseite: Rohstoff, Kapsel/Tablette, Premix).
+function lieferanten_fuer_anfrage_mehrere(array $kats): array {
+    $out = [];
+    foreach ($kats as $k) foreach (lieferanten_fuer_anfrage($k) as $l) {
+        $id = (int)$l['id'];
+        if (!isset($out[$id])) $out[$id] = $l + ['kat' => $k]; else $out[$id]['kat'] .= ' ' . $k;
+    }
+    uasort($out, fn($a, $b) => strcasecmp((string)$a['firma'], (string)$b['firma']));
+    return array_values($out);
+}
+
 // Status eines Rohstoffs bezogen auf Lieferantenpreise:
 //   'preise'    – mindestens ein Lieferantenpreis liegt vor
 //   'angefragt' – es gibt eine offene Preisanfrage, aber noch keinen Preis
@@ -114,6 +126,7 @@ function anfrage_modal(array $lieferanten, string $back): void {
       <input type="hidden" name="item_id" id="bxAnfrageItemId" value="">
       <input type="hidden" name="rezeptur_id" id="bxAnfrageRezId" value="">
       <input type="hidden" name="art" id="bxAnfrageArt" value="">
+      <input type="hidden" name="premix" id="bxAnfragePremix" value="">
       <input type="hidden" name="neu_rohstoff" id="bxAnfrageNeu" value="">
       <input type="hidden" name="item_ids" id="bxAnfrageItemIds" value="">
       <input type="hidden" name="back" value="<?= h($back) ?>">
@@ -121,7 +134,7 @@ function anfrage_modal(array $lieferanten, string $back): void {
         <?php if (!$lieferanten): ?>
           <div class="muted">Keine Lieferanten angelegt.</div>
         <?php else: foreach ($lieferanten as $l): ?>
-          <label style="display:flex;gap:8px;align-items:center;padding:4px 0">
+          <label style="display:flex;gap:8px;align-items:center;padding:4px 0"<?= isset($l['kat']) ? ' data-kat="' . h((string)$l['kat']) . '"' : '' ?>>
             <input type="checkbox" name="anf_lieferant[]" value="<?= (int)$l['id'] ?>">
             <span><?= h($l['firma']) ?><?= !empty($l['land']) ? ' <span class="muted" style="font-size:12px">· ' . h($l['land']) . '</span>' : '' ?></span>
           </label>
@@ -159,6 +172,15 @@ function anfrage_modal(array $lieferanten, string $back): void {
 </div>
 <script>
 function bxAnfrageZu(){ document.getElementById('bxAnfrageOverlay').style.display='none'; }
+// Lieferantenliste nach Art filtern (nur wenn die Seite Kategorien mitgibt, z. B. Produktseite): 'rohstoff' | 'fertigprodukt' | '' = alle.
+function bxAnfrageKat(k){
+  document.querySelectorAll('#bxAnfrageOverlay label[data-kat]').forEach(function(l){
+    var ok = !k || (' ' + l.getAttribute('data-kat') + ' ').indexOf(' ' + k + ' ') >= 0;
+    l.style.display = ok ? 'flex' : 'none';
+    if (!ok) { var c = l.querySelector('input'); if (c) c.checked = false; }
+  });
+  var p = document.getElementById('bxAnfragePremix'); if (p) p.value = '';
+}
 // Modus umschalten: 'preis' = normale Preisanfrage (Preis-Block sichtbar);
 // 'doku' = Fokus CoA/Spezifikation (Preis-Block optional, per Häkchen dazuschaltbar).
 function bxAnfrageModus(modus){
@@ -193,6 +215,7 @@ function bxAnfMengeStaffel(on){
   if(l) l.textContent = on ? 'Mengen-Staffel (optional)' : 'Menge (optional)';
 }
 function bxAnfrageOeffnen(itemId, btn){
+  bxAnfrageKat('rohstoff');
   document.getElementById('bxAnfrageItemId').value = itemId;
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
@@ -214,7 +237,7 @@ function bxAnfrageOeffnen(itemId, btn){
 }
 // Neuer Rohstoff (noch nicht im Katalog): wird beim Absenden als Rohstoff angelegt und direkt angefragt.
 window.bxAnfrageNeuOeffnen = function(name){
-  name = (name || '').trim();
+  name = (name || '').trim(); bxAnfrageKat('rohstoff');
   document.getElementById('bxAnfrageItemId').value = '';
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';
@@ -230,6 +253,7 @@ window.bxAnfrageNeuOeffnen = function(name){
 };
 // Fertigprodukt-Modus: ganze Rezeptur als Fremdfertigung anfragen.
 function bxAnfrageProduktOeffnen(rezId, btn){
+  bxAnfrageKat('fertigprodukt');
   document.getElementById('bxAnfrageItemId').value = '';
   document.getElementById('bxAnfrageRezId').value = rezId;
   document.getElementById('bxAnfrageArt').value = 'fertigprodukt';
@@ -244,8 +268,19 @@ function bxAnfrageProduktOeffnen(rezId, btn){
 }
 // Bulk-Modus: MEHRERE Rohstoffe auf einmal anfragen (z. B. „Alle anfragen" auf „Rohstoffe ohne Papiere").
 // ids = Array von item_ids. Fokus CoA/Spezifikation (doku-Modus), an alle gewählten Lieferanten.
+// Premix-Modus: die Mischung der Rezeptur lose (nicht verkapselt) je kg anfragen. Die Antwort landet als Preis je kg an der
+// Rezeptur und erscheint im Beschaffungsweg unter Premix. Lieferanten: Rohstoff- und Fertigprodukt-Lieferanten.
+window.bxAnfragePremixOeffnen = function(rezId, btn){
+  bxAnfrageProduktOeffnen(rezId, btn);
+  bxAnfrageKat('');
+  document.getElementById('bxAnfragePremix').value = '1';
+  var mEl = document.getElementById('bxAnfMenge'); if (mEl) mEl.placeholder = 'z. B. 25, 50, 100';
+  var l = document.getElementById('bxAnfMengeLbl'); if (l) l.textContent = 'Mengen-Staffel in kg (optional)';
+  var name = btn && btn.getAttribute('data-name');
+  document.getElementById('bxAnfrageItem').textContent = 'Premix \u201e' + (name || '') + '\u201c (fertige Mischung, lose, je kg) \u2013 bei welchen Lieferanten anfragen?';
+};
 window.bxAnfrageBulkOeffnen = function(ids, label){
-  ids = ids || [];
+  ids = ids || []; bxAnfrageKat('rohstoff');
   document.getElementById('bxAnfrageItemId').value = '';
   document.getElementById('bxAnfrageRezId').value = '';
   document.getElementById('bxAnfrageArt').value = '';

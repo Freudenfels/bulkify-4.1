@@ -550,3 +550,7 @@ Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohs
 
 ## Beschaffungsweg: voller Bedarf neben dem Rest (10.11.2026)
 `auftrag_beschaffungswege()` liefert je Weg zusätzlich `menge_voll` (voller Bedarf des Auftrags ohne Abzug zugeordneter Ware), je Rohstoff-Position `voll` und gesamt `kg_voll`. Gerechnet direkt aus der Rezeptur (Pulver nach Massenanteil am Füllgewicht, sonst mg × Einheiten). Kosten bleiben auf dem Rest.
+
+## Premix-Preise an Stück-Rezepturen (10.11.2026)
+- `lieferant_angebot_speichern()`: Antwort auf eine Anfrage mit Form Pulver/Granulat an einer Kapsel-/Tabletten-Rezeptur wird an der Rezeptur als Preis je kg gespiegelt (`rezeptur_lief_angebot.einheit='kg'`). Der Beschaffungsweg liest ihn unter „Premix“.
+- `rezeptur_fremd_lieferant_preise()`: bei Stück-Rezepturen werden kg/g/L-Zeilen (Premix) nicht mehr als Stückpreis gelesen.

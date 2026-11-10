@@ -236,6 +236,7 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
     $hatPortal = function (int $lid): bool { return $lid > 0 && (int) scalar("SELECT COUNT(*) FROM benutzer WHERE lieferant_id=? AND aktiv=1", [$lid]) > 0; };
     $lief = function (int $lid) { return $lid > 0 ? one("SELECT id, firma, land, ansprechpartner, email, telefon, lieferzeit_tage, mindestbestellwert FROM lieferanten WHERE id=?", [$lid]) : null; };
     // (1) Zukauf-Lieferanten mit allen Staffeln (Produkt + Rezeptur), je Lieferant gebündelt.
+    $pkSchuett = $rid > 0 && form_groessen_einheit((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid])) !== '';
     $zk = [];
     foreach (all("SELECT z.*, COALESCE(l.firma, z.lieferant_name, '') AS firma FROM produkt_lieferant_preis z LEFT JOIN lieferanten l ON l.id=z.lieferant_id
                   WHERE z.produkt_id=? ORDER BY z.menge_ab", [$pid]) as $r) {
@@ -246,19 +247,21 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
     }
     if ($rid) foreach (all("SELECT a.*, COALESCE(l.firma,'') AS firma FROM rezeptur_lief_angebot a LEFT JOIN lieferanten l ON l.id=a.lieferant_id
                             WHERE a.rezeptur_id IN (?, ?) AND a.preis>0 ORDER BY a.menge", [$rid, rezeptur_stamm_id($rid)]) as $r) {
-        $k = (int)$r['lieferant_id'] . '|' . mb_strtolower(trim((string)$r['firma']));
-        $zk[$k]['lid'] = (int)$r['lieferant_id']; $zk[$k]['firma'] = (string)$r['firma'];
+        // Kapsel/Tablette: Rezeptur-Preise in kg sind Premix (lose Mischung je kg) - eigene Gruppe, nicht mit Stückpreisen vergleichen.
+        $istPm = !$pkSchuett && in_array(mb_strtolower(trim((string)$r['einheit'])), ['kg', 'kilogramm'], true);
+        $k = ($istPm ? 'pm' : '') . (int)$r['lieferant_id'] . '|' . mb_strtolower(trim((string)$r['firma']));
+        $zk[$k]['lid'] = (int)$r['lieferant_id']; $zk[$k]['firma'] = (string)$r['firma']; $zk[$k]['premix'] = $istPm;
         $zk[$k]['staffeln'][] = ['ab' => (float)$r['menge'], 'preis' => (float)$r['preis'], 'einheit' => (string)($r['einheit'] ?: 'Stk'), 'waehrung' => 'EUR',
-                                 'incoterm' => '', 'versandart' => '', 'stand' => (string)($r['stand'] ?: $r['angelegt']), 'quelle' => 'Rezeptur', 'id' => 0];
+                                 'incoterm' => '', 'versandart' => '', 'stand' => (string)($r['stand'] ?: $r['angelegt']), 'quelle' => $istPm ? 'Premix (Rezeptur)' : 'Rezeptur', 'id' => 0];
     }
     $zukauf = [];
     foreach ($zk as $k => $z) {
         $l = $lief($z['lid']);
         $doks = $z['lid'] ? all("SELECT id, typ, datei_orig FROM dokument WHERE lieferant_id=? AND ((objekt_typ='produkt' AND objekt_id=?) OR (objekt_typ='rezeptur' AND objekt_id=?)) ORDER BY id DESC LIMIT 6", [$z['lid'], $pid, $rid]) : [];
-        $zukauf[] = ['lieferant_id' => $z['lid'], 'firma' => $z['firma'] ?: 'ohne Namen', 'lief' => $l, 'portal' => $hatPortal($z['lid']), 'staffeln' => $z['staffeln'], 'doks' => $doks,
+        $zukauf[] = ['lieferant_id' => $z['lid'], 'firma' => $z['firma'] ?: 'ohne Namen', 'lief' => $l, 'portal' => $hatPortal($z['lid']), 'staffeln' => $z['staffeln'], 'doks' => $doks, 'premix' => !empty($z['premix']),
                      'min_preis' => min(array_map(fn($s) => $s['preis'], $z['staffeln']))];
     }
-    usort($zukauf, fn($a, $b) => $a['min_preis'] <=> $b['min_preis']);
+    usort($zukauf, fn($a, $b) => [$a['premix'], $a['min_preis']] <=> [$b['premix'], $b['min_preis']]);   // Stückpreise zuerst, Premix (je kg) danach
     // (2) Rohstoffe der Rezeptur mit Lieferantenpreisen + Bestand.
     $kalk = produkt_kalkulation($pid, $packungen);
     $roh = [];
@@ -290,7 +293,7 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
                  WHERE b.status<>'storniert' AND (bp.item_id IN ($in) OR (bp.item_id IS NULL AND bp.auftrag_id IN (SELECT id FROM auftrag WHERE produkt_id=?)))
                  ORDER BY b.id DESC LIMIT 12", [$pid]);
     // (5) Preisanfragen zu Rezeptur/Produkt und zu den Rohstoffen, mit Antwort.
-    $anf = all("SELECT la.id, la.nummer, la.status, la.angelegt, la.art, la.menge, la.einheit, COALESCE(l.firma,'') AS firma, COALESCE(i.name,'') AS item,
+    $anf = all("SELECT la.id, la.nummer, la.status, la.angelegt, la.art, la.form, la.menge, la.einheit, COALESCE(l.firma,'') AS firma, COALESCE(i.name,'') AS item,
                        ag.preis AS ang_preis, ag.einheit AS ang_einheit, ag.waehrung AS ang_waehrung, ag.lieferzeit_tage AS ang_lz, ag.mindestmenge AS ang_mm
                 FROM lieferant_anfrage la LEFT JOIN lieferanten l ON l.id=la.lieferant_id LEFT JOIN item i ON i.id=la.item_id
                 LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id
