@@ -39,3 +39,5 @@ Der Live-Formatter des Mengen-Staffel-Felds (`#bxAnfMenge`, Tausenderpunkte je k
 ## Premix-Anfrage und Lieferanten je Art (10.11.2026)
 - `lieferanten_fuer_anfrage_mehrere(['rohstoff','fertigprodukt'])`: eine Liste für mehrere Arten, je Zeile `kat`. Das Popup zeigt dann je Anfrage-Art nur die passenden Lieferanten (`bxAnfrageKat()`): Rohstoff → Rohstoff-Lieferanten, Kapsel/Tablette → Fertigprodukt-Lieferanten, Premix → beide. Seiten ohne `kat` (z. B. Rezeptur) bleiben unverändert.
 - `bxAnfragePremixOeffnen(rezId, btn)`: wie die Fertigprodukt-Anfrage, aber mit verstecktem Feld `premix=1` und Mengen-Staffel in kg.
+
+- `anfrage_premix_button($rezeptur_id, $name)`: Knopf „Premix anfragen“ (öffnet `bxAnfragePremixOeffnen`), Teil 7.

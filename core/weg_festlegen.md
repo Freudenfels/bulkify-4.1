@@ -16,3 +16,5 @@
 - `weg_festlegen_dialog()`: Dialog + `bxWegFestlegen(auftragId)` (lädt `?p=weg_festlegen&auftrag=…&zurueck=…`).
 
 **Eingesetzt:** Reiter Beschaffungsweg (Auftrag), Bestellen-Seite (Block „warten auf Festlegung des Wegs“), „Beschaffungsweg offen“, PA-Seite (vor Produktionsbeginn), alte Seite `?p=bedarf`. Später kommt „Zu erledigen“ dazu.
+
+- Karte Premix ohne Preis: „Premix anfragen“ öffnet direkt die Premix-Anfrage auf der Rezepturseite (`&premix_anfrage=1`). Karte Zukauf fertig: „Angebot anfragen“ (`&fertig_anfrage=1`).

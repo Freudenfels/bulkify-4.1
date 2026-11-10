@@ -609,6 +609,9 @@ function nwAddRow(){
     <div style="display:flex;gap:8px;align-items:center">
       <?= anfrage_produkt_badge((int)$id) ?>
       <?= anfrage_produkt_button((int)$id, (string)($r['name'] ?? 'Produkt'), (string)(anfrage_formen()[$df] ?? $df), 'Fertigprodukt anfragen', 'btn btn-primary btn-sm') ?>
+      <?php if (form_groessen_einheit((string)$df) === ''): // Premix nur bei Stück-Formen (bei Pulver ist die Mischung das Produkt) ?>
+      <?= anfrage_premix_button((int)$id, (string)($r['name'] ?? 'Produkt'), 'Premix anfragen', 'btn btn-ghost btn-sm') ?>
+      <?php endif; ?>
     </div>
   </div>
   <div class="bx-tablewrap"><table class="bx-table">
@@ -632,7 +635,14 @@ function nwAddRow(){
     </tbody>
   </table></div>
 </div>
-<?php anfrage_modal(lieferanten_fuer_anfrage('fertigprodukt'), '?p=rezeptur_detail&id=' . (int)$id); ?>
+<?php anfrage_modal(lieferanten_fuer_anfrage_mehrere(['rohstoff', 'fertigprodukt']), '?p=rezeptur_detail&id=' . (int)$id); ?>
+<script>
+// Aus dem Beschaffungsweg am Auftrag (Karte Premix / Zukauf fertig: „Angebot anfragen“) direkt die passende Anfrage öffnen (Teil 7).
+(function(){ var q=location.search;
+  if (/[?&]premix_anfrage=1/.test(q) && typeof bxAnfragePremixOeffnen==='function') bxAnfragePremixOeffnen(<?= (int)$id ?>, {getAttribute:function(k){ return k==='data-name' ? <?= json_encode((string)($r['name'] ?? '')) ?> : 'Pulver'; }});
+  else if (/[?&]fertig_anfrage=1/.test(q) && typeof bxAnfrageProduktOeffnen==='function') bxAnfrageProduktOeffnen(<?= (int)$id ?>, {getAttribute:function(k){ return k==='data-name' ? <?= json_encode((string)($r['name'] ?? '')) ?> : <?= json_encode((string)(anfrage_formen()[$df] ?? $df)) ?>; }});
+})();
+</script>
 
 <?php endif; ?>
 

@@ -106,3 +106,6 @@ Das Stamm-Panel verknüpft nicht mehr nur per Pointer: Beim Verknüpfen (`stamm_
 
 ## Mail an den Kunden (Paket Mails)
 Wird die Rezeptur (erneut) auf „Vorschlag" gesetzt, bekommt der Kunde `mail_kunde_rezepturvorschlag()`.
+
+## Premix anfragen (10.11.2026, Teil 7)
+Neben „Fertigprodukt anfragen“ steht bei Stück-Formen der Knopf **„Premix anfragen“**: lose Mischung je kg, Staffel in kg, Zusammensetzung, CoA/Spec. Die Lieferantenliste enthält Rohstoff- und Fertigprodukt-Lieferanten und filtert je Anfrage-Art. Aufruf mit `&premix_anfrage=1` bzw. `&fertig_anfrage=1` öffnet die Anfrage direkt. So verlinken die Karten Premix und Zukauf fertig im Beschaffungsweg („Premix anfragen“ bzw. „Angebot anfragen“).

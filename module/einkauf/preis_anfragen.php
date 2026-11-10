@@ -61,7 +61,15 @@ if ($art === 'fertigprodukt' && $rez_id > 0) {
     if ($premix) {
         $form = 'pulver';
         $betreff = 'Premix (fertige Mischung, lose): ' . (string)$rez['name'];
-        $notiz = trim('Premix: fertige Mischung der Rezeptur, lose (nicht verkapselt), Preis je kg. ' . $notiz);
+        rezeptur_premixitem($rez_id, true);   // Teil 7: Premix-Artikel „Premix · <Rezeptur>“ bei der ersten Anfrage anlegen
+        // Zusammensetzung: Rohstoff, mg je Einheit und Anteil in % der Mischung (das Portal zeigt die Tabelle zusätzlich).
+        $zus = all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS n, z.menge_mg FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rez_id]);
+        $sumMg = array_sum(array_map(fn($z) => (float)$z['menge_mg'], $zus));
+        $zt = [];
+        foreach ($zus as $z) $zt[] = '- ' . $z['n'] . ': ' . rtrim(rtrim(number_format((float)$z['menge_mg'], 3, ',', '.'), '0'), ',') . ' mg je Einheit'
+                                   . ($sumMg > 0 ? ' (' . number_format((float)$z['menge_mg'] / $sumMg * 100, 2, ',', '.') . ' %)' : '');
+        $notiz = trim('Premix: fertige Mischung der Rezeptur, lose (nicht verkapselt), Preis je kg. Bitte CoA/Spezifikation mitschicken.'
+                    . ($zt ? "\nZusammensetzung (Mischung " . rtrim(rtrim(number_format($sumMg, 3, ',', '.'), '0'), ',') . " mg je Einheit):\n" . implode("\n", $zt) : '') . "\n" . $notiz);
     }
     // Fertigprodukt: mehrere Mengen (Staffel) kommagetrennt möglich – der Lieferant bekommt sie vorausgefüllt.
     $mengen  = array_values(array_filter(array_map(fn($x) => (int) str_replace('.', '', (string)$x), preg_split('/[,;\s]+/', (string)($_POST['anf_menge'] ?? ''))), fn($m) => $m > 0));

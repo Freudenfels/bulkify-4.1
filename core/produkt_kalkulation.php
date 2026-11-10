@@ -254,6 +254,14 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
         $zk[$k]['staffeln'][] = ['ab' => (float)$r['menge'], 'preis' => (float)$r['preis'], 'einheit' => (string)($r['einheit'] ?: 'Stk'), 'waehrung' => 'EUR',
                                  'incoterm' => '', 'versandart' => '', 'stand' => (string)($r['stand'] ?: $r['angelegt']), 'quelle' => $istPm ? 'Premix (Rezeptur)' : 'Rezeptur', 'id' => 0];
     }
+    // Teil 7 (10.11.2026): Premix-Preise stehen als Lieferantenpreis am Premix-Artikel der Rezeptur (je kg).
+    if ($rid && !$pkSchuett && ($pmB = rezeptur_premixitem($rid, false)))
+        foreach (all("SELECT lp.*, COALESCE(l.firma,'') AS firma FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? AND lp.preis>0 ORDER BY lp.menge_ab", [$pmB]) as $r) {
+            $k = 'pm' . (int)$r['lieferant_id'] . '|' . mb_strtolower(trim((string)$r['firma']));
+            $zk[$k]['lid'] = (int)$r['lieferant_id']; $zk[$k]['firma'] = (string)$r['firma']; $zk[$k]['premix'] = true;
+            $zk[$k]['staffeln'][] = ['ab' => (float)$r['menge_ab'], 'preis' => (float)$r['preis'], 'einheit' => 'kg', 'waehrung' => (string)($r['waehrung'] ?: 'EUR'),
+                                     'incoterm' => (string)($r['incoterm'] ?? ''), 'versandart' => (string)($r['versandart'] ?? ''), 'stand' => (string)($r['stand'] ?? ''), 'quelle' => 'Premix-Artikel', 'id' => 0];
+        }
     $zukauf = [];
     foreach ($zk as $k => $z) {
         $l = $lief($z['lid']);

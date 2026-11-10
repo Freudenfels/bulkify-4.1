@@ -87,7 +87,7 @@ function beschaffungsweg_karten(int $auftrag_id, string $zurueck = '', bool $pop
         <div class="muted" style="font-size:12px;margin-top:4px">Beschaffung über die Bedarfsliste (meist mehrere Lieferanten).</div>
       <?php else: ?>
         <?php if (!$w['angebote']): ?>
-          <div class="muted">Kein Lieferantenpreis. <a href="?p=rezeptur_detail&id=<?= (int)$bw['rezeptur_id'] ?>"<?= $bwTgt ?>>Angebot anfragen</a></div>
+          <div class="muted">Kein Lieferantenpreis. <a href="?p=rezeptur_detail&id=<?= (int)$bw['rezeptur_id'] ?>&<?= $k === 'premix' ? 'premix_anfrage' : 'fertig_anfrage' ?>=1"<?= $bwTgt ?>><?= $k === 'premix' ? 'Premix anfragen' : 'Angebot anfragen' ?></a></div>
         <?php else: ?>
           <table class="bx-table" style="font-size:13px"><tbody>
           <?php foreach ($w['angebote'] as $ag): ?>

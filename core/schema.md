@@ -562,3 +562,8 @@ Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohs
 - `item.synonyme` (TEXT): frühere bzw. alternative Namen, z. B. zusammengeführte Doppel-Artikel. Sie werden überall mitgesucht (Teil 5).
 
 - `auftraege_ohne_festlegung()` liefert zusätzlich `angebot_id`, `angebot_nr`, `rezeptur_id` und `rezeptur_nr` (Links im Block auf der Bestellen-Seite, Teil 6).
+
+## Premix-Anfrage (10.11.2026, Einkauf gerade ziehen Teil 7)
+- `anfrage_ist_premix($a)`: Eine Fertigprodukt-Anfrage an einer Stück-Rezeptur mit Form Pulver/Granulat ist eine Premix-Anfrage (lose Mischung je kg).
+- `lieferant_angebot_speichern()`: Die Antwort auf eine Premix-Anfrage wird als **Lieferantenpreis am Premix-Artikel** der Rezeptur gespeichert (`lieferant_preis`, je kg, Grundpreis + Staffeln, ersetzt die Zeilen dieses Lieferanten). Sie wird nicht mehr an der Rezeptur gespiegelt (`rezeptur_lief_angebot` = nur Stückpreise). Der Behelf von heute früh (Pulver-Anfrage als kg-Zeile an der Rezeptur) entfällt.
+- `rezeptur_premixitem()`: Neue Premix-Artikel heißen „Premix · <Rezepturname>“ (Einheit kg). Bestehende behalten ihren Namen.

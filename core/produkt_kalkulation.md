@@ -33,3 +33,6 @@ Einheitliche Kundenanzeige auf der Produktseite: „Kürzel (Firma)", z. B. „F
 
 ## Premix in der Beschaffung (10.11.2026)
 `produkt_beschaffung()`: bei Kapsel/Tablette sind Rezeptur-Preise in kg Premix-Preise – eigene Gruppe je Lieferant (`premix=true`, Quelle „Premix (Rezeptur)“), nach den Stückpreisen sortiert, nie „günstigster“. Preisanfragen tragen `form` (Anzeige „Premix (je kg)“).
+
+## Premix-Preise am Premix-Artikel (Teil 7)
+`produkt_beschaffung()` nimmt Lieferantenpreise am Premix-Artikel der Rezeptur als eigene Premix-Gruppe auf (Quelle „Premix-Artikel“, Badge „Premix je kg“). Die Kalkulation rechnet den Premix-Weg mit Premix je kg × Füllgewicht + Leerkapseln. Sie las den Premix-Artikel schon vorher.

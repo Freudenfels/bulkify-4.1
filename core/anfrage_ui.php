@@ -114,6 +114,12 @@ function anfrage_produkt_button(int $rezeptur_id, string $name, string $form = '
          . '" onclick="bxAnfrageProduktOeffnen(' . (int)$rezeptur_id . ',this)">' . h($label) . '</button>';
 }
 
+// Premix anfragen (Teil 7): die Mischung der Rezeptur lose je kg (Zusammensetzung, Staffel in kg, CoA/Spec).
+function anfrage_premix_button(int $rezeptur_id, string $name, string $label = 'Premix anfragen', string $klasse = 'btn btn-ghost btn-sm'): string {
+    return '<button type="button" class="' . h($klasse) . '" data-name="' . h($name) . '" data-form="Pulver"'
+         . ' onclick="bxAnfragePremixOeffnen(' . (int)$rezeptur_id . ',this)">' . h($label) . '</button>';
+}
+
 // Das Popup + JS EINMAL je Seite ausgeben. $back = wohin nach dem Senden zurück.
 // Die Lieferantenliste kommt bewusst als Parameter (jede Seite hat sie schon geladen).
 function anfrage_modal(array $lieferanten, string $back): void {

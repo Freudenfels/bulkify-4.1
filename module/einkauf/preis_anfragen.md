@@ -14,3 +14,6 @@ Legt je gesperrt-freiem Lieferanten eine `lieferant_anfrage` an und – wenn der
 
 ## Premix (10.11.2026)
 Kommt `premix=1` mit einer Fertigprodukt-Anfrage an einer Kapsel-/Tabletten-Rezeptur, wird die Anfrage als Form Pulver, Einheit kg, ohne Kapselgröße gestellt. Betreff „Premix (fertige Mischung, lose): …“, die Notiz beginnt mit „Premix: fertige Mischung der Rezeptur, lose (nicht verkapselt), Preis je kg.“
+
+## Premix (Teil 7, 10.11.2026)
+Bei der ersten Premix-Anfrage wird der Premix-Artikel der Rezeptur angelegt („Premix · <Rezeptur>“). In die Notiz kommt die Zusammensetzung: je Rohstoff mg je Einheit und Anteil in % der Mischung, dazu „Bitte CoA/Spezifikation mitschicken“. Das Portal zeigt die Rezeptur zusätzlich als Tabelle, CoA oder Spezifikation je Rohstoff ist bei der Abgabe Pflicht.

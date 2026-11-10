@@ -7043,6 +7043,13 @@ function einheit_wort(?string $e, float $menge = 1, string $sprache = 'de'): str
 }
 
 // Klartext für die Zeile „Produkttyp" – deutsch, englisch, chinesisch.
+// Premix-Anfrage (Teil 7): Fertigprodukt-Anfrage an einer Stück-Rezeptur (Kapsel/Tablette …), aber mit Form Pulver/Granulat =
+// die lose Mischung je kg. Erkennbar ohne eigene Spalte (Produktseite, Rezepturseite, Beschaffungsweg stellen sie so).
+function anfrage_ist_premix(array $a): bool {
+    if ((string)($a['art'] ?? '') !== 'fertigprodukt' || (int)($a['rezeptur_id'] ?? 0) <= 0) return false;
+    if (!in_array((string)($a['form'] ?? ''), ['pulver', 'granulat'], true)) return false;
+    return form_groessen_einheit((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [(int)$a['rezeptur_id']])) === '';
+}
 function anfrage_art_label(string $art, string $form = '', string $sprache = 'de'): string {
     $arten = [
         'rohstoff'      => ['de'=>'Rohstoff', 'en'=>'Raw material', 'zh'=>'原料'],
@@ -7164,6 +7171,29 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
     }
     q("UPDATE lieferant_anfrage SET status='beantwortet' WHERE id=?", [$anfrage_id]);
     log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Angebot zu ' . $a['nummer'] . ' abgegeben: ' . number_format($preis, 4, ',', '.') . ' je ' . ($einheit ?: 'Einheit') . '.', 'angebot', 'lieferant_anfrage', $anfrage_id);
+    // Premix-Anfrage (Teil 7, 10.11.2026): Preis je kg als LIEFERANTENPREIS am Premix-Artikel der Rezeptur (analog Bulk-Artikel),
+    // nicht an der Rezeptur – dort stehen nur Stückpreise (sonst könnte ein kg-Preis einen Kapselpreis desselben Lieferanten treffen).
+    if (anfrage_ist_premix($a)) {
+        $pm = rezeptur_premixitem((int)$a['rezeptur_id'], true);
+        if ($pm > 0) {
+            $le = strtolower(trim($einheit));
+            $fk = in_array($le, ['g', 'gramm'], true) ? 1000.0 : 1.0;            // je g -> je kg
+            $pe = ($preis_basis === 1000 ? $preis / 1000 : $preis) * $fk;
+            $zeilen = [[0.0, $pe]];
+            foreach ($staffeln as $s) {
+                $m = (float)($s[0] ?? 0); $pr = (float)($s[1] ?? 0);
+                if ($m <= 0 || $pr <= 0) continue;
+                $zeilen[] = [round($m / $fk, 3), ($preis_basis === 1000 ? $pr / 1000 : $pr) * $fk];
+            }
+            q("DELETE FROM lieferant_preis WHERE item_id=? AND lieferant_id=?", [$pm, $lieferant_id]);
+            foreach ($zeilen as [$zm, $zp])
+                q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart) VALUES (?,?,?,?,?,CURDATE(),?,?)",
+                  [$pm, $lieferant_id, $zm, $zp, 'EUR', $inco, $vers]);
+            if (function_exists('item_ek_aus_lieferantenpreis')) item_ek_aus_lieferantenpreis($pm);
+            log_aktivitaet('item', $pm, 'lieferant', 'Premix-Preis ' . number_format($pe, 2, ',', '.') . ' €/kg' . (count($zeilen) > 1 ? ' (+' . (count($zeilen) - 1) . ' Staffel)' : '') . ' aus ' . $a['nummer'] . '.', 'angebot', 'lieferant_anfrage', $anfrage_id);
+        }
+        return '';
+    }
     // Fremdfertigung (Anfrage an einer Rezeptur): den Preis als FESTGESETZTEN Rezeptur-Preis spiegeln.
     // Erstangebot = sofort freigegeben; Änderung eines schon freigegebenen Preises = nur Vorschlag (Team-Freigabe nötig).
     $rezId = (int)($a['rezeptur_id'] ?? 0);
@@ -7174,8 +7204,6 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
         // Flüssig/Gel je L – nie „Stk" (St-13). Hat der Lieferant je g bzw. ml angeboten, wird auf kg/L umgerechnet
         // (Preis × 1000, Staffelmenge / 1000). Die Bulk-Bestellung fragt den Preis in kg/L ab (bulk_bestell_menge).
         $fuellE = form_groessen_einheit($rform);
-        // Premix-Anfrage (Form Pulver/Granulat) an einer Stück-Rezeptur: Preis gilt je kg der losen Mischung.
-        if ($fuellE === '' && in_array((string)($a['form'] ?? ''), ['pulver', 'granulat'], true)) $fuellE = 'g';
         $rEinheit = $fuellE === 'g' ? 'kg' : ($fuellE === 'ml' ? 'L'
                   : (in_array($rform, ['kapsel','softgel'], true) ? 'Kapsel' : ($rform === 'tablette' ? 'Tablette' : ($rform === 'stick' ? 'Stick' : 'Stk'))));
         $le = strtolower(trim($einheit));
@@ -8313,7 +8341,7 @@ function rezeptur_premixitem(int $rezeptur_id, bool $anlegen = true): int {
     $name = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$rid]);
     if ($name === '') return 0;
     q("INSERT INTO item (artikelnummer,name,kategorie,form,einheit,preis_bezug,rezeptur_id) VALUES (?,?,?,?,?,?,?)",
-      [naechste_nummer('PMX'), $name . ' – Premix', 'rohstoff', 'premix', 'kg', 'kg', $rid]);
+      [naechste_nummer('PMX'), 'Premix · ' . $name, 'rohstoff', 'premix', 'kg', 'kg', $rid]);   // Teil 7 (10.11.2026): „Premix · <Rezeptur>“
     return (int) insert_id();
 }
 // Aktiver Produktionsauftrag eines Auftrags (neuester, nicht storniert).
