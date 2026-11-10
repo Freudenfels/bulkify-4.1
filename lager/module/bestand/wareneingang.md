@@ -123,3 +123,10 @@ Die ankommenden Sendungen stehen als **kompakte Liste** (eine Zeile je Lieferung
 
 ## Kacheln (08.11.2026)
 Reihenfolge: Lieferschein scannen · Sendungsnummer · Aus Liste wählen (Zähler ankommende Sendungen) · Rezepturnummer-Aufkleber · Etiketten einbuchen · **Kundenware (Lager 2)** (Link auf `l2_eingang`) · **Manuell** (bisher „Regulär“, als Ausweichweg zuletzt). Nur Kacheln mit `data-weg` öffnen einen Weg auf dieser Seite.
+
+## Immer gegen eine Bestellung (10.11.2026, Einkauf gerade ziehen Teil 1/2)
+- Erste Kachel ist **„Bestellung wählen“**: erwartete Lieferungen mit Suche nach BE-Nr., Lieferant und Artikel. Sendungsnummer-Scan lädt dieselbe Bestellung. Lieferschein-Scan, Rezeptur-Aufkleber und Etiketten suchen die offene Bestellposition zum Artikel selbst.
+- Jede Zeile trägt `p_bp` (Bestellposition). Ist sie gesetzt, sind Artikel, Warenart und Einheit fest. Darunter steht „Bestellung BE-… · offen … · Kapselgröße“, dazu der Knopf „Nicht aus dieser Bestellung“.
+- **Ohne Bestellung** (Kachel statt „Manuell“, oder eine gelöste Zeile): Pflicht-Grund im Kopf, nämlich alte Bestellung (mit Lieferant: nachträgliche Bestellung wird angelegt und verknüpft), Muster oder Sonstiges (Notiz Pflicht). Lager 2 gilt als Kundenware. Ohne Grund wird die Zeile nicht gebucht.
+- Nach dem Buchen je Bestellung: Meldung „vollständig eingegangen und geschlossen“, „Teillieferung … der Rest zählt weiter als unterwegs“ oder „Mehrlieferung“.
+- Die Artikelauswahl zeigt Warenart, Kapselgröße/Füllgewicht und Synonyme.

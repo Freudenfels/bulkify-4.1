@@ -721,9 +721,39 @@ function erp_items_eingang(): array {
     $w = $hatGesperrt ? ' AND gesperrt=0' : '';
     $hatKg = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='kapselgroesse_id'");
-    return all("SELECT id, name, kategorie, einheit, form, verpackung_rolle" . ($hatKg ? ", kapselgroesse_id" : ", NULL AS kapselgroesse_id") . " FROM item
-                WHERE kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')$w
-                ORDER BY name");
+    $hatSyn = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='item' AND COLUMN_NAME='synonyme'");
+    // Einkauf gerade ziehen (Teil 1/5): Kapselgröße/Füllgewicht und Synonyme mitgeben - die Auswahl zeigt sie an.
+    $rows = all("SELECT i.id, i.name, i.kategorie, i.einheit, i.form, i.verpackung_rolle" . ($hatKg ? ", i.kapselgroesse_id" : ", NULL AS kapselgroesse_id")
+              . ", CONCAT_WS(' ', NULLIF(i.synonym,'')" . ($hatSyn ? ", NULLIF(i.synonyme,'')" : "") . ") AS syn,
+                  COALESCE(kgi.name, kgr.name) AS kg_name, IF(r.darreichungsform IN ('kapsel','softgel','tablette'), r.einheit_fuellmenge, NULL) AS fuell_mg
+                FROM item i LEFT JOIN kapselgroesse kgi ON kgi.id=i.kapselgroesse_id
+                LEFT JOIN rezeptur r ON r.id=i.rezeptur_id LEFT JOIN kapselgroesse kgr ON kgr.id=r.kapselgroesse_id
+                WHERE i.kategorie IN ('rohstoff','verpackung','verbrauch','fertig','verkaufsfertig')" . str_replace('gesperrt', 'i.gesperrt', $w) . "
+                ORDER BY i.name");
+    foreach ($rows as &$r) {
+        $t = [];
+        if ((string)($r['kg_name'] ?? '') !== '') $t[] = 'Größe ' . preg_replace('/^(Größe|Gr\.?)\s*/iu', '', (string)$r['kg_name']);
+        if ((float)($r['fuell_mg'] ?? 0) > 0) $t[] = rtrim(rtrim(number_format((float)$r['fuell_mg'], 1, ',', '.'), '0'), ',') . ' mg';
+        $r['kapsel'] = implode(' · ', $t);
+    }
+    unset($r);
+    return $rows;
+}
+// Einkauf gerade ziehen (Teil 1): offene Bestellposition zu einem Artikel (Lieferschein-Scan, Rezeptur-Aufkleber, Etiketten).
+// Bevorzugt derselbe Lieferant, dann der früheste Termin. Rückgabe Felder wie in erp_lieferung_positionen (bp_*) oder null.
+function erp_offene_bp_fuer_item(int $item_id, int $lieferant_id = 0): ?array {
+    if ($item_id <= 0 || !tabelle_da('bestellung_position')) return null;
+    require_once __DIR__ . '/../../core/wareneingang_bestellung.php';
+    webe_spalten();
+    $r = one("SELECT bp.id, bp.bestellung_id, b.nummer, b.lieferant_id, " . erp_bp_rest_sql() . " AS rest, bp.einheit
+              FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+              WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert','offen') AND b.angekommen_am IS NULL AND bp.rest_storniert_am IS NULL
+                AND " . erp_bp_rest_sql() . " > 0
+              ORDER BY (b.lieferant_id <=> ?) DESC, (b.eta_geplant IS NULL), b.eta_geplant, b.id LIMIT 1", [$item_id, $lieferant_id ?: null]);
+    if (!$r) return null;
+    return ['bp_id' => (int)$r['id'], 'bestellung_id' => (int)$r['bestellung_id'], 'bp_nummer' => (string)$r['nummer'], 'bp_rest' => (float)$r['rest'],
+            'bp_einheit' => erp_einheit_norm((string)$r['einheit']), 'lieferant_id' => (int)$r['lieferant_id'], 'kapsel' => webe_kapsel_label($item_id)];
 }
 // Kapselgrößen-Stammdaten (id, name) für den Wareneingang (Leerkapseln) – klein nach groß.
 function erp_kapselgroessen(): array {
@@ -1080,31 +1110,12 @@ function erp_kapselgroesse_label(?int $item_id, ?int $auftrag_id): string {
 function erp_lieferung_per_tracking(string $tracking): array {
     $tc = preg_replace('/\s+/', '', trim($tracking));
     if ($tc === '' || !tabelle_da('bestellung')) return ['ok' => false];
-    $b = one("SELECT b.id, b.nummer, b.lieferant_id, lf.firma AS lieferant
-              FROM bestellung b LEFT JOIN lieferanten lf ON lf.id = b.lieferant_id
+    $bid = (int) scalar("SELECT b.id FROM bestellung b
               WHERE b.tracking IS NOT NULL AND b.tracking<>'' AND REPLACE(b.tracking,' ','') = ?
                 AND b.angekommen_am IS NULL
               ORDER BY b.id DESC LIMIT 1", [$tc]);
-    if (!$b) return ['ok' => false];
-    $pos = [];
-    if (tabelle_da('bestellung_position')) {
-        foreach (all("SELECT bp.item_id, " . erp_bp_rest_sql() . " AS menge, bp.einheit,
-                             COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie
-                      FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
-                      WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id", [(int)$b['id']]) as $p) {
-            if (trim((string)($p['name'] ?? '')) === '') continue;
-            $pos[] = [
-                'name'      => (string)$p['name'],
-                'menge'     => (float)$p['menge'],
-                'einheit'   => erp_einheit_norm((string)($p['einheit'] ?? '')),
-                'charge_nr' => '',
-                'mhd'       => '',
-                'warenart'  => (string)($p['kategorie'] ?? ''),
-            ];
-        }
-    }
-    return ['ok' => true, 'id' => (int)$b['id'], 'lieferant' => (string)$b['lieferant'], 'lieferant_id' => (int)$b['lieferant_id'],
-            'nummer' => (string)$b['nummer'], 'positionen' => $pos];
+    // Einkauf gerade ziehen (Teil 1): dieselben Positionen wie „Aus Liste wählen" (fest an die Bestellposition).
+    return $bid > 0 ? erp_lieferung_positionen($bid) : ['ok' => false];
 }
 
 // Bestellung als „angekommen" markieren (Wareneingang) – nur wenn noch offen. Lässt die Kunden-
@@ -1132,60 +1143,27 @@ function erp_einheit_faktor(string $von, string $nach): float {
     $f = ['g>kg' => 0.001, 'kg>g' => 1000, 'mg>g' => 0.001, 'g>mg' => 1000, 'mg>kg' => 0.000001, 'kg>mg' => 1000000, 'ml>l' => 0.001, 'l>ml' => 1000];
     return $f[$v . '>' . $n] ?? 1.0;
 }
-function erp_bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids): array {
+function erp_bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids, array $bp_je_charge = []): array {
+    // Einkauf gerade ziehen (Teil 1-3, 10.11.2026): gemeinsame Stelle mit dem Dashboard (core/wareneingang_bestellung.php, ohne
+    // core/schema.php). Jede Charge hängt an genau einer Position; gelieferte Menge = Summe der verknüpften Chargen.
     if ($bestellung_id <= 0 || !tabelle_da('bestellung')) return ['komplett' => false, 'offen' => 0];
-    if (!erp_bp_geliefert_da()) { erp_bestellung_angekommen($bestellung_id); return ['komplett' => true, 'offen' => 0]; }
-    $pos = all("SELECT id, item_id, menge, COALESCE(geliefert_menge,0) AS gel, einheit FROM bestellung_position WHERE bestellung_id=? ORDER BY sort, id", [$bestellung_id]);
+    require_once __DIR__ . '/../../core/wareneingang_bestellung.php';
     foreach (array_filter(array_map('intval', $charge_ids)) as $cid) {
-        $c = one("SELECT item_id, menge, einheit FROM charge WHERE id=?", [$cid]);
+        $c = one("SELECT item_id FROM charge WHERE id=?", [$cid]);
         if (!$c) continue;
-        $rest = (float)$c['menge'];
-        $bpKand = [];
-        foreach ([true, false] as $exakt) {
-            foreach ($pos as &$p) {
-                if ($rest <= 1e-9) break;
-                if ($exakt ? (int)$p['item_id'] !== (int)$c['item_id'] : !empty($p['item_id'])) continue;
-                $fak = erp_einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
-                $offen = max(0.0, (float)$p['menge'] - (float)$p['gel']);
-                if ($offen <= 1e-9) continue;
-                $nimm = min($offen, $rest * $fak);
-                $p['gel'] = (float)$p['gel'] + $nimm; $rest -= $nimm / $fak;
-                $bpKand[] = (int)$p['id'];
-                q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]);
-            }
-            unset($p);
+        $bp = (int)($bp_je_charge[$cid] ?? 0);
+        if ($bp <= 0) {
+            $kand = array_map('intval', array_column(all("SELECT id FROM bestellung_position WHERE bestellung_id=? AND item_id=? ORDER BY (COALESCE(geliefert_menge,0) >= menge), sort, id", [$bestellung_id, (int)$c['item_id']]), 'id'));
+            if (!$kand) $kand = array_map('intval', array_column(all("SELECT id FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL ORDER BY sort, id", [$bestellung_id]), 'id'));
+            $bp = $kand ? erp_position_fuer_charge($cid, $kand) : 0;
         }
-        // Spiegel von bestellung_lieferung_erfassen() (Dashboard): charge.bestellung_position_id setzen -> CoA/Spezifikation der
-        // Bestellposition hängen an der Charge (Handbuch 4.4). Bevorzugt die Position mit derselben gemeldeten Chargennummer.
-        if (!$bpKand) foreach ($pos as $p) if ((int)$p['item_id'] === (int)$c['item_id']) { $bpKand[] = (int)$p['id']; break; }
-        if ($bpKand && erp_spalte_da('charge', 'bestellung_position_id')) {
-            $bpId = erp_position_fuer_charge($cid, $bpKand);
-            if ($bpId) q("UPDATE charge SET bestellung_position_id=COALESCE(bestellung_position_id, ?) WHERE id=?", [$bpId, $cid]);
-            erp_charge_werte_aus_bestellung($cid);   // Analysewerte des geprüften CoA an die Charge
-        }
-        if ($rest > 1e-9) foreach ($pos as &$p) if ((int)$p['item_id'] === (int)$c['item_id']) {
-            $p['gel'] = (float)$p['gel'] + $rest * erp_einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
-            q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]); break;
-        }
-        unset($p);
+        if ($bp <= 0) continue;
+        webe_position_artikel_setzen($bp, (int)$c['item_id']);
+        webe_charge_verknuepfen($cid, $bp, false);
+        erp_charge_werte_aus_bestellung($cid);   // Analysewerte des geprüften CoA an die Charge
     }
-    $offen = 0;
-    foreach ($pos as $p) if ((float)$p['menge'] > 0 && (float)$p['gel'] + 1e-9 < (float)$p['menge'] * 0.98) $offen++;
-    if ($offen === 0) erp_bestellung_angekommen($bestellung_id);
-    else { q("UPDATE bestellung SET teilgeliefert_am=CURDATE() WHERE id=?", [$bestellung_id]); erp_bedarf_bump(); }
-    // Nacht 4b (Spiegel von bestellung_eingang_melden()): Portal-Station „eingegangen" ohne Mail + Team-Benachrichtigung.
-    $b = one("SELECT b.nummer, b.lieferant_id, l.firma FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.id=?", [$bestellung_id]);
-    if ($b) {
-        if ($offen === 0 && !empty($b['lieferant_id'])) q("UPDATE bestellung SET station='eingegangen' WHERE id=?", [$bestellung_id]);
-        if (tabelle_da('benachrichtigung')) {
-            $betreff = 'Lieferung eingebucht: ' . $b['nummer'] . ($b['firma'] ? ' (' . $b['firma'] . ')' : '') . ($offen === 0 ? '' : ' – Teillieferung');
-            $text = $offen === 0 ? 'Die Bestellung ' . $b['nummer'] . ' ist vollständig eingegangen (Lager-App).'
-                                 : 'Teillieferung zu ' . $b['nummer'] . ' eingebucht (Lager-App), ' . $offen . ' Position(en) noch offen.';
-            try { q("INSERT INTO benachrichtigung (betreff,text,link,art,erstellt) VALUES (?,?,?,?,?)", [$betreff, $text, '?p=bestellung&id=' . $bestellung_id, 'bestellung', gmdate('Y-m-d H:i:s')]); }
-            catch (\Throwable $e) { q("INSERT INTO benachrichtigung (betreff,text,link,erstellt) VALUES (?,?,?,?)", [$betreff, $text, '?p=bestellung&id=' . $bestellung_id, gmdate('Y-m-d H:i:s')]); }
-        }
-    }
-    return ['komplett' => $offen === 0, 'offen' => $offen];
+    $st = webe_bestellung_stand($bestellung_id, true, 'Lager-App');
+    return ['komplett' => $st['komplett'], 'offen' => count($st['offen']), 'mehr' => $st['mehr']];
 }
 // Welche Bestellposition gehört zu dieser Charge? Die mit derselben (tolerant verglichenen) Chargennummer aus
 // bestellung_charge, sonst die erste, auf die gebucht wurde. Spiegel von bch_position_fuer_charge() (core/bestellung_chargen.php).
@@ -1349,12 +1327,15 @@ function erp_lieferung_positionen(int $id): array {
     if (!$b) return ['ok' => false];
     $pos = [];
     if (tabelle_da('bestellung_position')) {
-        $sel = "SELECT bp.item_id, bp.auftrag_id, " . erp_bp_rest_sql() . " AS menge, bp.einheit,
+        require_once __DIR__ . '/../../core/wareneingang_bestellung.php';
+        webe_spalten();
+        $sel = "SELECT bp.id AS bp_id, bp.item_id, bp.auftrag_id, " . erp_bp_rest_sql() . " AS menge, bp.einheit, bp.rest_storniert_am,
                        COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie, i.form, i.verpackung_rolle
                 FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                 WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id";
         foreach (all($sel, [$id]) as $p) {
             if (trim((string)($p['name'] ?? '')) === '') continue;
+            if ((float)$p['menge'] <= 0 || !empty($p['rest_storniert_am'])) continue;   // schon geliefert bzw. Rest storniert
             // Rezeptur der Position ableiten -> beim Einbuchen direkt als "Fertigware/Bulk" vorauswählen.
             // Hat die Position einen eigenen Nicht-Bulk-Artikel (Verpackung, Etikett, Rohstoff ...), bleibt dieser
             // samt Warenart erhalten (S-21) – nur ein Bulk-Artikel bzw. Freitext wird auf die Rezeptur gemappt.
@@ -1374,6 +1355,11 @@ function erp_lieferung_positionen(int $id): array {
                 // bei Rezeptur-Treffer: das koppelbare Bulk-Item schon mitgeben; sonst der Artikel der Position
                 'item_id'       => $rz['rezeptur_id'] ? $rz['bulk_item_id'] : ($eigen ? (int)$p['item_id'] : 0),
                 'item_name'     => $rz['rezeptur_id'] ? $rz['bulk_item_name'] : ($eigen ? (string)$p['name'] : ''),
+                // Einkauf gerade ziehen (Teil 1): die Position ist fest - Artikel und Einheit kommen aus der Bestellung.
+                'bp_id'         => (int)$p['bp_id'],
+                'bp_nummer'     => (string)$b['nummer'],
+                'bp_rest'       => (float)$p['menge'],
+                'kapsel'        => webe_kapsel_label($rz['rezeptur_id'] ? (int)$rz['bulk_item_id'] : (int)($p['item_id'] ?? 0)),
             ];
         }
     }

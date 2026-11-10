@@ -132,3 +132,9 @@ Umlagern Lager 1 -> Lager 2 (04.11.2026): `erp_umlagern_kandidaten()` (freie Fer
 `erp_bestellung_lieferung_erfassen()` setzt `charge.bestellung_position_id` (über `erp_position_fuer_charge()`, Chargennummer tolerant über `core/charge_norm.php`). `erp_charge_bestell_dokumente($charge_id)` liest CoA/Spezifikation der Bestellposition – Spiegel von `charge_bestell_dokumente()` im Dashboard.
 
 `erp_charge_werte_aus_bestellung($charge_id)`: Analysewerte des im Popup bestätigten CoA (`dokument.ki_daten.werte_bestaetigt`) beim Wareneingang an die Charge (`charge_analyse`), nur wenn sie noch keine hat.
+
+## Wareneingang gegen Bestellung (10.11.2026)
+- `erp_bestellung_lieferung_erfassen($bid, $charge_ids, $bp_je_charge)` nutzt dieselbe Stelle wie das Dashboard (`core/wareneingang_bestellung.php`, ohne core/schema.php).
+- `erp_lieferung_positionen()` liefert je Position `bp_id`, `bp_nummer`, `bp_rest`, `kapsel`. Erledigte bzw. „Rest storniert“-Positionen fehlen. `erp_lieferung_per_tracking()` gibt dieselben Positionen.
+- `erp_offene_bp_fuer_item($item, $lieferant)`: offene Bestellposition zu einem Artikel (Lieferschein-Scan, Rezeptur-Aufkleber, Etiketten).
+- `erp_items_eingang()` gibt je Artikel Kapselgröße/Füllgewicht (`kapsel`) und Synonyme (`syn`) für die Auswahl mit.

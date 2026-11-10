@@ -1,4 +1,7 @@
 <?php
+// Einkauf gerade ziehen (Teil 1, 10.11.2026): Die alte Schnell-Maske ist abgeschaltet – es gibt EINEN Wareneingang (?p=we), der
+// immer gegen eine Bestellung bucht (oder ohne Bestellung nur mit Grund). Alte Links landen dort.
+weiter('?p=we');
 // Wareneingang (Warenlager-Manager): Artikel (bestehend ODER neu anlegen) + Menge buchen,
 // Blinker ist PFLICHT -> Charge anlegen, Blinker anhaengen, fertig. Scanner-freundlich.
 // Schreibt ueber erp_wareneingang_buchen()/erp_item_anlegen() (die Naht) und protokolliert in lg_bewegung.

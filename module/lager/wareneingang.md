@@ -60,3 +60,9 @@ Soll-Kette 2c (04.11.2026): Buchen auf einen losen Bulk-Artikel (kategorie ferti
 
 ## CoA aus der Bestellung (08.11.2026)
 Beim Buchen mit „Zur Bestellung“ setzt `bestellung_lieferung_erfassen()` an der Charge die `bestellung_position_id`; CoA und Spezifikation der Position hängen damit an der Charge (`charge_bestell_dokumente`). Fehlt das CoA noch, kommt nur ein Hinweis (`&coafehlt=`), nichts wird blockiert.
+
+## Erst die Bestellung (10.11.2026, Einkauf gerade ziehen Teil 1/2)
+- Erstes Feld **Bestellung**: Suche bzw. Scan über alle offenen Bestellpositionen (BE-Nr., Lieferant, Artikel, Auftrag, Sendungsnummer). Mit der Wahl sind Artikel und Einheit fest, Lieferant und Auftrag vorbelegt. Der Typ entfällt, Kapselgröße/Füllgewicht stehen dabei. `?p=wareneingang&bp=ID` wählt die Position vor; dahin führt „Wareneingang buchen“ an der Bestellung.
+- Freitext-Positionen (Bulk-Zukauf zum Auftrag) bekommen den Bulk- bzw. Fertigartikel des Auftrags.
+- **Ohne Bestellung** (Haken): Grund Pflicht. Alte Bestellung braucht den Lieferanten und legt eine nachträgliche Bestellung an. Muster/Sonstiges brauchen eine Notiz. Sonst wird nicht gebucht (`grundfehler`). Gilt auch für „Fertigware zum Auftrag“.
+- Das Feld „Zur Bestellung“ entfällt. Mengen werden deutsch eingegeben (`7.000`).

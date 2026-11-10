@@ -33,3 +33,6 @@ Soll-Kette 2b (04.11.2026): Neu angelegter Artikel (Name ohne Treffer) → Hinwe
 
 ## Stillgelegt (08.11.2026, Soll-Handbuch 4.5)
 Die Schnellmaske ist stillgelegt: `?p=eingang` leitet in `public/lager/index.php` auf den vollwertigen Wareneingang `?p=we` um (Gewicht je Karton, Bulk-Regel, Knopf „Neuer Artikel"). Im Menü stand sie schon nicht mehr; der Link „Nächstes Einbuchen" auf der Charge-Seite zeigt jetzt auf `?p=we`. Die Datei bleibt vorerst liegen.
+
+## Abgeschaltet (10.11.2026)
+Die alte Schnell-Maske leitet auf `?p=we` um. Es gibt einen Wareneingang, der immer gegen eine Bestellung bucht (Einkauf gerade ziehen, Teil 1).

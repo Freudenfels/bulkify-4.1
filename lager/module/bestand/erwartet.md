@@ -33,3 +33,6 @@ Je Position „für AB-… · Kunde“, wenn die Bestellung für einen Auftrag i
 ## 08.11.2026
 - Ein Termin am Bestelltag oder davor (Eingabefehler, z. B. BE-2924) gilt als „offen“ statt „überfällig“.
 - Der Artikelname ist ein Link und öffnet direkt den Wareneingang dieser Lieferung (wie „Einbuchen“).
+
+## 10.11.2026
+„Freies Einbuchen“ heißt jetzt „Ohne Bestellung einbuchen“ (`?p=we&weg=regulaer`, nur mit Grund).

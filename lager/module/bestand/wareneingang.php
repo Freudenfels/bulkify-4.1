@@ -31,9 +31,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'scan'
     foreach ($pfade as $p) @unlink($p);
     if (!$r['ok']) { echo json_encode($r); exit; }
     $pos = [];
-    foreach ($r['positionen'] as $p) $pos[] = erp_position_zuordnen($p);
     // Lieferant direkt finden oder anlegen -> wird im Formular vorausgewählt und beim Buchen verknüpft.
     $lid = erp_lieferant_finden_oder_anlegen((string)($r['lieferant'] ?? ''));
+    // Einkauf gerade ziehen (Teil 1): jede erkannte Position der offenen Bestellung zuordnen (gleicher Artikel, bevorzugt Lieferant).
+    foreach ($r['positionen'] as $p) { $z = erp_position_zuordnen($p); if ((int)($z['item_id'] ?? 0) > 0 && ($bp = erp_offene_bp_fuer_item((int)$z['item_id'], (int)$lid))) $z += $bp; $pos[] = $z; }
     echo json_encode([
         'ok'  => true,
         'kopf' => ['lieferant' => $r['lieferant'], 'lieferant_id' => $lid, 'ls_nr' => $r['ls_nr'], 'auftrag_nr' => ($r['auftrag_nr'] ?? ''), 'datum' => $r['datum']],
@@ -78,10 +79,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rstic
     $r = function_exists('erp_rezeptur_per_nummer') ? erp_rezeptur_per_nummer((string)($_POST['code'] ?? '')) : null;
     if (!$r) { echo json_encode(['ok' => false, 'fehler' => 'Keine Rezeptur zu dieser Nummer gefunden.']); exit; }
     $pos = erp_position_zuordnen($r);
+    if ((int)($pos['item_id'] ?? 0) > 0 && ($bp = erp_offene_bp_fuer_item((int)$pos['item_id']))) $pos += $bp;   // Teil 1: offene Bestellung dazu
     echo json_encode(['ok' => true, 'position' => $pos], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
+// --- AJAX: offene Bestellposition zu einem Artikel (Etiketten einbuchen, Teil 1) ------------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bp_fuer_item') {
+    header('Content-Type: application/json; charset=utf-8');
+    $bp = erp_offene_bp_fuer_item((int)($_POST['item_id'] ?? 0));
+    echo json_encode(['ok' => (bool)$bp, 'bp' => $bp], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 // --- AJAX: Etiketten einbuchen – Produkt gewählt -> Kundenetiketten (Kunde/Version, Design, Maße) -----
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_produkt') {
     header('Content-Type: application/json; charset=utf-8');
@@ -124,6 +133,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $names   = (array)($_POST['p_name'] ?? []);
     $gebucht = [];
     $fehler  = [];
+    // Einkauf gerade ziehen (Teil 1/2): Ware hängt an einer Bestellposition. Ohne Bestellung nur mit Grund (Übergangsphase).
+    require_once __DIR__ . '/../../../core/wareneingang_bestellung.php';
+    webe_spalten();
+    $weGrund = (string)($_POST['we_grund'] ?? '');
+    $weGrundNotiz = trim((string)($_POST['we_grund_notiz'] ?? ''));
+    if ($ziel === 'l2') $weGrund = 'kundenware';
+    $bpMap = [];        // charge_id => bestellung_position_id
+    $ohneBest = [];     // charge_ids ohne Bestellung
+    $lgU = function_exists('lg_benutzer') ? (string)((lg_benutzer()['name'] ?? '')) : '';
     foreach ($names as $i => $nm) {
         $name     = trim((string)$nm);
         $key      = (string)($_POST['p_key'][$i] ?? (string)$i);   // stabiler Zeilenschlüssel (für 2D-Rollen-Felder)
@@ -144,6 +162,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $statusP  = (string)($_POST['p_frei'][$i] ?? '1') === '0' ? 'quarantaene' : 'auto';
         $rezeptur_id = (int)($_POST['p_rezeptur'][$i] ?? 0);   // nur bei Warenart 'fertig' relevant
         if ($name === '' && $menge <= 0 && $rezeptur_id <= 0) continue;   // leere Zeile
+        // Teil 1: Bestellposition der Zeile. Artikel kommt fest aus der Position (ein Bulk-Artikel bleibt über die Rezeptur gekoppelt).
+        $bpZ = (int)($_POST['p_bp'][$i] ?? 0);
+        $bpRow = $bpZ > 0 ? one("SELECT bp.id, bp.item_id, bp.bestellung_id, i.kategorie FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN item i ON i.id=bp.item_id
+                                  WHERE bp.id=? AND b.status<>'storniert'", [$bpZ]) : null;
+        if ($bpZ > 0 && !$bpRow) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Die Bestellposition gibt es nicht mehr – bitte neu wählen.'; continue; }
+        if ($bpRow && (int)$bpRow['item_id'] > 0 && (string)$bpRow['kategorie'] !== 'fertig') $item_id = (int)$bpRow['item_id'];
+        if (!$bpRow) {
+            if (!isset(webe_gruende()[$weGrund])) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Keine Bestellung gewählt – bitte die Bestellung wählen oder den Grund „ohne Bestellung" angeben. Nicht gebucht.'; continue; }
+            if ($weGrund === 'alt_bestellung' && !$lief) { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Alte Bestellung: bitte den Lieferanten angeben. Nicht gebucht.'; continue; }
+            if (in_array($weGrund, ['muster', 'sonstiges'], true) && $weGrundNotiz === '') { $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): Bei „' . webe_gruende()[$weGrund] . '" ist eine Notiz Pflicht. Nicht gebucht.'; continue; }
+        }
 
         // Warenart -> echte Zuordnung (kategorie + form). Leerkapseln=rohstoff/kapselhuelle, fertige Kapseln=fertig.
         $defs = function_exists('erp_warenart_defs') ? erp_warenart_defs() : [];
@@ -184,6 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             lg_bewegung_log((int)$cid, 'ein', $menge, $cc['einheit'] ?? null, (string)($cc['item_name'] ?? ''), $notiz . ' (' . (int)$rr['angelegt'] . ' Rolle(n))');
             if (!empty($rr['fehler'])) $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): ' . implode(' · ', $rr['fehler']);
             $gebucht[] = (int)$cid;
+            if ($bpRow) $bpMap[(int)$cid] = (int)$bpRow['id']; else $ohneBest[] = (int)$cid;
             continue;
         }
 
@@ -308,6 +338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             if ($lr) leiste_finden((int)$lr['id'], 'gruen', 3, false);
         }
         $gebucht[] = (int)$cid;
+        if ($bpRow) $bpMap[(int)$cid] = (int)$bpRow['id']; else $ohneBest[] = (int)$cid;
         if ($neuAngelegt && function_exists('erp_hinweis_neuer_artikel'))
             erp_hinweis_neuer_artikel((int)$item_id, $name, (string)($def['label'] ?? $warenart), (int)$cid, rtrim(rtrim(number_format($menge, 3, ',', '.'), '0'), ',') . ' ' . $einheit);
     }
@@ -315,9 +346,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     // Kam der Wareneingang aus einer gewählten Lieferung? Dann die Bestellung als „angekommen" markieren
     // -> die Kunden-Statusleiste springt automatisch auf „Rohstoff angekommen" (mit Datum).
     $beId = (int)($_POST['we_bestellung_id'] ?? 0);
-    // Teillieferung (Nacht 1c): nur Gelieferte quittieren, Bestellung bleibt für den Rest offen.
-    $beRes = ($gebucht && $beId > 0) ? erp_bestellung_lieferung_erfassen($beId, $gebucht) : null;
-    if ($beRes && !$beRes['komplett']) flash('Teillieferung: ' . (int)$beRes['offen'] . ' Position(en) der Bestellung sind noch offen und bleiben unterwegs.', 'warn');
+    // Teil 1-3: je Bestellung die gebuchten Chargen an ihre Positionen; die Bestellung schließt sich, wenn alles da ist.
+    // Teillieferung bleibt offen (Rest = unterwegs), Mehrlieferung nur Hinweis.
+    $jeBest = [];
+    foreach ($bpMap as $cidB => $bpB) $jeBest[(int) scalar("SELECT bestellung_id FROM bestellung_position WHERE id=?", [$bpB])][] = $cidB;
+    $beRes = null;
+    foreach ($jeBest as $bidB => $cids) {
+        $rB = erp_bestellung_lieferung_erfassen($bidB, $cids, $bpMap);
+        $nrB = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$bidB]);
+        if (!$rB['komplett']) flash('Teillieferung ' . $nrB . ': ' . (int)$rB['offen'] . ' Position(en) noch offen – der Rest zählt weiter als unterwegs.', 'warn');
+        else flash('Bestellung ' . $nrB . ' ist vollständig eingegangen und geschlossen.');
+        if (!empty($rB['mehr'])) flash('Mehrlieferung bei ' . $nrB . ': mehr als bestellt eingegangen – der Überschuss ist freier Bestand.', 'warn');
+        $beRes = $rB;
+    }
+    // Teil 2: ohne Bestellung. Alte Bestellung -> nachträgliche Bestellung (direkt bestellt, geliefert) + Prüfaufgabe; sonst Grund vermerken.
+    foreach ($ohneBest as $cidO) {
+        if ($weGrund === 'alt_bestellung' && $lief) {
+            $nb = webe_nachtraegliche_bestellung($cidO, (int)$lief, $weGrundNotiz, $lgU);
+            if ($nb) flash('Nachträgliche Bestellung ' . h((string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$nb])) . ' angelegt und verknüpft – Nico prüft Preis und Daten.');
+        } else webe_ohne_bestellung_vermerken($cidO, $weGrund, $weGrundNotiz, $lgU);
+    }
     // CoA kommt über die Bestellung an die Charge (Handbuch 4.4). Fehlt es noch: nur Hinweis, blockiert nichts.
     if ($beRes) {
         $ohneCoa = 0;
@@ -389,6 +437,10 @@ if ($gebucht):
 
   <!-- Start: 4 Kacheln – wie einbuchen? -->
   <div id="weStart" class="we-kacheln">
+    <button type="button" class="we-kachel we-kachel-haupt" data-weg="liste">
+      <div class="we-kachel-t">Bestellung wählen<?= count($erwartet) ? ' <span class="lg-kachel-z">' . count($erwartet) . '</span>' : '' ?></div>
+      <div class="we-kachel-s"><?= count($erwartet) ?> erwartete Lieferung(en) – suchen nach BE-Nr., Lieferant, Artikel oder scannen</div>
+    </button>
     <button type="button" class="we-kachel" data-weg="schein">
       <div class="we-kachel-t">Lieferschein scannen</div>
       <div class="we-kachel-s">Foto oder PDF – die KI liest alles aus</div>
@@ -397,10 +449,7 @@ if ($gebucht):
       <div class="we-kachel-t">Sendungsnummer</div>
       <div class="we-kachel-s">Paketlabel scannen – Lieferung wird geladen</div>
     </button>
-    <button type="button" class="we-kachel" data-weg="liste">
-      <div class="we-kachel-t">Aus Liste wählen<?= count($erwartet) ? ' <span class="lg-kachel-z">' . count($erwartet) . '</span>' : '' ?></div>
-      <div class="we-kachel-s"><?= count($erwartet) ?> ankommende Sendung(en)</div>
-    </button>
+
     <button type="button" class="we-kachel" data-weg="rsticker">
       <div class="we-kachel-t">Rezepturnummer-Aufkleber</div>
       <div class="we-kachel-s">R-Code scannen – Rezeptur/Produkt wird erkannt</div>
@@ -414,8 +463,8 @@ if ($gebucht):
       <div class="we-kachel-s">Ware, die einem Kunden gehört, ins Fremdlager buchen</div>
     </a>
     <button type="button" class="we-kachel" data-weg="regulaer">
-      <div class="we-kachel-t">Manuell</div>
-      <div class="we-kachel-s">Von Hand erfassen</div>
+      <div class="we-kachel-t">Ohne Bestellung</div>
+      <div class="we-kachel-s">Nur mit Grund: alte Bestellung, Muster, Sonstiges</div>
     </button>
   </div>
 
@@ -594,6 +643,19 @@ if ($gebucht):
           <?php foreach ($kisten as $kk): ?><option value="<?= h((string)$kk['name']) ?>"><?= $kk['blinker'] ? 'Blinker ' . h((string)$kk['blinker']) : 'kein Blinker' ?></option><?php endforeach; ?>
         </datalist>
         <?php endif; ?>
+        <div class="bx-field" id="weGrundWrap" style="margin:0;min-width:260px;flex:1 1 100%;display:none">
+          <label>Ohne Bestellung – Grund *</label>
+          <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap;align-items:flex-start">
+            <select name="we_grund" id="weGrund" style="flex:0 1 280px">
+              <option value="">– Grund wählen –</option>
+              <option value="alt_bestellung">Alte Bestellung, nicht im System</option>
+              <option value="muster">Muster</option>
+              <option value="sonstiges">Sonstiges</option>
+            </select>
+            <input type="text" name="we_grund_notiz" id="weGrundNotiz" maxlength="250" placeholder="Notiz (bei Muster/Sonstiges Pflicht)" style="flex:1 1 260px">
+          </div>
+          <div class="muted" id="weGrundInfo" style="font-size:12px;margin-top:4px">Mindestens eine Position hängt an keiner Bestellung. Bei „Alte Bestellung“ wird mit dem Lieferanten oben eine nachträgliche Bestellung angelegt (direkt bestellt, geliefert) – Nico prüft Preis und Daten. Kundenware bitte über Lager 2 buchen.</div>
+        </div>
         <div class="bx-field" style="margin:0;min-width:240px;flex:1 1 240px"><label>Sendungs-/Paketnummer <span class="muted">(optional, scannen)</span></label>
           <input type="text" name="tracking" class="lg-code" autocomplete="off" placeholder="Paketlabel scannen – welches Paket ist gekommen">
         </div>
@@ -631,6 +693,9 @@ if ($gebucht):
   .we-li-eta{flex:0 0 auto;color:var(--muted);font-size:12px;white-space:nowrap}
   .we-liste.zu{max-height:none;overflow:visible}
   .we-listitem[hidden],#weListeAndere[hidden],#weListeSuche[hidden]{display:none}
+  .we-bpinfo{flex:1 1 100%;font-size:13px;margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .we-fest{background:#f2f4f0 !important;pointer-events:none}
+  .we-kachel-haupt{border-color:var(--gruen,#1D9E75) !important}
   @media (max-width:640px){.we-listitem{flex-wrap:wrap}.we-li-lief{max-width:none}}
   .we-listnamen{font-size:13px;margin-top:2px}
   .we-ziel{border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 14px;cursor:pointer;line-height:1.3}
@@ -695,7 +760,7 @@ if ($gebucht):
 
 <script>
 (function(){
-  var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??''),'r'=>(string)($it['verpackung_rolle']??''),'g'=>(int)($it['kapselgroesse_id']??0)], $items), JSON_UNESCAPED_UNICODE) ?>;
+  var ITEMS = <?= json_encode(array_map(fn($it)=>['id'=>(int)$it['id'],'n'=>(string)$it['name'],'e'=>(string)$it['einheit'],'k'=>(string)$it['kategorie'],'f'=>(string)($it['form']??''),'r'=>(string)($it['verpackung_rolle']??''),'g'=>(int)($it['kapselgroesse_id']??0),'kl'=>(string)($it['kapsel']??''),'s'=>(string)($it['syn']??'')], $items), JSON_UNESCAPED_UNICODE) ?>;
   var KGR = <?= json_encode(array_map(fn($k)=>['id'=>(int)$k['id'],'n'=>(string)$k['name']], function_exists('erp_kapselgroessen') ? erp_kapselgroessen() : []), JSON_UNESCAPED_UNICODE) ?>;
   // Leerkapseln am Namen erkennen + Größe lesen (gleiche Regeln wie kapselgroesse_aus_name()/name_ist_leerkapsel() im Dashboard).
   function kgrAusName(s){ var m=String(s||'').match(/(?:gr(?:ö|oe|o)?(?:ß|ss)?e?\.?|size|#)\s*(000|00|0|1|2|3|4|5)(?!\d)/i); if(!m) return 0; var k=KGR.filter(function(x){return x.n==='Größe '+m[1];})[0]; return k?k.id:0; }
@@ -744,6 +809,30 @@ if ($gebucht):
       bad[0].scrollIntoView({behavior:'smooth', block:'center'});
       alert('Die Menge je Karton passt bei ' + bad.length + ' Position(en) nicht zur Gesamtmenge. Bitte korrigieren – erst dann wird gebucht.');
     }, true); })();
+  // Einkauf gerade ziehen (Teil 1): Zeile an eine Bestellposition binden. Artikel und Einheit sind dann fest (aus der Bestellung),
+  // Kapselgröße/Füllgewicht sichtbar. „Nicht aus dieser Bestellung" löst die Bindung (dann gilt der Grund ohne Bestellung).
+  function bpSetzen(card, bp){
+    var h=card.querySelector('.we-bp'), inf=card.querySelector('.we-bpinfo'), nm=card.querySelector('.we-name');
+    var fest=card.querySelectorAll('.we-name,.we-art,.f-einheit select,.f-einheit input');
+    if(h) h.value = bp && bp.bp_id ? String(bp.bp_id) : '0';
+    fest.forEach(function(el){ el.classList.toggle('we-fest', !!(bp && bp.bp_id)); if(el.tagName==='INPUT') el.readOnly=!!(bp && bp.bp_id); });
+    if(inf){
+      if(bp && bp.bp_id){
+        inf.innerHTML='<span>Bestellung <strong>'+esc(bp.bp_nummer||'')+'</strong> · offen '+nf(bp.bp_rest||0)+' '+esc(bp.bp_einheit||bp.einheit||'')+(bp.kapsel?(' · '+esc(bp.kapsel)):'')+' · Artikel und Einheit aus der Bestellung</span> <button type="button" class="btn btn-ghost btn-sm we-bp-los">Nicht aus dieser Bestellung</button>';
+        inf.querySelector('.we-bp-los').addEventListener('click', function(){ bpSetzen(card, null); grundSync(); });
+      } else inf.innerHTML='<span class="muted">Ohne Bestellung</span>';
+    }
+    grundSync();
+  }
+  function grundSync(){
+    var w=document.getElementById('weGrundWrap'); if(!w) return;
+    var l2=(document.querySelector('input[name="ziel"]:checked')||{}).value==='l2';
+    var ohne=[].some.call(document.querySelectorAll('#weRows .we-pos'), function(c){ var b=c.querySelector('.we-bp'), n=c.querySelector('.we-name'); return (!b || b.value==='0') && n && n.value.trim()!==''; });
+    w.style.display = (ohne && !l2) ? '' : 'none';
+    var g=document.getElementById('weGrund'); if(g) g.required = ohne && !l2;
+  }
+  document.addEventListener('input', function(e){ if(e.target && e.target.closest && e.target.closest('#weRows')) grundSync(); });
+  document.addEventListener('change', function(e){ if(e.target && e.target.name==='ziel') grundSync(); });
   function artOptions(sel){ return ARTEN.map(function(a){return '<option value="'+a[0]+'"'+(a[0]===sel?' selected':'')+'>'+a[1]+'</option>';}).join(''); }
   function katLabel(it){
     if(it.f==='kapselhuelle') return 'Leerkapseln';
@@ -752,7 +841,7 @@ if ($gebucht):
     return m[it.k]||it.k||'';
   }
   function itemArt(it){ return (it.k==='verpackung' && it.r==='etikett') ? 'etikett' : (it.f==='kapselhuelle'?'leerkapsel':it.k); }
-  function datalistItems(){ return ITEMS.map(function(it){ var l=katLabel(it); return '<option value="'+esc(it.n)+'">'+(l?esc(l):'')+'</option>'; }).join(''); }
+  function datalistItems(){ return ITEMS.map(function(it){ var l=[katLabel(it), it.kl, it.s].filter(function(x){return x;}).join(' · '); return '<option value="'+esc(it.n)+'">'+(l?esc(l):'')+'</option>'; }).join(''); }
   var dl=document.createElement('datalist'); dl.id='weItemList'; dl.innerHTML=datalistItems(); document.body.appendChild(dl);
   var dlR=document.createElement('datalist'); dlR.id='weRezList';
   dlR.innerHTML=REZ.map(function(r){ return '<option value="'+esc(r.n)+'">'+(r.bi?'':'noch kein Bulk-Artikel')+'</option>'; }).join('');
@@ -787,7 +876,7 @@ if ($gebucht):
       '<button type="button" class="btn btn-ghost btn-sm we-del" title="Zeile entfernen">×</button>'+
       '<input type="hidden" name="p_key[]" value="'+rowKey+'">'+
       '<div class="we-row">'+
-        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><input type="hidden" name="p_auftrag_id[]" value="'+(p.auftrag_id||0)+'"><div class="we-aehnlich"></div><div class="we-neu"></div><input type="hidden" name="p_neu[]" class="we-neu-h" value="0"></div>'+
+        '<div class="bx-field f-art"><label>Artikel</label><input type="text" class="we-name" name="p_name[]" list="weItemList" autocomplete="off" value="'+esc(p.item_name||p.name||'')+'" title="'+esc(p.item_name||p.name||'')+'" placeholder="Artikel suchen oder neuen Namen eingeben"><input type="hidden" name="p_item[]" value="'+(p.item_id||0)+'"><input type="hidden" name="p_auftrag_id[]" value="'+(p.auftrag_id||0)+'"><input type="hidden" name="p_bp[]" class="we-bp" value="'+(p.bp_id||0)+'"><div class="we-aehnlich"></div><div class="we-neu"></div><input type="hidden" name="p_neu[]" class="we-neu-h" value="0"></div>'+
         '<div class="bx-field f-warenart"><label>Warenart</label><select name="p_warenart[]" class="we-art">'+artOptions(art)+'</select></div>'+
         '<div class="bx-field f-form" style="display:none"><label>Beschaffenheit *</label><select name="p_form[]" class="we-form"><option value="">– wählen –</option><option value="pulver">Pulver</option><option value="granulat">Granulat</option><option value="extrakt">Extrakt</option><option value="fluessig">Flüssig</option><option value="oel">Öl</option><option value="paste">Paste</option><option value="kristallin">Kristallin</option></select></div>'+
         '<div class="bx-field f-kgr" style="display:none"><label>Kapselgröße *</label><select name="p_kapselgroesse[]" class="we-kgr"><option value="">– wählen –</option>'+KGR.map(function(k){return '<option value="'+k.id+'">'+esc(k.n)+'</option>';}).join('')+'</select></div>'+
@@ -817,8 +906,10 @@ if ($gebucht):
           '<div class="we-rollen-liste" style="display:flex;flex-direction:column;gap:8px;margin-top:6px"></div>'+
           '<div class="muted" style="font-size:12px;margin-top:6px">Die Gesamtmenge wird gleichmäßig auf die Rollen verteilt (Rest auf die letzte). Inventaraufkleber je Rolle optional scannen (Enter springt weiter) – leer lassen = Nummer wird automatisch vergeben.</div>'+
         '</div>'+
-      '</div>';
+      '</div>'+
+      '<div class="we-bpinfo"></div>';
     rows.appendChild(card);
+    bpSetzen(card, p.bp_id ? p : null);
     // Paketnummern: die ANZAHL der Scan-Felder folgt der Zahl im Feld "Pakete".
     // Tippst du 11, erscheinen sofort 11 Felder (kein Zählen/Nachklicken). Scan+Enter springt zum nächsten.
     var pakWrap=card.querySelector('.we-pakscan'), pakH=card.querySelector('.we-pak-h'),
@@ -1347,6 +1438,9 @@ if ($gebucht):
     rows.innerHTML='';
     var card=addRow({item_id:etGewaehlt.id, item_name:etGewaehlt.name, verpackung_rolle:'etikett', einheit:'Stk'});
     etPanels(true); etOk.disabled=true;
+    // Teil 1: gibt es eine offene Bestellung über dieses Etikett? Dann die Zeile daran binden.
+    (function(c, iid){ var fdb=new FormData(); fdb.append('aktion','bp_fuer_item'); fdb.append('item_id', iid);
+      fetch('?p=we',{method:'POST',body:fdb}).then(function(r){return r.json();}).then(function(j){ if(j.ok && j.bp && c) bpSetzen(c, j.bp); }).catch(function(){}); })(card, etGewaehlt.id);
     var mg=card&&card.querySelector('input[name="p_menge[]"]');
     if(posP) posP.scrollIntoView({behavior:'smooth',block:'start'});
     if(mg) setTimeout(function(){ mg.focus(); }, 300);
@@ -1406,7 +1500,7 @@ if ($gebucht):
   });
 
   // Direkter Einstieg (z. B. Startseite „Etiketten einbuchen"): ?p=we&weg=etikett öffnet den Etiketten-Weg.
-  (function(){ var m=/[?&]weg=([a-z]+)/.exec(location.search); if(m && document.querySelector('.we-weg[data-w="'+m[1]+'"]')) zeigeWeg(m[1]); })();
+  (function(){ var m=/[?&]weg=([a-z]+)/.exec(location.search); if(m && (m[1]==='regulaer' || document.querySelector('.we-weg[data-w="'+m[1]+'"]'))) zeigeWeg(m[1]); })();
 
   // Aus „Erwartete Lieferungen -> Einbuchen": ?lieferung=ID öffnet „Aus Liste wählen" und lädt die Lieferung sofort.
   (function(){

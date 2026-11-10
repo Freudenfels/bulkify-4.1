@@ -113,7 +113,7 @@ if ($hatRest) $reiter['rest'] = 'Sonstiges';
         <?php if ($z['hat_pos']): ?>
           <a class="btn btn-primary btn-sm" href="<?= h($buchUrl) ?>">Einbuchen</a>
         <?php else: ?>
-          <a class="btn btn-ghost btn-sm" href="?p=we<?= $z['lieferant_id'] ? '&lieferant=' . (int)$z['lieferant_id'] : '' ?><?= $z['nummer'] !== '' ? '&charge=' . rawurlencode($z['nummer']) : '' ?>">Freies Einbuchen</a>
+          <a class="btn btn-ghost btn-sm" href="?p=we&amp;weg=regulaer">Ohne Bestellung einbuchen</a>
         <?php endif; ?>
       </td>
     </tr>

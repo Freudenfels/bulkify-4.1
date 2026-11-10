@@ -3,7 +3,8 @@
 // Regel: erst CREATE (frisch installierbar), dann additive Migrationen via ensure_column().
 // Nie Spalten loeschen. Alles UTF-8 (utf8mb4).
 require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/charge_norm.php';   // toleranter Chargen-Vergleich (Handbuch 4.5/4.12) – eine Stelle für alle Programme
+require_once __DIR__ . '/charge_norm.php';
+require_once __DIR__ . '/wareneingang_bestellung.php';   // Wareneingang gegen Bestellung (Einkauf gerade ziehen, Teil 1-3) – eine Stelle für Dashboard + Lager-App   // toleranter Chargen-Vergleich (Handbuch 4.5/4.12) – eine Stelle für alle Programme
 
 // Master-/Test-Scan: in der Produktion überspringt dieser Code Charge-Prüfung und Bestandsabbuchung
 // und lässt zum nächsten Schritt durch (Durchklicken/Testen ohne echte Chargen).
@@ -1388,7 +1389,12 @@ function init_schema(): void {
 
     ensure_column('bestellung', 'bestelldatum', "DATE NULL");   // „gemeinsam bestellt am"
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
-    ensure_column('bestellung_position', 'geliefert_menge', "DECIMAL(14,3) NOT NULL DEFAULT 0");   // Teillieferung (Nacht 1c): schon eingebucht, in Positions-Einheit
+    ensure_column('bestellung_position', 'geliefert_menge', "DECIMAL(14,3) NOT NULL DEFAULT 0");
+    ensure_column('bestellung_position', 'rest_storniert_am', "DATE NULL");      // „Rest storniert" (Teil 3): Rest zählt nicht mehr als unterwegs
+    ensure_column('bestellung', 'nachtraeglich_grund', "VARCHAR(40) NULL");      // beim Wareneingang ohne Bestellung angelegt (Teil 2)
+    ensure_column('bestellung', 'nachtraeglich_geprueft_am', "DATETIME NULL");
+    ensure_column('charge', 'we_grund', "VARCHAR(40) NULL");                     // Wareneingang ohne Bestellung: Grund + Notiz (Teil 2)
+    ensure_column('charge', 'we_grund_notiz', "VARCHAR(255) NULL");   // Teillieferung (Nacht 1c): schon eingebucht, in Positions-Einheit
     // Chargen & Dokumente an der Bestellposition (08.11.2026, Handbuch 4.4): Charge + MHD + Menge des Lieferanten je Position,
     // mehrere Zeilen je Position möglich (Teillieferung / zwei Chargen). Team und Lieferant (Portal) pflegen dieselben Zeilen.
     // Vergleichsbasis für den späteren blinden Chargen-Abgleich (4.5, Schritt 6). Dokumente (CoA/Spezifikation) liegen in der
@@ -4558,51 +4564,29 @@ function einheit_faktor(string $von, string $nach): float {
 // Wareneingang zu einer Bestellung (Nacht 1c): die eingebuchten Chargen auf die Positionen verteilen (gleicher Artikel, sonst
 // Freitext-Position ohne Artikel). Die Bestellung wird erst geschlossen (angekommen_am, Status geliefert), wenn ALLE Positionen
 // (mind. 98 %) geliefert sind – eine Teillieferung lässt sie offen, der Rest bleibt „unterwegs". Rückgabe ['komplett'=>bool, 'rest'=>[...]].
-function bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids): array {
+function bestellung_lieferung_erfassen(int $bestellung_id, array $charge_ids, array $bp_je_charge = []): array {
+    // Einkauf gerade ziehen (Teil 1-3, 10.11.2026): jede Charge hängt an GENAU einer Position (gewählt, sonst die erste offene
+    // mit demselben Artikel, sonst eine Freitext-Position). Gelieferte Menge = Summe der verknüpften Chargen, Abschluss in
+    // webe_bestellung_stand() (core/wareneingang_bestellung.php) – dieselbe Stelle wie in der Lager-App.
     if ($bestellung_id <= 0) return ['komplett' => false, 'rest' => []];
-    if (!column_exists('bestellung_position', 'geliefert_menge')) { bestellung_als_angekommen($bestellung_id); return ['komplett' => true, 'rest' => []]; }
-    $pos = all("SELECT id, item_id, menge, COALESCE(geliefert_menge,0) AS gel, einheit FROM bestellung_position WHERE bestellung_id=? ORDER BY sort, id", [$bestellung_id]);
+    require_once __DIR__ . '/bestellung_chargen.php';
     foreach (array_filter(array_map('intval', $charge_ids)) as $cid) {
-        $c = one("SELECT item_id, menge, einheit FROM charge WHERE id=?", [$cid]);
+        $c = one("SELECT item_id FROM charge WHERE id=?", [$cid]);
         if (!$c) continue;
-        $rest = (float)$c['menge'];
-        $bpKand = [];                                            // Positionen, auf die diese Charge gebucht wurde
-        foreach ([true, false] as $exakt) {                      // erst gleicher Artikel, dann Freitext-Position
-            foreach ($pos as &$p) {
-                if ($rest <= 1e-9) break;
-                if ($exakt ? (int)$p['item_id'] !== (int)$c['item_id'] : !empty($p['item_id'])) continue;
-                $fak = einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
-                $offen = max(0.0, (float)$p['menge'] - (float)$p['gel']);
-                if ($offen <= 1e-9) continue;
-                $nimm = min($offen, $rest * $fak);
-                $p['gel'] = (float)$p['gel'] + $nimm; $rest -= $nimm / $fak;
-                $bpKand[] = (int)$p['id'];
-                q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]);
-            }
-            unset($p);
+        $bp = (int)($bp_je_charge[$cid] ?? 0);
+        if ($bp <= 0) {
+            $kand = array_map('intval', array_column(all("SELECT id FROM bestellung_position WHERE bestellung_id=? AND item_id=? ORDER BY (COALESCE(geliefert_menge,0) >= menge), sort, id", [$bestellung_id, (int)$c['item_id']]), 'id'));
+            if (!$kand) $kand = array_map('intval', array_column(all("SELECT id FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL ORDER BY sort, id", [$bestellung_id]), 'id'));
+            $bp = $kand ? bch_position_fuer_charge($cid, $kand) : 0;
         }
-        // Verbindung Bestellung <-> Charge (Handbuch 4.4): charge.bestellung_position_id setzen. Daraus ergeben sich CoA und
-        // Spezifikation der Charge (charge_bestell_dokumente) – auch wenn das CoA erst später an der Bestellung hochgeladen wird.
-        if (!$bpKand) foreach ($pos as $p) if ((int)$p['item_id'] === (int)$c['item_id']) { $bpKand[] = (int)$p['id']; break; }
-        if ($bpKand) {
-            require_once __DIR__ . '/bestellung_chargen.php';
-            $bpId = bch_position_fuer_charge($cid, $bpKand);
-            if ($bpId) q("UPDATE charge SET bestellung_position_id=COALESCE(bestellung_position_id, ?) WHERE id=?", [$bpId, $cid]);
-            bch_werte_an_charge($cid);   // Analysewerte des geprüften CoA an die Charge
-        }
-        // Mehrlieferung auf die erste passende Position schreiben (Rest > 0): zählt als geliefert, nie negativ „unterwegs".
-        if ($rest > 1e-9) foreach ($pos as &$p) if ((int)$p['item_id'] === (int)$c['item_id']) {
-            $p['gel'] = (float)$p['gel'] + $rest * einheit_faktor((string)$c['einheit'], (string)$p['einheit']);
-            q("UPDATE bestellung_position SET geliefert_menge=? WHERE id=?", [round((float)$p['gel'], 3), (int)$p['id']]); break;
-        }
-        unset($p);
+        if ($bp <= 0) continue;
+        webe_position_artikel_setzen($bp, (int)$c['item_id']);
+        webe_charge_verknuepfen($cid, $bp, false);
+        bch_werte_an_charge($cid);   // Analysewerte des geprüften CoA an die Charge
     }
-    $offenListe = [];
-    foreach ($pos as $p) if ((float)$p['menge'] > 0 && (float)$p['gel'] + 1e-9 < (float)$p['menge'] * 0.98) $offenListe[] = ['id' => (int)$p['id'], 'rest' => (float)$p['menge'] - (float)$p['gel'], 'einheit' => (string)$p['einheit']];
-    if (!$offenListe) bestellung_als_angekommen($bestellung_id);
-    else { q("UPDATE bestellung SET teilgeliefert_am=CURDATE() WHERE id=?", [$bestellung_id]); bedarf_bump(); }
-    bestellung_eingang_melden($bestellung_id, !$offenListe, count($offenListe));
-    return ['komplett' => !$offenListe, 'rest' => $offenListe];
+    $st = webe_bestellung_stand($bestellung_id);
+    bestellung_eingang_melden($bestellung_id, $st['komplett'], count($st['offen']));
+    return ['komplett' => $st['komplett'], 'rest' => $st['offen'], 'mehr' => $st['mehr']];
 }
 // Wareneingang gebucht (Nacht 4b): Portal-Statuskette auf „Wareneingang bei bulkify" (komplett) – der Lieferant sieht den Stand,
 // bekommt aber KEINE Mail. Das Team bekommt eine Dashboard-Benachrichtigung (Teillieferung mit Anzahl offener Positionen).
