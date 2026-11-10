@@ -1318,7 +1318,12 @@ if (has_role('admin') || has_role('sales')):
           $farbe = $fDone ? 'var(--gruen,#1D9E75)' : (($fState === 'err' || $fBlock) ? '#b23b2f' : (in_array($fState, ['current', 'teil'], true) ? '#C9A227' : 'var(--line)'));
           $stTxt = $fDone ? 'fertig' : ($fState === 'err' ? 'fehlt' : ($fBlock ? 'blockiert' : ($fState === 'teil' ? 'teilweise' : ($fState === 'current' ? 'läuft' : 'wartet'))));
           $ikon  = $fDone ? '&#10003;' : ($fState === 'err' ? '!' : ($fi === $fsErster ? '&#9679;' : '&#9675;'));
-          $actor = ($istFremd && in_array($fFertig, ['Produziert', 'Etikettiert', 'Verpackt', 'Qualitätsprüfung abgeschlossen'], true)) ? 'Lieferant' : 'wir';
+          // Wer macht den Schritt (Nico 10.11.2026): Bei Fremdproduktion produziert der Lieferant. Etikettieren/Verpacken macht er nur,
+          // wenn fertige Ware zugekauft wird (zukauf_art 'fertig' = abgefüllt + etikettiert). Bei zugekauften Bulk-Kapseln machen wir das.
+          $fremdFertig = $istFremd && (string)($pa['zukauf_art'] ?? 'bulk') === 'fertig';
+          $actor = ($istFremd && ($fFertig === 'Produziert' || ($fremdFertig && in_array($fFertig, ['Etikettiert', 'Verpackt', 'Qualitätsprüfung abgeschlossen'], true)))) ? 'Lieferant' : 'wir';
+          // Erledigt ohne eigenes Datum: niemand hat den Schritt gemeldet, ein späterer Schritt hat ihn mit abgehakt.
+          $fOhneMeldung = $fDone && !$fDatum && !$fSub && $fi > 0;
       ?>
       <div class="bx-panel" style="padding:10px 14px;margin:0;border-left:4px solid <?= $farbe ?>;<?= $fi === $fsErster ? 'background:var(--panel-2)' : '' ?>">
         <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1326,7 +1331,7 @@ if (has_role('admin') || has_role('sales')):
             <span style="color:<?= $farbe ?>;font-size:16px;line-height:1;font-weight:700"><?= $ikon ?></span>
             <div>
               <div style="font-weight:600;font-size:14px">Schritt <?= $fi + 1 ?>/<?= $fsN ?>: <?= h($fDone ? $fFertig : $fStatus) ?></div>
-              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor ?><?= $fDatum ? ' · ' . h(fmt_zeit((string)$fDatum, 'd.m.Y')) : '' ?><?= $fSub ? ' · ' . h((string)$fSub) : '' ?></div>
+              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor ?><?= $fDatum ? ' · ' . h(fmt_zeit((string)$fDatum, 'd.m.Y')) : '' ?><?= $fSub ? ' · ' . h((string)$fSub) : '' ?><?= $fOhneMeldung ? ' · <span title="Für diesen Schritt gibt es keine eigene Meldung. Er gilt als erledigt, weil ein späterer Schritt erledigt ist.">ohne Datum, mit späterem Schritt abgehakt</span>' : '' ?></div>
             </div>
           </div>
           <?php if ($fi === $fsErster && $fStufe !== null && $fStufe > $curIdxA): ?>

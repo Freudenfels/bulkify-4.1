@@ -349,3 +349,8 @@ Jede Karte zeigt immer „Bedarf für diesen Auftrag“ (volle Menge). Ist schon
 - Der Reiter Beschaffungsweg gibt `beschaffungsweg_karten()` aus `core/weg_festlegen.php` aus, also dieselben Karten wie das Pop-up „Weg festlegen“. Neu ist die vierte Karte „Haben wir schon im Lager“ (Stand der Zuordnung + passende freie Chargen).
 - Die Aktionen `beschaffungsweg_setzen`, `beschaffung_bedarf`, `beschaffung_bestellen` und `deckung_*` beachten `zurueck`, damit es nach dem Speichern aus dem Pop-up zurück auf die Bestellen-Seite bzw. „Beschaffungsweg offen“ geht.
 - Reiter Produktion: „Herstellen / Einkaufen“ entfällt. Ohne Produktionsauftrag gibt es nur noch „Produktionsauftrag anlegen“, der Weg folgt im Reiter Beschaffungsweg. Die Aktion `pa_freigeben` (Eigen/Fremd) entfällt.
+
+## Schritte: wer und ohne Datum (10.11.2026)
+- **Wer („wir“ / „Lieferant“):** Bei Fremdproduktion steht beim Schritt Produziert „Lieferant“. Etikettiert, Verpackt und Qualitätsprüfung stehen nur auf „Lieferant“, wenn fertige Ware zugekauft wird (`zukauf_art = 'fertig'`, abgefüllt und etikettiert). Bei zugekauften Bulk-Kapseln (Zukauf fertige Kapsel/Tablette) füllen und etikettieren wir, dann steht „wir“.
+- **Ohne Datum:** Ein Schritt kann erledigt sein, ohne dass ihn jemand gemeldet hat. Das passiert, wenn ein späterer Schritt erledigt ist, z. B. Laboranalyse abgeschlossen, dann gilt Etikettiert mit. Die Karte zeigt dann „ohne Datum, mit späterem Schritt abgehakt“.
+
