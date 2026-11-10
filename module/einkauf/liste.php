@@ -30,7 +30,7 @@ foreach (all("SELECT DISTINCT lieferant_id FROM benutzer WHERE lieferant_id IS N
 // Laufend = alles außer geliefert UND storniert (aufgeteilte Ur-Bestellungen sind storniert und sollen hier weg).
 $wo = $archiv ? "WHERE b.status='geliefert'" : "WHERE b.status NOT IN ('geliefert','storniert')";
 // Positionen holen (mit Kopfdaten der Bestellung) und in PHP je Bestellung zusammenfassen.
-$posRows = all("SELECT bp.id AS pos_id, bp.menge, bp.einheit, bp.bestellung_id, bp.item_id, bp.sort,
+$posRows = all("SELECT bp.id AS pos_id, bp.menge, bp.einheit, bp.bestellung_id, bp.item_id, bp.sort, bp.auftrag_id, au.nummer AS auftrag_nr,
                 COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS produkt,
                 b.nummer, b.status, b.bestelldatum, b.angelegt, COALESCE(b.bestaetigt,0) AS bestaetigt,
                 b.lieferant_id, b.eta_geplant, b.station, b.tracking, b.angekommen_am, b.erinnert_am,
@@ -39,6 +39,7 @@ $posRows = all("SELECT bp.id AS pos_id, bp.menge, bp.einheit, bp.bestellung_id, 
                 JOIN bestellung b ON b.id=bp.bestellung_id
                 LEFT JOIN item i ON i.id=bp.item_id
                 LEFT JOIN lieferanten l ON l.id=b.lieferant_id
+                LEFT JOIN auftrag au ON au.id=bp.auftrag_id
                 $wo ORDER BY bp.sort, bp.id");
 $anzArchiv = (int) scalar("SELECT COUNT(DISTINCT b.id) FROM bestellung b WHERE b.status='geliefert'");
 
@@ -56,9 +57,10 @@ foreach ($posRows as $r) {
             'station'=>(string)($r['station'] ?? ''), 'tracking'=>(string)($r['tracking'] ?? ''),
             'angekommen_am'=>$r['angekommen_am'], 'erinnert_am'=>$r['erinnert_am'], 'bestellart'=>(string)($r['bestellart'] ?? ''),
             'pos_anz'=>0, 'produkte'=>[], 'bulk_basis'=>[], 'erstes'=>(string)$r['produkt'],
-            'einzel_menge'=>(float)$r['menge'], 'einzel_einheit'=>(string)($r['einheit'] ?? ''),
+            'einzel_menge'=>(float)$r['menge'], 'einzel_einheit'=>(string)($r['einheit'] ?? ''), 'auftraege'=>[],
         ];
     }
+    if (!empty($r['auftrag_id'])) $best[$bid]['auftraege'][(int)$r['auftrag_id']] = (string)$r['auftrag_nr'];
     $best[$bid]['pos_anz']++;
     $best[$bid]['produkte'][] = (string)$r['produkt'];
     if (empty($r['item_id']) && strncmp((string)$r['produkt'], 'Bulk', 4) === 0)
@@ -72,6 +74,7 @@ if ($q !== '') {
         if (mb_strpos(mb_strtolower((string)$r['nummer']), $needle) !== false) return true;
         if (mb_strpos(mb_strtolower((string)$r['lieferant_firma']), $needle) !== false) return true;
         foreach ($r['produkte'] as $p) if (mb_strpos(mb_strtolower((string)$p), $needle) !== false) return true;
+        foreach ($r['auftraege'] as $an) if (mb_strpos(mb_strtolower((string)$an), $needle) !== false) return true;
         return false;
     });
 }
@@ -104,10 +107,11 @@ $inhalt = function($r) use ($mfmt) {
 
 $cols = [
     'nummer'          => ['label'=>'Bestellung', 'sort'=>true, 'render'=>function($r) {
-        $nr = h((string)$r['nummer']);
+        $nr = '<a href="?p=bestellung&id=' . (int)$r['id'] . '" onclick="event.stopPropagation()">' . h((string)$r['nummer']) . '</a>';   // Teil 8
         $n  = count($r['bulk_basis']);
         return $nr . ($n >= 2 ? ' ' . bx_badge('Bündel: ' . $n . ' Produkte', 'warn') : '');
     }],
+    'auftrag'         => ['label'=>'Auftrag', 'render'=>fn($r)=> $r['auftraege'] ? implode(', ', array_map(fn($aid, $anr) => '<a href="?p=auftrag&id=' . (int)$aid . '" onclick="event.stopPropagation()">' . h($anr !== '' ? $anr : '#' . $aid) . '</a>', array_keys($r['auftraege']), $r['auftraege'])) : '<span class="muted">Lager</span>'],
     'lieferant_firma' => ['label'=>'Lieferant', 'sort'=>true, 'render'=>fn($r)=> $r['lieferant_firma'] !== '' ? h($r['lieferant_firma']) : '<span class="muted">extern</span>'],
     'inhalt'          => ['label'=>'Inhalt', 'render'=>$inhalt],
     'bestelldatum'    => ['label'=>'Bestellt am', 'sort'=>true, 'render'=>fn($r)=> !empty($r['bestelldatum']) ? h(date('d.m.Y', strtotime((string)$r['bestelldatum']))) : '<span class="muted">–</span>'],

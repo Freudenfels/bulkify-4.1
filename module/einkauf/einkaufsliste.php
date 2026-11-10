@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freib
         $kat = array_key_exists($_POST['fb_kategorie'] ?? '', betriebsmittel_kategorien()) ? $_POST['fb_kategorie'] : null;
         q("INSERT INTO freibedarf (bezeichnung,menge,einheit,kategorie,lieferant_id,elektrisch,notiz) VALUES (?,?,?,?,?,?,?)",
           [$bez,
-           (float)str_replace(',', '.', $_POST['fb_menge'] ?? '1') ?: 1,
+           zahl_lesen((string)($_POST['fb_menge'] ?? '1'), true) ?: 1,
            trim($_POST['fb_einheit'] ?? '') ?: 'Stk',
            $kat,
            ($_POST['fb_lieferant'] ?? '') !== '' ? (int)$_POST['fb_lieferant'] : null,
@@ -278,7 +278,7 @@ $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit =
 };
 
 render_header('einkaufsliste', 'Bestellen');
-bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von zwei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Beides landet unter „Bestellt".',
+bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von drei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung), „Direkt bestellt" (Telefon/Mail – sofort bestellt und bestätigt, keine Mail) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Alles landet unter „Bestellt".',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (Händler gespeichert, Preis falls angegeben)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : 'Lieferant ohne aktiven Account/Preis. Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
 if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Online bestellt" fehlt Händler/Quelle. Bitte die Positionen erneut anhaken und den Händler angeben.</div>';
@@ -502,7 +502,7 @@ if ($ohneFestlegung): ?>
     <p class="muted" style="margin-top:0;font-size:13px">Alles, was gekauft werden soll, aber nichts mit der Produktion zu tun hat – z. B. Toilettenpapier (Verbrauchsgüter) oder ein neues iPhone (Inventar). Landet im passenden Typ-Reiter oben und lässt sich wie alles andere bestellen.</p>
     <div class="bx-grid">
       <div class="bx-field"><label>Bezeichnung</label><input type="text" name="fb_bezeichnung" required placeholder="z. B. Toilettenpapier / iPhone 15"></div>
-      <div class="bx-field"><label>Menge</label><input type="number" step="0.001" name="fb_menge" value="1"></div>
+      <div class="bx-field"><label>Menge</label><input type="text" inputmode="decimal" name="fb_menge" value="1"></div>
       <div class="bx-field"><label>Einheit</label><input type="text" name="fb_einheit" value="Stk"></div>
       <div class="bx-field"><label>Typ / Kategorie <?= bx_hint('ordnet es einem Warenlager-Typ und dem passenden Reiter zu') ?></label>
         <select name="fb_kategorie"><option value="">– Sonstiges –</option><?php foreach ($BM_KAT as $k => $lbl): ?><option value="<?= $k ?>" <?= $aktTyp === $k ? 'selected' : '' ?>><?= h($lbl) ?></option><?php endforeach; ?></select>

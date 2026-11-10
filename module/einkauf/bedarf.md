@@ -31,3 +31,5 @@ Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftr
 
 ## 10.11.2026 (Teil 6)
 Die Eigen/Fremd-Auswahl je Auftrag entfällt (Aktion `produktionsart`). Stattdessen gibt es den Weg als Badge und den Knopf „Weg festlegen“ (Pop-up). Melden an den Einkauf bleibt.
+
+- Menge beim Artikel-Melden mit deutscher Eingabe (`zahl_lesen`), Textfeld statt `number` (10.11.2026).

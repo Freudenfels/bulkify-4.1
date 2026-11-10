@@ -94,3 +94,5 @@ Gesperrte Zeilen (Kundenetikett bzw. bedruckter Beutel ohne Kunden-Freigabe des 
 
 ## Weg festlegen per Pop-up (10.11.2026, Teil 6)
 Der Block „warten auf die Festlegung des Wegs“ zeigt je Auftrag Links zu Auftrag, Angebot und Rezeptur (neuer Tab) und den Knopf **„Weg festlegen“**. Er öffnet das Pop-up aus `core/weg_festlegen.php`: Kopf, Rezeptur mit kg je Rohstoff, vier Karten mit Kosten. Die Knöpfe „Eigenproduktion / Fremdproduktion (zukaufen)“ und die Aktion `festlegen` entfallen, sie kannten weder Premix noch Lager. Danach erscheint die Meldung `bwok`.
+
+- Kopftext (10.11.2026): **drei** Bestellwege (Portal, Direkt bestellt, Online). Freier Bedarf: Menge mit deutscher Eingabe.

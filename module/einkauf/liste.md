@@ -22,3 +22,6 @@ Die laufende Liste zeigt alles außer `geliefert` **und `storniert`** – aufget
 **Offen seit + Überfälligkeit (B4):** Spalte „Offen seit" zeigt die Tage seit Bestellung (`bestellung_tage_offen()`); unbestätigte **Portal**-Bestellungen ab **3 Tagen** als **überfällig · T+N** (rot, `bestellung_ueberfaellig()`). Über der Liste ein Panel „N überfällige Bestellung(en)" mit Button **„Überfällige jetzt erinnern"** (POST `aktion=erinnern_alle` → `einkauf_erinnerungen_cron(3,0)`, Mail an alle überfälligen Portal-Lieferanten). **Storno** (`aktion=storno` → `bestellung_stornieren()`): markiert storniert, informiert einen Portal-Lieferanten (Chat+Mail); der Button sitzt auf der Bestelldetailseite. Nach dem Stornieren verschwindet die Bestellung aus der laufenden Liste (storniert ist ausgeblendet).
 
 **Automatische Erinnerung (Cron):** `public/einkauf_cron.php?token=<einkauf_cron_token()>` (kein Login, Token aus `app_meta`) ruft `einkauf_erinnerungen_cron()` auf – erinnert alle überfälligen, unbestätigten Portal-Bestellungen, je Bestellung höchstens 1×/24 h (`bestellung.erinnert_am`). Die URL zeigt ein Admin-Aufklappkasten über der Liste; ein Server-Cron (z. B. täglich) muss sie aufrufen.
+
+## 10.11.2026 (Teil 8)
+Bestellnummer und Auftrag (AB) je Zeile sind anklickbar (neue Spalte „Auftrag“, „Lager“ ohne Auftragsbezug). Die Suche findet auch die AB-Nummer.

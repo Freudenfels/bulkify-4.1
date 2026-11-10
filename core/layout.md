@@ -70,3 +70,5 @@ Gilt vor den älteren Absätzen oben (Anfragen-Gruppe mit 4 Punkten und Lager-Gr
 - **Lager = ein Punkt** (`lager` → `?p=lager`); Lager 1 / Lager 2 sind Filter-Reiter auf der Seite. `lager_l1`/`lager_fremd` sind aus dem
   Hauptmenü raus (nur noch im Werk-Menü). **Rohstoffe** stehen in der Gruppe Produkt (bei gespeichertem Menü gilt weiter der Menü-Editor).
 - Alte Bedarfsliste `?p=bedarf` war schon nicht im Menü; die Seite bleibt bis Schritt 5 unverändert. Jede ausgeblendete Seite bleibt per Link erreichbar.
+
+- `bx_rscombo_script()` (10.11.2026): Die Suche berücksichtigt zusätzlich `data-such` an der Option, z. B. Synonyme eines Artikels.

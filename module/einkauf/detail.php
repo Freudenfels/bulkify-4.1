@@ -194,8 +194,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pi = $_POST['p_item'] ?? []; $pm = $_POST['p_menge'] ?? []; $pe = $_POST['p_ek'] ?? []; $pa = $_POST['p_auftrag'] ?? [];
     foreach ($pi as $i => $iid) {
         $iid = (int)$iid; if ($iid <= 0) continue;
-        $menge = (float)str_replace(',', '.', $pm[$i] ?? '0');
-        $ek = (float)str_replace(',', '.', $pe[$i] ?? '0');
+        $menge = zahl_lesen((string)($pm[$i] ?? '0'), true);   // „7.000" = 7000 (Teil 8, deutsche Eingabe)
+        $ek = zahl_lesen((string)($pe[$i] ?? '0'));
         $einh = scalar("SELECT einheit FROM item WHERE id=?", [$iid]);
         $aid = ($pa[$i] ?? '') !== '' ? (int)$pa[$i] : null;
         q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?)",
@@ -210,7 +210,10 @@ $v = fn($k) => h((string)($b[$k] ?? ''));
 $geliefert = ($b['status'] ?? '') === 'geliefert';
 
 $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
-$items = all("SELECT id, name, einheit, ek_preis, kategorie FROM item WHERE kategorie IN ('rohstoff','verpackung','verbrauch') AND gesperrt=0 ORDER BY name");
+$items = all("SELECT i.id, i.name, i.einheit, i.ek_preis, i.kategorie, CONCAT_WS(' ', NULLIF(i.synonym,''), NULLIF(i.synonyme,'')) AS syn,
+                     COALESCE(kgi.name, kgr.name) AS kg_name, IF(r.darreichungsform IN ('kapsel','softgel','tablette'), r.einheit_fuellmenge, NULL) AS fuell_mg
+              FROM item i LEFT JOIN kapselgroesse kgi ON kgi.id=i.kapselgroesse_id LEFT JOIN rezeptur r ON r.id=i.rezeptur_id LEFT JOIN kapselgroesse kgr ON kgr.id=r.kapselgroesse_id
+              WHERE i.kategorie IN ('rohstoff','verpackung','verbrauch','fertig') AND i.gesperrt=0 ORDER BY i.name");
 $positionen = $neu ? [] : all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NOT NULL ORDER BY sort,id", [(int)$id]);
 $posGesamt  = $neu ? 0 : (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);   // inkl. Bulk-/Freitext-Positionen (item_id NULL)
 $bulkPositionen = $neu ? [] : all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL ORDER BY sort,id", [(int)$id]);
@@ -247,7 +250,10 @@ if ($neu && isset($_GET['ki']) && !empty($_SESSION['ki_best'])) {
 
 function pos_options(array $items, $sel): string {
     $s = '<option value="">– Artikel wählen –</option>';
-    foreach ($items as $it) $s .= '<option value="' . (int)$it['id'] . '"' . ((int)$sel === (int)$it['id'] ? ' selected' : '') . '>' . h($it['name']) . ' (' . h($it['einheit']) . ')</option>';
+    // Teil 5/8 (10.11.2026): Suchfeld (rscombo) mit Synonymen; Kapselgröße/Füllgewicht steht im Text (Bulk/Premix/Leerkapsel).
+    foreach ($items as $it) { $kl = implode(' · ', array_filter([(string)($it['kg_name'] ?? '') !== '' ? 'Größe ' . preg_replace('/^(Größe|Gr\.?)\s*/iu', '', (string)$it['kg_name']) : '',
+                                                    (float)($it['fuell_mg'] ?? 0) > 0 ? rtrim(rtrim(number_format((float)$it['fuell_mg'], 1, ',', '.'), '0'), ',') . ' mg' : '']));
+        $s .= '<option value="' . (int)$it['id'] . '"' . ((int)$sel === (int)$it['id'] ? ' selected' : '') . ' data-such="' . h((string)($it['syn'] ?? '')) . '">' . h($it['name']) . ($kl !== '' ? ' · ' . h($kl) : '') . ' (' . h($it['einheit']) . ')</option>'; }
     return $s;
 }
 // Offene Kundenaufträge, damit eine Bestellposition „für Auftrag X" markiert werden kann (Baustein 4)
@@ -538,10 +544,10 @@ if (!$neu) {
       <tbody id="prows">
         <?php $pr = $positionen ?: [['item_id'=>'','menge'=>'','ek_preis'=>'','auftrag_id'=>'']]; foreach ($pr as $p): ?>
         <tr class="prow">
-          <td><select name="p_item[]" class="pitem"><?= pos_options($items, $p['item_id']) ?></select></td>
+          <td><select name="p_item[]" class="pitem rscombo" data-ph="Artikel suchen (Name, Synonym) …"><?= pos_options($items, $p['item_id']) ?></select></td>
           <td><select name="p_auftrag[]" class="pauf"><?= auftrag_options($auftraege, $p['auftrag_id'] ?? '') ?></select></td>
-          <td><input type="number" step="0.001" class="pmenge" name="p_menge[]" value="<?= h($p['menge']!==''&&$p['menge']!==null ? rtrim(rtrim(number_format((float)$p['menge'],3,'.',''),'0'),'.') : '') ?>"></td>
-          <td><input type="number" step="0.0001" class="pek" name="p_ek[]" value="<?= h($p['ek_preis']!==''&&$p['ek_preis']!==null ? rtrim(rtrim(number_format((float)$p['ek_preis'],4,'.',''),'0'),'.') : '') ?>"></td>
+          <td><input type="text" inputmode="decimal" class="pmenge" name="p_menge[]" value="<?= h($p['menge']!==''&&$p['menge']!==null ? rtrim(rtrim(number_format((float)$p['menge'],3,',','.'),'0'),',') : '') ?>"></td>
+          <td><input type="text" inputmode="decimal" class="pek" name="p_ek[]" value="<?= h($p['ek_preis']!==''&&$p['ek_preis']!==null ? rtrim(rtrim(number_format((float)$p['ek_preis'],4,',',''),'0'),',') : '') ?>"></td>
           <td class="bx-num psum">–</td>
           <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.prow').remove();psum()">×</button></td>
         </tr>
@@ -566,8 +572,9 @@ function eur(x){ return x.toLocaleString('de-DE',{minimumFractionDigits:2,maximu
 function psum(){
   var g=0;
   document.querySelectorAll('.prow').forEach(function(r){
-    var m=parseFloat((r.querySelector('.pmenge').value||'').replace(',','.'))||0;
-    var e=parseFloat((r.querySelector('.pek').value||'').replace(',','.'))||0;
+    var dz=function(v){ v=String(v||'').trim(); if(v.indexOf(',')>=0) v=v.replace(/\./g,'').replace(',','.'); else if(/^\d{1,3}(\.\d{3})+$/.test(v)) v=v.replace(/\./g,''); return parseFloat(v)||0; };
+    var m=dz(r.querySelector('.pmenge').value);
+    var e=dz(r.querySelector('.pek').value);
     var s=m*e; g+=s;
     r.querySelector('.psum').textContent = (m&&e)?eur(s):'–';
   });
@@ -576,13 +583,13 @@ function psum(){
 (function(){
   document.getElementById('addP').addEventListener('click',function(){
     var tr=document.createElement('tr'); tr.className='prow';
-    tr.innerHTML='<td><select name="p_item[]" class="pitem">'+OPT+'</select></td>'
+    tr.innerHTML='<td><select name="p_item[]" class="pitem rscombo" data-ph="Artikel suchen (Name, Synonym) …">'+OPT+'</select></td>'
       +'<td><select name="p_auftrag[]" class="pauf">'+OPTA+'</select></td>'
-      +'<td><input type="number" step="0.001" class="pmenge" name="p_menge[]"></td>'
-      +'<td><input type="number" step="0.0001" class="pek" name="p_ek[]"></td>'
+      +'<td><input type="text" inputmode="decimal" class="pmenge" name="p_menge[]"></td>'
+      +'<td><input type="text" inputmode="decimal" class="pek" name="p_ek[]"></td>'
       +'<td class="bx-num psum">–</td><td><button type="button" class="btn btn-ghost btn-sm">×</button></td>';
     tr.querySelector('button').addEventListener('click',function(){tr.remove();psum();});
-    wire(tr); document.getElementById('prows').appendChild(tr);
+    wire(tr); document.getElementById('prows').appendChild(tr); if(window.bxRsComboInit) window.bxRsComboInit(tr);
   });
   function wire(row){
     row.querySelector('.pitem').addEventListener('change',function(){ var ek=EK[this.value]; if(ek!==undefined && !row.querySelector('.pek').value) row.querySelector('.pek').value=ek; psum(); });
