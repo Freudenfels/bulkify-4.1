@@ -137,6 +137,26 @@ $CHECKS = [
                     ORDER BY ((SELECT COUNT(*) FROM rezeptur_zutat z2 WHERE z2.item_id=i.id) > 0) DESC, (COUNT(DISTINCT ag.id) > 0) DESC, MAX(la.angelegt) DESC, i.name",
         'ohne_fix' => 'Nur Anzeige: beim Lieferanten nachfordern oder am Rohstoff hochladen (Öffnen).',
     ],
+    'rohstoff_kundenanfrage_ohne_dok' => [
+        'titel' => 'Rohstoff: in Kunden-Anfragen bzw. offenen Rezepturen, aber ohne Lieferanten-Dokumente',
+        'info'  => 'Rohstoffe aus Rezeptur-Anfragen (Wunschzeilen), Rohstoff-Anfragen im Portal sowie Rezepturen im Entwurf oder Vorschlag, an denen weder Spezifikation noch CoA noch Analyse des Lieferanten hängt (Nico 10.11.2026, z. B. RZ-4166). „Preisanfrage“ = schon beim Lieferanten angefragt (dann kommen Spec/CoA mit der Antwort). Sortiert nach Anzahl offener Vorgänge.',
+        'sql'   => "SELECT i.id AS _id, CONCAT('?p=rohstoff&id=', i.id) AS _link, i.artikelnummer, i.name,
+                           (SELECT GROUP_CONCAT(DISTINCT r.nummer ORDER BY r.id DESC SEPARATOR ', ') FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id
+                             WHERE z.item_id=i.id AND r.status IN ('entwurf','vorschlag')) AS offene_rezepturen,
+                           (SELECT COUNT(DISTINCT w.anfrage_id) FROM rezeptur_anfrage_wunsch w JOIN rezeptur_anfrage ra ON ra.id=w.anfrage_id
+                             WHERE w.item_id=i.id AND ra.status NOT IN ('abgelehnt')) AS rezeptur_anfragen,
+                           (SELECT COUNT(*) FROM portal_anfrage pa WHERE pa.rohstoff_id=i.id) AS rohstoff_anfragen,
+                           (SELECT COUNT(*) FROM lieferant_anfrage la WHERE la.item_id=i.id) AS preisanfrage
+                    FROM item i
+                    WHERE i.kategorie='rohstoff' AND COALESCE(i.form,'') NOT IN ('kapselhuelle','premix')
+                      AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id AND d.typ IN ('spec','coa','beides','analyse'))
+                      AND ( EXISTS (SELECT 1 FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id WHERE z.item_id=i.id AND r.status IN ('entwurf','vorschlag'))
+                         OR EXISTS (SELECT 1 FROM rezeptur_anfrage_wunsch w JOIN rezeptur_anfrage ra ON ra.id=w.anfrage_id WHERE w.item_id=i.id AND ra.status NOT IN ('abgelehnt'))
+                         OR EXISTS (SELECT 1 FROM portal_anfrage pa WHERE pa.rohstoff_id=i.id) )
+                    ORDER BY ((SELECT COUNT(DISTINCT z.rezeptur_id) FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id WHERE z.item_id=i.id AND r.status IN ('entwurf','vorschlag'))
+                              + (SELECT COUNT(*) FROM rezeptur_anfrage_wunsch w WHERE w.item_id=i.id)) DESC, i.name",
+        'ohne_fix' => 'Nur Anzeige: am Rohstoff „Preis anfragen“ (mit CoA/Spezifikation) oder vorhandene Unterlagen hochladen (Öffnen).',
+    ],
     'rohstoff_ohne_wirkstoff' => [
         'titel' => 'Rohstoff: klingt nach Mineral/Vitamin, aber ohne Wirkstoffdaten (in Rezepturen verwendet)',
         'info'  => 'Ohne Wirkstoffdaten (z. B. „Kalium 38 %“ an Kaliumcitrat) fehlen in Rezeptur, PIB und Kundenportal die elementaren Werte und die % NRV – der Kunde sieht dann nur die Salz-Menge. Bitte am Rohstoff unter Wirkstoffe den Gehalt eintragen (Nico 10.11.2026, RZ-4166 Basen-Modul: Kalium, Zink, Natrium fehlten).',

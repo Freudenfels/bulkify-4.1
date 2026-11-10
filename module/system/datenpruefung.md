@@ -107,3 +107,4 @@ Weitere Prüfpunkte:
   - CoA angefordert, Rezepturen, CoA an Bestellung.
 
   Sortiert: in Rezepturen verwendete und beantwortete zuerst. Nur Anzeige.
+- Prüfpunkt **„Rohstoff: in Kunden-Anfragen bzw. offenen Rezepturen, aber ohne Lieferanten-Dokumente“** (10.11.2026): Rohstoffe aus Rezeptur-Wunschzeilen, Portal-Rohstoffanfragen und Rezepturen im Entwurf oder Vorschlag ohne Spezifikation, CoA oder Analyse am Rohstoff. Zeigt außerdem, ob schon eine Preisanfrage beim Lieferanten läuft. Nur Anzeige.
