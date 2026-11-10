@@ -353,4 +353,5 @@ Jede Karte zeigt immer „Bedarf für diesen Auftrag“ (volle Menge). Ist schon
 ## Schritte: wer und ohne Datum (10.11.2026)
 - **Wer („wir“ / „Lieferant“):** Bei Fremdproduktion steht beim Schritt Produziert „Lieferant“. Etikettiert, Verpackt und Qualitätsprüfung stehen nur auf „Lieferant“, wenn fertige Ware zugekauft wird (`zukauf_art = 'fertig'`, abgefüllt und etikettiert). Bei zugekauften Bulk-Kapseln (Zukauf fertige Kapsel/Tablette) füllen und etikettieren wir, dann steht „wir“.
 - **Ohne Datum:** Ein Schritt kann erledigt sein, ohne dass ihn jemand gemeldet hat. Das passiert, wenn ein späterer Schritt erledigt ist, z. B. Laboranalyse abgeschlossen, dann gilt Etikettiert mit. Die Karte zeigt dann „ohne Datum, mit späterem Schritt abgehakt“.
+- **Wer hat abgeschlossen:** Erledigte Schritte zeigen „abgeschlossen von …“, soweit das System es weiß. Die Angabe kommt aus `auftrag_fortschritt()`, 7. Feld je Schritt, siehe `core/schema.md`. Ist niemand bekannt, steht nichts da. Das gilt z. B. für Schritte, die ein späterer Schritt automatisch mit abgehakt hat.
 

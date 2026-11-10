@@ -572,3 +572,10 @@ Manuell gesetzte Stufe (`phase_override=1`) ohne Bestellung: Datenprüfung `rohs
 - Neue Spalten an `portal_anfrage`: `lieferstatus`, `lieferstatus_hinweis`, `alternativen_gesendet_am`, `alternativen_entschieden_am`, `original_rohstoff_id`, `original_betreff`
 - Neue Tabelle `portal_anfrage_alternative`
 - Die Logik steht in `core/rohstoff_alternative.php`; schema.php bindet die Datei ein.
+
+## auftrag_fortschritt(): wer hat abgeschlossen (10.11.2026)
+Jeder Schritt hat ein 7. Feld mit dem Namen der Person, die ihn abgeschlossen hat, oder null. Es wird nur auf der Auftragsseite gefüllt, in Listen (`$leicht`) nicht. Quellen, nur vorhandene Daten:
+- **Produziert, Etikettiert, Verpackt, Qualitätsprüfung:** `produktion_schritt.erledigt_von` der passenden Produktionsschritte. Bei Produziert sind das die Herstellung, sonst das Abfüllen.
+- **Laboranalyse:** `dokument.hochgeladen_von` des Laborberichts, wenn dort ein Name steht. Allgemeine Werte wie „team“ zählen nicht.
+- **Sonst:** War die Stufe über „Fortschritt manuell auf eine Stufe setzen“ (`phase_override`) gesetzt und deckt sie den Schritt ab, steht die Person aus dem letzten Eintrag „Fortschritt gesetzt“ in `aktivitaet` mit dem Zusatz „(Fortschritt von Hand gesetzt)“.
+

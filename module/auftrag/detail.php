@@ -1323,7 +1323,8 @@ if (has_role('admin') || has_role('sales')):
           $fremdFertig = $istFremd && (string)($pa['zukauf_art'] ?? 'bulk') === 'fertig';
           $actor = ($istFremd && ($fFertig === 'Produziert' || ($fremdFertig && in_array($fFertig, ['Etikettiert', 'Verpackt', 'Qualitätsprüfung abgeschlossen'], true)))) ? 'Lieferant' : 'wir';
           // Erledigt ohne eigenes Datum: niemand hat den Schritt gemeldet, ein späterer Schritt hat ihn mit abgehakt.
-          $fOhneMeldung = $fDone && !$fDatum && !$fSub && $fi > 0;
+          $fVon = $fx[6] ?? null;
+          $fOhneMeldung = $fDone && !$fDatum && !$fSub && !$fVon && $fi > 0;
       ?>
       <div class="bx-panel" style="padding:10px 14px;margin:0;border-left:4px solid <?= $farbe ?>;<?= $fi === $fsErster ? 'background:var(--panel-2)' : '' ?>">
         <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1331,7 +1332,7 @@ if (has_role('admin') || has_role('sales')):
             <span style="color:<?= $farbe ?>;font-size:16px;line-height:1;font-weight:700"><?= $ikon ?></span>
             <div>
               <div style="font-weight:600;font-size:14px">Schritt <?= $fi + 1 ?>/<?= $fsN ?>: <?= h($fDone ? $fFertig : $fStatus) ?></div>
-              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor ?><?= $fDatum ? ' · ' . h(fmt_zeit((string)$fDatum, 'd.m.Y')) : '' ?><?= $fSub ? ' · ' . h((string)$fSub) : '' ?><?= $fOhneMeldung ? ' · <span title="Für diesen Schritt gibt es keine eigene Meldung. Er gilt als erledigt, weil ein späterer Schritt erledigt ist.">ohne Datum, mit späterem Schritt abgehakt</span>' : '' ?></div>
+              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor ?><?= $fDatum ? ' · ' . h(fmt_zeit((string)$fDatum, 'd.m.Y')) : '' ?><?= $fSub ? ' · ' . h((string)$fSub) : '' ?><?= $fVon ? ' · abgeschlossen von ' . h((string)$fVon) : '' ?><?= $fOhneMeldung ? ' · <span title="Für diesen Schritt gibt es keine eigene Meldung. Er gilt als erledigt, weil ein späterer Schritt erledigt ist.">ohne Datum, mit späterem Schritt abgehakt</span>' : '' ?></div>
             </div>
           </div>
           <?php if ($fi === $fsErster && $fStufe !== null && $fStufe > $curIdxA): ?>

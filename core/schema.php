@@ -6351,7 +6351,7 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
     // („Verpacken" = ins Glas/Dose) / Etikett / Umverpackung / QC. Abfüllen + Etikettieren laufen meist zusammen.
     $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$aid]);
     $g = ['herst' => [], 'abf' => [], 'etik' => [], 'umv' => [], 'qc' => []];
-    if ($pa) foreach (all("SELECT station, erledigt, erledigt_at FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [(int)$pa['id']]) as $s) {
+    if ($pa) foreach (all("SELECT station, erledigt, erledigt_at, erledigt_von FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [(int)$pa['id']]) as $s) {
         $n = (string)$s['station'];
         $k = preg_match('/etikett/i', $n) ? 'etik' : (preg_match('/beipack|umkarton/i', $n) ? 'umv' : (preg_match('/qualit/i', $n) ? 'qc'
            : (preg_match('/freigabe/i', $n) ? null : ($n === 'Verpacken' ? 'abf' : 'herst'))));
@@ -6485,6 +6485,41 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
               'Abgeschlossen' => 6, 'Versendet' => 7, 'Eingelagert' => 7];
     foreach ($steps as &$s) $s[5] = $stufe[$s[1]] ?? null;
     unset($s);
+    // Wer hat den Schritt abgeschlossen (Nico 10.11.2026)? 7. Feld, nur aus vorhandenen Daten: Produktionsschritte (erledigt_von),
+    // Laborbericht (hochgeladen_von), sonst „Fortschritt manuell gesetzt“ (Aktivität), wenn die Hand-Stufe den Schritt abdeckt.
+    // null = unbekannt (z. B. automatisch mit einem späteren Schritt abgehakt). Nur auf der Auftragsseite, nicht in Listen.
+    if (!$leicht) {
+        $vonListe = function (array $list): ?string {
+            $n = [];
+            foreach ($list as $x) if ((int)$x['erledigt'] === 1 && trim((string)($x['erledigt_von'] ?? '')) !== '') $n[trim((string)$x['erledigt_von'])] = true;
+            return $n ? implode(', ', array_keys($n)) : null;
+        };
+        $vonLabor = null;
+        if ($labor && !empty($lt['dok_id'])) {
+            $hv = trim((string) scalar("SELECT hochgeladen_von FROM dokument WHERE id=?", [(int)$lt['dok_id']]));
+            if ($hv !== '' && !ctype_digit($hv) && !in_array($hv, ['team', 'kunde', 'lieferant', 'portal', 'coa_ueb', 'ki'], true)) $vonLabor = $hv;
+            elseif (ctype_digit($hv)) $vonLabor = (string) (scalar("SELECT name FROM benutzer WHERE id=?", [(int)$hv]) ?: '') ?: null;
+        }
+        $ov = (isset($a['phase_override']) && $a['phase_override'] !== null && $a['phase_override'] !== '') ? (int)$a['phase_override'] : 0;
+        $vonHand = $ov > 0 ? (string) (scalar("SELECT benutzer FROM aktivitaet WHERE objekt_typ='auftrag' AND objekt_id=? AND text LIKE 'Fortschritt gesetzt:%'
+                                                ORDER BY id DESC LIMIT 1", [$aid]) ?: '') : '';
+        foreach ($steps as &$s) {
+            $von = null;
+            if ($s[2] === 'done') {
+                $von = match ($s[1]) {
+                    'Produziert'  => $vonListe($g['herst']) ?? $vonListe($g['abf']),
+                    'Etikettiert' => $vonListe($g['etik']),
+                    'Verpackt'    => $vonListe($g['umv']),
+                    'Qualitätsprüfung abgeschlossen' => $vonListe($g['qc']),
+                    'Laboranalyse abgeschlossen'     => $vonLabor,
+                    default => null,
+                };
+                if ($von === null && $vonHand !== '' && $s[5] !== null && $s[5] <= $ov) $von = $vonHand . ' (Fortschritt von Hand gesetzt)';
+            }
+            $s[6] = $von;
+        }
+        unset($s);
+    }
     return ['steps' => $steps, 'energ' => $energ, 'menge' => ['ziel' => $ziel, 'geb' => $geb, 'vers' => $vers]];
 }
 
