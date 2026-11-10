@@ -69,6 +69,7 @@ function route_rollen_map(): array {
         'portal_anfrage'     => ['sales', 'production', 'einkauf'],
         'rezeptur'           => ['production', 'labor'],
         'kapsel_referenz'    => ['production', 'labor', 'sales'],   // Nachschlagewerk Kapselgrößen
+        'd3k2_rechner'       => ['production', 'labor', 'sales'],   // D3K2-Tropfen-Rechner (Schnellberechnung)
         'rezeptur_detail'    => ['production', 'labor', 'sales'],   // + Innendienst: Ziel nach „Vorschlag senden" (St-10)
         'rezeptur_pib'       => ['production', 'labor', 'sales'],   // PIB zur Rezeptur (St-10)
         'rezeptur_dubletten' => [],                                 // Dubletten zusammenführen – nur Admin (Stammdaten)

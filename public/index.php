@@ -140,6 +140,7 @@ $routes = [
     'rezeptur_popup'  => 'rezeptur/popup.php',        // schlanke read-only Rezeptur-Ansicht fuer Popups (iframe)
     'rezept_preise'   => 'rezeptur/lief_preise.php', // Alt: leitet auf einkauf_preise&tab=fremd weiter
     'kapsel_referenz' => 'system/kapsel_referenz.php',   // Nachschlagewerk Kapselgrößen
+    'd3k2_rechner'    => 'system/d3k2_rechner.php',      // Werkzeug: D3K2-Tropfen-Rechner (Schnellberechnung, reine Rechenseite)
     'crmdemo'         => 'crmdemo/app.php',               // isolierte CRM-Demo (Lieferanten-Beta), versteckt
     'produkte'        => 'produkt/liste.php',
     'produkt'         => 'produkt/detail.php',
