@@ -2757,8 +2757,10 @@ portal_head('Kundenportal · ' . $k['firma']);
     // Angenommene Rezepturen (eingefroren = „Rezeptur angelegt") -> BESTÄTIGT; abgelehnte Anfragen -> ABGELEHNT.
     $bestRows = array_values(array_filter($erledigtRows, fn($r) => ($r['stufe'] ?? '') === 'erledigt'));
     $abglRows = array_values(array_filter($erledigtRows, fn($r) => in_array($r['stufe'] ?? '', ['abgelehnt','abgeschlossen'], true)));
-    $nZuBest = count($offen_ang);                        // Angebote mit Preis – „Zu bestätigen"
-    $nOffen  = count($anfPruef) + count($pending);       // Vorschläge (wartet auf Sie) + in Prüfung – noch ohne Preis
+    // Nico 10.11.2026: Rezeptur-Vorschläge warten auf die Entscheidung des Kunden -> gehören zu „Zu bestätigen“ (nicht in einen
+    // eingeklappten Extra-Kasten „Wartet auf Sie“ und nicht zu „In Prüfung“).
+    $nZuBest = count($offen_ang) + count($anfPruef);     // Angebote mit Preis + Rezeptur-Vorschläge – „Zu bestätigen"
+    $nOffen  = count($pending);                          // in Prüfung bei uns – noch ohne Preis
     $sumBest  = count($best_ang) + count($bestRows);     // bestätigt (in Arbeit/versendet) + Rezeptur angelegt
     $sumAbgel = count($abgel_ang) + count($abglRows);    // abgelehnt / nicht machbar
     // Unterreiter nach Typ: die Zähler oben bleiben GESAMT; hier nur die Anzeige-Listen filtern.
@@ -2781,9 +2783,9 @@ portal_head('Kundenportal · ' . $k['firma']);
            : ($nZuBest > 0 ? 'zubestaetigen' : 'offen');
     $typsInTab = [];
     if ($oatab === 'offen') {
-        foreach ($anfPruef as $x)   $typsInTab[] = 'rezeptur';
         foreach ($pending as $r)    $typsInTab[] = $r['typ'] ?? '';
     } elseif ($oatab === 'zubestaetigen') {
+        foreach ($anfPruef as $x)   $typsInTab[] = 'rezeptur';
         foreach ($offen_ang as $a)  $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
     } else { /* archiv: angenommen + abgelehnt */
         foreach ($best_ang as $a)   $typsInTab[] = $angTyp[$a['id']] ?? 'produkt';
@@ -2803,35 +2805,6 @@ portal_head('Kundenportal · ' . $k['firma']);
     $anfPruefShow = ($atab === 'alle' || $atab === 'rezeptur') ? $anfPruef : [];  // Vorschläge = Rezepturen
   ?>
 
-  <?php if ($anfPruefShow): ?>
-  <?php // Einklappbar: stört sonst dauerhaft offen. Zustand pro Betrachter im Browser gemerkt (localStorage),
-        // standardmäßig zugeklappt. Die Anzahl bleibt in der Überschrift sichtbar, damit man es trotzdem bemerkt. ?>
-  <details class="bx-panel" id="ptWartet" style="border-color:var(--gruen);background:var(--panel-2)">
-    <summary style="cursor:pointer;font-size:19px;font-weight:600">Wartet auf Sie (<?= count($anfPruefShow) ?>)<span class="muted" style="font-weight:400;font-size:13px">&nbsp;– zum Auf-/Zuklappen klicken</span></summary>
-    <p class="muted" style="margin:10px 0 0">Zu diesen Anfragen liegt ein Vorschlag bereit – bitte prüfen und annehmen oder ablehnen.</p>
-    <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table">
-      <thead><tr><th>Nummer</th><th>Wunschname</th><th>Form</th><th>Vorschlag</th><th></th></tr></thead>
-      <tbody>
-      <?php foreach ($anfPruefShow as $an): ?>
-        <tr>
-          <td><?= h($an['nummer']) ?></td>
-          <td><?= $an['produktname'] ? h($an['produktname']) : '<span class="muted">–</span>' ?></td>
-          <td><?= h($DFORM_P[$an['darreichungsform']] ?? $an['darreichungsform']) ?></td>
-          <td><?= $an['rezeptur_name'] ? h($an['rezeptur_name']) : '<span class="muted">–</span>' ?></td>
-          <td style="text-align:right"><a class="btn btn-primary btn-sm" href="<?= $portalLink('rezeptur') ?>&rid=<?= (int)$an['rezeptur_id'] ?>">Prüfen &amp; entscheiden</a></td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table></div>
-  </details>
-  <script>
-  (function(){
-    var d = document.getElementById('ptWartet'); if (!d) return;
-    try { d.open = (localStorage.getItem('bxWartetOffen') === '1'); } catch (e) { d.open = false; }
-    d.addEventListener('toggle', function(){ try { localStorage.setItem('bxWartetOffen', d.open ? '1' : '0'); } catch (e) {} });
-  })();
-  </script>
-  <?php endif; ?>
 
   <?php // Drei Reiter in Prioritätsreihenfolge: Zu bestätigen (Handlungsbedarf) · Offen · Archiv. ($oatab oben gesetzt.) ?>
   <div class="settabs" style="margin:0 0 8px">
@@ -2873,10 +2846,30 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
   <?php }; ?>
   <?php if ($oatab === 'zubestaetigen'): ?>
+    <?php if ($anfPruefShow): ?>
+    <div class="bx-panel">
+      <h2 style="margin:0 0 4px">Rezeptur-Vorschläge</h2>
+      <p class="muted" style="margin:0 0 12px;font-size:13px">Zu Ihrer Anfrage liegt unser Rezeptur-Vorschlag bereit – bitte prüfen und annehmen oder mit kurzem Grund ablehnen.</p>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Nummer</th><th>Wunschname</th><th>Form</th><th>Vorschlag</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($anfPruefShow as $an): ?>
+          <tr>
+            <td><?= h($an['nummer']) ?></td>
+            <td><?= $an['produktname'] ? h($an['produktname']) : '<span class="muted">–</span>' ?></td>
+            <td><?= h($DFORM_P[$an['darreichungsform']] ?? $an['darreichungsform']) ?></td>
+            <td><?= $an['rezeptur_name'] ? h($an['rezeptur_name']) : '<span class="muted">–</span>' ?></td>
+            <td style="text-align:right"><a class="btn btn-primary btn-sm" href="<?= $portalLink('rezeptur') ?>&rid=<?= (int)$an['rezeptur_id'] ?>">Prüfen &amp; entscheiden</a></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+    <?php endif; ?>
     <?php if ($offen_ang): ?>
     <p class="muted" style="margin:0 0 12px">Klappen Sie ein Angebot auf, wählen Sie die gewünschte Menge und bestätigen Sie verbindlich.</p>
     <?php foreach ($offen_ang as $a): $st = $staffelFuer($a); $inf = $angInfoFuer($a); $accept = true; $open = false; include __DIR__ . '/_angebot_karte.php'; endforeach; ?>
-    <?php else: ?><div class="bx-panel"><div class="muted">Aktuell liegt kein Angebot zum Bestätigen vor.</div></div><?php endif; ?>
+    <?php elseif (!$anfPruefShow): ?><div class="bx-panel"><div class="muted">Aktuell liegt nichts zum Bestätigen vor.</div></div><?php endif; ?>
 
   <?php elseif ($oatab === 'offen'): ?>
     <?php if ($pending): ?>
@@ -2949,7 +2942,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <script>document.querySelectorAll('.anf-dlg').forEach(function(d){ d.addEventListener('click', function(e){ if(e.target===d) d.close(); }); });</script>
     <?php endif; ?>
     <?php endif; ?>
-    <?php if (!$pending && !$anfPruefShow): ?><div class="bx-panel"><div class="muted">Aktuell nichts Offenes. Neue Anfragen stellen Sie über das Menü links.</div></div><?php endif; ?>
+    <?php if (!$pending): ?><div class="bx-panel"><div class="muted">Aktuell nichts Offenes. Neue Anfragen stellen Sie über das Menü links.</div></div><?php endif; ?>
 
   <?php else: /* archiv: angenommen + abgelehnt zusammen */ ?>
     <?php if (!$best_ang && !$bestRows && !$abgel_ang && !$abglRows): ?><div class="bx-panel"><div class="muted">Noch nichts im Archiv – hier sammeln sich Ihre angenommenen und abgelehnten Vorgänge.</div></div><?php endif; ?>
@@ -3044,7 +3037,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezeptur_ableiten') ?>&basis=<?= (int)$rezDetail['id'] ?>">Als Basis weiterentwickeln</a>
         <?php endif; ?>
         <a class="btn btn-ghost btn-sm" href="<?= $portalLink('rezepturen') ?>">Zurück zur Liste</a>
-        <?php if ((int)($rezDetail['kunde_id'] ?? 0) === $kid): ?>
+        <?php if ((int)($rezDetail['kunde_id'] ?? 0) === $kid && !in_array((string)$rezDetail['status'], ['vorschlag', 'eingefroren'], true)): // Vorschlag: annehmen/ablehnen statt löschen ?>
           <form method="post" style="margin:0" onsubmit="return confirm('Diese eigene Rezeptur wirklich löschen? Das kann nicht rückgängig gemacht werden.');">
             <input type="hidden" name="aktion" value="rezeptur_loeschen"><input type="hidden" name="rezeptur_id" value="<?= (int)$rezDetail['id'] ?>">
             <button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Eigene Rezeptur löschen">Löschen</button>
@@ -3053,6 +3046,51 @@ portal_head('Kundenportal · ' . $k['firma']);
       </div>
     </div>
     <p class="bx-sub"><?= h($rezDetail['nummer']) ?> · <?= h($DFORM_P[$rezDetail['darreichungsform']] ?? $rezDetail['darreichungsform']) ?> · <?= $rezBadge($rezDetail['status']) ?></p>
+    <?php // Nico 10.11.2026: Zum Prüfen gehören Form, Gewicht je Portion, die eigene Anfrage und die Nährstoffe mit NRV – nicht nur mg-Zutaten.
+      $rzSumMg = array_sum(array_map(fn($z) => (float)$z['menge_mg'], $rezZutaten));
+      $rzNaehr = rezeptur_naehrwerte((int)$rezDetail['id']);
+      $rzAnf = one("SELECT * FROM rezeptur_anfrage WHERE rezeptur_id=? AND kunde_id=? ORDER BY id DESC LIMIT 1", [(int)$rezDetail['id'], $kid]);
+      $rzWunsch = $rzAnf ? all("SELECT bezeichnung, wunsch_menge, einheit, notiz FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort, id", [(int)$rzAnf['id']]) : [];
+      $rzG = fn($mg) => $mg >= 1000 ? rtrim(rtrim(number_format($mg / 1000, 2, ',', '.'), '0'), ',') . ' g' : rtrim(rtrim(number_format($mg, 1, ',', '.'), '0'), ',') . ' mg'; ?>
+    <div class="bx-panel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+      <div><div class="muted" style="font-size:12px">Darreichungsform</div><div style="font-size:18px;font-weight:600"><?= h($DFORM_P[$rezDetail['darreichungsform']] ?? $rezDetail['darreichungsform']) ?></div></div>
+      <div><div class="muted" style="font-size:12px">Gewicht je <?= $dfP ?></div><div style="font-size:18px;font-weight:600"><?= $rzSumMg > 0 ? $rzG($rzSumMg) : '–' ?></div></div>
+      <div><div class="muted" style="font-size:12px">Zutaten</div><div style="font-size:18px;font-weight:600"><?= count($rezZutaten) ?></div></div>
+      <div><div class="muted" style="font-size:12px">Status</div><div style="font-size:18px;font-weight:600"><?= $rezBadge($rezDetail['status']) ?></div></div>
+    </div>
+    <?php if ($rzAnf): ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Ihre Anfrage<?= !empty($rzAnf['nummer']) ? ' <span class="muted" style="font-size:14px;font-weight:400">' . h((string)$rzAnf['nummer']) . '</span>' : '' ?></h2>
+      <div style="font-size:14px;line-height:1.7">
+        <div><span class="muted">Gewünschte Form:</span> <?= h($DFORM_P[$rzAnf['darreichungsform']] ?? (string)$rzAnf['darreichungsform']) ?><?= (string)$rzAnf['darreichungsform'] !== (string)$rezDetail['darreichungsform'] ? ' <span style="color:#8f231b">(Vorschlag: ' . h($DFORM_P[$rezDetail['darreichungsform']] ?? $rezDetail['darreichungsform']) . ')</span>' : '' ?></div>
+        <?php if (!empty($rzAnf['produktname'])): ?><div><span class="muted">Wunschname:</span> <?= h((string)$rzAnf['produktname']) ?></div><?php endif; ?>
+        <?php if (trim((string)($rzAnf['notiz'] ?? '')) !== ''): ?><div><span class="muted">Ihre Hinweise:</span> <?= nl2br(h((string)$rzAnf['notiz'])) ?></div><?php endif; ?>
+      </div>
+      <?php if ($rzWunsch): ?>
+      <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table"><thead><tr><th>Gewünschter Inhaltsstoff</th><th class="bx-num">Wunschmenge</th><th>Hinweis</th></tr></thead><tbody>
+        <?php foreach ($rzWunsch as $w): ?><tr><td><?= h((string)$w['bezeichnung']) ?></td><td class="bx-num"><?= h(trim((string)$w['wunsch_menge'] . ' ' . (string)$w['einheit'])) ?: '–' ?></td><td class="muted" style="font-size:13px"><?= h((string)($w['notiz'] ?? '')) ?></td></tr><?php endforeach; ?>
+      </tbody></table></div>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Nährstoffe je <?= $dfP ?></h2>
+      <?php if ($rzNaehr): ?>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Nährstoff</th><th class="bx-num">Menge je <?= $dfP ?></th><th class="bx-num">% NRV*</th></tr></thead>
+        <tbody>
+        <?php foreach ($rzNaehr as $n):
+            $mg = (float)$n['mg']; $betrag = $n['einheit'] === 'µg' ? rtrim(rtrim(number_format($mg*1000,1,',','.'),'0'),',').' µg' : rtrim(rtrim(number_format($mg,1,',','.'),'0'),',').' mg';
+            $pct = '–'; if ($n['nrv'] !== null && $n['nrv'] !== '') { $nrvMg = $n['einheit']==='µg' ? (float)$n['nrv']/1000 : (float)$n['nrv']; if ($nrvMg > 0) $pct = number_format($mg/$nrvMg*100, 0, ',', '.') . ' %'; } ?>
+          <tr><td><?= h($n['name']) ?></td><td class="bx-num"><?= $betrag ?></td><td class="bx-num"><?= $pct ?></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+      <div class="muted" style="margin-top:6px;font-size:12px">Elementare Gehalte (z. B. Magnesium aus Magnesiumcitrat). * NRV = Nährstoffbezugswert je Tag, bezogen auf eine <?= $dfP ?>.</div>
+      <?php else: ?>
+      <div class="muted">Die Nährstoffangaben ergänzen wir – sprechen Sie uns gern an, wenn Sie sie vor der Entscheidung brauchen.</div>
+      <?php endif; ?>
+    </div>
     <div class="bx-panel">
       <h2>Zutaten je <?= $dfP ?></h2>
       <?php if (!$rezZutaten): ?><div class="muted">Noch keine Zutaten hinterlegt.</div>

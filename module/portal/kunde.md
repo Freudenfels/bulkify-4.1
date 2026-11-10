@@ -440,3 +440,11 @@ Energetisierung nicht mehr in der Kette, sondern als Kästchen (`portal_energ_ht
 In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. DL-Aufträge unverändert (eigene Schritte).
 
 **Nachbestellung eingegangen (09.11.2026):** Im Reiter „Bestellungen“ steht oben ein Block mit allen Nachbestellungen, die noch auf unsere Preisprüfung warten (Produkt mit Kundenname, Menge, Datum; bei neuem Preis Knopf „Neuen Preis freigeben“). Hat der Vorauftrag keinen Preis, rechnet das Nachbestell-Formular mit dem Kundenpreis; gibt es keinen, steht „Preis folgt“ statt 0,00 €.
+
+## Rezeptur-Vorschlag prüfen (10.11.2026, Nico)
+- **Angebote & Anfragen:** Rezeptur-Vorschläge stehen im Reiter **„Zu bestätigen“** (eigene Tabelle „Rezeptur-Vorschläge“ über den Angeboten) und zählen dort mit. Der eingeklappte Kasten „Wartet auf Sie“ über den Reitern entfällt. „In Prüfung“ zählt nur noch Anfragen, die bei uns liegen.
+- **Rezeptur-Ansicht** (`v=rezeptur`):
+  - Kacheln: Darreichungsform, Gewicht je Portion/Einheit, Zutaten, Status.
+  - **„Ihre Anfrage“**: gewünschte Form (rot, wenn der Vorschlag abweicht), Wunschname, Hinweise und die gewünschten Inhaltsstoffe mit Wunschmenge.
+  - **„Nährstoffe je …“**: elementare Gehalte mit % NRV aus `rezeptur_naehrwerte()` (gleiche Werte wie im Dashboard). Fehlen Wirkstoffdaten, steht ein Hinweis.
+  - Bei Vorschlag bzw. angenommener Rezeptur gibt es keinen „Löschen“-Knopf mehr, sondern Annehmen bzw. Ablehnen.
