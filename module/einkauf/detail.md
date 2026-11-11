@@ -86,3 +86,6 @@ Block „Wareneingang zuordnen“ (`#abgleich`, aus `core/bestellung_abgleich.ph
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 „als bestellt markieren“ erst mit vollständigen Unterlagen (sonst grau mit Grund + Link). Admin: „trotzdem bestellen“ mit Pflicht-Grund (Verlauf). Kasten „Unterlagen des Lieferanten fehlen“ mit Upload im Namen des Lieferanten (aktion lu_upload).
+
+## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
+Bereich „Labels / Aufkleber“ wie im Portal (Direkt-Bestellungen, Nachdruck); Versanddaten mit Anzahl Pakete.

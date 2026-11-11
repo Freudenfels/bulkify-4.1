@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'zertifikat_sichtbar') 
 
 // --- Firma speichern ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
-    foreach (['firma_name','firma_strasse','firma_hausnr','firma_plz','firma_ort','firma_land','firma_ustid','firma_eori','firma_email','firma_tel','firma_gf','firma_web',
+    foreach (['firma_name','firma_strasse','firma_hausnr','firma_plz','firma_ort','firma_land','firma_ustid','firma_eori','firma_email','firma_tel','firma_gf','firma_web','firma_prod_adresse',
               'bank_de_name','bank_de_iban','bank_de_bic','bank_int_name','bank_int_iban','bank_int_bic'] as $k)
         meta_set($k, trim($_POST[$k] ?? ''));
     // Weitere Banken (beliebig viele): parallele Arrays id/name/iban/bic; leere Zeilen raus; ids stabil halten.
@@ -333,6 +333,8 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       <div class="bx-field"><label>E-Mail</label><input type="email" name="firma_email" value="<?= $m('firma_email') ?>"></div>
       <div class="bx-field"><label>Telefon</label><input type="text" name="firma_tel" value="<?= $m('firma_tel') ?>"></div>
       <div class="bx-field"><label>Webseite</label><input type="text" name="firma_web" value="<?= $m('firma_web') ?>"></div>
+      <div class="bx-field" style="grid-column:1/-1"><label>Produktions- bzw. Lieferadresse <?= bx_hint('steht als „Ship to“ auf den Gebindeaufklebern der Lieferanten (je Zeile eine Zeile). Leer = Maniso GmbH, II. Hüllenweg 29, 26676 Barßel, Germany.') ?></label>
+        <textarea name="firma_prod_adresse" rows="4" placeholder="Maniso GmbH&#10;II. Hüllenweg 29&#10;26676 Barßel&#10;Germany"><?= $m('firma_prod_adresse') ?></textarea></div>
     </div>
 
     <div style="font-weight:600;margin:16px 0 6px">Bankverbindungen <?= bx_hint('erscheinen auf Angeboten/Rechnungen. Zwei Konten möglich (Deutschland + International).') ?></div>

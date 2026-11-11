@@ -85,6 +85,15 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
             $o .= '</select></div>'
                 . '<div class="bx-field"><label>' . $t('Sendungsnummer', 'Tracking number', '物流单号') . '</label>'
                 . '<input type="text" name="tracking" maxlength="120" value="' . $h($b['tracking'] ?? '') . '"></div>'
+                . (function () use ($b, $t, $h, $sprache) {   // Paket 12.11.2026 Teil 5: Anzahl Pakete aus den Gebindeaufklebern vorschlagen
+                    require_once __DIR__ . '/lief_aufkleber.php';
+                    $laN = la_stand((int)$b['id'])['gesamt'];
+                    $wert = (int)($b['pakete_angekuendigt'] ?? 0) ?: $laN;
+                    $hin = la_versand_hinweis((int)$b['id'], $sprache);
+                    return '<div class="bx-field"><label>' . $t('Anzahl Pakete', 'Number of packages', '包裹数量') . '</label>'
+                         . '<input type="number" min="0" name="pakete_angekuendigt" value="' . ($wert ?: '') . '" style="max-width:140px">'
+                         . ($hin !== '' ? '<div class="muted" style="font-size:12px;margin-top:4px">' . $h($hin) . '</div>' : '') . '</div>';
+                })()
                 . '</div><button class="btn btn-ghost" type="submit">' . $t('Versanddaten speichern', 'Save shipping details', '保存物流信息') . '</button>'
                 . '<div class="muted" style="font-size:12px;margin-top:6px">'
                 . $t('„versendet" lässt sich erst setzen, wenn Anbieter, Versandart und Sendungsnummer eingetragen sind.',

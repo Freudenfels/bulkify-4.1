@@ -14,11 +14,20 @@ if (!$neu && isset($_GET['coa_stand'])) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['stand' => $cd ? bch_coa_stand($cd) : 'fehler']); exit;
 }
+if (isset($_GET['la_pdf']) && ($laBg = one("SELECT * FROM bestellung WHERE id=?", [(int)($_GET['id'] ?? 0)]))) {   // Paket 12.11.2026 Teil 5: Aufkleber-PDF
+    require_once BX_ROOT . '/core/lief_aufkleber_ui.php';
+    if (la_pdf_get($laBg)) exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
     // Einkauf gerade ziehen (Teil 1, 10.11.2026): „Wareneingang buchen" führt in den EINEN Wareneingang mit vorgewählter Position
     // (Charge, MHD, Menge echt erfasst) – kein pauschales Einbuchen „zu BE-…" mehr.
+    if (strncmp($aktion, 'la_', 3) === 0 && !$neu) {   // Paket 12.11.2026 Teil 5: Gebindeaufkleber (Direkt-Bestellungen, Nachdruck)
+        require_once BX_ROOT . '/core/lief_aufkleber_ui.php';
+        $laB = one("SELECT * FROM bestellung WHERE id=?", [(int)$id]);
+        if ($laB && ($laR = la_post($laB, 'team', 'de')) !== null) la_post_ausgeben($laB, $laR, '?p=bestellung&id=' . (int)$id);
+    }
     if ($aktion === 'liefern' && !$neu) {
         $bpErst = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND COALESCE(geliefert_menge,0) < menge AND rest_storniert_am IS NULL ORDER BY sort, id LIMIT 1", [(int)$id]);
         header('Location: ?p=wareneingang' . ($bpErst ? '&bp=' . $bpErst : '')); exit;
@@ -86,6 +95,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mb_substr(trim((string)($_POST['versandanbieter'] ?? '')), 0, 60) ?: null,
             array_key_exists((string)($_POST['versandart'] ?? ''), versandart_liste()) ? $_POST['versandart'] : null,
             mb_substr(trim((string)($_POST['tracking'] ?? '')), 0, 120) ?: null, (int)$id]);
+        if (isset($_POST['pakete_angekuendigt']) && ctype_digit(trim((string)$_POST['pakete_angekuendigt'])))
+            q("UPDATE bestellung SET pakete_angekuendigt=? WHERE id=?", [(int)$_POST['pakete_angekuendigt'], (int)$id]);
         header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
     }
     if ($aktion === 'lu_upload' && !$neu) {   // Paket 12.11.2026 Teil 4: Unterlage intern nachreichen (Liste „Unterlagen fehlen“)
@@ -454,6 +465,8 @@ if (!$neu) {
            . lu_panel((int)$b['lieferant_id'], '?p=bestellung&id=' . (int)$id, 'de', ['liste' => $luF], true) . '</div>';
     }
     echo bestellung_chargen_panel($b, 'team', 'de');
+    require_once BX_ROOT . '/core/lief_aufkleber_ui.php';
+    echo la_panel($b, '?p=bestellung&id=' . (int)$id, 'team', 'de');   // Paket 12.11.2026 Teil 5: Labels / Aufkleber (auch für Direkt-Bestellungen)
 
     // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.
     if (($b['bestellart'] ?? '') === 'online') {

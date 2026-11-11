@@ -1089,7 +1089,8 @@ function init_schema(): void {
     ensure_column('rezeptur', 'status_vor_inaktiv', "VARCHAR(20) NULL");   // Block C 11.11.2026: Status vor „inaktiv" (für Wieder aktivieren)
     ensure_column('item', 'gesperrt_durch_rezeptur', "INT NULL");          // Block C: mit der Rezeptur gesperrter Bulk-/Premix-Artikel
     ensure_column('item', 'ek_abgelaufen_seit', "DATE NULL");              // Block D: Auto-EK stammt aus einem inzwischen abgelaufenen Preis
-    require_once __DIR__ . '/datenpflege_1211.php'; dpf_1211_einmal();   // Paket 12.11. Teil 1: einmalige Datenpflege live (Freigabe Nico 11.11.2026)
+    require_once __DIR__ . '/datenpflege_1211.php'; dpf_1211_einmal();
+    require_once __DIR__ . '/lief_aufkleber.php'; la_schema();   // Paket 12.11. Teil 5: Gebindeaufkleber (Tabelle lief_aufkleber, herstell_datum, aufkleber_lagerung)   // Paket 12.11. Teil 1: einmalige Datenpflege live (Freigabe Nico 11.11.2026)
     rezeptur_testdaten_inaktiv_einmal();   // Block C Teil 2: RZ-4023, RZ-4033, RZ-4034 einmalig inaktiv (von Nico ausdrücklich erlaubt)
     preis_spalten_sechs_stellen();   // Sofortfix 11.11.2026: Lieferanten-/EK-Preise mit 6 Nachkommastellen (2,95 € / 1.000 = 0,002950)
     ensure_column('bestellung', 'bestaetigt_am', "DATETIME NULL");
@@ -7866,6 +7867,11 @@ function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $we
         if ($coaFehlt) return $m('Bitte CoA der Charge hochladen (unter „Chargen & Dokumente“): ', 'Please upload the CoA of the batch (under “Batches & documents”): ', '请上传批次的 CoA（在“批次与文件”中）：') . implode('; ', $coaFehlt);
     }
     q("UPDATE bestellung SET station=? WHERE id=?", [$ziel, $bestellung_id]);
+    if ($ziel === 'versendet') {   // Paket 12.11.2026 Teil 5: Anzahl Pakete = nicht stornierte Gebindeaufkleber (falls nichts eingetragen)
+        require_once __DIR__ . '/lief_aufkleber.php';
+        $laN = la_stand($bestellung_id)['gesamt'];
+        if ($laN > 0) q("UPDATE bestellung SET pakete_angekuendigt=? WHERE id=? AND COALESCE(pakete_angekuendigt,0)=0", [$laN, $bestellung_id]);
+    }
     // Der interne Status laeuft mit: sobald der Lieferant produziert, ist die Bestellung "bestellt".
     // 'gesendet' = aus der Einkaufsliste an den Lieferanten-Account gesendet (S-03) – zählt wie 'offen'.
     if (in_array((string)$b['status'], ['offen', 'gesendet'], true)) q("UPDATE bestellung SET status='bestellt' WHERE id=?", [$bestellung_id]);

@@ -40,3 +40,6 @@ Vor „Dokumente & Rechnung“ steht derselbe Block wie auf der Bestellseite des
 Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache des Lieferanten, z. B. Kapsel → capsule / 粒. kg, g, L und ml bleiben unverändert.
 
 **Interne Notiz nie im Portal (Sofortfix 11.11.2026):** `bestellung.notiz` ist intern (Auftragsbezug, „Direkt bestellt“, Zukauf-Vermerke) und erscheint hier nicht mehr. Sichtbar ist nur `bestellung.hinweis_lieferant` („Hinweis von bulkify“), das im Dashboard an der Bestellung bewusst gefüllt wird und sonst leer bleibt.
+
+## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
+Bereich „Labels / Aufkleber“ (core/lief_aufkleber_ui.php): Herstelldatum, Aufkleber drucken, Nachdruck, Storno, PDF; Versanddaten mit Anzahl Pakete.

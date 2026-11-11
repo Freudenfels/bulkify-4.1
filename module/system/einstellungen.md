@@ -46,3 +46,6 @@ Textfeld `mail_signatur_vorlage` (app_meta) im E-Mail-Block: zentrale HTML-Signa
 
 Reiter Produktion (04.11.2026): Schalter **Wareneingang in Quarantäne** (`wareneingang_quarantaene`, Standard aus = alles, was im Wareneingang gebucht wird, ist sofort frei). Gespeichert mit `charge_std_save`.
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
+Firma: Feld „Produktions- bzw. Lieferadresse“ (firma_prod_adresse) = „Ship to“ auf den Gebindeaufklebern.

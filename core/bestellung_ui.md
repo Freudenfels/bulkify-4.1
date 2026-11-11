@@ -16,3 +16,6 @@ Neue letzte Station **„Wareneingang bei bulkify"** (`eingegangen`, de/en/zh). 
 
 ## 08.11.2026
 Bei „direkt bestellt“ heißt der Termin „Erwartet am“; das Team (`$wer='team'`) sieht daneben ein Datumsfeld „Termin ändern“ (Aktion `eta_setzen`, bis zum Wareneingang).
+
+## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
+Versandformular: Anzahl Pakete (Vorschlag = nicht stornierte Gebindeaufkleber) und Hinweis bei starker Gewichtsabweichung.

@@ -10,6 +10,12 @@ $id  = (int)($_GET['id'] ?? 0);
 // Nur eigene Bestellungen – die Pruefung haengt an jeder Abfrage, nicht an der Oberflaeche.
 $b   = $id ? one("SELECT * FROM bestellung WHERE id=? AND lieferant_id=?", [$id, $lid]) : null;
 
+// Paket 12.11.2026 Teil 5: Gebindeaufkleber (PDF, Drucken, Storno, Herstelldatum) – Baustein core/lief_aufkleber_ui.php
+if ($b) {
+    require_once BX_ROOT . '/core/lief_aufkleber_ui.php';
+    if (la_pdf_get($b)) exit;
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($laR = la_post($b, 'lieferant', lp_sprache())) !== null) la_post_ausgeben($b, $laR, '?p=lieferant_bestellung&id=' . $id);
+}
 if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     $wer    = (string)(current_user()['name'] ?? 'Lieferant');
@@ -30,6 +36,8 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
             mb_substr(trim((string)($_POST['versandanbieter'] ?? '')), 0, 60) ?: null,
             array_key_exists((string)($_POST['versandart'] ?? ''), versandart_liste()) ? $_POST['versandart'] : null,
             mb_substr(trim((string)($_POST['tracking'] ?? '')), 0, 120) ?: null, $id, $lid]);
+        if (isset($_POST['pakete_angekuendigt']) && ctype_digit(trim((string)$_POST['pakete_angekuendigt'])))
+            q("UPDATE bestellung SET pakete_angekuendigt=? WHERE id=? AND lieferant_id=?", [(int)$_POST['pakete_angekuendigt'], $id, $lid]);
     } elseif ($aktion === 'pakete_add') {
         // Mehrere Tracking-Nummern (eine pro Zeile) + optional Anzahl Pakete (falls noch keine Nummern).
         $r = lieferung_pakete_hinzufuegen($id, (string)($_POST['trackings'] ?? ''), (string)($_POST['spediteur'] ?? ''));
@@ -204,6 +212,7 @@ if (!$b):
   $bdoks = bestell_dokumente($id, true);   // je Position abgelegte CoA/Spezifikationen stehen im Block „Chargen & Dokumente"
   require_once BX_ROOT . '/core/bestellung_chargen.php';
   echo bestellung_chargen_panel($b, 'lieferant', lp_sprache());
+  echo la_panel($b, '?p=lieferant_bestellung&id=' . (int)$id, 'lieferant', lp_sprache());   // Paket 12.11.2026 Teil 5: Labels / Aufkleber
   $BDTYP = ['coa'=>lp_t('bd_coa'), 'rechnung'=>lp_t('bd_rechnung'), 'lieferschein'=>lp_t('bd_lieferschein'), 'spec'=>lp_t('spezifikation'), 'analyse'=>lp_t('bd_analyse'), 'zahlungsbeleg'=>lp_t('bd_zahlungsbeleg'), 'sonstiges'=>lp_t('sonstiges')]; ?>
   <?php // E8: Zahlungsstatus (vom Team gesetzt) – der Lieferant sieht „bezahlt" samt Beleg.
     if (!empty($b['bezahlt_am'])): ?>
