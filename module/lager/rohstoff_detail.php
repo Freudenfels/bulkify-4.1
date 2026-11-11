@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'als_l
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis_add' && !$neu) {
     $lid = (int)($_POST['lp_lieferant'] ?? 0);
-    $preis = (float)str_replace(',', '.', $_POST['lp_preis'] ?? '0');
+    $preis = preis_eingabe_lesen((string)($_POST['lp_preis'] ?? '0'), (string)($_POST['lp_basis'] ?? '1'));   // 6 Stellen, je 1.000 möglich (11.11.)
     $mengeab = (float)str_replace(',', '.', $_POST['lp_menge_ab'] ?? '0');
     $inco = in_array($_POST['lp_incoterm'] ?? '', array_keys(incoterm_liste()), true) ? $_POST['lp_incoterm'] : null;
     $vers = in_array($_POST['lp_versandart'] ?? '', array_keys(versandart_liste()), true) ? $_POST['lp_versandart'] : null;
@@ -392,6 +392,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             $vals[array_search('vk_aufschlag_prozent', $felder)] = null;
         }
         foreach (['ek_preis','overage_prozent'] as $nf) { $ix = array_search($nf, $felder); if (trim((string)$vals[$ix]) === '') $vals[$ix] = 0; }
+        // EK als Text mit Komma, optional je 1.000 (Sofortfix 11.11.2026) – 6 Nachkommastellen.
+        $ixEk = array_search('ek_preis', $felder); $vals[$ixEk] = round(preis_eingabe_lesen((string)$vals[$ixEk], (string)($_POST['ek_basis'] ?? '1')), 6);
         // Einheit wird bei bestehenden Artikeln NUR über „Einheit ändern" gepflegt (nie vermischen). Das Stammdaten-
         // Feld ist dort deaktiviert und würde leer gesendet -> aktuellen Wert behalten.
         if (!$neu) $vals[array_search('einheit', $felder)] = (string) scalar("SELECT einheit FROM item WHERE id=?", [(int)$id]);
@@ -671,7 +673,7 @@ if (!$neu && ($it['form'] ?? '') === 'kapselhuelle' && empty($it['kapselgroesse_
     echo '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px">Leerkapsel ohne <strong>Kapselgröße</strong> – bitte unten in den Stammdaten wählen. Ohne Größe ordnet das System die Kapsel keinem Produkt zu.</div>';
 
 if (!$neu) {
-    $pr = number_format((float)$it['ek_preis'], (float)$it['ek_preis'] < 1 ? 4 : 2, ',', '.');
+    $pr = (float)$it['ek_preis'] > 0 && (float)$it['ek_preis'] < 0.01 ? rtrim(rtrim(number_format((float)$it['ek_preis'], 6, ',', '.'), '0'), ',') : number_format((float)$it['ek_preis'], (float)$it['ek_preis'] < 1 ? 4 : 2, ',', '.');
     echo '<div class="bx-cards">';
     echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . ($gesperrt ? bx_badge('gesperrt','err') : bx_badge('aktiv','ok')) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Warenart</div><div class="v">' . h(($it['form'] ?? '') === 'kapselhuelle' ? 'Leerkapsel' : item_warenart_label($it)) . '</div></div>';
@@ -1084,7 +1086,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
 
   <section data-panel="ek" hidden>
     <div class="bx-panel"><div class="bx-grid">
-      <div class="bx-field"><label>EK-Preis <?= bx_hint('Einkaufspreis je Bezugseinheit. Leer oder 0: wird automatisch aus dem günstigsten Lieferantenpreis (kleinste Staffel) übernommen. Von Hand geändert: bleibt so, bis du wieder 0 einträgst.') ?></label><input type="number" step="0.0001" name="ek_preis" value="<?= $v('ek_preis') ?>">
+      <div class="bx-field"><label>EK-Preis <?= bx_hint('Einkaufspreis je Bezugseinheit. Leer oder 0: wird automatisch aus dem günstigsten Lieferantenpreis (kleinste Staffel) übernommen. Von Hand geändert: bleibt so, bis du wieder 0 einträgst.') ?></label><div class="bx-row" style="gap:6px;flex-wrap:nowrap"><input type="text" inputmode="decimal" name="ek_preis" value="<?= h(rtrim(rtrim(number_format((float)($it['ek_preis'] ?? 0), 6, ',', ''), '0'), ',')) ?>" style="width:110px"><select name="ek_basis" style="width:auto"><option value="1">je Bezugseinheit</option><option value="1000">je 1.000</option></select></div>
         <?php if (!$neu && (int)($it['ek_auto'] ?? 0) === 1): ?><div class="muted" style="font-size:12px;margin-top:4px">aus Lieferantenpreis übernommen</div><?php endif; ?></div>
       <?php if (darf_verkauf()): ?><div class="bx-field"><label>VK-Aufschlag (%) <?= bx_hint('Nur für Rohstoff-Weiterverkauf an Kunden. Leer = globaler Aufschlag aus den Einstellungen.') ?></label><input type="number" step="0.1" name="vk_aufschlag_prozent" value="<?= $v('vk_aufschlag_prozent') ?>" placeholder="<?= h((string)(float)meta_get('aufschlag_rohstoff','30')) ?> (Standard)"></div><?php endif; ?>
       <div class="bx-field"><label>Preis je</label>
@@ -1716,7 +1718,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
               onclick="bxAnfrageOeffnen(<?= (int)$id ?>,this)">neu anfragen</button><?php endif; ?></td>
           <td class="muted"><?= h(rohstoff_lief_kennung($it['artikelnummer'] ?? '', $pz['lief_kuerzel'] ?? '') ?: '–') ?></td>
           <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pz['menge_ab'],3,',','.'),'0'),',') ?> <?= h($it['einheit']) ?></td>
-          <td class="bx-num"><?= number_format((float)$pz['preis'], (float)$pz['preis']<1?4:2, ',', '.') ?> <?= h($pz['waehrung']) ?>/<?= h($it['preis_bezug']) ?></td>
+          <td class="bx-num"><?= h(preis_anzeige((float)$pz['preis'], (string)$pz['waehrung'], (string)$it['preis_bezug'])) ?></td>
           <td><?= pg_anzeige($pz['gueltig_bis'] ?? null) ?></td>
           <td><?= $pz['incoterm'] ? h($pz['incoterm']) : '<span class="muted">–</span>' ?></td>
           <td><?= !empty($pz['versandart']) ? h($VERS[$pz['versandart']] ?? $pz['versandart']) : '<span class="muted">–</span>' ?></td>
@@ -1734,7 +1736,9 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
         </select>
       </div>
       <div class="bx-field" style="margin:0;width:120px"><label>ab Menge</label><input type="number" step="0.001" name="lp_menge_ab" value="0"></div>
-      <div class="bx-field" style="margin:0;width:120px"><label>Preis</label><input type="number" step="0.0001" name="lp_preis" required></div>
+      <div class="bx-field" style="margin:0;width:200px"><label>Preis <?= bx_hint('Bei Kleinstpreisen (z. B. Leerkapseln) lieber je 1.000 Stk eingeben: 2,95 je 1.000 wird als 0,002950 je Stk gespeichert.') ?></label>
+        <div class="bx-row" style="gap:6px;flex-wrap:nowrap"><input type="text" inputmode="decimal" name="lp_preis" required style="width:90px">
+        <select name="lp_basis" style="width:auto"><option value="1">je <?= h($it['preis_bezug'] ?? 'Stk') ?></option><option value="1000">je 1.000 <?= h($it['preis_bezug'] ?? 'Stk') ?></option></select></div></div>
       <div class="bx-field" style="margin:0;width:150px"><label>Incoterm <?= bx_hint('Lieferbedingung: EXW = ab Werk (du zahlst Fracht+Zoll), DDP = frei Haus alles inkl. Preise nur mit gleichem Incoterm vergleichbar.') ?></label>
         <select name="lp_incoterm"><option value="">– offen –</option><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field" style="margin:0;width:130px"><label>Versandart</label>

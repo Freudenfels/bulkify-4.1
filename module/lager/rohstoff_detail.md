@@ -217,3 +217,5 @@ Siehe `core/preis_gueltig.md`.
 - Abgelaufene Lieferantenpreise sind grau und haben den Knopf „neu anfragen“ (vorbelegt). „günstigster“ gilt nur unter den gültigen Preisen.
 - Wird ein Preis gelöscht, geht er vorher in den Preisverlauf.
 - Unter dem Formular steht klappbar der „Preisverlauf“ mit aktuellen und ersetzten Preisen.
+
+**Preise je 1.000 Stk (Sofortfix 11.11.2026):** Lieferantenpreis und EK sind Textfelder (Komma erlaubt, `zahl_lesen()`) mit Auswahl „je Stk / je 1.000 Stk“. Gespeichert wird je Bezugseinheit mit 6 Nachkommastellen (2,95 je 1.000 = 0,002950). Anzeige unter 0,01 € als „2,95 € / 1.000 Stk“.

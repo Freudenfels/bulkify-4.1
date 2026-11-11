@@ -198,7 +198,7 @@ function init_schema(): void {
         cas VARCHAR(30) NULL,
         spezifikation VARCHAR(190) NULL,                   -- z. B. 95 % Curcumin
         herkunft VARCHAR(120) NULL,
-        preis DECIMAL(12,4) NULL,
+        preis DECIMAL(14,6) NULL,
         waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR',
         einheit VARCHAR(20) NULL,
         menge_ab DECIMAL(14,3) NULL,                       -- ab dieser Menge gilt der Preis (MOQ)
@@ -357,7 +357,7 @@ function init_schema(): void {
         volumen_ml DECIMAL(10,2) NULL,                    -- Fassungsvermögen in ml
         farbe VARCHAR(60) NULL,
         einheit VARCHAR(20) NOT NULL DEFAULT 'kg',        -- Basiseinheit
-        ek_preis DECIMAL(12,4) NOT NULL DEFAULT 0,        -- EK je preis_bezug
+        ek_preis DECIMAL(14,6) NOT NULL DEFAULT 0,        -- EK je preis_bezug
         preis_bezug VARCHAR(20) NOT NULL DEFAULT 'kg',    -- kg|Stück|L
         haupt_lieferant_id INT NULL,                      -- bevorzugter Lieferant (FK lieferanten)
         gesperrt TINYINT(1) NOT NULL DEFAULT 0,
@@ -879,7 +879,7 @@ function init_schema(): void {
         item_id INT NOT NULL,
         lieferant_id INT NOT NULL,
         menge_ab DECIMAL(14,3) NOT NULL DEFAULT 0,          -- Staffel: ab dieser Menge
-        preis DECIMAL(12,4) NOT NULL DEFAULT 0,             -- Preis je Einheit
+        preis DECIMAL(14,6) NOT NULL DEFAULT 0,             -- Preis je Einheit
         waehrung VARCHAR(3) NOT NULL DEFAULT 'EUR',
         stand DATE NULL,
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1075,7 +1075,7 @@ function init_schema(): void {
         bestellung_id INT NOT NULL,
         item_id INT NULL,
         menge DECIMAL(14,3) NOT NULL DEFAULT 0,
-        ek_preis DECIMAL(12,4) NOT NULL DEFAULT 0,
+        ek_preis DECIMAL(14,6) NOT NULL DEFAULT 0,
         einheit VARCHAR(20) NULL,
         sort INT NOT NULL DEFAULT 0,
         KEY idx_bestellung (bestellung_id)
@@ -1084,7 +1084,8 @@ function init_schema(): void {
     // Bestellung: Ablauf beim Lieferanten. Er bestaetigt mit geplantem Termin und pflegt danach
     // die Stationen; "versendet" verlangt Versandanbieter, Versandart und Sendungsnummer.
     ensure_column('bestellung', 'bestaetigt', "TINYINT(1) NOT NULL DEFAULT 0");
-    ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
+    ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");
+    preis_spalten_sechs_stellen();   // Sofortfix 11.11.2026: Lieferanten-/EK-Preise mit 6 Nachkommastellen (2,95 € / 1.000 = 0,002950)   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
     ensure_column('bestellung', 'bestaetigt_am', "DATETIME NULL");
     ensure_column('bestellung', 'bestaetigt_von', "VARCHAR(190) NULL");
     ensure_column('bestellung', 'eta_geplant', "DATE NULL");            // vom Lieferanten zugesagter Termin
@@ -1172,7 +1173,7 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         anfrage_id INT NOT NULL,
         lieferant_id INT NOT NULL,
-        preis DECIMAL(12,4) NOT NULL DEFAULT 0,
+        preis DECIMAL(14,6) NOT NULL DEFAULT 0,
         einheit VARCHAR(20) NULL,
         waehrung VARCHAR(5) NOT NULL DEFAULT 'EUR',
         mindestmenge DECIMAL(14,3) NULL,
@@ -1189,7 +1190,7 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         angebot_id INT NOT NULL,
         menge_ab DECIMAL(14,3) NOT NULL DEFAULT 0,
-        preis DECIMAL(12,4) NOT NULL DEFAULT 0,
+        preis DECIMAL(14,6) NOT NULL DEFAULT 0,
         KEY idx_angebot (angebot_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     ensure_column('lieferanten', 'sprache', "VARCHAR(5) NOT NULL DEFAULT 'de'");
@@ -2052,7 +2053,7 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         item_id INT NOT NULL,                             -- die Verpackung
         menge_ab INT NOT NULL DEFAULT 0,                  -- ab dieser Bestellmenge (Stück Gebinde)
-        ek_preis DECIMAL(12,4) NOT NULL DEFAULT 0,        -- EK je Gebinde in dieser Staffel
+        ek_preis DECIMAL(14,6) NOT NULL DEFAULT 0,        -- EK je Gebinde in dieser Staffel
         KEY idx_item (item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
@@ -2157,7 +2158,7 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         rezeptur_id INT NOT NULL,
         lieferant_id INT NULL,
-        preis DECIMAL(12,4) NULL,
+        preis DECIMAL(14,6) NULL,
         einheit VARCHAR(30) NULL,
         menge DECIMAL(14,3) NULL,
         status VARCHAR(20) NULL,
@@ -2171,7 +2172,7 @@ function init_schema(): void {
     // Festpreis mit Freigabe: `preis` = FREIGEGEBENER Preis (nur der zählt für die Kalkulation). Eine Änderung
     // des Lieferanten landet zuerst als `preis_vorschlag` (wartet auf Team-Freigabe) – bis dahin rechnen wir
     // mit dem alten freigegebenen Preis weiter. `quelle_anfrage_id` = aus welcher Preisanfrage (LA) der Preis kam.
-    ensure_column('rezeptur_lief_angebot', 'preis_vorschlag', "DECIMAL(12,4) NULL");
+    ensure_column('rezeptur_lief_angebot', 'preis_vorschlag', "DECIMAL(14,6) NULL");
     ensure_column('rezeptur_lief_angebot', 'vorschlag_am', "DATETIME NULL");
     ensure_column('rezeptur_lief_angebot', 'quelle_anfrage_id', "INT NULL");
     // Mengenstaffeln je Fremdfertigungs-Angebot (ab_menge -> Preis je Einheit). Lieferanten unterbieten sich hierüber.
@@ -2179,7 +2180,7 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         angebot_id INT NOT NULL,
         ab_menge DECIMAL(14,3) NOT NULL DEFAULT 0,
-        preis DECIMAL(12,4) NULL,
+        preis DECIMAL(14,6) NULL,
         sort INT NOT NULL DEFAULT 0,
         KEY idx_ang (angebot_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
@@ -2191,7 +2192,7 @@ function init_schema(): void {
         id INT AUTO_INCREMENT PRIMARY KEY,
         rohstoff_name VARCHAR(190) NOT NULL,
         lieferant VARCHAR(190) NULL,
-        eur_kg DECIMAL(12,4) NULL,
+        eur_kg DECIMAL(14,6) NULL,
         stand DATE NULL,
         v3_id INT NULL,
         angelegt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -6613,6 +6614,36 @@ function auftrag_fortschritt_fertig(array $a): bool {
     foreach (auftrag_fortschritt($a, true)['steps'] as $s) if ($s[1] === 'Abgeschlossen') return $c[$id] = $s[2] === 'done';
     return $c[$id] = true;
 }
+// Preise mit mehr als 4 Nachkommastellen (Sofortfix 11.11.2026, Fable 14.a): Die Datenbank rundete beim Speichern
+// (GS Capsules 2,95 €/1.000 -> 0,0030). Alle Lieferanten-Preisspalten + EK-Spalten auf DECIMAL(14,6). ALTER ... MODIFY
+// behält die bestehenden Werte; nur Spalten mit weniger als 6 Stellen werden angefasst, NULL/Default bleiben. Best effort.
+function preis_spalten_sechs_stellen(): void {
+    $spalten = [['lieferant_preis', 'preis'], ['lieferant_angebot', 'preis'], ['lieferant_angebot_staffel', 'preis'], ['lieferant_katalog', 'preis'],
+                ['rezeptur_lief_angebot', 'preis'], ['rezeptur_lief_angebot', 'preis_vorschlag'], ['rezeptur_lief_angebot_staffel', 'preis'],
+                ['lieferant_preisliste', 'eur_kg'], ['lieferant_preis_verlauf', 'preis'], ['item', 'ek_preis'], ['bestellung_position', 'ek_preis'],
+                ['pack_ek_staffel', 'ek_preis']];
+    foreach ($spalten as [$t, $c]) {
+        try {
+            $col = one("SELECT NUMERIC_SCALE AS sc, IS_NULLABLE AS nl, COLUMN_DEFAULT AS df FROM information_schema.columns WHERE table_schema=? AND table_name=? AND column_name=?", [DB_NAME, $t, $c]);
+            if (!$col || (int)$col['sc'] >= 6) continue;
+            $null = $col['nl'] === 'YES' ? 'NULL' : 'NOT NULL';
+            $def  = $col['df'] !== null && strtoupper((string)$col['df']) !== 'NULL' ? ' DEFAULT ' . (is_numeric(trim((string)$col['df'], "'")) ? trim((string)$col['df'], "'") : '0') : ($null === 'NULL' ? ' DEFAULT NULL' : '');
+            db()->exec("ALTER TABLE `$t` MODIFY `$c` DECIMAL(14,6) $null$def");
+        } catch (\Throwable $e) {}
+    }
+}
+// Preis für die Anzeige: unter 0,01 € mit bis zu 6 Stellen bzw. als „2,95 € / 1.000 Stk" (Sofortfix 11.11.2026).
+// $bezug = Bezugseinheit (Stk, kg …). Ab 0,01 wie bisher (2 bzw. 4 Stellen).
+function preis_anzeige(float $p, string $waehrung = 'EUR', string $bezug = 'Stk'): string {
+    $w = strtoupper($waehrung) === 'EUR' ? '€' : $waehrung;
+    if ($p > 0 && $p < 0.01) return rtrim(rtrim(number_format($p * 1000, 4, ',', '.'), '0'), ',') . ' ' . $w . ' / 1.000 ' . $bezug;
+    return number_format($p, $p < 1 ? 4 : 2, ',', '.') . ' ' . $w . '/' . $bezug;
+}
+// Preis-Eingabe „je Stk / je 1.000 Stk" lesen (Textfeld + Auswahl, wie im Lieferantenportal). Ergebnis je Bezugseinheit.
+function preis_eingabe_lesen(string $roh, string $basis): float {
+    $p = zahl_lesen($roh);
+    return $basis === '1000' ? $p / 1000 : $p;
+}
 // Was ist noch offen, wenn ein Auftrag von Hand auf „versendet" gesetzt wird? (Sofortfix 11.11.2026, AB-3244/3245)
 // Rückgabe '' = nichts offen, sonst z. B. „Labor läuft noch / Menge 175 von 500". Keine Sperre - nur Anlass für die Pflicht-Begründung.
 function auftrag_versendet_offen_text(array $a): string {
@@ -6950,7 +6981,7 @@ function lp_verlauf_sichern(int $item_id, ?int $lieferant_id = null, ?int $preis
     try {
         q("CREATE TABLE IF NOT EXISTS lieferant_preis_verlauf (
             id INT AUTO_INCREMENT PRIMARY KEY, item_id INT NOT NULL, lieferant_id INT NULL, lieferant_name VARCHAR(190) NULL,
-            menge_ab DECIMAL(12,3) NULL, preis DECIMAL(12,4) NULL, waehrung VARCHAR(3) NULL, stand DATE NULL, gueltig_bis DATE NULL,
+            menge_ab DECIMAL(12,3) NULL, preis DECIMAL(14,6) NULL, waehrung VARCHAR(3) NULL, stand DATE NULL, gueltig_bis DATE NULL,
             archiviert_am DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_item (item_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         $w = "item_id=?"; $args = [$item_id];

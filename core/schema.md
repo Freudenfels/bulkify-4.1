@@ -641,3 +641,9 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 `auftrag_status_kunde($a)` gibt den Status zurück, wie Kunde und Lager ihn sehen: „erledigt“ bleibt nur, wenn `auftrag_fortschritt_fertig()` sagt, dass „Abgeschlossen“ wirklich erledigt ist (alle Mengen da, Labor da). Sonst 'in_produktion'. Dienstleistungen unverändert. Fehlende Felder lädt die Funktion selbst nach. Eine Stelle für Portal-Startseite, „Meine Anfragen“, Etiketten-Seite und (per Loopback) die Lager-App.
 
 `auftrag_versendet_offen_text($a)` (11.11.2026): '' oder „Labor läuft noch / Menge 175 von 500“ – Anlass für die Pflicht-Begründung beim Hand-„versendet“. In `auftrag_fortschritt()` gilt „Abgeschlossen“ bei versendet mit offenem Labor als **nicht** erledigt.
+
+## Preise mit 6 Nachkommastellen (Sofortfix 11.11.2026)
+- `preis_spalten_sechs_stellen()` (in der Migration): `lieferant_preis.preis`, `lieferant_angebot(.._staffel).preis`, `lieferant_katalog.preis`, `rezeptur_lief_angebot.preis/preis_vorschlag`, `rezeptur_lief_angebot_staffel.preis`, `lieferant_preisliste.eur_kg`, `lieferant_preis_verlauf.preis`, `item.ek_preis`, `bestellung_position.ek_preis`, `pack_ek_staffel.ek_preis` -> `DECIMAL(14,6)` per `ALTER ... MODIFY` (Werte bleiben, NULL/Default bleiben). Vorher rundete die DB 2,95 €/1.000 auf 0,0030.
+- `preis_anzeige($p, $waehrung, $bezug)`: unter 0,01 als „2,95 € / 1.000 Stk“, sonst 2 bzw. 4 Stellen.
+- `preis_eingabe_lesen($roh, $basis)`: Textfeld über `zahl_lesen()`, `$basis='1000'` teilt durch 1.000.
+- Bereits falsch gespeicherte Werte (z. B. GS Capsules 0,0030 statt 0,00295) werden **nicht** automatisch korrigiert – neu eintragen.
