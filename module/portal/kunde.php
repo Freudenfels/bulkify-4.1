@@ -15,6 +15,12 @@ if (($_GET['v'] ?? '') === 'logout') { unset($_SESSION['portal_kid'], $_SESSION[
 $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 // Zugang auch per Kunden-Login (E-Mail+Passwort): Session-basiert. Magic-Link bleibt Backup.
 if (!$k && !empty($_SESSION['portal_kid'])) $k = one("SELECT * FROM kunden WHERE id=?", [(int)$_SESSION['portal_kid']]);
+// Gesperrter Kunde (Sofortfix 11.11.2026): weder Portal-Link noch laufende Sitzung. Ausnahme: ein angemeldetes
+// Team-Mitglied (kein Lieferant) in der internen Vorschau – es soll den Kunden weiter ansehen können.
+if ($k && (int)($k['gesperrt'] ?? 0) === 1 && !(is_logged_in() && !ist_echter_lieferant())) {
+    unset($_SESSION['portal_kid'], $_SESSION['portal_subuser'], $_SESSION['portal_rolle']);
+    header('Location: ?p=portal_login&gesperrt=1'); exit;
+}
 if ($k) { $_SESSION['portal_kid'] = (int)$k['id']; if (!empty($k['portal_token'])) $token = (string)$k['portal_token']; }
 
 // Portal-Rolle: Token-Zugang (Magic-Link) ODER Inhaber-Login = voller Zugriff. Ein per E-Mail angemeldeter

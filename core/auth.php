@@ -190,8 +190,21 @@ function current_user(): ?array {
     $uid = $_SESSION['uid'] ?? null;
     if (!$uid) return $cache = null;
     $u = one("SELECT * FROM benutzer WHERE id=? AND aktiv=1", [(int)$uid]);
+    // Gesperrter Lieferant (Sofortfix 11.11.2026): bei JEDEM Aufruf prüfen – auch eine laufende Sitzung endet sofort.
+    if ($u && !empty($u['lieferant_id']) && lieferant_zugang_gesperrt((int)$u['lieferant_id'])) {
+        unset($_SESSION['uid']); $_SESSION['zugang_gesperrt'] = 1;
+        return $cache = null;
+    }
     return $cache = ($u ?: null);
 }
+// Ist der Lieferant gesperrt (lieferanten.gesperrt=1, auch eine noch nicht freigegebene Bewerbung)? Dann kein Portal-Zugang.
+function lieferant_zugang_gesperrt(int $lieferant_id): bool {
+    if ($lieferant_id <= 0) return false;
+    try { return (int) scalar("SELECT COALESCE(gesperrt,0) FROM lieferanten WHERE id=?", [$lieferant_id]) === 1; }
+    catch (\Throwable $e) { return false; }
+}
+// Einheitlicher Text, wenn ein gesperrter Lieferant oder Kunde ins Portal will.
+function zugang_gesperrt_text(): string { return 'Zugang gesperrt, bitte bulkify kontaktieren.'; }
 function is_logged_in(): bool { return current_user() !== null; }
 
 function user_rollen(): array {
@@ -269,6 +282,7 @@ function route_erlaubt(string $route): bool {
 function auth_login(string $email, string $pass): bool {
     $u = one("SELECT * FROM benutzer WHERE email=? AND aktiv=1", [trim(mb_strtolower($email))]);
     if (!$u || !password_verify($pass, (string)$u['pass_hash'])) return false;
+    if (!empty($u['lieferant_id']) && lieferant_zugang_gesperrt((int)$u['lieferant_id'])) { $_SESSION['zugang_gesperrt'] = 1; return false; }
     $_SESSION['uid'] = (int)$u['id'];
     q("UPDATE benutzer SET letzter_login=? WHERE id=?", [gmdate('Y-m-d H:i:s'), (int)$u['id']]);
     return true;
@@ -304,6 +318,7 @@ function auth_login_by_token(string $token): bool {
     if ($token === '') return false;
     $u = one("SELECT * FROM benutzer WHERE login_token=? AND aktiv=1", [$token]);
     if (!$u) return false;
+    if (!empty($u['lieferant_id']) && lieferant_zugang_gesperrt((int)$u['lieferant_id'])) return false;
     $_SESSION['uid'] = (int)$u['id'];
     q("UPDATE benutzer SET letzter_login=? WHERE id=?", [gmdate('Y-m-d H:i:s'), (int)$u['id']]);
     return true;

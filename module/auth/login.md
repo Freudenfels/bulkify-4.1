@@ -11,3 +11,5 @@
 **Zugang:** Route `login` ist öffentlich (im Front Controller von der Login-Pflicht ausgenommen). Ein bereits angemeldeter Benutzer wird direkt zum Dashboard geleitet.
 
 **Erst-Admin:** Beim ersten Start legt `seed_benutzer_if_empty()` einen Admin an – **admin@bulkify.local / admin** (danach unbedingt ändern).
+
+Will sich ein gesperrter Lieferant über den Team-Login anmelden, kommt „Zugang gesperrt, bitte bulkify kontaktieren“.

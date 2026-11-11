@@ -277,7 +277,7 @@ if ($p === 'autologin') {
 $PUBLIC = ['login', 'portal', 'portal_login', 'portal_registrieren', 'portal_dok', 'lieferant_login', 'lieferant_einladung', 'lieferant_bewerbung', 'ki_job', 'novelfood_export'];   // portal_dok prüft Token + Freigabe selbst; novelfood_export = öffentlicher JSON-Katalog
 
 // Nicht angemeldet -> zur Login-Seite (außer öffentliche Routen)
-if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=login'); exit; }
+if (!in_array($p, $PUBLIC, true) && !is_logged_in()) { header('Location: ?p=' . (!empty($_SESSION['zugang_gesperrt']) ? 'lieferant_login' : 'login')); exit; }   // gesperrter Lieferant -> Hinweis auf dem Lieferanten-Login
 
 // Produktionsmitarbeiter haben einen eigenen Bereich (Werk) statt des Verkaufs-Dashboards
 $istWerk = is_logged_in() && function_exists('ist_produktionsbereich') && ist_produktionsbereich();

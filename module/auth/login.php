@@ -7,7 +7,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (auth_login($_POST['email'] ?? '', $_POST['pass'] ?? '')) {
         header('Location: ?p=' . (ist_produktionsbereich() ? 'werk' : 'dashboard')); exit;
     }
-    $fehler = 'E-Mail oder Passwort falsch.';
+    $fehler = !empty($_SESSION['zugang_gesperrt']) ? zugang_gesperrt_text() : 'E-Mail oder Passwort falsch.'; unset($_SESSION['zugang_gesperrt']);
 }
 $marke = BX_MARKE; $ver = BX_VERSION;
 ?><!doctype html><html lang="de"><head>

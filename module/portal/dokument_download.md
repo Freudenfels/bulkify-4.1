@@ -16,3 +16,5 @@ Die Datei selbst liegt in `data/uploads`, also außerhalb des Web-Ordners; ausge
 Rohstoff-Originale (`objekt_typ='item'`, `typ` spec/coa/analyse) werden **nie** ausgeliefert – auch dann
 nicht, wenn `kunde_sichtbar=1` (Altdaten). Prüfung über `dokument_ist_lieferant_original()`. Der Kunde
 erhält stattdessen das bulkify-Dokument (`spec_pdf`/`coa_pdf`).
+
+Gesperrter Kunde: 403 mit „Zugang gesperrt, bitte bulkify kontaktieren“ (außer Team-Vorschau).

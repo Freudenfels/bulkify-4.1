@@ -4,9 +4,11 @@
 require_once BX_ROOT . '/module/lieferant/portal_layout.php';
 
 $token = preg_replace('/[^a-f0-9]/', '', (string)($_GET['token'] ?? $_POST['token'] ?? ''));
-$inv   = $token !== '' ? one("SELECT e.*, l.firma, l.ansprechpartner, l.sprache
+$inv   = $token !== '' ? one("SELECT e.*, l.firma, l.ansprechpartner, l.sprache, COALESCE(l.gesperrt,0) AS l_gesperrt
                               FROM lieferant_einladung e JOIN lieferanten l ON l.id=e.lieferant_id
                               WHERE e.token=? AND e.eingeloest=0", [$token]) : null;
+// Gesperrter Lieferant (Sofortfix 11.11.2026): die Einladung legt keinen Zugang an.
+if ($inv && (int)$inv['l_gesperrt'] === 1) { $_SESSION['zugang_gesperrt'] = 1; header('Location: ?p=lieferant_login'); exit; }
 
 // Sprache: die Wahl des Besuchers zaehlt, sonst die am Lieferanten hinterlegte.
 if ($inv && empty($_SESSION['lp_lang']) && ($_GET['lang'] ?? '') === '')

@@ -46,3 +46,9 @@ Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) ode
 
 ## rohstoff_steckbrief (11.11.2026)
 Route `rohstoff_steckbrief`: production, einkauf, labor, sales, finance (admin immer). Nur intern.
+
+## Gesperrt = kein Zugang (Sofortfix 11.11.2026)
+- `current_user()` prüft bei **jedem** Aufruf: Hängt der Benutzer an einem Lieferanten mit `lieferanten.gesperrt=1`, endet die Sitzung sofort (`$_SESSION['zugang_gesperrt']`), Weiterleitung auf den Lieferanten-Login mit „Zugang gesperrt, bitte bulkify kontaktieren“.
+- `auth_login()` (Team-Login) und `auth_login_by_token()` lassen einen gesperrten Lieferanten ebenfalls nicht hinein.
+- `lieferant_zugang_gesperrt($id)` und `zugang_gesperrt_text()` sind die gemeinsamen Helfer (auch fürs Kundenportal).
+- Eine Lieferanten-Bewerbung (`quelle='bewerbung'`) hat ohnehin nur einen **inaktiven** Login bis zur Freigabe; durch die Sperre ist sie jetzt doppelt zu.

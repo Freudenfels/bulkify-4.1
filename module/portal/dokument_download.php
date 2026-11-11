@@ -10,6 +10,7 @@ require_once BX_ROOT . '/core/dokument_ui.php';   // dokument_ist_lieferant_orig
 $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 $k = $token ? one("SELECT * FROM kunden WHERE portal_token=?", [$token]) : null;
 if (!$k) { http_response_code(403); echo 'Zugang ungültig.'; exit; }
+if ((int)($k['gesperrt'] ?? 0) === 1 && !(is_logged_in() && !ist_echter_lieferant())) { http_response_code(403); echo h(zugang_gesperrt_text()); exit; }   // gesperrter Kunde (Sofortfix 11.11.)
 
 $id = (int)($_GET['id'] ?? 0);
 $d  = $id ? one("SELECT * FROM dokument WHERE id=? AND kunde_sichtbar=1", [$id]) : null;

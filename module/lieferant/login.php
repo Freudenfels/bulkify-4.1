@@ -11,15 +11,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mail = trim(mb_strtolower((string)($_POST['email'] ?? '')));
     $pass = (string)($_POST['passwort'] ?? '');
     $u = $mail !== '' ? one("SELECT * FROM benutzer WHERE email=? AND aktiv=1", [$mail]) : null;
-    if ($u && !empty($u['lieferant_id']) && password_verify($pass, (string)$u['pass_hash'])) {
+    $gesp = $u && !empty($u['lieferant_id']) && lieferant_zugang_gesperrt((int)$u['lieferant_id']) && password_verify($pass, (string)$u['pass_hash']);
+    if ($u && !$gesp && !empty($u['lieferant_id']) && password_verify($pass, (string)$u['pass_hash'])) {
         session_regenerate_id(true);
         $_SESSION['uid'] = (int)$u['id'];
         q("UPDATE benutzer SET letzter_login=? WHERE id=?", [gmdate('Y-m-d H:i:s'), (int)$u['id']]);
         header('Location: ?p=lieferant_portal'); exit;
     }
     // Absichtlich unspezifisch: nicht verraten, ob es die Adresse gibt.
-    $fehler = lp_t('login_fehler');
+    $fehler = $gesp ? zugang_gesperrt_text() : lp_t('login_fehler');
 }
+// Laufende Sitzung wurde wegen Sperre beendet (core/auth.php current_user) -> klarer Hinweis.
+if ($fehler === '' && !empty($_SESSION['zugang_gesperrt'])) { $fehler = zugang_gesperrt_text(); unset($_SESSION['zugang_gesperrt']); }
 
 lp_head('bulkify – ' . lp_t('portal'));
 ?>

@@ -41,6 +41,7 @@ $cssV = (int) @filemtime(BX_ROOT . '/public/assets/app.css');
   <div class="bx-panel">
     <h1 style="margin:0 0 4px;font-size:22px">Anmelden</h1>
     <p class="bx-sub" style="margin-top:0">Melden Sie sich mit Ihrer E-Mail und Ihrem Passwort an.</p>
+    <?php if (isset($_GET['gesperrt'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px"><?= h(zugang_gesperrt_text()) ?></div><?php endif; ?>
     <?php if (isset($_GET['abgemeldet'])): ?><div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px">Sie wurden abgemeldet.</div><?php endif; ?>
     <?php if ($fehler !== ''): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:10px 14px;margin-bottom:12px"><?= h($fehler) ?></div><?php endif; ?>
     <form method="post">
