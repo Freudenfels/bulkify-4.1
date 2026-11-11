@@ -109,6 +109,10 @@ Sobald ein Auftrag neu ist, fragt das System aktiv (Auftrag erscheint in "Zu erl
 - Jeder Lieferantenpreis kann ein „gültig bis“ haben. Leer heißt unbegrenzt.
 - Rohstoffe mit „Preis schwankt“ (z. B. Whey) bekommen eine Standard-Gültigkeit, die Vorbelegung und die Pflicht im Lieferantenportal.
 - Abgelaufene Preise werden markiert („abgelaufen seit …“, „neu anfragen“) und nie still verwendet. Gültige Preise gehen vor. Gibt es nur abgelaufene, ist die Summe „unsicher“.
+  - **Umgesetzt (11.11.2026, Abendpaket Block D):**
+    - **Hinweis auf der Seite:** Rechnet eine Seite mit einem abgelaufenen Preis, steht oben „Preis abgelaufen - Summe unsicher“ mit den betroffenen Artikeln. Das gilt für Beschaffungsweg, Kalkulation, Zukauf, VK, Express-Bestellung und den Auftrag.
+    - **Auto-EK:** Er wird nie aus einem abgelaufenen Preis gesetzt (Kennzeichen „aus abgelaufenem Preis“).
+    - **Bald ablaufend:** Bald ablaufende Rohstoff-, Zukauf- und Fremdfertigungspreise in offenen Angeboten melden sich täglich per Cron.
 - Ein Angebot gilt standardmäßig nicht länger als der kürzeste EK-Preis darin. Ein späteres Datum ergibt nur einen Hinweis.
 - Ein abgelaufenes Angebot kann der Kunde nicht annehmen, nur eine Aktualisierung anfragen.
 - Nach der Annahme gilt der Auftragspreis.
@@ -517,6 +521,7 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 11.11.2026 | Lieferanten-Anfragen & Preise: Fertigprodukt-Preise, die der Lieferant selbst im Portal einträgt (ohne Anfrage), stehen als eigener Block "Aus dem Lieferanten-Portal" in der Liste und zählen bei "Preis da" mit | Nico / Claude Code |
 | 11.11.2026 | Auftrag, Reiter Details: Etikett-Design als Bild unter den Kacheln (PDF Seite 1 per pdf.js), Klick öffnet das Etikett-Fenster | Nico / Claude Code |
 | 11.11.2026 | Rohstoff-Unterlagen: Reiter "Aktuelle Anfragen" - alle offenen Anfragen (wie Menü-Zahl), älteste zuerst, je Anfrage Rohstoffe mit Stand und "Preis / Unterlage" zum Hochladen | Nico / Claude Code |
+| 11.11.2026 | Abendpaket Block D: Tausenderpunkt Lager-/Produktions-App, Lager 2 nur mit Grund + Meldung, ein Zusammenführen-Weg, Material lösen, abgelaufene Preise nie still (4.2), bald ablaufend per Cron, Etiketten-Bestand im Portal aus produzierter Menge | Nico / Claude Code |
 | 11.11.2026 | Abendpaket Block C: Grundprinzip 9 gesperrt/inaktiv nirgends sichtbar (Auswahlfelder, Listen mit Schalter, günstigster Lieferant, Portale), Rezeptur-Status inaktiv, Datenprüfung Testdaten auf live | Nico / Claude Code |
 | 11.11.2026 | Abendpaket Block B: Charge Menge korrigieren (eine Funktion, Korrekturbewegung, Bestellung öffnet/schließt), Menge korrigieren und verknüpfen, Verknüpfung lösen, mehrere Chargen je Position (4.5) | Nico / Claude Code |
 | 11.11.2026 | Abendpaket Block A (Sofortfix nach der Fable-Prüfung): gesperrte Lieferanten/Kunden ohne Portal, interne Bestell-Notiz nie im Portal + "Hinweis an den Lieferanten", Cron-Token maskiert (4.3); "versandbereit" nur wenn fertig, Hand-"versendet" mit Grund (4.14); Preise 6 Nachkommastellen + Eingabe je 1.000 (4.2); Warnung Doppelbestellung (4.3); Etikett-Maß Beheben aus TrimBox, Meldung ab 5 mm | Nico / Claude Code |
