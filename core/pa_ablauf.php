@@ -119,8 +119,8 @@ function pa_ereignis(int $pa_id, ?int $uc_id, string $typ, string $text, string 
 // Aufgabe ans Büro (Abweichung): Mitarbeiter bekommt nur einen Hinweis, die Klärung liegt bei Nico/Tabea.
 function pa_aufgabe_buero(int $pa_id, string $titel, string $text, string $von = ''): void {
     try {
-        q("INSERT INTO aufgabe (titel, beschreibung, prio, erstellt_von, ref_typ, ref_id, angelegt) VALUES (?,?,?,?,?,?,?)",
-          [mb_substr($titel, 0, 190), mb_substr($text, 0, 2000), 2, $von ?: 'Produktion', 'produktion', $pa_id, gmdate('Y-m-d H:i:s')]);
+        q("INSERT INTO aufgabe (titel, beschreibung, prio, status, ref_typ, ref_id, angelegt) VALUES (?,?,?,?,?,?,?)",
+          [mb_substr($titel, 0, 190), mb_substr($text . ($von !== '' ? ' (gemeldet: ' . $von . ')' : ''), 0, 2000), 2, 'offen', 'produktion', $pa_id, gmdate('Y-m-d H:i:s')]);
     } catch (\Throwable $e) {}
 }
 
@@ -371,3 +371,4 @@ function pa_abschliessen(int $pa_id, string $rest_wahl, string $von): array {
 // Chargenprotokoll je Unter-Charge (Teil 7)
 require_once __DIR__ . '/pa_protokoll.php';
 require_once __DIR__ . '/pa_eimer.php';   // Eimerplanung (Teil 8)
+require_once __DIR__ . '/pa_kapsel.php';   // Kapselzahl aus Gewicht + Gegenprobe (Teil 9)

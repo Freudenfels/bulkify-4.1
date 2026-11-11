@@ -5,7 +5,7 @@ require_once BX_ROOT . '/core/erp_ablauf.php';
 $paId = (int)($_POST['pa_id'] ?? 0);
 $von  = $werkName ?: 'Mitarbeiter';
 $zur  = '?p=werk&id=' . $paId;
-$flash = function (string $t, bool $ok) { $_SESSION['werk_flash'] = $t; $_SESSION['werk_flash_ok'] = $ok; };
+$flash = function (string $t, bool $ok) { $_SESSION['werk_flash'] = $t . (!empty($GLOBALS['pa_hinweis']) ? ' ' . $GLOBALS['pa_hinweis'] : ''); $_SESSION['werk_flash_ok'] = $ok; };   // Gegenprobe = nur Hinweis
 $zahl = fn($k) => (float) str_replace(',', '.', str_replace('.', '', (string)($_POST[$k] ?? '0')));
 $dez  = fn($k) => (float) str_replace(',', '.', (string)($_POST[$k] ?? '0'));
 $uc = pa_aktuelle_unter_charge($paId);
