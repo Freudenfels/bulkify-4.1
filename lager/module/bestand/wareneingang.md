@@ -132,3 +132,6 @@ Reihenfolge: Lieferschein scannen · Sendungsnummer · Aus Liste wählen (Zähle
 - Die Artikelauswahl zeigt Warenart, Kapselgröße/Füllgewicht und Synonyme.
 
 - Der Ähnlichkeits-Hinweis bei neuen Namen vergleicht auch die Synonyme vorhandener Artikel (Teil 5).
+
+## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
+Kachel „Lieferanten-Aufkleber scannen“ (AJAX la_scan/la_abschluss), Stand „x von y erfasst“, Abschluss auch unvollständig; Sendungsnummer- und R-Code-Feld erkennen BX-Codes.

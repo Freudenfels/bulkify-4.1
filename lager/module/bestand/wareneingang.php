@@ -84,6 +84,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rstic
     exit;
 }
 
+// --- AJAX: Lieferanten-Gebindeaufkleber (BX…) scannen / Abschluss (Paket 12.11.2026 Teil 5) ---------------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['la_scan', 'la_abschluss'], true)) {
+    header('Content-Type: application/json; charset=utf-8');
+    $wer = (string)(lg_benutzer()['name'] ?? '');
+    $r = $_POST['aktion'] === 'la_scan' ? erp_la_scan((string)($_POST['code'] ?? ''), $wer) : erp_la_abschluss((int)($_POST['bestellung_id'] ?? 0), $wer);
+    if (isset($r['stand'])) $r['stand'] = ['erfasst' => (int)$r['stand']['erfasst'], 'gesamt' => (int)$r['stand']['gesamt'],
+                                          'fehlt' => array_map(fn($x) => la_code((int)$x['id']) . ' · ' . rtrim(rtrim(number_format((float)$x['netto_kg'], 3, ',', '.'), '0'), ',') . ' kg', $r['stand']['fehlt'] ?? [])];
+    echo json_encode($r, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // --- AJAX: offene Bestellposition zu einem Artikel (Etiketten einbuchen, Teil 1) ------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bp_fuer_item') {
     header('Content-Type: application/json; charset=utf-8');
@@ -450,6 +461,10 @@ if ($gebucht):
       <div class="we-kachel-s">Paketlabel scannen – Lieferung wird geladen</div>
     </button>
 
+    <button type="button" class="we-kachel" data-weg="aufkleber">
+      <div class="we-kachel-t">Lieferanten-Aufkleber scannen</div>
+      <div class="we-kachel-s">BX-Code je Gebinde scannen – Charge, MHD und Gewicht kommen vom Aufkleber</div>
+    </button>
     <button type="button" class="we-kachel" data-weg="rsticker">
       <div class="we-kachel-t">Rezepturnummer-Aufkleber</div>
       <div class="we-kachel-s">R-Code scannen – Rezeptur/Produkt wird erkannt</div>
@@ -514,6 +529,20 @@ if ($gebucht):
         <input type="text" id="weTrack" class="lg-code" autocomplete="off" placeholder="Barcode scannen – die Lieferung wird geladen">
       </div>
       <div id="weTrackInfo" class="muted" style="margin-top:var(--sp-2)"></div>
+    </div>
+
+    <!-- Methode: Lieferanten-Gebindeaufkleber (BX…) scannen – ein Scan = ein Gebinde (Paket 12.11.2026 Teil 5) -->
+    <div class="bx-panel we-weg" data-w="aufkleber" hidden>
+      <h2 style="margin-top:0">Lieferanten-Aufkleber scannen</h2>
+      <div class="bx-field" style="margin:0;max-width:460px">
+        <label>QR vom Gebinde scannen (BX…)</label>
+        <input type="text" id="weLa" class="lg-code" autocomplete="off" placeholder="BX-Code scannen – jedes Gebinde einmal">
+      </div>
+      <div id="weLaInfo" style="margin-top:var(--sp-3);font-size:15px"></div>
+      <div id="weLaStand" style="margin-top:var(--sp-2);font-size:22px;font-weight:600"></div>
+      <div id="weLaFehlt" class="muted" style="margin-top:var(--sp-1);font-size:13px"></div>
+      <div style="margin-top:var(--sp-3)"><button type="button" class="btn btn-ghost" id="weLaAbschluss" hidden>Wareneingang abschließen</button></div>
+      <div class="muted" style="margin-top:var(--sp-2);font-size:13px">Gleicher Code zweimal = „schon erfasst“. Fehlen am Ende Gebinde, kann trotzdem abgeschlossen werden – Nico wird informiert, Dustin bekommt die Aufgabe „Gebinde nachzählen“.</div>
     </div>
 
     <!-- Methode: Rezepturnummer-Aufkleber (R…) scannen -->
@@ -1291,6 +1320,7 @@ if ($gebucht):
   var track=document.getElementById('weTrack'), trackInfo=document.getElementById('weTrackInfo');
   function trackSuchen(){
     var code=(track.value||'').trim(); if(code==='')return;
+    if(/^BX\d{1,9}-[0-9A-F]{5}$/i.test(code)){ track.value=''; zeigeWeg('aufkleber'); laIn.value=code; laScan(); return; }   // Gebindeaufkleber erkannt (Paket 12.11.2026 Teil 5)
     trackInfo.textContent='Suche Lieferung …';
     var fd=new FormData(); fd.append('aktion','tracking'); fd.append('code',code);
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
@@ -1309,10 +1339,39 @@ if ($gebucht):
     track.addEventListener('change',trackSuchen);
   }
 
+  // Lieferanten-Gebindeaufkleber (BX…) scannen: ein Scan = ein Gebinde; Stand „8 von 10 erfasst“; Abschluss auch unvollständig.
+  var laIn=document.getElementById('weLa'), laInfo=document.getElementById('weLaInfo'), laStand=document.getElementById('weLaStand'),
+      laFehlt=document.getElementById('weLaFehlt'), laAbs=document.getElementById('weLaAbschluss'), laBid=0;
+  function laZeigen(j){
+    if(j.stand){ laStand.textContent=j.stand.erfasst+' von '+j.stand.gesamt+' erfasst'; laFehlt.textContent=j.stand.fehlt.length?('Noch offen: '+j.stand.fehlt.join(', ')):''; }
+    if(j.bestellung_id){ laBid=j.bestellung_id; laAbs.hidden=false; }
+  }
+  function laScan(){
+    var code=(laIn.value||'').trim(); if(code==='')return;
+    laIn.value=''; laInfo.textContent='Buche …'; laInfo.style.color='';
+    var fd=new FormData(); fd.append('aktion','la_scan'); fd.append('code',code);
+    fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+      var i=j.info||{};
+      laInfo.textContent=(j.art==='gebucht'?'✓ ':'')+(j.meldung||'')+(i.artikel?' · '+i.artikel:'')+(i.charge?' · Charge '+i.charge:'')+(i.bestellung?' · '+i.bestellung:'');
+      laInfo.style.color = j.art==='gebucht' ? (j.quarantaene?'#8a5a00':'#1D9E75') : '#8f231b';
+      laZeigen(j); laIn.focus();
+    }).catch(function(){ laInfo.textContent='Netzwerk-/Serverfehler.'; laInfo.style.color='#8f231b'; });
+  }
+  if(laIn){ laIn.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); laScan(); } }); laIn.addEventListener('change',laScan); }
+  if(laAbs) laAbs.addEventListener('click',function(){
+    if(!laBid) return;
+    if(!confirm('Wareneingang dieser Bestellung abschließen?')) return;
+    var fd=new FormData(); fd.append('aktion','la_abschluss'); fd.append('bestellung_id',laBid);
+    fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){ laInfo.textContent=j.meldung||''; laInfo.style.color=j.ok?'#1D9E75':'#8f231b'; laZeigen(j); });
+  });
+  // Direktaufruf ?p=we&weg=aufkleber&code=BX… (aus der Suche): gleich buchen.
+  (function(){ var u=new URLSearchParams(location.search); if(u.get('weg')==='aufkleber' && u.get('code') && laIn){ setTimeout(function(){ laIn.value=u.get('code'); laScan(); },200); } })();
+
   // Rezepturnummer-Aufkleber (R…) scannen -> Rezeptur/Produkt als Fertigware-Position vorausfüllen.
   var rst=document.getElementById('weRsticker'), rstInfo=document.getElementById('weRstickerInfo');
   function rstSuchen(){
     var code=(rst.value||'').trim(); if(code==='')return;
+    if(/^BX\d{1,9}-[0-9A-F]{5}$/i.test(code)){ rst.value=''; zeigeWeg('aufkleber'); laIn.value=code; laScan(); return; }   // Gebindeaufkleber erkannt (Paket 12.11.2026 Teil 5)
     rstInfo.textContent='Suche Rezeptur …';
     var fd=new FormData(); fd.append('aktion','rsticker'); fd.append('code',code);
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
@@ -1453,13 +1512,14 @@ if ($gebucht):
     startBox.hidden=true; arbeit.hidden=false;
     document.querySelectorAll('.we-weg').forEach(function(p){ p.hidden = p.getAttribute('data-w')!==w; });
     // Etiketten einbuchen: Ziel/Positionen erst nach der Sichtprüfung (Design + Größe) zeigen.
-    etPanels(w!=='etikett');
+    etPanels(w!=='etikett' && w!=='aufkleber');   // Aufkleber-Scan bucht direkt, ohne Positionsliste
     if(buchBtn) buchBtn.textContent = w==='etikett' ? 'Etiketten buchen' : BUCH_TXT;
     if(w==='etikett'){ etProd.value=''; etLetzt=''; etWahl.innerHTML=''; etPruef.hidden=true; etGewaehlt=null; if(etNeu){ etNeu.hidden=true; etNeuAuf.hidden=false; } setTimeout(function(){ etProd.focus(); },60); }
     rows.innerHTML=''; addRow();   // frische, leere Position
     var bidF=document.getElementById('weBestellungId'); if(bidF) bidF.value='';   // kein Lieferungsbezug bei manuellem/Scan-Weg
     if(w==='tracking'){ var t=document.getElementById('weTrack'); if(t) setTimeout(function(){t.focus();},60); }
     if(w==='rsticker'){ var rs=document.getElementById('weRsticker'); if(rs) setTimeout(function(){rs.focus();},60); }
+    if(w==='aufkleber'){ var la=document.getElementById('weLa'); if(la) setTimeout(function(){la.focus();},60); }
     arbeit.scrollIntoView({behavior:'smooth',block:'start'});
   }
   document.querySelectorAll('.we-kachel[data-weg]').forEach(function(b){ b.addEventListener('click',function(){ zeigeWeg(b.getAttribute('data-weg')); }); });

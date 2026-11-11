@@ -2283,3 +2283,123 @@ function lg_quarantaene_zahl(): int {
     if (!tabelle_da('charge')) return $n = 0;
     return $n = (int) scalar("SELECT COUNT(*) FROM charge WHERE status='quarantaene' AND fremd_kunde_id IS NULL AND menge_verfuegbar>0");
 }
+
+// --- Lieferanten-Gebindeaufkleber scannen (Paket 12.11.2026 Teil 5) -------------------------------------------------
+// Der Lieferant druckt je Gebinde einen Aufkleber mit QR „BX<id>-<Prüfziffer>“ (core/lief_aufkleber.php, ohne core/schema.php).
+// Ein Scan = ein Gebinde: beim ersten Scan einer Lieferanten-Charge entsteht die Charge (Wareneingang gegen die Bestellung),
+// jeder weitere Scan hängt ein Gebinde mit seinem Gewicht an (Charge = Summe der Gebinde). Gleicher Code zweimal = „schon erfasst“.
+// Chargen-Abgleich Aufkleber gegen CoA (charge_norm): passt er nicht -> Quarantäne + Aufgabe.
+function erp_la_laden(): bool {
+    $f = __DIR__ . '/../../core/lief_aufkleber.php';
+    if (!is_file($f)) return false;
+    require_once $f;
+    require_once __DIR__ . '/../../core/wareneingang_bestellung.php';
+    require_once __DIR__ . '/../../core/charge_norm.php';
+    la_schema();
+    return true;
+}
+function erp_la_ist_code(string $s): bool { return erp_la_laden() && la_ist_code($s); }
+
+// Ein weiteres Gebinde an eine bestehende Charge hängen (Menge in der Einheit des Artikels). Rückgabe gebinde_id.
+function erp_charge_gebinde_anhaengen(int $charge_id, float $menge): int {
+    if ($charge_id <= 0 || $menge <= 0 || !tabelle_da('charge_gebinde')) return 0;
+    $c = one("SELECT einheit, standort FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return 0;
+    q("UPDATE charge SET menge=menge+?, menge_verfuegbar=menge_verfuegbar+?, status=IF(status='leer','frei',status) WHERE id=?", [$menge, $menge, $charge_id]);
+    $nr = (int) scalar("SELECT COALESCE(MAX(nummer),0) FROM charge_gebinde WHERE charge_id=?", [$charge_id]) + 1;
+    $gw = erp_gebinde_spalte_da('gewogen');
+    q("INSERT INTO charge_gebinde (charge_id,nummer,anzahl_gesamt,menge,menge_verfuegbar,einheit,standort,status," . ($gw ? "gewogen,gewogen_am," : "") . "angelegt)
+       VALUES (?,?,?,?,?,?,?,'voll'," . ($gw ? "1,?," : "") . "?)",
+      array_merge([$charge_id, $nr, $nr, $menge, $menge, (string)($c['einheit'] ?? ''), (string)($c['standort'] ?? 'lager1') ?: 'lager1'], $gw ? [jetzt_utc()] : [], [jetzt_utc()]));
+    $gid = (int) insert_id();
+    q("UPDATE charge_gebinde SET anzahl_gesamt=? WHERE charge_id=?", [$nr, $charge_id]);
+    erp_bedarf_bump();
+    return $gid;
+}
+
+// Aufgabe (Tabelle aufgabe) – ohne core/schema.php. $person = Vorname (z. B. „Dustin“), sonst Team.
+function erp_la_aufgabe(string $titel, string $text, string $ref_typ, int $ref_id, string $person = ''): void {
+    try {
+        $uid = $person !== '' ? (int) scalar("SELECT id FROM benutzer WHERE name LIKE ? AND COALESCE(aktiv,1)=1 ORDER BY id LIMIT 1", [$person . '%']) : 0;
+        q("INSERT INTO aufgabe (titel, beschreibung, prio, status, zugewiesen_an, ref_typ, ref_id, angelegt) VALUES (?,?,?,?,?,?,?,?)",
+          [mb_substr($titel, 0, 190), mb_substr($text, 0, 2000), 1, 'offen', $uid ?: null, $ref_typ, $ref_id, jetzt_utc()]);
+    } catch (\Throwable $e) {}
+}
+
+// Scan eines Aufklebers. Rückgabe: ['ok', 'art' => gebucht|schon|storniert|unbekannt|fehler, 'meldung', 'info' => [...], 'stand' => [...], 'bestellung_id']
+function erp_la_scan(string $code, string $wer = ''): array {
+    if (!erp_la_laden()) return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Gebindeaufkleber sind auf diesem Server nicht eingerichtet.'];
+    $id = la_code_id($code);
+    if ($id <= 0) return ['ok' => false, 'art' => 'unbekannt', 'meldung' => la_ist_code($code) ? 'Code ungültig (Prüfziffer passt nicht) – kein Aufkleber von bulkify.' : 'Kein Lieferanten-Aufkleber (BX…).'];
+    $a = one("SELECT la.*, bc.charge_nr, bc.mhd, bp.item_id, bp.auftrag_id, bp.bezeichnung, bp.einheit AS bp_einheit, b.nummer AS bestellung_nr, b.lieferant_id
+              FROM lief_aufkleber la JOIN bestellung_charge bc ON bc.id=la.bestellung_charge_id JOIN bestellung_position bp ON bp.id=la.bestellung_position_id
+              JOIN bestellung b ON b.id=la.bestellung_id WHERE la.id=?", [$id]);
+    if (!$a) return ['ok' => false, 'art' => 'unbekannt', 'meldung' => 'Aufkleber nicht gefunden.'];
+    $bid = (int)$a['bestellung_id'];
+    $info = ['code' => la_code($id), 'bestellung' => (string)$a['bestellung_nr'], 'charge' => (string)$a['charge_nr'], 'mhd' => (string)($a['mhd'] ?? ''),
+             'netto' => (float)$a['netto_kg'], 'stueck' => $a['stueck'] !== null ? (float)$a['stueck'] : null, 'artikel' => (string)$a['bezeichnung']];
+    if ($a['status'] === 'storniert') return ['ok' => false, 'art' => 'storniert', 'meldung' => 'Dieser Aufkleber wurde vom Lieferanten storniert – Gebinde nicht buchen, bitte klären.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+    if ($a['status'] === 'erfasst') return ['ok' => false, 'art' => 'schon', 'meldung' => 'Schon erfasst (' . (string)$a['erfasst_am'] . ').', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+
+    // Artikel: an der Position, sonst Bulk-Artikel der Auftrags-Rezeptur.
+    $iid = (int)($a['item_id'] ?? 0);
+    if ($iid <= 0 && !empty($a['auftrag_id'])) {
+        $rid = (int) scalar("SELECT COALESCE(a.rezeptur_id, p.rezeptur_id) FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [(int)$a['auftrag_id']]);
+        if ($rid > 0) $iid = (int) scalar("SELECT id FROM item WHERE rezeptur_id=? AND kategorie='fertig' ORDER BY id LIMIT 1", [$rid]);
+    }
+    $it = $iid > 0 ? one("SELECT id, name, einheit FROM item WHERE id=?", [$iid]) : null;
+    if (!$it) return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Zur Bestellposition gibt es keinen Lagerartikel – bitte im Dashboard den Artikel an der Position setzen.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+    $info['artikel'] = (string)$it['name'];
+    // Menge in Artikel-Einheit: Gewicht (kg/g) aus Netto, Stück-Artikel aus „Stück je Gebinde“.
+    $ie = mb_strtolower(trim((string)$it['einheit']));
+    if (in_array($ie, ['kg', 'g', 't', 'mg'], true)) { $menge = (float)$a['netto_kg']; $einheit = 'kg'; }
+    elseif ($a['stueck'] !== null && (float)$a['stueck'] > 0) { $menge = (float)$a['stueck']; $einheit = (string)$it['einheit']; }
+    else return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Der Artikel wird in ' . $it['einheit'] . ' geführt, auf dem Aufkleber fehlt die Stückzahl – bitte normal über „Bestellung wählen“ buchen.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+
+    $cid = (int) scalar("SELECT charge_id FROM lief_aufkleber WHERE bestellung_charge_id=? AND status='erfasst' AND charge_id IS NOT NULL ORDER BY id LIMIT 1", [(int)$a['bestellung_charge_id']]);
+    $hinweis = '';
+    if ($cid <= 0) {
+        // Erster Scan dieser Lieferanten-Charge: Chargen-Abgleich gegen die CoA der Position (tolerant, charge_norm).
+        $coaNr = array_filter(array_map(fn($r) => trim((string)$r['charge_nr']), all("SELECT charge_nr FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND bestellung_position_id=? AND typ='coa' AND charge_nr IS NOT NULL AND charge_nr<>''", [$bid, (int)$a['bestellung_position_id']])));
+        $passt = !$coaNr || (bool) array_filter($coaNr, fn($n) => charge_gleich($n, (string)$a['charge_nr']));
+        $status = $passt ? 'auto' : 'quarantaene';
+        $cid = (int) erp_wareneingang_buchen($iid, $menge, (string)$a['charge_nr'], $a['mhd'] ?: null, $a['lieferant_id'] ? (int)$a['lieferant_id'] : null,
+                                             'Wareneingang per Gebindeaufkleber (' . $a['bestellung_nr'] . ')', $status, $einheit);
+        if ($cid <= 0) return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Buchen nicht möglich.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+        $cm = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [$cid]);
+        erp_charge_gebinde_mit_mengen($cid, [$cm]);
+        $gid = (int) scalar("SELECT id FROM charge_gebinde WHERE charge_id=? ORDER BY nummer DESC, id DESC LIMIT 1", [$cid]);
+        if (!$passt) {
+            $hinweis = 'Charge passt nicht zur CoA (' . implode(', ', $coaNr) . ') – Ware in Quarantäne, Aufgabe angelegt.';
+            webe_melden('Wareneingang ' . $a['bestellung_nr'] . ': Charge passt nicht zur CoA', 'Aufkleber-Charge ' . $a['charge_nr'] . ', CoA-Charge ' . implode(', ', $coaNr) . '. Ware ist in Quarantäne.', '?p=bestellung&id=' . $bid, true);
+            erp_la_aufgabe('Charge passt nicht zur CoA – ' . $a['bestellung_nr'], 'Aufkleber-Charge ' . $a['charge_nr'] . ' / CoA-Charge ' . implode(', ', $coaNr) . '. Ware in Quarantäne. Bitte mit dem Lieferanten klären.', 'bestellung', $bid);
+        }
+    } else {
+        // Weitere Gebinde derselben Charge: Gewicht in Artikel-Einheit umrechnen und anhängen.
+        [$mI] = erp_menge_in_item_einheit($menge, erp_einheit_norm($einheit), (string)$it['einheit']);
+        $gid = erp_charge_gebinde_anhaengen($cid, (float)$mI);
+    }
+    q("UPDATE lief_aufkleber SET status='erfasst', charge_id=?, gebinde_id=?, erfasst_am=?, erfasst_von=? WHERE id=?", [$cid, $gid ?: null, jetzt_utc(), mb_substr($wer, 0, 190) ?: null, $id]);
+    if (function_exists('lg_bewegung_log')) lg_bewegung_log($cid, 'ein', $menge, $einheit, (string)$it['name'], 'Gebindeaufkleber ' . la_code($id) . ' (' . $a['bestellung_nr'] . ')');
+    erp_bestellung_lieferung_erfassen($bid, [$cid], [$cid => (int)$a['bestellung_position_id']]);
+    $info['charge_id'] = $cid;
+    $st = la_stand($bid);
+    return ['ok' => true, 'art' => 'gebucht', 'meldung' => 'Gebinde gebucht: ' . rtrim(rtrim(number_format($menge, 3, ',', '.'), '0'), ',') . ' ' . $einheit . ($hinweis !== '' ? ' – ' . $hinweis : ''),
+            'quarantaene' => $hinweis !== '', 'info' => $info, 'stand' => $st, 'bestellung_id' => $bid];
+}
+
+// Abschluss des Wareneingangs per Aufkleber (auch unvollständig). Fehlen Aufkleber: Meldung an Nico mit den fehlenden
+// Gewichten und Aufgabe für Dustin „Gebinde nachzählen / Aufkleber fehlt“ an der Bestellung.
+function erp_la_abschluss(int $bestellung_id, string $wer = ''): array {
+    if (!erp_la_laden() || $bestellung_id <= 0) return ['ok' => false, 'meldung' => 'Nicht möglich.'];
+    $st = la_stand($bestellung_id);
+    $nr = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$bestellung_id]);
+    try { q("UPDATE bestellung SET aufkleber_abschluss=? WHERE id=?", [jetzt_utc(), $bestellung_id]); } catch (\Throwable $e) {}
+    if ($st['fehlt']) {
+        $liste = implode(', ', array_map(fn($x) => la_code((int)$x['id']) . ' (' . rtrim(rtrim(number_format((float)$x['netto_kg'], 3, ',', '.'), '0'), ',') . ' kg)', $st['fehlt']));
+        $txt = 'Wareneingang ' . $nr . ' per Aufkleber abgeschlossen: ' . $st['erfasst'] . ' von ' . $st['gesamt'] . ' erfasst' . ($wer !== '' ? ' (' . $wer . ')' : '') . '. Fehlend: ' . $liste . '.';
+        webe_melden('Wareneingang ' . $nr . ': Gebinde fehlen (' . $st['erfasst'] . ' von ' . $st['gesamt'] . ')', $txt, '?p=bestellung&id=' . $bestellung_id, true);
+        erp_la_aufgabe('Gebinde nachzählen / Aufkleber fehlt – ' . $nr, $txt, 'bestellung', $bestellung_id, 'Dustin');
+    }
+    return ['ok' => true, 'meldung' => $st['fehlt'] ? ('Abgeschlossen mit ' . count($st['fehlt']) . ' fehlenden Gebinden – Nico ist informiert, Aufgabe für Dustin angelegt.') : 'Abgeschlossen – alle Gebinde erfasst.', 'stand' => $st];
+}

@@ -144,3 +144,6 @@ Umlagern Lager 1 -> Lager 2 (04.11.2026): `erp_umlagern_kandidaten()` (freie Fer
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Lieferanten- und Kunden-Auswahl (`erp_lieferanten`, `erp_kunden_liste`, `erp_fulfillment_kunden`) ohne gesperrte.
 
 **Zahlen (Block D, 11.11.2026):** `erp_menge_parse()`: Eine Tausendergruppe beginnt nie mit 0 – „0.045“ bleibt 0,045 (vorher 45).
+
+## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
+erp_la_scan() / erp_la_abschluss() / erp_charge_gebinde_anhaengen() / erp_la_aufgabe(): Scan der Lieferanten-Gebindeaufkleber (ein Scan = ein Gebinde, Charge beim ersten Scan, Chargen-Abgleich gegen CoA -> Quarantäne + Aufgabe, Abschluss mit Meldung an Nico und Aufgabe für Dustin).
