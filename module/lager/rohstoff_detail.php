@@ -265,26 +265,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'coa_f
 // Bestand einer Charge korrigieren (nur Admin): verfügbare Menge + Einheit setzen – z. B. eine falsch in „g"
 // gebuchte Charge auf den echten kg-Wert bringen. Setzt menge + menge_verfuegbar und passt den Status an.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'charge_bestand_korr' && !$neu) {
+    // Block B (11.11.2026): dieselbe Funktion wie Chargenseite und Lager-App (core/charge_korrektur.php) – Korrekturbewegung
+    // statt Überschreiben der Ursprungsmenge (Fable 18.1.3/18.1.6), Grund-Auswahl, Gebinde, Bestellung rechnet neu.
     if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=1'); exit; }
+    require_once BX_ROOT . '/core/charge_korrektur.php';
     $cid = (int)($_POST['charge_id'] ?? 0);
-    $c   = $cid ? one("SELECT id, status, einheit, charge_nr, menge_verfuegbar FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id]) : null;
-    // Grund ist Pflicht (z. B. Zählfehler, Bruch, Falschbuchung) – er landet im Verlauf des Artikels.
-    $grund = trim((string)($_POST['grund'] ?? ''));
-    if ($c && $grund === '') { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=grund'); exit; }
-    if ($c) {
-        $raw  = str_replace(['.', ' '], '', trim((string)($_POST['menge'] ?? '')));   // Tausenderpunkt raus
-        $neuM = (float) str_replace(',', '.', $raw);                                   // Komma -> Dezimalpunkt
-        $einh = (string)$c['einheit'];   // Einheit NICHT hier ändern (dafür „Einheit ändern" – nie vermischen)
-        $altM = (float)$c['menge_verfuegbar'];
-        if ($neuM >= 0) {
-            $status = $neuM <= 1e-9 ? 'leer' : (($c['status'] ?? '') === 'leer' ? 'frei' : (string)$c['status']);
-            q("UPDATE charge SET menge=?, menge_verfuegbar=?, status=? WHERE id=? AND item_id=?",
-              [$neuM, $neuM, $status, $cid, (int)$id]);
-            if (function_exists('bedarf_bump')) bedarf_bump();   // Bestand geändert -> Bedarf/Einkaufsliste neu rechnen
-            $nfm = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
-            log_aktivitaet('item', (int)$id, 'team',
-                'Bestandskorrektur Charge ' . ($c['charge_nr'] ?: ('#' . $cid)) . ': ' . $nfm($altM) . ' -> ' . $nfm($neuM) . ' ' . $einh . '. Grund: ' . $grund, 'notiz');
-        }
+    if ($cid && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id]) === 1) {
+        if ((string)($_POST['korr_grund'] ?? '') === '') { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=grund'); exit; }
+        $r = charge_menge_korrigieren($cid, (string)($_POST['korr_was'] ?? 'verfuegbar'), zahl_lesen((string)($_POST['menge'] ?? ''), true),
+                                      (string)$_POST['korr_grund'], (string)($_POST['grund'] ?? ''), (string)(current_user()['name'] ?? 'Team'));
+        if ($r['ok']) log_aktivitaet('item', (int)$id, 'team', 'Bestandskorrektur Charge #' . $cid . ': ' . $r['meldung'] . ($r['hinweis'] ? ' ' . $r['hinweis'] : ''), 'notiz');
+        else { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=' . rawurlencode($r['meldung'])); exit; }
     }
     header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrok=1'); exit;
 }
@@ -1341,7 +1332,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
       <?php if (isset($_GET['coafrei'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">CoA-Freigabe aktualisiert.</td></tr><?php endif; ?>
       <?php if (isset($_GET['korrok'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">Charge-Bestand korrigiert. Der Bedarf/die Einkaufsliste rechnet neu.</td></tr><?php endif; ?>
       <?php if (($_GET['korrfehler'] ?? '') === 'grund'): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b">Bitte einen Grund für die Bestandskorrektur angeben.</td></tr>
-      <?php elseif (isset($_GET['korrfehler'])): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b">Nur Admins dürfen Bestand/Charge ändern.</td></tr><?php endif; ?>
+      <?php elseif (isset($_GET['korrfehler'])): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b"><?= ($_GET['korrfehler'] ?? '') === '1' ? 'Nur Admins dürfen Bestand/Charge ändern.' : h((string)$_GET['korrfehler']) ?></td></tr><?php endif; ?>
       <?php foreach ($charges as $c): $coaFrei = (int)($c['coa_freigegeben'] ?? 0) === 1; ?>
         <tr>
           <td><?= h($c['charge_nr'] ?: '–') ?></td>
@@ -1374,7 +1365,9 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
                   <input type="text" name="menge" value="<?= h(rtrim(rtrim(number_format((float)$c['menge_verfuegbar'],3,',','.'),'0'),',')) ?>" style="width:90px;padding:4px 6px;text-align:right" inputmode="decimal" title="Neue verfügbare Menge">
                   <span class="muted" style="font-size:11px"><?= h((string)$c['einheit']) ?></span>
                 </div>
-                <input type="text" name="grund" placeholder="Grund (z. B. Zählfehler, Bruch)" required style="width:180px;padding:4px 6px" title="Grund ist Pflicht – landet im Verlauf">
+                <select name="korr_was" data-norscombo style="width:180px;padding:4px 6px"><option value="verfuegbar">nur verfügbar (Schwund, Bruch)</option><option value="ursprung">Ursprung falsch eingebucht</option></select>
+                <select name="korr_grund" required data-norscombo style="width:180px;padding:4px 6px"><option value="">Grund wählen</option><option value="einbuchfehler">Einbuchfehler</option><option value="lieferschein">Lieferschein abweichend</option><option value="schwund">Schwund</option><option value="bruch">Bruch</option><option value="sonstiges">Sonstiges</option></select>
+                <input type="text" name="grund" placeholder="Notiz" style="width:180px;padding:4px 6px" title="Notiz zur Korrektur (bei Sonstiges Pflicht)">
                 <button class="btn btn-ghost btn-sm" type="submit">setzen</button>
               </form>
             </details>

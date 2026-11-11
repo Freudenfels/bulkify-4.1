@@ -219,3 +219,5 @@ Siehe `core/preis_gueltig.md`.
 - Unter dem Formular steht klappbar der „Preisverlauf“ mit aktuellen und ersetzten Preisen.
 
 **Preise je 1.000 Stk (Sofortfix 11.11.2026):** Lieferantenpreis und EK sind Textfelder (Komma erlaubt, `zahl_lesen()`) mit Auswahl „je Stk / je 1.000 Stk“. Gespeichert wird je Bezugseinheit mit 6 Nachkommastellen (2,95 je 1.000 = 0,002950). Anzeige unter 0,01 € als „2,95 € / 1.000 Stk“.
+
+**Bestand korrigieren an der Charge (Block B, 11.11.2026):** läuft über `core/charge_korrektur.php`, mit Art, Grund-Auswahl und Notiz. Die Ursprungsmenge wird nicht mehr still überschrieben, es entsteht eine Korrekturbewegung.

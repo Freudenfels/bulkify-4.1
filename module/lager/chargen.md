@@ -21,3 +21,8 @@
 Die Detailseite einer Charge zeigt unter „Verwendet in Produktionen" zusätzlich die Spalte **Kundencharge**: die aus diesem PA entstandene Fertigware-/Kundencharge (`charge.pa_id` = PA, `item.kategorie IN ('fertig','verkaufsfertig')`), verlinkt. Damit ist von der Bulk-Charge aus direkt sichtbar, in welche Kundencharge(n) sie geflossen ist (Gegenrichtung zur „Zusammensetzung" der Kundencharge). Gespeist aus Easy Production / `produktion_verbrauch`.
 
 Spalte „Art“ zeigt die Kapselgröße der Charge (Soll-Kette 2d, 04.11.2026).
+
+**Block B (11.11.2026), nur Admin**
+- **Stift an „Menge (verfügbar)“ und „Ursprung“:** Pop-up „Menge korrigieren“ mit Art, neuer Menge (Einheit fest), Pflicht-Grund, Notiz und optionalem Beleg (`core/charge_korrektur.php`).
+- **Block „Bestellung“:** Bestellbezug mit Link und „Verknüpfung lösen“.
+- **Block „Korrekturen“:** alle Korrekturen mit alt, neu, Differenz, Grund, wer und Beleg.

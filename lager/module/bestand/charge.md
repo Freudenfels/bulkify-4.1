@@ -64,3 +64,5 @@ Kachel **Für Auftrag** (Auftrag + Kunde, darunter Reservierungen), Soll-Kette 3
 Unter „Dokumente“ stehen zuerst CoA und Spezifikation aus der Bestellposition der Charge (`erp_charge_bestell_dokumente`, Zusatz „aus der Bestellung“), danach die des Artikels/Produkts.
 
 **Bewegungen (11.11.2026):** Neuer Block „Bewegungen“ mit den letzten 30 Bewegungen dieser Charge aus `lg_bewegung`, darunter die Inventur-Korrekturen mit Grund. Platz-Änderungen stehen unter „Änderungen“ (Feld `platz`).
+
+**Menge korrigieren (Block B, 11.11.2026):** nur Admin (Stift nur für Admin). Formular mit Art (verfügbar / Ursprung), neuer Menge, Pflicht-Grund, Notiz und Beleg. Bucht über dieselbe Funktion wie das Dashboard (`core/charge_korrektur.php`): Korrekturbewegung, Verlauf, Gebinde, die Bestellung rechnet neu.

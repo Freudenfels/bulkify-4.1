@@ -99,7 +99,9 @@ function webe_position_neu_rechnen(int $bp_id): float {
 }
 
 // Stand einer Bestellung prüfen und ggf. schließen. Rückgabe ['komplett'=>bool, 'offen'=>[[id, rest, einheit]], 'mehr'=>[...]].
-function webe_bestellung_stand(int $bestellung_id, bool $melden = false, string $quelle = ''): array {
+// $oeffnen (Block B, 11.11.2026): nach Mengenkorrektur oder „Verknüpfung lösen" darf eine schon gelieferte Bestellung
+// wieder aufgehen (status 'geliefert' -> 'bestellt', angekommen_am leer), wenn wieder etwas offen ist. Rückgabe zusätzlich 'wieder_offen'.
+function webe_bestellung_stand(int $bestellung_id, bool $melden = false, string $quelle = '', bool $oeffnen = false): array {
     webe_spalten();
     $b = one("SELECT id, nummer, status, angekommen_am, lieferant_id FROM bestellung WHERE id=?", [$bestellung_id]);
     if (!$b) return ['komplett' => false, 'offen' => [], 'mehr' => []];
@@ -122,6 +124,13 @@ function webe_bestellung_stand(int $bestellung_id, bool $melden = false, string 
     } elseif ($irgendwas) {
         q("UPDATE bestellung SET teilgeliefert_am=COALESCE(teilgeliefert_am, CURDATE()) WHERE id=?", [$bestellung_id]);
     }
+    $wiederOffen = false;
+    if (!$komplett && $oeffnen && $warSchon && $offen) {
+        q("UPDATE bestellung SET status='bestellt', angekommen_am=NULL WHERE id=? AND status='geliefert'", [$bestellung_id]);
+        if (!empty($b['lieferant_id'])) { try { q("UPDATE bestellung SET station=NULL WHERE id=? AND station='eingegangen'", [$bestellung_id]); } catch (\Throwable $e) {} }
+        $wiederOffen = true;
+        if (function_exists('log_aktivitaet')) { try { log_aktivitaet('bestellung', $bestellung_id, 'team', 'Bestellung wieder offen: nach Korrektur bzw. gelöster Verknüpfung fehlt noch Ware.', 'status'); } catch (\Throwable $e) {} }
+    }
     webe_bedarf_bump();
     if ($melden && $irgendwas && !$warSchon) {
         $firma = $b['lieferant_id'] ? (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [(int)$b['lieferant_id']]) : '';
@@ -130,7 +139,30 @@ function webe_bestellung_stand(int $bestellung_id, bool $melden = false, string 
                       : 'Teillieferung zu ' . $b['nummer'] . ' eingebucht' . ($quelle !== '' ? ' (' . $quelle . ')' : '') . ', ' . count($offen) . ' Position(en) noch offen (zählen weiter als unterwegs).',
             '?p=bestellung&id=' . $bestellung_id);
     }
-    return ['komplett' => $komplett, 'offen' => $offen, 'mehr' => $mehr];
+    return ['komplett' => $komplett, 'offen' => $offen, 'mehr' => $mehr, 'wieder_offen' => $wiederOffen];
+}
+
+// Verknüpfung Charge <-> Bestellposition lösen (Block B Teil 3, 11.11.2026), z. B. falsch verknüpft (Mikrozirkulation BE-2890 vs.
+// BE-2933). Danach ist die Charge frei (kein Bestellbezug), die Position rechnet neu (ohne Charge: geliefert 0) und die Bestellung
+// geht ggf. wieder auf. Auftrag/Lieferant an der Charge bleiben (können echt sein). Rückgabe ['ok','msg'].
+function webe_charge_loesen(int $charge_id, string $von = ''): array {
+    $c = one("SELECT id, charge_nr, bestellung_position_id FROM charge WHERE id=?", [$charge_id]);
+    if (!$c || empty($c['bestellung_position_id'])) return ['ok' => false, 'msg' => 'Diese Charge ist mit keiner Bestellung verknüpft.'];
+    $bpId = (int)$c['bestellung_position_id'];
+    $bp = one("SELECT bp.bestellung_id, b.nummer FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.id=?", [$bpId]);
+    q("UPDATE charge SET bestellung_position_id=NULL WHERE id=?", [$charge_id]);
+    if ((int) scalar("SELECT COUNT(*) FROM charge WHERE bestellung_position_id=?", [$bpId]) === 0) q("UPDATE bestellung_position SET geliefert_menge=0 WHERE id=?", [$bpId]);
+    else webe_position_neu_rechnen($bpId);
+    $st = $bp ? webe_bestellung_stand((int)$bp['bestellung_id'], false, '', true) : ['wieder_offen' => false];
+    $cnr = (string)($c['charge_nr'] ?: '#' . $charge_id);
+    $txt = 'Verknüpfung gelöst: Charge ' . $cnr . ' gehört nicht mehr zu ' . ($bp['nummer'] ?? 'der Bestellung') . ($von !== '' ? ' (' . $von . ')' : '') . '.';
+    if (function_exists('log_aktivitaet')) {
+        try { if ($bp) log_aktivitaet('bestellung', (int)$bp['bestellung_id'], 'team', $txt, 'status'); log_aktivitaet('charge', $charge_id, 'team', $txt, 'notiz'); } catch (\Throwable $e) {}
+    }
+    if (function_exists('aenderung_protokollieren')) { try { aenderung_protokollieren('charge', $charge_id, ['bestellung_position_id' => $bpId], ['bestellung_position_id' => null], 'verknuepfung_loesen'); } catch (\Throwable $e) {} }
+    try { q("INSERT INTO lg_charge_log (charge_id,feld,alt,neu,benutzer_id,benutzer_name,angelegt) VALUES (?,?,?,?,?,?,?)",
+            [$charge_id, 'Bestellung', (string)($bp['nummer'] ?? ''), 'gelöst', null, mb_substr($von, 0, 120), gmdate('Y-m-d H:i:s')]); } catch (\Throwable $e) {}
+    return ['ok' => true, 'msg' => $txt . (!empty($st['wieder_offen']) ? ' Die Bestellung ist wieder offen.' : '')];
 }
 
 // Charge an eine Bestellposition hängen (überschreibt eine frühere Verknüpfung) und die Bestellung neu bewerten.

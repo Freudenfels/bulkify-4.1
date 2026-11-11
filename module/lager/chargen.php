@@ -2,6 +2,7 @@
 // Chargenverfolgung – Übersicht aller Chargen + Rückverfolgung (Rohstoff ↔ Produkt) über produktion_verbrauch.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/charge_korrektur.php';   // Menge korrigieren / Verknüpfung lösen (Block B, 11.11.2026)
 
 $chId = (int)($_GET['id'] ?? 0);
 
@@ -22,6 +23,25 @@ if ($chId) {
               LEFT JOIN auftrag a ON a.id=c.auftrag_id LEFT JOIN kunden ak ON ak.id=a.kunde_id
               WHERE c.id=?", [$chId]);
     if (!$c) { render_header('chargen','Charge'); bx_head('Charge nicht gefunden','', bx_btn('Zurück','?p=chargen','ghost')); render_footer(); exit; }
+
+    // Block B (11.11.2026): Menge korrigieren (nur Admin) und Verknüpfung zur Bestellung lösen. Eine Funktion für alle Wege.
+    $wer = (string)(current_user()['name'] ?? 'Team');
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'menge_korr') {
+        if (!has_role('admin')) { header('Location: ?p=chargen&id=' . $chId . '&kfehler=' . rawurlencode('Nur Admin darf Mengen korrigieren.')); exit; }
+        $beleg = charge_korr_beleg_speichern($_FILES['korr_beleg'] ?? [], $chId);
+        $r = charge_menge_korrigieren($chId, (string)($_POST['korr_was'] ?? ''), zahl_lesen((string)($_POST['korr_menge'] ?? ''), true),
+                                      (string)($_POST['korr_grund'] ?? ''), (string)($_POST['korr_notiz'] ?? ''), $wer, $beleg);
+        header('Location: ?p=chargen&id=' . $chId . ($r['ok'] ? '&kok=' . rawurlencode(trim($r['meldung'] . ' ' . $r['hinweis'])) : '&kfehler=' . rawurlencode($r['meldung']))); exit;
+    }
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'verkn_loesen') {
+        if (!has_role('admin')) { header('Location: ?p=chargen&id=' . $chId . '&kfehler=' . rawurlencode('Nur Admin.')); exit; }
+        $r = webe_charge_loesen($chId, $wer);
+        header('Location: ?p=chargen&id=' . $chId . ($r['ok'] ? '&kok=' : '&kfehler=') . rawurlencode($r['msg'])); exit;
+    }
+    $istAdminC = has_role('admin');
+    $bestBezug = !empty($c['bestellung_position_id']) ? one("SELECT bp.id, bp.menge, bp.einheit, COALESCE(bp.geliefert_menge,0) AS geliefert, b.id AS bid, b.nummer, b.status
+                       FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.id=?", [(int)$c['bestellung_position_id']]) : null;
+    $korrListe = charge_korr_liste($chId);
 
     // Wohin ging diese Charge? (nur Rohstoff/Verpackung sinnvoll) – aus produktion_verbrauch
     $verwendet = all("SELECT v.menge, v.einheit, pa.id AS pa_id, pa.nummer AS pa_nr, pa.status AS pa_status,
@@ -51,11 +71,42 @@ if ($chId) {
 
     echo '<div class="bx-cards">';
     echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . $chBadge($c['status']) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Menge (verfügbar)</div><div class="v">' . $num($c['menge_verfuegbar']) . ' ' . h($c['einheit']) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Ursprung</div><div class="v">' . $num($c['menge']) . ' ' . h($c['einheit']) . '</div></div>';
+    $stift = fn(string $was) => $istAdminC ? ' <button type="button" class="btn btn-ghost btn-sm" style="padding:0 6px" title="Menge korrigieren (nur Admin)" onclick="var d=document.getElementById(\'dlgKorr\');d.querySelector(\'[name=korr_was]\').value=\'' . $was . '\';d.showModal()">&#9998;</button>' : '';
+    echo '<div class="bx-card"><div class="k">Menge (verfügbar)' . $stift('verfuegbar') . '</div><div class="v">' . $num($c['menge_verfuegbar']) . ' ' . h($c['einheit']) . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Ursprung' . $stift('ursprung') . '</div><div class="v">' . $num($c['menge']) . ' ' . h($c['einheit']) . '</div></div>';
     echo '<div class="bx-card"><div class="k">MHD</div><div class="v">' . ($c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '–') . '</div></div>';
     echo '</div>';
+    if (isset($_GET['kok'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">' . h((string)$_GET['kok']) . '</div>';
+    if (isset($_GET['kfehler'])) echo '<div class="bx-panel" style="padding:10px 14px;border-color:#e6c4c0;color:#8f231b">' . h((string)$_GET['kfehler']) . '</div>';
+    if ($istAdminC) echo charge_korr_dialog($c, 'dlgKorr', '<input type="hidden" name="aktion" value="menge_korr">');
     ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Bestellung</h2>
+      <?php if ($bestBezug): ?>
+        <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>Verknüpft mit <a href="?p=bestellung&id=<?= (int)$bestBezug['bid'] ?>"><?= h($bestBezug['nummer']) ?></a>
+            <span class="muted">· bestellt <?= $num($bestBezug['menge']) ?> <?= h((string)$bestBezug['einheit']) ?> · geliefert <?= $num($bestBezug['geliefert']) ?> · <?= h(status_text((string)$bestBezug['status'])) ?></span></div>
+          <?php if ($istAdminC): ?><form method="post" style="margin:0" onsubmit="return confirm('Verknüpfung mit <?= h($bestBezug['nummer']) ?> lösen? Die Bestellung rechnet die gelieferte Menge neu und geht ggf. wieder auf.');">
+            <input type="hidden" name="aktion" value="verkn_loesen"><button class="btn btn-ghost btn-sm" type="submit">Verknüpfung lösen</button></form><?php endif; ?>
+        </div>
+      <?php else: ?><div class="muted">Mit keiner Bestellung verknüpft.</div><?php endif; ?>
+    </div>
+    <?php if ($korrListe): ?>
+    <div class="bx-panel">
+      <h2 style="margin-top:0">Korrekturen</h2>
+      <div class="bx-tablewrap"><table class="bx-table">
+        <thead><tr><th>Wann</th><th>Was</th><th class="bx-num">alt</th><th class="bx-num">neu</th><th class="bx-num">Differenz</th><th>Grund</th><th>Wer</th><th>Beleg</th></tr></thead>
+        <tbody><?php foreach ($korrListe as $kr): $u = $kr['art'] === 'ursprung'; ?>
+          <tr><td><?= h(fmt_zeit((string)$kr['angelegt'])) ?></td><td><?= $u ? 'Ursprungsmenge' : 'verfügbar' ?></td>
+            <td class="bx-num"><?= $num($u ? $kr['menge_alt'] : $kr['verf_alt']) ?></td><td class="bx-num"><?= $num($u ? $kr['menge_neu'] : $kr['verf_neu']) ?></td>
+            <td class="bx-num"><?= ((float)$kr['differenz'] > 0 ? '+' : '') . $num($kr['differenz']) ?> <?= h((string)$kr['einheit']) ?></td>
+            <td><?= h(charge_korr_gruende()[$kr['grund']] ?? $kr['grund']) ?><?= $kr['notiz'] ? '<div class="muted" style="font-size:12px">' . h($kr['notiz']) . '</div>' : '' ?><?= $kr['gebinde'] || $kr['bestellung'] ? '<div class="muted" style="font-size:12px">' . h(trim($kr['gebinde'] . ' ' . $kr['bestellung'])) . '</div>' : '' ?></td>
+            <td><?= h((string)$kr['von']) ?></td>
+            <td><?= $kr['beleg'] ? '<a href="?p=dokument&id=' . (int)$kr['beleg'] . '" target="_blank">Beleg</a>' : '<span class="muted">-</span>' ?></td></tr>
+        <?php endforeach; ?></tbody>
+      </table></div>
+    </div>
+    <?php endif; ?>
     <div class="bx-panel">
       <h2>Herkunft</h2>
       <div class="bx-grid">

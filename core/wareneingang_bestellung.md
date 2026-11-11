@@ -29,3 +29,7 @@ Aufrufer: `bestellung_lieferung_erfassen()` (core/schema.php), `erp_bestellung_l
 
 ## Als geliefert schließen (Teil 4)
 `webe_als_geliefert_schliessen($bid)`: Die Ware kam, ist aber nicht einzeln eingebucht. Offene Positionen bekommen `rest_storniert_am`, die Bestellung wird geliefert/angekommen, dazu ein Vermerk in der Notiz. Es wird keine Charge angelegt.
+
+**Block B (11.11.2026)**
+- `webe_bestellung_stand(..., $oeffnen)`: Mit `$oeffnen=true` (nach Mengenkorrektur oder gelöster Verknüpfung) geht eine gelieferte Bestellung wieder auf, wenn wieder etwas fehlt: `status` von 'geliefert' auf 'bestellt', `angekommen_am` wird geleert, mit Verlaufseintrag. Rückgabe `wieder_offen`.
+- `webe_charge_loesen($charge_id, $von)`: löst die Verknüpfung Charge <-> Bestellposition. Danach ist die Charge frei. Die Position rechnet neu (ohne Charge: geliefert 0), die Bestellung geht ggf. wieder auf. Verlauf, Änderungsprotokoll und Charge-Log. Auftrag und Lieferant an der Charge bleiben.

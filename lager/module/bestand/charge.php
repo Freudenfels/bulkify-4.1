@@ -56,15 +56,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'menge_korr') {
-        $neu   = (float) str_replace(',', '.', (string)($_POST['menge'] ?? ''));
-        $grund = trim((string)($_POST['grund'] ?? ''));
-        $r = erp_charge_menge_setzen($id, $neu, $grund);
-        if ($r['ok']) {
-            $delta = (float)$r['delta'];
-            if (abs($delta) > 1e-9) lg_bewegung_log($id, $delta > 0 ? 'ein' : 'aus', abs($delta), (string)$r['einheit'], (string)$c['item_name'], 'Korrektur' . ($grund ? ': ' . $grund : ''));
-            lg_charge_log_add($id, 'Bestand', menge_txt($c['menge_verfuegbar']) . ' ' . (string)$c['einheit'], menge_txt($neu) . ' ' . (string)($r['einheit'] ?? $c['einheit']));
-        }
-        flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
+        // Block B (11.11.2026): nur Admin, Pflicht-Grund, eine gemeinsame Funktion mit dem Dashboard (core/charge_korrektur.php):
+        // Korrekturbewegung + Verlauf, Gebinde, Bestellung rechnet neu (Fable 18.1.1c/18.1.6).
+        if (!lg_ist_admin()) { flash('Menge korrigieren darf nur ein Admin.', 'warn'); weiter('?p=charge&id=' . $id); }
+        require_once BX_ROOT . '/../core/charge_korrektur.php';
+        $u = lg_benutzer();
+        $beleg = charge_korr_beleg_speichern($_FILES['korr_beleg'] ?? [], $id);
+        $roh = (string)($_POST['korr_menge'] ?? '');
+        $neu = (float) str_replace(',', '.', str_replace('.', '', $roh));   // deutsche Schreibweise: Punkt = Tausender
+        $r = charge_menge_korrigieren($id, (string)($_POST['korr_was'] ?? 'verfuegbar'), $neu, (string)($_POST['korr_grund'] ?? ''),
+                                      (string)($_POST['korr_notiz'] ?? ''), (string)($u['name'] ?? 'Lager'), $beleg);
+        flash(trim($r['meldung'] . ' ' . ($r['hinweis'] ?? '')), $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
     }
     if ($aktion === 'mhd_korr') {
@@ -212,17 +214,23 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
 ?>
 <div class="bx-grid lg-cards" style="margin-bottom:var(--sp-5)">
 
-  <!-- Bestand -->
+  <!-- Bestand (Korrektur nur Admin, mit Grund - Block B 11.11.2026) -->
   <div class="bx-card lg-ecard">
-    <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
+    <?php if (lg_ist_admin()): ?><button type="button" class="lg-ebtn" title="Menge korrigieren (nur Admin)">✎</button><?php endif; ?>
     <div class="k">Bestand</div>
-    <div class="v lg-eview"><?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?></div>
-    <form method="post" class="lg-eform" hidden>
+    <div class="v lg-eview"><?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?><?php if ((float)($c['menge'] ?? 0) > 0): ?><div class="muted" style="font-size:12px">Ursprung <?= h(menge_txt($c['menge'])) ?></div><?php endif; ?></div>
+    <?php if (lg_ist_admin()): ?>
+    <form method="post" class="lg-eform" enctype="multipart/form-data" hidden>
       <input type="hidden" name="aktion" value="menge_korr">
-      <input type="text" inputmode="decimal" name="menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>">
-      <input type="text" name="grund" placeholder="Grund (optional)">
-      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">OK</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
+      <select name="korr_was" data-norscombo><option value="verfuegbar">verfügbar (Schwund, Bruch)</option><option value="ursprung">Ursprung (falsch eingebucht)</option></select>
+      <input type="text" inputmode="decimal" name="korr_menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>" required>
+      <span class="muted" style="font-size:12px"><?= h((string)$c['einheit']) ?> (Einheit fest)</span>
+      <select name="korr_grund" required data-norscombo><option value="">Grund wählen</option><option value="einbuchfehler">Einbuchfehler</option><option value="lieferschein">Lieferschein abweichend</option><option value="schwund">Schwund</option><option value="bruch">Bruch</option><option value="sonstiges">Sonstiges</option></select>
+      <input type="text" name="korr_notiz" placeholder="Notiz">
+      <input type="file" name="korr_beleg" accept=".pdf,image/*">
+      <div class="lg-erow"><button class="btn btn-primary btn-sm" type="submit">Korrektur buchen</button><button type="button" class="btn btn-ghost btn-sm lg-ecancel">Abbr.</button></div>
     </form>
+    <?php endif; ?>
   </div>
 
   <!-- MHD -->
