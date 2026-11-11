@@ -80,7 +80,7 @@ function pg_vorbelegung(int $item_id): ?string { $t = pg_item_tage($item_id); re
 // $opt: pflicht (bool), sprache (de/en/zh), label (string|null), hinweis (string)
 function pg_eingabe(string $name, ?string $wert, array $opt = []): string {
     static $js = false;
-    $s = in_array($opt['sprache'] ?? 'de', ['de', 'en', 'zh'], true) ? $opt['sprache'] : 'de';
+    $s = in_array($opt['sprache'] ?? 'de', ['de', 'en', 'zh'], true) ? ($opt['sprache'] ?? 'de') : 'de';
     $T = ['lbl' => ['de' => 'Preis gültig bis', 'en' => 'Price valid until', 'zh' => '价格有效期至'],
           'tg'  => ['de' => 'Tage', 'en' => 'days', 'zh' => '天'],
           'leer'=> ['de' => 'leer = unbegrenzt', 'en' => 'empty = no expiry', 'zh' => '留空 = 长期有效'],
