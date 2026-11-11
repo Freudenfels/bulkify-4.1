@@ -81,3 +81,5 @@ Unter der Gruppe **Anfragen** steht neu `rohstoff_unterlagen` („Rohstoff-Unter
   - Optionen werden bei jedem Öffnen frisch aus dem Select gelesen (per JS neu befüllte Listen bleiben aktuell); Werte, die andere Skripte setzen, werden nachgezogen.
   - Die leere Option (z. B. „Lager / allgemein“) erscheint als Platzhalter und oben in der Liste, damit man zurück auf leer wählen kann. Lange Einträge laufen beim Darüberfahren durch (Marquee), `title` zeigt den vollen Text.
 
+
+Nach `<main>`: einmaliges Pop-up „Es gibt schon eine offene Bestellung“ (`core/bestellung_doppelt.php`), wenn die Sitzung `bx_doppelt` trägt (Sofortfix 11.11.2026).

@@ -3,6 +3,22 @@
 // nichts vorausgewählt; beim Bestellen wird je Lieferant EINE Bestellung erzeugt. Bulk (Fertige Produkte) je Produkt.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/bestellung_doppelt.php';
+
+// Warnung bei Doppelbestellung (Sofortfix 11.11.2026): vor „Vorsorglich" und „Bestellen" (alle drei Modi) die offenen
+// Bestellungen der gewählten Artikel bzw. Bulk-Produkte prüfen. Treffer ohne Bestätigung -> Pop-up, nichts wird angelegt.
+$bxDoppelt = [];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['vorsorglich', 'bestellen'], true)) {
+    $dItems = []; $dProds = [];
+    if ($_POST['aktion'] === 'vorsorglich') $dItems[] = (int)($_POST['item_id'] ?? 0);
+    else foreach ((array)($_POST['sel'] ?? []) as $k) {
+        $teile = explode(':', (string)$k);
+        if (in_array($teile[0], ['item', 'nach', 'etikett'], true)) $dItems[] = (int)($teile[1] ?? 0);
+        elseif ($teile[0] === 'bulk') $dProds[] = (int)($teile[1] ?? 0);
+    }
+    $bxDoppelt = bestellung_doppelt_treffer($dItems, $dProds);
+    if ($bxDoppelt && empty($_POST['doppelt_ok'])) bestellung_doppelt_stopp($bxDoppelt, '?p=einkaufsliste' . (($_GET['typ'] ?? '') !== '' ? '&typ=' . rawurlencode((string)$_GET['typ']) : ''));
+}
 
 // Freien Bedarf hinzufügen (etwas kaufen, das nichts mit der Produktion zu tun hat)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freibedarf_add') {
@@ -46,6 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
     if (!$online && !$direkt && !lieferant_portalfaehig((int)$sup, $iid, null)) { header('Location: ?p=einkaufsliste&vorsorgportal=1'); exit; }
     if ($iid > 0 && $menge > 0 && scalar("SELECT id FROM item WHERE id=?", [$iid])) {
         $bid = bestellung_erstellen([['item_id'=>$iid, 'menge'=>$menge, 'auftrag_id'=>0]], [], $sup, date('Y-m-d'));
+        if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         if ($bid) {
             if ($direkt) {
                 bestellung_direkt_abschliessen($bid, (string)($_POST['di_datum'] ?? ''), (string)($_POST['di_eta'] ?? ''), trim('Vorsorglich · ' . trim((string)($_POST['di_notiz'] ?? '')), ' ·'));
@@ -164,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         // Eine reale Einkaufsquittung = EIN Beleg (Rohstoffe + ggf. Bulk zusammen).
         $g = $groups[0] ?? [];
         $bid = bestellung_erstellen($g['pos'] ?? [], $onlineBulk, null, $datum, $g['frei'] ?? [], $bulkMengeMap);
-        if ($bid) { $n++; $finalOnline($bid); einkauf_rechnung_anhaengen($bid, 'on_rechnung'); }   // B3: Rechnung zum Beleg ablegen
+        if ($bid) { $n++; $finalOnline($bid); bestellung_doppelt_vermerken([$bid], $bxDoppelt); einkauf_rechnung_anhaengen($bid, 'on_rechnung'); }   // B3: Rechnung zum Beleg ablegen
     } else {
         // B1: je Position ein eigener Beleg (Rohstoff/Verpackung/frei/Nachbestellung).
         foreach ($einzel as $e) {
@@ -172,14 +189,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
                 ? bestellung_erstellen([], [], $e['sup'] ?: null, $datum, [(int)$e['frei']])
                 : bestellung_erstellen([$e['pos']], [], $e['sup'] ?: null, $datum, []);
             if (!$bid) continue;
-            $n++; $finalLief($bid);
+            $n++; $finalLief($bid); bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         }
         // Bulk/Fremdfertigung: je Produkt ein EIGENER Beleg.
         foreach ($bulkUnits as $u) {
             $bmap = $u['ov'] !== null ? [$u['pid'] => $u['ov']] : [];
             $bid = bestellung_erstellen([], [$u['pid']], $u['sup'] ?: null, $datum, [], $bmap);
             if (!$bid) continue;
-            $n++; $finalLief($bid);
+            $n++; $finalLief($bid); bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         }
     }
     header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal : '')); exit;

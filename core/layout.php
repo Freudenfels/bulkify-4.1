@@ -408,6 +408,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     // Hauptbereich
     echo bx_menue_scrim();
     echo "<main class=\"bx-main\">" . bx_mobilbar();
+    // Pop-up „Es gibt schon eine offene Bestellung" (Sofortfix 11.11.2026), einmalig nach dem Bestellversuch.
+    if (!empty($_SESSION['bx_doppelt'])) { require_once __DIR__ . '/bestellung_doppelt.php'; echo bestellung_doppelt_dialog(); }
 }
 
 // Umschalter „Menü: Einfach | Ausführlich" in der Benutzer-Box. Postet auf die aktuelle Seite; public/index.php speichert

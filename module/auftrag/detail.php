@@ -586,7 +586,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?
                     log_aktivitaet('auftrag', $id, 'team', 'Bedarf an die Bedarfsliste gemeldet (' . (beschaffungswege()[pa_beschaffungsweg($paB)] ?? '') . ').', 'notiz'); }
         header('Location: ' . $bwZ . '&bwok=' . urlencode('An die Bedarfsliste gemeldet.')); exit;
     }
+    // Warnung bei Doppelbestellung (Sofortfix 11.11.2026): offene Bulk-/Premix-Bestellung für diesen Auftrag -> Pop-up.
+    require_once BX_ROOT . '/core/bestellung_doppelt.php';
+    $dPre = ($_POST['weg'] ?? '') === 'premix' ? (int) rezeptur_premixitem((int)(auftrag_beschaffungswege($id)['rezeptur_id'] ?? 0)) : 0;
+    $bxDoppelt = bestellung_doppelt_treffer($dPre ? [$dPre] : [], [], $id);
+    if ($bxDoppelt && empty($_POST['doppelt_ok'])) bestellung_doppelt_stopp($bxDoppelt, $bwZ);
     $bid = auftrag_beschaffung_bestellen($id, (string)($_POST['weg'] ?? ''), (int)($_POST['lieferant_id'] ?? 0));
+    if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
     // Dritter Weg „Direkt bestellt (Telefon/Mail)": Entwurf sofort als bestellt + bestätigt abschließen, ohne Mail.
     if ($bid && ($_POST['modus'] ?? '') === 'direkt') bestellung_direkt_abschliessen($bid, null, null, 'aus dem Beschaffungsweg');
     header('Location: ' . ($bid ? '?p=bestellung&id=' . $bid : $bwZ . '&bwfehler=' . urlencode('Bestellung nicht möglich (Weg nicht festgelegt oder kein Angebot).'))); exit;

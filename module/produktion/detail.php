@@ -124,7 +124,12 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 }
 // 1-Klick: Bestellungen aus dem Fehlbedarf anlegen
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'bedarf_bestellen') {
+    // Warnung bei Doppelbestellung (Sofortfix 11.11.2026): offene Bestellungen der fehlenden Artikel -> Pop-up.
+    require_once BX_ROOT . '/core/bestellung_doppelt.php';
+    $bxDoppelt = bestellung_doppelt_treffer(array_column(auftrag_fehlbedarf($id), 'item_id'));
+    if ($bxDoppelt && empty($_POST['doppelt_ok'])) bestellung_doppelt_stopp($bxDoppelt, '?p=produktionsauftrag&id=' . $id);
     $neu = bestellung_aus_bedarf($id);
+    bestellung_doppelt_vermerken($neu, $bxDoppelt);
     // „Direkt bestellt (Telefon/Mail)": Entwürfe mit Lieferant sofort bestellt + bestätigt, keine Mail (ohne Lieferant bleibt Entwurf).
     if (($_POST['modus'] ?? '') === 'direkt')
         foreach ($neu as $nb) if ((int) scalar("SELECT COALESCE(lieferant_id,0) FROM bestellung WHERE id=?", [$nb]) > 0) bestellung_direkt_abschliessen((int)$nb, null, null, 'aus dem Produktionsauftrag');

@@ -8972,6 +8972,7 @@ function auftrag_beschaffung_bestellen(int $auftrag_id, string $weg, int $liefer
     if (!$w || !in_array($weg, ['kapsel', 'premix'], true) || $d['gewaehlt'] !== $weg || !$d['pa']) return 0;
     $ang = null; foreach ($w['angebote'] as $x) if ($x['lieferant_id'] === $lieferant_id) $ang = $x;
     if (!$ang) return 0;
+    if ((float)($w['menge'] ?? 0) <= 1e-6) return 0;   // Sofortfix 11.11.2026: Rest 0 = schon gedeckt -> nichts anlegen (auch ohne Knopf, serverseitig)
     $nr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id]);
     $bez = (string) scalar("SELECT COALESCE(NULLIF(produkt_bezeichnung,''), '') FROM auftrag WHERE id=?", [$auftrag_id]);
     q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz) VALUES (?,?,?,?)",

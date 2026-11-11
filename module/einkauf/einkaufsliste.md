@@ -104,3 +104,5 @@ Der Block „warten auf die Festlegung des Wegs“ zeigt je Auftrag Links zu Auf
 - **Technik:** `item_lieferant_preise()`, `rezeptur_fremd_lieferant_preise()` und `produkt_fremd_lieferant_preise()` haben einen optionalen Referenz-Parameter `$abgelaufen`. Die Auswahl je Lieferant macht `lp_je_lieferant_gueltig()` in core/schema.php.
 
 **Notiz (11.11.2026):** „wartet auf Bestätigung“ wird nicht mehr in die Notiz geschrieben, den Stand zeigt die Statuskette. „Vorsorglich“ und „Direkt bestellt“ **ergänzen** eine vorhandene Notiz, statt sie zu überschreiben.
+
+**Doppelbestellung (11.11.2026):** Vor dem Anlegen prüft `core/bestellung_doppelt.php` offene Bestellungen desselben Artikels bzw. Auftrags. Treffer: Pop-up mit Link, weiter nur mit „Trotzdem bestellen“ (steht im Verlauf).

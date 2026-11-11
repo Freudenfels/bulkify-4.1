@@ -174,3 +174,5 @@ Vor Produktionsbeginn öffnen „Verkürzter Weg“ und „voller Produktionsweg
 - **Schritt-Knöpfe ohne Menge** gibt es nur noch für Admin: „Ohne Menge abhaken (Admin)“ mit Rückfrage und Grund, der Grund landet im Protokoll (`pa_ereignis` abweichung). Die QM-Stationen (Qualitätsprüfung, Freigaben) bleiben normal.
 - Die alte Box „Teilmenge einbuchen“ (eigene Charge je Buchung) entfällt.
 - Der Kopf-Knopf heißt jetzt „In der Werk-App produzieren“.
+
+**Doppelbestellung (11.11.2026):** Vor dem Anlegen prüft `core/bestellung_doppelt.php` offene Bestellungen desselben Artikels bzw. Auftrags. Treffer: Pop-up mit Link, weiter nur mit „Trotzdem bestellen“ (steht im Verlauf).

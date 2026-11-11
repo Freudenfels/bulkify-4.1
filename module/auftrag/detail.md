@@ -373,3 +373,5 @@ Wer „Produziert“, „Etikettiert“ oder „Abgeschlossen“ setzt (`phase_s
 Alle drei Wege stehen im Verlauf.
 
 **Von Hand „versendet“ mit Grund (Sofortfix 11.11.2026):** Statusleiste (`status_schnell`) und „Fortschritt auf Stufe setzen“ (`phase_setzen`, letzte Stufe) fragen nach, wenn das Labor noch läuft oder die Menge nicht voll ist (`auftrag_versendet_offen_text()`): Pop-up „Labor läuft noch / Menge 175 von 500 - trotzdem versendet?“ mit Pflicht-Grund. Grund und Name gehen in den Verlauf. Keine Sperre. „Abgeschlossen“ bleibt bei versendet mit offenem Labor offen, der Kunde sieht „Laboranalyse läuft“.
+
+**Doppelbestellung (11.11.2026):** Vor dem Anlegen prüft `core/bestellung_doppelt.php` offene Bestellungen desselben Artikels bzw. Auftrags. Treffer: Pop-up mit Link, weiter nur mit „Trotzdem bestellen“ (steht im Verlauf).

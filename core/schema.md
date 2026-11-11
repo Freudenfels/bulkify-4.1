@@ -647,3 +647,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 - `preis_anzeige($p, $waehrung, $bezug)`: unter 0,01 als „2,95 € / 1.000 Stk“, sonst 2 bzw. 4 Stellen.
 - `preis_eingabe_lesen($roh, $basis)`: Textfeld über `zahl_lesen()`, `$basis='1000'` teilt durch 1.000.
 - Bereits falsch gespeicherte Werte (z. B. GS Capsules 0,0030 statt 0,00295) werden **nicht** automatisch korrigiert – neu eintragen.
+
+`auftrag_beschaffung_bestellen()` legt bei Rest 0 nichts an (11.11.2026).
