@@ -34,3 +34,11 @@ Umschalter „Liste / Vergleich (nach Produkt)" (`?p=lief_anfragen&ansicht=vergl
 ## E8 – Lieferantenrechnung bezahlen (an der Bestellung)
 Die Zahlung steht auf der Bestelldetailseite (`module/einkauf/detail.php`, Panel „Zahlung"): Download der vom Lieferanten hochgeladenen Rechnung, „Als bezahlt markieren" mit Datum + Zahlungsweg + optionaler Überweisungsbestätigung (`bestellung_bezahlt_markieren()` → `bestellung.bezahlt_am/zahlungsweg` + `dokument` typ='zahlungsbeleg'). Der Lieferant sieht im Portal (`module/lieferant/bestellung.php`) den Status „bezahlt am …" und kann die Überweisungsbestätigung herunterladen (nicht löschen). Noch NICHT mit Buchhaltung/OP-Liste verknüpft.
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+## Fertigprodukt-Preise aus dem Lieferanten-Portal (11.11.2026)
+Nico hat gemeldet: Ein Lieferant hatte auf seiner Seite „Fertigprodukt-Preise“ Preise eingetragen, in dieser Liste standen sie aber nicht. Grund: Diese Preise liegen in `rezeptur_lief_angebot`, es gibt dazu keine Anfrage in `lieferant_anfrage`.
+- Unter der Liste steht jetzt der Block **„Aus dem Lieferanten-Portal“** (Anker `#portalpreise`). Er zeigt Lieferant, Rezeptur mit Kunde, Preis je Einheit, einen offenen Vorschlag und den Stand.
+- Aufgenommen werden Zeilen mit Preis oder Vorschlag, die nicht aus einer beantworteten Anfrage stammen. Bedingung: `quelle_anfrage_id` ist leer oder die Anfrage hat kein Angebot. So steht nichts doppelt.
+- Der Block erscheint bei Typ „Alle“ oder „Fertigprodukte“ und Preis-Tab „Alle“ oder „Preis da“. Die Suche gilt auch hier.
+- Der Tab „Preis da“ zeigt die Zahl zusätzlich, z. B. „Preis da (3 + 10 Portal)“. Oben steht ein Hinweis mit Sprung zum Block.
+

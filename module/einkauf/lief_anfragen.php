@@ -66,6 +66,30 @@ $cTypRoh    = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE art='ro
 $cTypFertig = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE art='fertigprodukt'");
 $cTypAlle   = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage");
 
+// Fertigprodukt-Preise, die der Lieferant selbst im Portal pflegt (Seite „Fertigprodukt-Preise", rezeptur_lief_angebot) -
+// ohne eigene Anfrage (Nico 11.11.2026: „Lieferant hat die Preise eingetragen, ich finde sie nicht in der Liste").
+// Zeilen, die aus einer beantworteten Anfrage stammen, stehen schon oben und werden hier nicht doppelt gezeigt.
+$portalPreise = [];
+if ($typ !== 'rohstoff' && $f !== 'offen') {
+    $ppWhere = "(rla.preis > 0 OR rla.preis_vorschlag > 0)
+                AND (rla.quelle_anfrage_id IS NULL OR NOT EXISTS (SELECT 1 FROM lieferant_angebot ag2 WHERE ag2.anfrage_id = rla.quelle_anfrage_id))";
+    $ppArgs = [];
+    if ($q !== '') {
+        $ppLike = '%' . str_replace('\\', '', $q) . '%';
+        $ppWhere .= " AND (l.firma LIKE ? OR rz.name LIKE ? OR rz.nummer LIKE ? OR kz.firma LIKE ?)";
+        array_push($ppArgs, $ppLike, $ppLike, $ppLike, $ppLike);
+    }
+    $portalPreise = all("SELECT rla.id, rla.rezeptur_id, rla.lieferant_id, rla.preis, rla.preis_vorschlag, rla.vorschlag_am, rla.einheit,
+                                rla.stand, rla.angelegt, l.firma, rz.name AS rez_name, rz.nummer AS rez_nummer, rz.darreichungsform,
+                                kz.firma AS rez_kunde, rz.kunde_id AS rez_kunde_id
+                         FROM rezeptur_lief_angebot rla
+                         JOIN rezeptur rz ON rz.id = rla.rezeptur_id
+                         LEFT JOIN lieferanten l ON l.id = rla.lieferant_id
+                         LEFT JOIN kunden kz ON kz.id = rz.kunde_id
+                         WHERE $ppWhere
+                         ORDER BY COALESCE(rla.stand, DATE(rla.angelegt)) DESC, l.firma, rz.name LIMIT 500", $ppArgs);
+}
+
 $eur = fn($x, $w) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',') . ' ' . h($w ?: 'EUR');
 $menge = fn($m, $e) => $m !== null && $m !== '' ? rtrim(rtrim(number_format((float)$m, 3, ',', '.'), '0'), ',') . ($e ? ' ' . h($e) : '') : '–';
 $dat = fn($d) => $d ? fmt_zeit($d, 'd.m.Y') : '–';
@@ -105,7 +129,7 @@ if (has_role('admin')) {
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>'; ?>
 <div class="bx-listbar">
   <?php $tab = function($key,$lbl) use ($f,$q,$typSuffix) { $on=$f===$key?' class="on"':''; $href='?p=lief_anfragen&f='.$key.$typSuffix.($q!==''?'&q='.urlencode($q):''); return '<a'.$on.' href="'.$href.'" style="margin-right:12px">'.$lbl.'</a>'; }; ?>
-  <div><?= $tab('alle','Alle ('.$cAlle.')') ?><?= $tab('offen','Preis ausstehend ('.$cOffen.')') ?><?= $tab('beantwortet','Preis da ('.$cBeant.')') ?>
+  <div><?= $tab('alle','Alle ('.$cAlle.')') ?><?= $tab('offen','Preis ausstehend ('.$cOffen.')') ?><?= $tab('beantwortet','Preis da ('.$cBeant.($typ !== 'rohstoff' && ($cPortal = (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot rla WHERE (rla.preis > 0 OR rla.preis_vorschlag > 0) AND (rla.quelle_anfrage_id IS NULL OR NOT EXISTS (SELECT 1 FROM lieferant_angebot ag2 WHERE ag2.anfrage_id = rla.quelle_anfrage_id))")) ? ' + '.$cPortal.' Portal' : '').')') ?>
     <span style="margin:0 10px;color:var(--line)">|</span>
     <a href="?p=lief_anfragen"<?= $ansicht==='liste'?' class="on"':'' ?> style="margin-right:12px">Liste</a><a href="?p=lief_anfragen&ansicht=vergleich"<?= $ansicht==='vergleich'?' class="on"':'' ?>>Vergleich (nach Produkt)</a>
   </div>
@@ -117,6 +141,11 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
   </form>
 </div>
 
+<?php if ($ansicht === 'liste' && $portalPreise): ?>
+<div class="bx-panel" style="border-left:3px solid var(--gruen);padding:10px 14px">
+  <?= count($portalPreise) ?> Fertigprodukt-Preis(e) hat der Lieferant direkt im Portal eingetragen (ohne eigene Anfrage) - <a href="#portalpreise">unten in der Liste „Aus dem Lieferanten-Portal"</a>.
+</div>
+<?php endif; ?>
 <?php if ($ansicht === 'liste'): ?>
 <div class="bx-panel">
 <?php if (!$rows): ?>
@@ -169,6 +198,28 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
   <?php if (count($rows) >= 500): ?><p class="muted" style="font-size:12px;margin-top:8px">Nur die neuesten 500 – mit der Suche eingrenzen.</p><?php endif; ?>
 <?php endif; ?>
 </div>
+<?php if ($portalPreise): ?>
+<div class="bx-panel" id="portalpreise">
+  <h2 style="margin-top:0">Aus dem Lieferanten-Portal <span class="muted" style="font-weight:normal">(<?= count($portalPreise) ?>)</span></h2>
+  <p class="muted" style="margin-top:0;font-size:13px">Fertigprodukt-Preise, die der Lieferant auf seiner Seite „Fertigprodukt-Preise" selbst eingetragen hat. Ein Erstpreis gilt sofort, eine Änderung eines festen Preises ist ein Vorschlag und wartet auf Freigabe (Einkauf → Preise → Fremdfertigung).</p>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th>Lieferant</th><th>Rezeptur</th><th class="bx-num">Preis</th><th>Status</th><th>Stand</th></tr></thead>
+    <tbody>
+    <?php foreach ($portalPreise as $pp): $ppE = (string)($pp['einheit'] ?: 'Stk'); ?>
+      <tr>
+        <td style="max-width:220px;white-space:normal;overflow-wrap:anywhere"><a href="?p=lieferant&id=<?= (int)$pp['lieferant_id'] ?>"><?= h((string)($pp['firma'] ?: '–')) ?></a></td>
+        <td style="max-width:320px;white-space:normal;overflow-wrap:anywhere"><a href="?p=rezeptur_detail&id=<?= (int)$pp['rezeptur_id'] ?>"><?= h(trim(((string)$pp['rez_nummer'] !== '' ? $pp['rez_nummer'] . ' · ' : '') . (string)$pp['rez_name'])) ?></a>
+          <?php if (!empty($pp['rez_kunde'])): ?><div class="muted" style="font-size:11px">Kunde: <?= kunde_anzeige($pp['rez_kunde_id'], (string)$pp['rez_kunde']) ?></div><?php endif; ?></td>
+        <td class="bx-num"><?php if ((float)$pp['preis'] > 0): ?><strong style="font-weight:600"><?= $eur($pp['preis'], 'EUR') ?></strong> <span class="muted">/ <?= h($ppE) ?></span><?php else: ?><span class="muted">–</span><?php endif; ?>
+          <?php if ((float)($pp['preis_vorschlag'] ?? 0) > 0): ?><div style="font-size:11px;color:#8a6d1f">Vorschlag: <?= $eur($pp['preis_vorschlag'], 'EUR') ?></div><?php endif; ?></td>
+        <td><?= (float)($pp['preis_vorschlag'] ?? 0) > 0 ? bx_badge('Vorschlag wartet', 'warn') : bx_badge('Preis da', 'ok') ?></td>
+        <td style="white-space:nowrap"><?= $dat($pp['stand'] ?: $pp['angelegt']) ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php endif; ?>
 <?php else: /* ======= E6: Vergleich nach Produkt gruppiert ======= */
   // Alle Anfragen MIT Angebot laden, nach Produkt/Rohstoff gruppieren, Angebote je Gruppe nebeneinander.
   $vz = all("SELECT la.id, la.nummer, la.art, la.item_id, la.rezeptur_id, la.betreff, la.menge, la.einheit,
