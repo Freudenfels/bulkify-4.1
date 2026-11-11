@@ -27,3 +27,22 @@ Die Seite ändert keine Daten. Die Kästen auf der Anfrage- und Rezepturseite (`
 ## Ergänzung 10.11.2026
 - Jede Zeile hat den Knopf **„Preis / Unterlage“**. Er öffnet das Fenster für Preis ab Menge und CoA/Spec-Upload; die KI füllt die Infos (siehe `rohstoff_erfassen.md`).
 - Vorgeschlagene **Alternativen** zu Rohstoff-Anfragen zählen als Quelle mit („PAF-… · Alternative“), solange der Kunde noch nicht entschieden hat.
+
+## Reiter „Aktuelle Anfragen“ (11.11.2026)
+Nico wollte alle offenen Anfragen (damals 42) an einer Stelle sortiert haben, damit sich die Infos leicht hochladen lassen. Dafür gibt es den ersten Reiter `f=anfragen`.
+- **Welche Anfragen:** dieselbe Regel wie die Zahl am Menü „Anfragen“ (`bx_anfrage_counts()` in core/layout.php):
+  - Rezeptur-Anfragen ohne echten Vorschlag
+  - Portal-Anfragen (Produkt, Rohstoff, Dienstleistung) ohne sichtbares, freigegebenes Angebot
+  - jeweils nicht abgelehnt
+- **Sortierung:** älteste zuerst, also wer am längsten wartet.
+- **Je Anfrage ein Block:**
+  - Kopf: Nummer (Link), Art, Kunde, Titel bzw. Menge, Eingangsdatum und Badge „n mit Lücke“ bzw. „Unterlagen vollständig“.
+  - Darunter die Rohstoffe mit Preis, Dokument, Wirkstoff/NRV und Stand beim Lieferanten. Der Knopf „Preis / Unterlage“ öffnet das bekannte Pop-up (`?p=rohstoff_erfassen`: Preis ab Menge, CoA/Spec, KI liest aus).
+- **Woher die Rohstoffe kommen:**
+  - Rezeptur-Anfrage: Wunschzeilen und die Zutaten einer verknüpften Rezeptur. Ist eine Wunschzeile ohne Zuordnung, steht dort „noch keinem Rohstoff zugeordnet“ mit Knopf „Zuordnen“.
+  - Rohstoff-Anfrage: der angefragte Rohstoff und vorgeschlagene Alternativen.
+  - Produkt-Anfrage: die Zutaten der Rezeptur bzw. der Produkt-Rezeptur.
+- Leerkapseln und Premix werden hier nicht gezeigt, wie in der übrigen Liste.
+- **Suche:** wirkt auch hier, auf Nummer, Kunde, Titel und Rohstoff.
+- **Code:** Die Stand-Abfrage je Rohstoff ist jetzt die Funktion `$statusFuer()` und wird von beiden Ansichten genutzt.
+

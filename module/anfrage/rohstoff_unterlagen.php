@@ -10,7 +10,7 @@ require_once BX_ROOT . '/core/rohstoff_unterlagen.php';   // Pop-up „Preis & U
 
 $DFORM = function_exists('anfrage_formen') ? anfrage_formen() : [];
 $filter = (string)($_GET['f'] ?? 'offen');
-$FILTER = ['offen' => 'Etwas fehlt', 'dok' => 'Dokument fehlt', 'preis' => 'Preis fehlt', 'nrv' => 'NRV nachtragen', 'ok' => 'Vollständig', 'alle' => 'Alle'];
+$FILTER = ['anfragen' => 'Aktuelle Anfragen', 'offen' => 'Etwas fehlt', 'dok' => 'Dokument fehlt', 'preis' => 'Preis fehlt', 'nrv' => 'NRV nachtragen', 'ok' => 'Vollständig', 'alle' => 'Alle'];
 if (!isset($FILTER[$filter])) $filter = 'offen';
 $q = trim((string)($_GET['q'] ?? ''));
 
@@ -47,8 +47,11 @@ foreach (all("SELECT a.item_id, pa.id, pa.nummer, pa.betreff, k.firma FROM porta
 
 // --- Stand je Rohstoff: Preis, Dokument, Wirkstoff/NRV, Lieferanten-Anfragen ----------------------------------------
 $zeilen = [];
-if ($vorg) {
-    $in = implode(',', array_map('intval', array_keys($vorg)));
+// Stand je Rohstoff (Preis, Dokument, Wirkstoffe, Lieferanten-Anfragen) für eine Liste von IDs.
+$statusFuer = function (array $ids): array {
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+    if (!$ids) return [];
+    $in = implode(',', $ids);
     $items = all("SELECT i.id, i.name, i.artikelnummer, i.ek_preis, i.einheit,
                          EXISTS(SELECT 1 FROM lieferant_preis lp WHERE lp.item_id=i.id AND lp.preis>0) AS hat_lp,
                          EXISTS(SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id AND d.typ IN ('spec','coa','beides','analyse')) AS hat_dok,
@@ -65,10 +68,69 @@ if ($vorg) {
         $dok = !empty($it['hat_dok']);
         $nrvPflicht = (string)($it['wirkstoffe'] ?? '') === '' && preg_match($nrvMuster, mb_strtolower((string)$it['name']));
         $fehlt = (!$preis ? 1 : 0) + (!$dok ? 1 : 0) + ($nrvPflicht ? 1 : 0);
-        $zeilen[] = $it + ['preis' => $preis, 'dok' => $dok, 'nrv' => $nrvPflicht, 'fehlt' => $fehlt, 'vorgaenge' => array_values($vorg[(int)$it['id']])];
+        $out[(int)$it['id']] = $it + ['preis' => $preis, 'dok' => $dok, 'nrv' => (bool)$nrvPflicht, 'fehlt' => $fehlt];
     }
+    return $out ?? [];
+};
+if ($vorg) foreach ($statusFuer(array_keys($vorg)) as $iid => $st) $zeilen[] = $st + ['vorgaenge' => array_values($vorg[$iid])];
+
+// --- Reiter „Aktuelle Anfragen" (Nico 11.11.2026): die offenen Anfragen (gleiche Regel wie die Zahl am Menü „Anfragen"),
+// je Anfrage ihre Rohstoffe mit Stand und Knopf zum Hochladen von Preis/CoA/Spec. Älteste zuerst (wartet am längsten).
+$anfOffen = [];
+$TYPLBL = ['produkt' => 'Produkt-Anfrage', 'rohstoff' => 'Rohstoff-Anfrage', 'dienstleistung' => 'Dienstleistung'];
+foreach (all("SELECT ra.id, ra.nummer, ra.darreichungsform, ra.produktname, ra.angelegt, ra.status, ra.rezeptur_id, k.firma
+              FROM rezeptur_anfrage ra LEFT JOIN rezeptur r ON r.id=ra.rezeptur_id LEFT JOIN kunden k ON k.id=ra.kunde_id
+              WHERE ra.status<>'abgelehnt' AND NOT (ra.status<>'ueberarbeiten' AND r.status IN ('vorschlag','freigegeben','eingefroren'))") as $r) {
+    $roh = [];
+    foreach (all("SELECT item_id, bezeichnung FROM rezeptur_anfrage_wunsch WHERE anfrage_id=? ORDER BY sort, id", [(int)$r['id']]) as $w)
+        $roh[] = ['item_id' => (int)$w['item_id'], 'bez' => (string)$w['bezeichnung']];
+    if (!empty($r['rezeptur_id'])) foreach (all("SELECT item_id, bezeichnung FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [(int)$r['rezeptur_id']]) as $z)
+        $roh[] = ['item_id' => (int)$z['item_id'], 'bez' => (string)$z['bezeichnung']];
+    $anfOffen[] = ['nummer' => (string)$r['nummer'], 'href' => '?p=anfrage&id=' . (int)$r['id'], 'art' => 'Rezeptur-Anfrage · ' . ($DFORM[$r['darreichungsform']] ?? (string)$r['darreichungsform']),
+                   'titel' => (string)($r['produktname'] ?? ''), 'kunde' => (string)($r['firma'] ?? ''), 'datum' => (string)$r['angelegt'], 'roh' => $roh];
 }
-$cnt = ['offen' => 0, 'dok' => 0, 'preis' => 0, 'nrv' => 0, 'ok' => 0, 'alle' => count($zeilen)];
+foreach (all("SELECT pa.id, pa.nummer, pa.typ, pa.betreff, pa.angelegt, pa.rohstoff_id, pa.rezeptur_id, pa.produkt_id, pa.wunsch_menge, pa.wunsch_einheit, k.firma
+              FROM portal_anfrage pa LEFT JOIN kunden k ON k.id=pa.kunde_id
+              WHERE pa.status<>'abgelehnt'
+                AND NOT EXISTS (SELECT 1 FROM angebot a WHERE a.anfrage_id=pa.id AND a.kunde_id=pa.kunde_id
+                                AND COALESCE(a.kunde_ausgeblendet,0)=0 AND a.status<>'offen' AND a.preise_kunde=1)") as $r) {
+    $roh = [];
+    if ($r['typ'] === 'rohstoff') {
+        $roh[] = ['item_id' => (int)($r['rohstoff_id'] ?? 0), 'bez' => (string)$r['betreff']];
+        foreach (all("SELECT item_id FROM portal_anfrage_alternative WHERE anfrage_id=? AND status='vorgeschlagen'", [(int)$r['id']]) as $al)
+            $roh[] = ['item_id' => (int)$al['item_id'], 'bez' => 'Alternative'];
+    } else {
+        $rzId = (int)($r['rezeptur_id'] ?? 0) ?: ((int)($r['produkt_id'] ?? 0) ? (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$r['produkt_id']]) : 0);
+        if ($rzId) foreach (all("SELECT item_id, bezeichnung FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [$rzId]) as $z)
+            $roh[] = ['item_id' => (int)$z['item_id'], 'bez' => (string)$z['bezeichnung']];
+    }
+    $menge = $r['wunsch_menge'] ? ' · ' . rtrim(rtrim(number_format((float)$r['wunsch_menge'], 3, ',', '.'), '0'), ',') . ' ' . (string)$r['wunsch_einheit'] : '';
+    $anfOffen[] = ['nummer' => (string)$r['nummer'], 'href' => '?p=portal_anfrage&id=' . (int)$r['id'], 'art' => ($TYPLBL[$r['typ']] ?? (string)$r['typ']),
+                   'titel' => (string)($r['betreff'] ?? '') . $menge, 'kunde' => (string)($r['firma'] ?? ''), 'datum' => (string)$r['angelegt'], 'roh' => $roh];
+}
+usort($anfOffen, fn($a, $b) => strcmp($a['datum'], $b['datum']));
+$anfStatus = $statusFuer(array_merge(...array_map(fn($a) => array_column($a['roh'], 'item_id'), $anfOffen ?: [['roh' => []]])));
+// Je Anfrage: wie viele Rohstoffe haben eine Lücke (inkl. „noch nicht zugeordnet")?
+foreach ($anfOffen as &$ao) {
+    $seen = []; $liste = [];
+    foreach ($ao['roh'] as $rr) {
+        $k = $rr['item_id'] > 0 ? 'i' . $rr['item_id'] : 'b' . mb_strtolower($rr['bez']);
+        if (isset($seen[$k])) continue; $seen[$k] = 1;
+        if ($rr['item_id'] > 0 && !isset($anfStatus[$rr['item_id']])) continue;   // z. B. Leerkapsel/Premix: hier nicht relevant
+        $liste[] = $rr;
+    }
+    $ao['roh'] = $liste;
+    $ao['luecken'] = count(array_filter($liste, fn($rr) => $rr['item_id'] <= 0 || $anfStatus[$rr['item_id']]['fehlt'] > 0));
+}
+unset($ao);
+if ($q !== '' && $filter === 'anfragen') {
+    $nq = mb_strtolower($q);
+    $anfOffen = array_values(array_filter($anfOffen, function ($a) use ($nq, $anfStatus) {
+        $hay = mb_strtolower($a['nummer'] . ' ' . $a['art'] . ' ' . $a['titel'] . ' ' . $a['kunde'] . ' ' . implode(' ', array_map(fn($r) => $r['bez'] . ' ' . ($anfStatus[$r['item_id']]['name'] ?? ''), $a['roh'])));
+        return mb_strpos($hay, $nq) !== false;
+    }));
+}
+$cnt = ['anfragen' => count($anfOffen), 'offen' => 0, 'dok' => 0, 'preis' => 0, 'nrv' => 0, 'ok' => 0, 'alle' => count($zeilen)];
 foreach ($zeilen as $z) {
     if ($z['fehlt']) $cnt['offen']++; else $cnt['ok']++;
     if (!$z['dok']) $cnt['dok']++;
@@ -100,6 +162,42 @@ echo rohstoff_erfassen_meldung();
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
   <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="<?= h($lnk(['q' => ''])) ?>">zurücksetzen</a><?php endif; ?>
 </form>
+<?php if ($filter === 'anfragen'): ?>
+<p class="muted" style="margin:0 0 10px;font-size:13px">Offene Anfragen (wie die Zahl am Menü „Anfragen“), älteste zuerst. Je Anfrage die Rohstoffe mit Stand. „Preis / Unterlage“ öffnet das Fenster zum Hochladen von Preis, CoA und Spezifikation (KI liest aus).</p>
+<?php if (!$anfOffen): ?><div class="bx-panel"><div class="muted">Keine offenen Anfragen.</div></div><?php endif; ?>
+<?php foreach ($anfOffen as $ao): ?>
+<div class="bx-panel" style="padding:12px 14px;margin-bottom:12px<?= $ao['luecken'] ? ';border-left:3px solid var(--warn)' : ';border-left:3px solid var(--gruen)' ?>">
+  <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+    <div><a href="<?= h($ao['href']) ?>" target="_blank" rel="noopener"><?= h($ao['nummer']) ?></a> <span class="muted">· <?= h($ao['art']) ?><?= $ao['kunde'] !== '' ? ' · ' . h($ao['kunde']) : '' ?></span>
+      <?php if ($ao['titel'] !== ''): ?><div style="font-size:13px"><?= h(mb_substr($ao['titel'], 0, 90)) ?></div><?php endif; ?></div>
+    <div class="muted" style="font-size:12px;white-space:nowrap">eingegangen <?= h(fmt_zeit($ao['datum'], 'd.m.Y')) ?> · <?= $ao['roh'] ? ($ao['luecken'] ? bx_badge($ao['luecken'] . ' mit Lücke', 'warn') : bx_badge('Unterlagen vollständig', 'ok')) : bx_badge('keine Rohstoffe', '') ?></div>
+  </div>
+  <?php if ($ao['roh']): ?>
+  <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table" style="font-size:13px">
+    <thead><tr><th>Rohstoff</th><th>Preis</th><th>Dokument</th><th>Wirkstoff / NRV</th><th>Beim Lieferanten</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($ao['roh'] as $rr): $st = $rr['item_id'] > 0 ? ($anfStatus[$rr['item_id']] ?? null) : null; ?>
+      <tr>
+        <?php if (!$st): ?>
+          <td style="white-space:normal"><?= h($rr['bez'] !== '' ? $rr['bez'] : '–') ?></td>
+          <td colspan="4"><?= bx_badge('noch keinem Rohstoff zugeordnet', 'warn') ?> <span class="muted" style="font-size:11px">in der Anfrage zuordnen</span></td>
+          <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h($ao['href']) ?>" target="_blank" rel="noopener">Zuordnen</a></td>
+        <?php else: ?>
+          <td style="white-space:normal;min-width:180px"><a href="?p=rohstoff&id=<?= (int)$st['id'] ?>" target="_blank" rel="noopener"><?= h((string)$st['name']) ?></a><?= $st['artikelnummer'] ? ' <span class="muted" style="font-size:11px">' . h((string)$st['artikelnummer']) . '</span>' : '' ?></td>
+          <td><?= $st['preis'] ? bx_badge('vorhanden', 'ok') : bx_badge('fehlt', 'err') ?></td>
+          <td><?= $st['dok'] ? bx_badge('vorhanden', 'ok') : bx_badge('fehlt', 'err') ?></td>
+          <td style="white-space:normal;max-width:220px"><?= (string)($st['wirkstoffe'] ?? '') !== '' ? '<span class="muted">' . h(preg_replace('/(\d)\.(\d)/', '$1,$2', (string)$st['wirkstoffe'])) . '</span>' : ($st['nrv'] ? bx_badge('NRV nachtragen', 'warn') : '<span class="muted">–</span>') ?></td>
+          <td style="white-space:normal"><?= (int)$st['la_n'] > 0 ? ((int)$st['la_antw'] > 0 ? bx_badge('beantwortet', 'ok') : bx_badge('angefragt', 'info')) . ' <span class="muted" style="font-size:11px">' . (int)$st['la_n'] . '×</span>' : '<span class="muted">noch nicht</span>' ?></td>
+          <td style="text-align:right;white-space:nowrap"><?= rohstoff_erfassen_knopf((int)$st['id'], (string)$st['name']) ?></td>
+        <?php endif; ?>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+</div>
+<?php endforeach; ?>
+<?php else: ?>
 <div class="bx-panel" style="padding:0;overflow:hidden">
   <div class="bx-tablewrap"><table class="bx-table" style="font-size:13px">
     <thead><tr>
@@ -134,6 +232,7 @@ echo rohstoff_erfassen_meldung();
     bxAnfrageBulkOeffnen(ids, ids.length+' Rohstoff(e) – bei welchen Lieferanten anfragen? (Preis je kg, CoA/Spezifikation)'); if(typeof bxAnfrageModus==='function') bxAnfrageModus('preis');})()">Ausgewählte beim Lieferanten anfragen</button>
   <span class="muted" style="font-size:12px">Preis je kg + Spezifikation/CoA (bei der Preisabgabe Pflicht). „NRV nachtragen“ = am Rohstoff unter Wirkstoffe den Gehalt eintragen (z. B. Kalium 38 %), sonst fehlen elementare Werte und % NRV in Rezeptur, PIB und Kundenportal.</span>
 </div>
+<?php endif; /* Ansicht */ ?>
 <?php anfrage_modal(lieferanten_fuer_anfrage('rohstoff'), '?p=rohstoff_unterlagen&f=' . rawurlencode($filter)); ?>
 <?= rohstoff_erfassen_dialog($lnk([])) ?>
 <?php render_footer(); ?>
