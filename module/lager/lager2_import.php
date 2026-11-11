@@ -34,9 +34,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'eintr
     $mengen = (array)($_POST['menge'] ?? []);
     $chargen= (array)($_POST['charge'] ?? []);
     $mhds   = (array)($_POST['mhd'] ?? []);
-    $n = 0;
+    // Block D (Fable 11.9): Import ohne Bestellung nur mit Pflichtnotiz; je Charge Grund vermerkt, EINE Sammelmeldung an Nico.
+    $weNotiz = trim((string)($_POST['we_notiz'] ?? ''));
+    if ($weNotiz === '') { header('Location: ?p=lager2_import&kunde=' . $kid . '&fehler=' . rawurlencode('Bitte notieren, woher die Bestände stammen (Pflicht).')); exit; }
+    require_once BX_ROOT . '/core/wareneingang_bestellung.php'; webe_spalten();
+    $n = 0; $neuIds = [];
     foreach ($pids as $i => $pid) {
-        $menge = (float) str_replace(',', '.', (string)($mengen[$i] ?? '0'));
+        $menge = zahl_lesen((string)($mengen[$i] ?? '0'), true);   // Tausenderpunkt (Block D)
         if ($pid <= 0 || $menge <= 0) continue;
         // gehört das Produkt zum Kunden? (Historie ist nach kunde_id=kid gefiltert) – Kunde setzen, falls leer.
         if (!scalar("SELECT 1 FROM auftrag WHERE produkt_id=? AND kunde_id=? LIMIT 1", [$pid, $kid])) continue;
@@ -44,8 +48,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'eintr
             q("UPDATE produkt SET kunde_id=? WHERE id=?", [$kid, $pid]);
         $charge = trim((string)($chargen[$i] ?? '')) ?: null;
         $mhd    = trim((string)($mhds[$i] ?? '')) ?: null;
-        if (lager2_einbuchen($pid, $menge, $charge, $mhd, 'Anfangsbestand-Import (Lager 2)')) $n++;
+        if ($cidI = lager2_einbuchen($pid, $menge, $charge, $mhd, 'Anfangsbestand-Import (Lager 2)')) { $n++; $neuIds[] = (int)$cidI; q("UPDATE charge SET we_grund='kundenware', we_grund_notiz=? WHERE id=?", [mb_substr($weNotiz, 0, 255), (int)$cidI]); }
     }
+    if ($n) webe_melden('Lager 2 ohne Bestellung: ' . $n . ' Charge(n) für ' . (string)($kundeRow['firma'] ?? 'Kunde') . ' importiert',
+        $n . ' Charge(n) ohne Bestellung ins Lager 2 gebucht (Anfangsbestand-Import' . (($cu = current_user()) ? ', ' . ($cu['name'] ?? '') : '') . '). Grund: Kundenware (Lager 2) - ' . $weNotiz . '. Bitte prüfen.', '?p=lager2');
     header('Location: ?p=lager2_import&kunde=' . $kid . '&ok=' . $n); exit;
 }
 
@@ -54,6 +60,7 @@ bx_head('Lager-2 Bestände importieren', 'Produkte eines Fulfillment-Kunden aus 
         bx_btn('Zum Fremdlager', '?p=lager2', 'ghost'));
 
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['ok'] . ' Produkt(e) ins Lager 2 eingebucht.</div>';
+if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0;color:#8f231b">' . h((string)$_GET['fehler']) . '</div>';
 
 if (!$ffKunden) {
     echo '<div class="bx-panel"><div class="muted">Kein Fulfillment-Kunde vorhanden. Im <a href="?p=kunden">Kunden</a>-Datensatz „Nutzt unser Fulfillment (Fremdlager)" setzen.</div></div>';
@@ -126,6 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsc
         <input type="hidden" name="charge[]" value="<?= h($z['charge']) ?>">
         <input type="hidden" name="mhd[]" value="<?= h($z['mhd']) ?>">
       <?php endforeach; ?>
+      <input type="text" name="we_notiz" required placeholder="Woher stammen die Bestände? (Pflicht, ohne Bestellung)" style="min-width:320px;flex:1">
       <button class="btn btn-primary" type="submit">Jetzt eintragen (<?= count($zeilen) ?>)</button>
       <a class="btn btn-ghost" href="?p=lager2_import&kunde=<?= $kid ?>">Zurück / ändern</a>
     </form>

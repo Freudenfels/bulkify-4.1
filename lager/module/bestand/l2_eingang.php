@@ -10,11 +10,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $typ        = (string)($_POST['typ'] ?? '');
     $blinkerRaw = trim((string)($_POST['blinker'] ?? ''));
     $blinker    = $blinkerRaw === '' ? null : led_leiste_normalisieren($blinkerRaw);
-    $menge      = (float) str_replace(',', '.', trim((string)($_POST['menge'] ?? '0')));
+    $menge      = erp_menge_parse((string)($_POST['menge'] ?? '0'));   // Block D (Fable 11.9): „135.000" war 135, jetzt 135000
     if ($kunde_id <= 0) { flash('Bitte den Kunden wählen, dem die Ware gehört.', 'warn'); weiter('?p=l2_eingang'); }
     if (!isset($defs[$typ])) { flash('Bitte einen Typ wählen (Verkaufsprodukt, Rohstoff, Etikett …).', 'warn'); weiter('?p=l2_eingang'); }
     if ($blinkerRaw !== '' && $blinker === null) { flash('Blinker-Code ungültig (6 Zeichen) – oder das Feld leer lassen.', 'warn'); weiter('?p=l2_eingang'); }
     if ($menge <= 0) { flash('Bitte eine Menge größer 0 angeben.', 'warn'); weiter('?p=l2_eingang'); }
+    // Block D (Fable 11.9): Kundenware kommt ohne Bestellung -> Wareneingang-Grund mit Pflichtnotiz, danach Meldung an Nico.
+    $weGrund = (string)($_POST['we_grund'] ?? 'kundenware'); $weNotiz = trim((string)($_POST['we_notiz'] ?? ''));
+    if ($weNotiz === '') { flash('Bitte kurz notieren, was angeliefert wurde und warum (Pflicht bei Ware ohne Bestellung).', 'warn'); weiter('?p=l2_eingang'); }
     $def = $defs[$typ];
 
     $item_id = (int)($_POST['item_id'] ?? 0);
@@ -31,6 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         trim((string)($_POST['mhd'] ?? '')) ?: null, $kunde_id, trim((string)($_POST['notiz'] ?? '')));
     if (!$cid) { flash('Einbuchen fehlgeschlagen. Bitte Angaben prüfen.', 'warn'); weiter('?p=l2_eingang'); }
     lg_pakete_set((int)$cid, $pakete);
+    require_once BX_ROOT . '/../core/wareneingang_bestellung.php';
+    webe_ohne_bestellung_vermerken((int)$cid, $weGrund, $weNotiz, (string)(lg_benutzer()['name'] ?? 'Lager'));
     $c = erp_charge((int)$cid);
     lg_bewegung_log((int)$cid, 'ein', $menge, $c['einheit'] ?? null, (string)($c['item_name'] ?? ''), 'Fremdlager-Wareneingang (' . $def['label'] . ')');
 
@@ -103,6 +108,8 @@ if (!$kunden) { hinweis('Noch keine Fulfillment-Kunden hinterlegt. Setze bei ein
       <div class="bx-field"><label>Charge-Nr.</label><input type="text" name="charge_nr" class="lg-code" placeholder="optional"></div>
       <div class="bx-field" id="l2PaketeWrap"><label>Anzahl Pakete / Kartons</label><input type="number" name="pakete" id="l2Pakete" min="1" step="1" value="1"></div>
       <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="notiz" placeholder="z. B. Anlieferung Kunde"></div>
+      <div class="bx-field"><label>Grund (ohne Bestellung)</label><select name="we_grund" required data-norscombo><option value="kundenware" selected>Kundenware (Lager 2)</option><option value="muster">Muster</option><option value="alt_bestellung">Alte Bestellung, nicht im System</option><option value="sonstiges">Sonstiges</option></select></div>
+      <div class="bx-field"><label>Was kam und warum? (Pflicht)</label><input type="text" name="we_notiz" required placeholder="z. B. Kunde schickt 500 Etiketten selbst"></div>
     </div>
 
     <div id="l2Neu" hidden>

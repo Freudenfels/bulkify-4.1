@@ -30,3 +30,5 @@ Quarantäne), schreibt die Bewegung (mit Typ-Label) und bindet – **falls angeg
 - **Verkaufsfertige Produkte haben keine Pakete/Kartons** – bei Typ „Verkaufsprodukt" wird das Feld
   „Anzahl Pakete / Kartons" ausgeblendet und die Paketzahl fest auf 1 gesetzt. Für die anderen Typen
   (Rohstoff, Etikett, …) bleibt die Paketzahl wählbar.
+
+**Grund + Meldung (Block D, 11.11.2026, Fable 11.9):** Kundenware kommt ohne Bestellung. Pflicht sind Grund (Standard „Kundenware (Lager 2)“) und Notiz „Was kam und warum?“. Danach `webe_ohne_bestellung_vermerken()` mit Grund an der Charge und Benachrichtigung an Nico. Die Menge wird deutsch gelesen (135.000 = 135000, vorher 135).

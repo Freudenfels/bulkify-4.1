@@ -24,9 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ff_pu
 // Manuelle Einbuchung
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'einbuchen') {
     $pid   = (int)($_POST['produkt_id'] ?? 0);
-    $menge = (float)str_replace(',', '.', $_POST['menge'] ?? '0');
+    $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);
     $ff    = $pid ? (bool) scalar("SELECT k.nutzt_fulfillment FROM produkt p JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$pid]) : false;
-    if ($pid && $ff && $menge > 0) lager2_einbuchen($pid, $menge, trim($_POST['charge'] ?? '') ?: null, trim($_POST['mhd'] ?? '') ?: null, 'Manuelle Fremdlager-Einbuchung');
+    // Block D (Fable 11.9): ohne Bestellung nur mit Grund + Pflichtnotiz, danach Meldung an Nico (wie Wareneingang ohne Bestellung).
+    $weNotiz = trim((string)($_POST['we_notiz'] ?? ''));
+    if ($weNotiz === '') { header('Location: ?p=lager2&l2fehler=' . rawurlencode('Bitte notieren, was eingebucht wird und warum (Pflicht).')); exit; }
+    $cidL2 = ($pid && $ff && $menge > 0) ? lager2_einbuchen($pid, $menge, trim($_POST['charge'] ?? '') ?: null, trim($_POST['mhd'] ?? '') ?: null, 'Manuelle Fremdlager-Einbuchung') : null;
+    if ($cidL2) { require_once BX_ROOT . '/core/wareneingang_bestellung.php'; webe_ohne_bestellung_vermerken((int)$cidL2, (string)($_POST['we_grund'] ?? 'kundenware'), $weNotiz, (string)(current_user()['name'] ?? '')); }
     header('Location: ?p=lager2&eingebucht=1'); exit;
 }
 
@@ -76,6 +80,7 @@ bx_head('Fremdlager', $ffKunden . ' Fulfillment-Kunde(n) · ' . count($produkte)
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['eingebucht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Fertigware ins Fremdlager eingebucht.</div>';
+if (isset($_GET['l2fehler'])) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0;color:#8f231b">' . h((string)$_GET['l2fehler']) . '</div>';
 if (isset($_GET['energ'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Energetisierung aktualisiert.</div>';
 
 if (!$ffKunden) {
@@ -150,7 +155,9 @@ if (!$ffKunden) {
           <?php foreach ($ffProdukte as $p): ?><option value="<?= (int)$p['id'] ?>"><?= h($p['kunde']) ?> · <?= h($p['anzeigename']) ?> (<?= h($p['nummer']) ?>)</option><?php endforeach; ?>
         </select>
       </div>
-      <div class="bx-field"><label>Menge (Stk)</label><input type="number" step="1" min="1" name="menge" required placeholder="z. B. 500"></div>
+      <div class="bx-field"><label>Menge (Stk)</label><input type="text" inputmode="numeric" name="menge" required placeholder="z. B. 500"></div>
+      <div class="bx-field"><label>Grund (ohne Bestellung)</label><select name="we_grund" required data-norscombo><option value="kundenware" selected>Kundenware (Lager 2)</option><option value="muster">Muster</option><option value="alt_bestellung">Alte Bestellung, nicht im System</option><option value="sonstiges">Sonstiges</option></select></div>
+      <div class="bx-field"><label>Was und warum? (Pflicht)</label><input type="text" name="we_notiz" required placeholder="z. B. Erstbestand laut Inventur Kunde"></div>
       <div class="bx-field"><label>Charge (optional)</label><input type="text" name="charge" placeholder="z. B. BF26801"></div>
       <div class="bx-field"><label>MHD (optional)</label><input type="date" name="mhd"></div>
     </div>

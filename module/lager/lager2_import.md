@@ -13,3 +13,5 @@
 Je Zeile mit Menge > 0: prüft, dass das Produkt wirklich in der Historie des Kunden liegt; setzt `produkt.kunde_id` auf den Kunden, **falls leer** (Katalog-/Rezeptur-Produkte ohne Kunde); dann `lager2_einbuchen($pid,$menge,$charge,$mhd,'Anfangsbestand-Import (Lager 2)')` → legt (lazy) das Verkaufsfertig-Item + **BSKU** an (`produkt_lageritem`/`bsku_ensure`) und bucht die Charge. Danach Flash „N Produkt(e) eingebucht".
 
 **Lesen statt Filtern nach kunde_id:** Über die Aufträge werden auch Produkte gefunden, die am Produkt selbst **keinen** Kunden gesetzt haben (würden sonst im Einbuch-Dropdown fehlen). Siehe `lager2.php` (manuelle Einzel-Einbuchung) und `core/schema.php` (`lager2_einbuchen`, `lager2_bestand`).
+
+**Grund + Meldung (Block D, 11.11.2026):** Beim Eintragen ist eine Notiz „Woher stammen die Bestände?“ Pflicht. Jede Charge bekommt Grund „Kundenware (Lager 2)“, dazu gibt es **eine** Sammelmeldung an Nico statt einer je Charge.
