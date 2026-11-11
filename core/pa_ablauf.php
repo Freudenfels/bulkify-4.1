@@ -370,3 +370,4 @@ function pa_abschliessen(int $pa_id, string $rest_wahl, string $von): array {
 
 // Chargenprotokoll je Unter-Charge (Teil 7)
 require_once __DIR__ . '/pa_protokoll.php';
+require_once __DIR__ . '/pa_eimer.php';   // Eimerplanung (Teil 8)

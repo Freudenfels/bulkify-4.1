@@ -20,6 +20,15 @@ if ($aktion === 'wa_start') {
         $flash('SPERRE: ' . $s['name'] . ' gehört nicht zu diesem Auftrag. Bitte den richtigen Bulk scannen.', false); weiter($zur);
     }
     if ($s['prod_charge_id'] && (int)($s['pa_id'] ?? 0) !== $paId) { $flash('SPERRE: Dieser Eimer gehört zu einem anderen Produktionsauftrag.', false); weiter($zur); }
+    // Eimer der Reihe nach (Handbuch 4.8): der nächste noch nicht abgefüllte Eimer – ein anderer = STOPP.
+    if ($s['prod_charge_id'] && !($uc && (int)$uc['prod_charge_id'] === $s['prod_charge_id'])) {
+        $benutzt = array_map('intval', array_column(all("SELECT prod_charge_id FROM pa_unter_charge WHERE pa_id=? AND prod_charge_id IS NOT NULL", [$paId]), 'prod_charge_id'));
+        $naechster = null; foreach (erp_gebinde_unterchargen($paId) as $e) if (!in_array((int)$e['id'], $benutzt, true)) { $naechster = $e; break; }
+        if ($naechster && (int)$naechster['id'] !== $s['prod_charge_id']) {
+            pa_ereignis($paId, $uc ? (int)$uc['id'] : null, 'sperre', 'Falscher Eimer gescannt: ' . $s['charge_nr'] . ' – an der Reihe ist ' . ($naechster['nummer'] ?? '') . ($naechster['sub_kennung'] ?? ''), '', '', '', $von);
+            $flash('STOPP: Falscher Eimer. Zuerst Eimer ' . ($naechster['nummer'] ?? '') . ($naechster['sub_kennung'] ?? '') . ' abfüllen (Reihenfolge).', false); weiter($zur);
+        }
+    }
     $gleicherBulk = $uc && $s['charge_id'] && (int)$uc['bulk_charge_id'] === $s['charge_id'];   // Wiederanlauf: keine erneute Prüfung
     if ($s['charge_id'] && !$gleicherBulk && ($alt = erp_wa_aeltere_bulk($s['item_id'], $s['charge_id'], $s['mhd'])) !== '' && empty($_POST['aelter_ok'])) {
         $flash('STOPP: Es gibt eine ältere Bulk-Charge (' . $alt . ') – bitte zuerst die ältere verbrauchen.', false); weiter($zur . '&bulk=' . rawurlencode((string)$_POST['bulk_code']));

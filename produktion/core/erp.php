@@ -1811,7 +1811,7 @@ function erp_mischer_plan(int $pa_id, float $cap = 0.0): array {
     // Nur der noch offene REST wird gemischt (St-08); Pulver/Granulat nach Füllgewicht (Massenanteil), nicht nach Portionszahl.
     $restM = (float)$pa['menge'] * erp_rest_faktor($pa_id);
     $einheiten = erp_pa_ist_bulk($pa) ? (int)round($restM) : (int)round($restM) * erp_stueck_je_packung($pa);
-    $zutaten = all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name, z.menge_mg
+    $zutaten = all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name, z.menge_mg, z.item_id
                     FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                     WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rid]);
     $total_mg = 0.0; foreach ($zutaten as $z) $total_mg += (float)$z['menge_mg'];
@@ -1820,6 +1820,14 @@ function erp_mischer_plan(int $pa_id, float $cap = 0.0): array {
     if ($pulver) { $einheiten = (int)round($restM) * erp_stueck_je_packung($pa); $total_mg = 1.0; }   // g Füllgewicht; Zutat = Anteil an 1,0
     $total_kg = $pulver ? $einheiten / 1000.0 : $total_mg * $einheiten / 1e6;
     $out = ['ok'=>true, 'total_kg'=>$total_kg, 'einheiten'=>$einheiten, 'anzahl'=>0, 'cap'=>$cap, 'gebinde'=>[]];
+    // Ein Weg (11.11.2026, Handbuch 4.8): ohne Behältergröße gibt das SYSTEM die Eimer vor (core/pa_eimer.php) – festgeschrieben ab dem 1. Eimer.
+    if ($cap <= 0 && $total_kg > 0 && function_exists('pa_eimerplan_berechnen')) {
+        $fest = pa_eimerplan_fest($pa_id);
+        if ($fest) return $fest + ['einheiten' => $einheiten];
+        $sumMg = 0.0; foreach ($zutaten as $zz) $sumMg += (float)$zz['menge_mg'];
+        $zl = array_map(fn($z) => ['item_id' => (int)$z['item_id'], 'name' => (string)$z['name'], 'kg' => $sumMg > 0 ? (float)$z['menge_mg'] / $sumMg * $total_kg : 0.0], $zutaten);
+        return pa_eimerplan_berechnen($pa_id, $zl, $total_kg) + ['einheiten' => $einheiten, 'cap' => 0];
+    }
     if ($cap <= 0 || $total_kg <= 0) return $out;
     $anzahl = (int) ceil($total_kg / $cap - 1e-9);
     $rest = $total_kg; $gebinde = [];
@@ -1883,12 +1891,10 @@ function erp_mischer_fertig_anzahl(int $pa_id): int { return count(erp_gebinde_u
 // Einen Eimer (Mischbehälter) abschließen: legt GENAU EINE Gebinde-Untercharge an (der Reihe nach).
 // Rückgabe: ['ok','sub_id','nummer','nr','anzahl','alle_fertig','msg'].
 function erp_mischer_eimer_abschliessen(int $pa_id, float $cap, int $eimer_nr, string $akteur = ''): array {
-    if ($cap <= 0) $cap = erp_mischer_cap($pa_id);
-    if ($cap <= 0) return ['ok'=>false, 'msg'=>'Keine Behältergröße eingegeben.'];
-    if (erp_mischer_cap($pa_id) <= 0 && function_exists('pr_daten_setzen'))
-        pr_daten_setzen($pa_id, 'mischer_cap', rtrim(rtrim(number_format($cap, 3, '.', ''), '0'), '.'), $akteur);
-    $cap  = erp_mischer_cap($pa_id) ?: $cap;
+    // Ein Weg (11.11.2026): Eimer gibt das System vor (cap 0 = Eimerplan). Eine früher eingegebene Behältergröße gilt für laufende PAs weiter.
+    $cap = erp_mischer_cap($pa_id) ?: 0.0;
     $plan = erp_mischer_plan($pa_id, $cap);
+    if ($cap <= 0 && !empty($plan['auto']) && function_exists('pa_eimerplan_festschreiben')) pa_eimerplan_festschreiben($pa_id, $plan, $akteur);
     if (empty($plan['ok']) || empty($plan['gebinde'])) return ['ok'=>false, 'msg'=>'Mischplan nicht berechenbar.'];
     $N    = (int)$plan['anzahl'];
     $done = erp_mischer_fertig_anzahl($pa_id);
