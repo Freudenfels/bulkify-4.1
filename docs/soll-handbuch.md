@@ -242,7 +242,7 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
 - Die **Etikett-Freigabe** (Design-Version durch Kunde bzw. im Namen des Kunden) gehört **vor das Etikettieren**. Ohne Freigabe ist **nur der Schritt Etikettieren gesperrt**; Mischen, Verkapseln, Abfüllen bis vor das Etikett laufen.
 - Werk-App zeigt "Etikett nicht freigegeben - nur bis vor dem Etikettieren"; im Dashboard steht es am Auftrag und in "Zu erledigen" (freigeben oder beim Kunden nachhaken).
 - Etikett hochladen/freigeben geschieht am Auftrag über den **Stift an der Kachel "Etikett"** (Reiter Details). Design liegt am Produkt + Kunde; die Freigabe der Version am Auftrag.
-- Kein stiller Ersatz durch ein generisches Etikett: fehlt das Kundenetikett im Bestand, ist Etikettieren gesperrt (alte Etiketten per "Update-Etikett erzeugen" schrittweise umstellen).
+- Kein stiller Ersatz durch ein generisches Etikett: fehlt das Kundenetikett im Bestand, ist Etikettieren gesperrt (alte Etiketten per "Update-Etikett erzeugen" schrittweise umstellen). *(Umgesetzt 11.11.2026, Abendpaket Block E: Ersatz in Dashboard und Werk-App entfernt, beide rechnen gleich. Datenprüfung "Etikett: Aufträge ohne aktuelles Kundenetikett" mit Knopf "Update-Etikett erzeugen" (aus dem freigegebenen Design, sonst "Design fehlt") und "Etikett: Produktionsaufträge, deren Kundenetikett zu wenig Bestand hat".)*
 
 ### 4.10 Kartons und Kartonetiketten (in der Produktion)
 - Nach dem Etikettieren wird verpackt. **Immer wenn ein Karton voll ist**, tippt der Mitarbeiter am Tablet "Karton drucken": Menge ist mit der Standard-Stückzahl je Karton vorbelegt (z. B. 68), er ändert sie nur beim Rest-Karton. Das Etikett kommt sofort.
@@ -521,6 +521,7 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 11.11.2026 | Lieferanten-Anfragen & Preise: Fertigprodukt-Preise, die der Lieferant selbst im Portal einträgt (ohne Anfrage), stehen als eigener Block "Aus dem Lieferanten-Portal" in der Liste und zählen bei "Preis da" mit | Nico / Claude Code |
 | 11.11.2026 | Auftrag, Reiter Details: Etikett-Design als Bild unter den Kacheln (PDF Seite 1 per pdf.js), Klick öffnet das Etikett-Fenster | Nico / Claude Code |
 | 11.11.2026 | Rohstoff-Unterlagen: Reiter "Aktuelle Anfragen" - alle offenen Anfragen (wie Menü-Zahl), älteste zuerst, je Anfrage Rohstoffe mit Stand und "Preis / Unterlage" zum Hochladen | Nico / Claude Code |
+| 11.11.2026 | Abendpaket Block E: Etikett-Ersatz entfernt, Update-Etikett erzeugen, Liste blockierter PAs (4.9) | Nico / Claude Code |
 | 11.11.2026 | Abendpaket Block D: Tausenderpunkt Lager-/Produktions-App, Lager 2 nur mit Grund + Meldung, ein Zusammenführen-Weg, Material lösen, abgelaufene Preise nie still (4.2), bald ablaufend per Cron, Etiketten-Bestand im Portal aus produzierter Menge | Nico / Claude Code |
 | 11.11.2026 | Abendpaket Block C: Grundprinzip 9 gesperrt/inaktiv nirgends sichtbar (Auswahlfelder, Listen mit Schalter, günstigster Lieferant, Portale), Rezeptur-Status inaktiv, Datenprüfung Testdaten auf live | Nico / Claude Code |
 | 11.11.2026 | Abendpaket Block B: Charge Menge korrigieren (eine Funktion, Korrekturbewegung, Bestellung öffnet/schließt), Menge korrigieren und verknüpfen, Verknüpfung lösen, mehrere Chargen je Position (4.5) | Nico / Claude Code |
