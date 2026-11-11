@@ -36,3 +36,9 @@ Eine Lieferantin (Mingyan) hat alle Preise eingetragen, danach waren sie weg. Bi
 
 ## Preis-Gültigkeit (11.11.2026)
 Je Zeile gibt es die Spalte „Gültig bis“ mit Datumsfeld im gemeinsamen Formular, auch beim Hinzufügen. Eine geänderte Gültigkeit wird mit „Alle Preise speichern“ gesichert, auch ohne Preisänderung.
+
+## Nur noch angefragte Rezepturen (11.11.2026)
+- **Freie Auswahl entfällt:** „Für weitere Rezeptur bepreisen“ aus allen Rezepturen der freigeschalteten Formen ist weg. Die Auswahl lief blind nach Namen, und der Lieferant sah dabei auch Kundenrezepturen.
+- **Block „Bitte bepreisen“:** offene Fremdfertigungs-Anfragen an diesen Lieferanten ohne Preis. Jede Zeile hat die Zusammensetzung aufklappbar und den Knopf „Angebot abgeben“ zur Anfrage.
+- **Bepreiste Zeilen:** Auch dort ist die Zusammensetzung aufklappbar (`fertig_zusammensetzung_html`).
+- **`preis_add`:** nimmt nur noch Rezepturen an, die bei diesem Lieferanten angefragt sind.

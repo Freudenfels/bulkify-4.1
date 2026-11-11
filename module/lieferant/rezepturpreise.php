@@ -6,6 +6,7 @@
 require_once BX_ROOT . '/module/lieferant/portal_layout.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" je Preis (11.11.2026)
+require_once BX_ROOT . '/core/fertig_anfrage.php';  // Zusammensetzung in der Zeile; nur angefragte Rezepturen (11.11.2026)
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid  = aktueller_lieferant_id();
@@ -81,7 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $preis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
         $form  = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
         // Nur freigeschaltete Formen + keine Dublette.
-        if ($rid > 0 && in_array($form, $fertigFormen, true) && !scalar("SELECT id FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=?", [$rid, $lid])) {
+        $angefragtR = (bool) scalar("SELECT id FROM lieferant_anfrage WHERE lieferant_id=? AND rezeptur_id=? AND art='fertigprodukt' AND status NOT IN ('zurueckgezogen','geschlossen')", [$lid, $rid]);
+        if ($rid > 0 && $angefragtR && !scalar("SELECT id FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=?", [$rid, $lid])) {
             q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt,gueltig_bis) VALUES (?,?,?,?, 'angeboten', CURDATE(), NOW(), ?)",
               [$rid, $lid, $preis > 0 ? $preis : null, $formEinheit($form), pg_lesen((string)($_POST['gueltig_bis'] ?? ''))]);
             rezeptur_produkt_matrizen_auffrischen($rid);   // Matrix auffrischen -> Fertigpreis automatisch im Angebot
@@ -104,15 +106,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $rows = all("SELECT la.id, la.preis, la.preis_vorschlag, la.einheit, la.stand, la.gueltig_bis, r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
              FROM rezeptur_lief_angebot la JOIN rezeptur r ON r.id=la.rezeptur_id
              WHERE la.lieferant_id=? ORDER BY r.name", [$lid]);
-// Rezepturen, die der Lieferant noch NICHT bepreist hat – NUR in den freigeschalteten Formen.
-$offen = [];
-if ($fertigFormen) {
-    $ph = implode(',', array_fill(0, count($fertigFormen), '?'));
-    $offen = all("SELECT r.id, r.nummer, r.name, r.darreichungsform AS form FROM rezeptur r
-                  WHERE r.id NOT IN (SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE lieferant_id=?)
-                    AND r.darreichungsform IN ($ph)
-                  ORDER BY r.name", array_merge([$lid], $fertigFormen));
-}
+// Angefragte Rezepturen ohne Preis (Nico 11.11.2026): Der Lieferant wählt NICHT mehr frei aus allen Rezepturen seiner Formen
+// (blind nach Namen, inkl. Kundenrezepturen), sondern sieht nur, was wir ihm als Fremdfertigung angefragt haben.
+$offen = all("SELECT la.id AS anfrage_id, la.nummer AS anfrage_nr, r.id, r.nummer, r.name, r.darreichungsform AS form
+              FROM lieferant_anfrage la JOIN rezeptur r ON r.id=la.rezeptur_id
+              WHERE la.lieferant_id=? AND la.art='fertigprodukt' AND la.status='offen'
+                AND NOT EXISTS (SELECT 1 FROM lieferant_angebot ag WHERE ag.anfrage_id=la.id)
+                AND r.id NOT IN (SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE lieferant_id=?)
+              ORDER BY la.angelegt, r.name", [$lid, $lid]);
 $intervall = lieferant_preis_intervall($lid);
 $standMax  = null; foreach ($rows as $r) if ($r['stand'] && (!$standMax || $r['stand'] > $standMax)) $standMax = $r['stand'];
 $alter     = $standMax ? (int) floor((time() - strtotime((string)$standMax)) / 86400) : null;
@@ -135,8 +136,26 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
 <p class="bx-sub"><?= h(lp_t('rez_preise_sub')) ?></p>
 <?php if ($fertigFormen): ?>
   <p class="muted" style="font-size:13px;margin:-6px 0 12px"><?= h(lp_t('freigeschaltet_formen')) ?>: <strong><?= h(implode(', ', array_map(fn($f) => anfrage_art_label('', $f, $spr) ?: ($formLabel[$f] ?? $f), $fertigFormen))) ?></strong></p>
-<?php else: ?>
-  <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h(lp_t('keine_formen')) ?></div>
+<?php endif; ?>
+<?php if ($offen): ?>
+<div class="bx-panel" style="border-left:3px solid var(--gruen)">
+  <h2 style="margin-top:0"><?= h(['de' => 'Bitte bepreisen', 'en' => 'Please quote', 'zh' => '请报价'][$spr] ?? 'Please quote') ?> <span class="muted" style="font-weight:normal">(<?= count($offen) ?>)</span></h2>
+  <p class="muted" style="margin-top:0;font-size:13px"><?= h(['de' => 'Diese Rezepturen haben wir bei Ihnen angefragt. Zusammensetzung aufklappen, dann „Angebot abgeben" (Preis, Staffel, CoA/Spezifikation je Rohstoff).', 'en' => 'We have requested these formulas from you. Open the composition, then "Submit offer" (price, tiers, CoA/specification per raw material).', 'zh' => '我们已向您询价以下配方。展开成分，然后点击“提交报价”（价格、阶梯价、每种原料的CoA/规格）。'][$spr] ?? '') ?></p>
+  <div class="bx-tablewrap"><table class="bx-table">
+    <thead><tr><th><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?></th><th><?= h(lp_t('form_lbl')) ?></th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($offen as $o): ?>
+      <tr>
+        <td style="white-space:normal"><details><summary style="cursor:pointer"><?= h((string)$o['name']) ?> <span class="muted" style="font-size:12px"><?= h((string)$o['nummer']) ?> · <?= h((string)$o['anfrage_nr']) ?></span></summary><?= fertig_zusammensetzung_html((int)$o['id'], $spr) ?></details></td>
+        <td><?= h(anfrage_art_label('', (string)$o['form'], $spr)) ?></td>
+        <td class="bx-num"><a class="btn btn-primary btn-sm" href="?p=lieferant_anfrage&id=<?= (int)$o['anfrage_id'] ?>"><?= h(lp_t('angebot_abgeben')) ?></a></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+</div>
+<?php elseif (!$rows): ?>
+  <div class="bx-panel muted" style="padding:12px 16px"><?= h(['de' => 'Zurzeit keine Rezepturen zum Bepreisen. Sobald wir Ihnen eine Rezeptur anfragen, erscheint sie hier mit Zusammensetzung.', 'en' => 'No formulas to quote at the moment. As soon as we request one, it appears here with its composition.', 'zh' => '目前没有需要报价的配方。我们向您询价后，配方及成分会显示在这里。'][$spr] ?? '') ?></div>
 <?php endif; ?>
 
 <?php if ($veraltet): ?>
@@ -164,7 +183,7 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
     <tbody>
     <?php foreach ($rows as $r): $alt = $r['stand'] ? (int) floor((time() - strtotime((string)$r['stand'])) / 86400) : null; ?>
       <tr>
-        <td><a href="?p=lieferant_rezeptur&id=<?= (int)$r['rezeptur_id'] ?>"><?= h($r['name']) ?></a> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></td>
+        <td style="white-space:normal"><details><summary style="cursor:pointer"><?= h($r['name']) ?> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></summary><?= fertig_zusammensetzung_html((int)$r['rezeptur_id'], $spr) ?></details></td>
         <td><?= h(anfrage_art_label('', (string)$r['form'], $spr) ?: lp_einheit($formEinheit($r['form']), 2)) ?></td>
         <td class="bx-num">
           <div class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
@@ -189,20 +208,7 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
   <div class="bx-row" style="justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" type="submit" form="rpForm"><?= h(lp_t('alle_speichern')) ?></button></div>
   <?php endif; ?>
 
-  <?php if ($fertigFormen && $offen): ?>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:16px">
-    <input type="hidden" name="aktion" value="preis_add">
-    <div class="bx-field" style="margin:0;flex:1 1 300px"><label><?= h(lp_t('rez_preise_add')) ?></label>
-      <input type="text" id="rezSuche" list="rezDL" autocomplete="off" placeholder="<?= h(lp_t('rezeptur') ?: 'Rezeptur') ?> …">
-      <input type="hidden" name="rezeptur_id" id="rezId">
-      <datalist id="rezDL"><?php foreach ($offen as $o): $lbl = trim($o['name'] . ($o['nummer'] ? ' · ' . $o['nummer'] : '')); ?><option value="<?= h($lbl) ?>"></option><?php endforeach; ?></datalist>
-    </div>
-    <div class="bx-field" style="margin:0;width:140px"><label><?= h(lp_t('ihr_preis')) ?> (€)</label><input type="text" name="preis" inputmode="decimal"></div>
-    <?= pg_eingabe('gueltig_bis', null, ['sprache' => $spr]) ?>
-    <a id="rezAnsehen" class="btn btn-ghost" href="#" target="_blank" rel="noopener" hidden><?= h(lp_t('rez_ansehen')) ?></a>
-    <button class="btn btn-primary" type="submit"><?= h(lp_t('hinzufuegen')) ?></button>
-  </form>
-  <?php endif; ?>
+  <?php // Freie Auswahl aus allen Rezepturen entfernt (11.11.2026) - angefragte Rezepturen stehen oben unter „Bitte bepreisen". ?>
 
 </div>
 <script>
@@ -212,13 +218,6 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
   if (f) f.addEventListener('submit', function(){ offen = false; });
   window.addEventListener('beforeunload', function(e){ if (offen) { e.preventDefault(); e.returnValue = ''; } });
 })();
-(function(){
-  var map = {};
-  <?php foreach ($offen as $o): $lbl = trim($o['name'] . ($o['nummer'] ? ' · ' . $o['nummer'] : '')); ?>map[<?= json_encode($lbl, JSON_UNESCAPED_UNICODE) ?>]=<?= (int)$o['id'] ?>;<?php endforeach; ?>
-  var t=document.getElementById('rezSuche'), h=document.getElementById('rezId'), a=document.getElementById('rezAnsehen');
-  function s(){ var id = map[(t.value||'').trim()] || ''; h.value = id;
-    if(a){ if(id){ a.href='?p=lieferant_rezeptur&id='+id; a.hidden=false; } else { a.hidden=true; } } }
-  if(t){ t.addEventListener('input', s); t.addEventListener('change', s); }
-})();
+
 </script>
 <?php lp_shell_ende(); lp_foot();

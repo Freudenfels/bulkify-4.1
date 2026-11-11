@@ -14,3 +14,7 @@
 
 ## Anklickbare Rohstoffe (Stand 2026-10-08)
 Zutaten mit `item_id` sind jetzt Links (`a.lp-roh[data-iid]`) → öffnen das Rohstoff-Info-Popup (`lp_rohstoff_popup()` aus `portal_layout.php`, lädt `?p=lieferant_rohstoff_info`). Zeigt Identität + Beschaffenheit/DEV + Wirkstoff-Gehalte (ohne Preise/Lieferanten), damit der Lieferant besser vergleichen kann. Gleiches Popup auch in `anfrage.php`.
+
+## Sichtbarkeit (11.11.2026)
+- Nicht mehr allein über die freigeschaltete Form. Nur noch Rezepturen, die bei diesem Lieferanten angefragt, von ihm bepreist oder bei ihm bestellt wurden.
+- Andere Rezepturen: „nicht gefunden oder nicht für Sie freigeschaltet“.

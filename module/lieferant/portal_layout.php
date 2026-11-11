@@ -298,7 +298,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'rez_preise_sub'  => ['de'=>'Tragen Sie je Rezeptur Ihren Preis ein (z. B. je Kapsel). Bitte alle 4 Wochen aktualisieren.',
                               'en'=>'Enter your price per formula (e.g. per capsule). Please update every 4 weeks.',
                               'zh'=>'请为每个配方填写您的价格（例如每粒）。请每 4 周更新一次。'],
-        'rez_preise_leer' => ['de'=>'Noch keine Preise. Unten eine Rezeptur wählen und Preis eintragen.', 'en'=>'No prices yet. Pick a formula below and enter a price.', 'zh'=>'暂无价格。请在下方选择配方并填写价格。'],
+        'rez_preise_leer' => ['de'=>'Noch keine Preise. Angefragte Rezepturen stehen oben unter „Bitte bepreisen“.', 'en'=>'No prices yet. Requested formulas are listed above under "Please quote".', 'zh'=>'暂无价格。已询价的配方显示在上方“请报价”中。'],
         'rez_preise_add'  => ['de'=>'Weitere Rezeptur bepreisen', 'en'=>'Price another formula', 'zh'=>'为其他配方报价'],
         'preis_vorschlag_info' => ['de'=>'Preisänderung eingereicht – wartet auf Freigabe durch bulkify. Bis dahin gilt Ihr bisheriger Preis.', 'en'=>'Price change submitted – pending bulkify approval. Your previous price applies until then.', 'zh'=>'价格修改已提交——等待 bulkify 审核。在此之前以原价为准。'],
         'vorschlag_offen' => ['de'=>'Vorschlag (wartet auf Freigabe)', 'en'=>'Proposed (pending approval)', 'zh'=>'建议价（待审核）'],
@@ -495,6 +495,7 @@ function lp_shell_start(string $aktiv): void {
     $hatMaterial = (bool) array_intersect($lfKat, ['rohstoff', 'leerkapsel', 'verpackung', 'verbrauch', 'maschine', 'labor']);
     // Wer schon Preise gepflegt hat, behaelt die Liste – auch wenn Formen/Kategorien (noch) nicht gesetzt sind.
     if ($lfId && !$hatFertig)   $hatFertig   = (bool) scalar("SELECT 1 FROM rezeptur_lief_angebot WHERE lieferant_id=? LIMIT 1", [$lfId]);
+    if ($lfId && !$hatFertig)   $hatFertig   = (bool) scalar("SELECT 1 FROM lieferant_anfrage WHERE lieferant_id=? AND art='fertigprodukt' AND status='offen' LIMIT 1", [$lfId]);   // angefragte Rezepturen (11.11.2026)
     if ($lfId && !$hatMaterial) $hatMaterial = (bool) scalar("SELECT 1 FROM lieferant_preisliste WHERE lieferant_id=? LIMIT 1", [$lfId])
         || (bool) scalar("SELECT 1 FROM item WHERE haupt_lieferant_id=? AND kategorie='rohstoff' AND gesperrt=0 LIMIT 1", [$lfId])
         || (bool) scalar("SELECT 1 FROM lieferant_preis WHERE lieferant_id=? LIMIT 1", [$lfId]);

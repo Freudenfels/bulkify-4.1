@@ -98,3 +98,9 @@ Ansprechpartner beim Labor ist das normale Feld Ansprechpartner. Gespeichert wir
 ## Kategorie Leerkapseln (10.11.2026)
 Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur Leerkapseln verkaufen. Sie steht neben Rohstoff, Verpackung, Verbrauch, Maschine, Labor und Fertige Produkte und wird wie diese in `lieferanten.kategorien` gespeichert.
 Die Checkbox steht bei den Liefer-Kategorien.
+
+## Fertigprodukte anfragen (11.11.2026)
+Im Reiter Preise steht der Block „Fertigprodukte anfragen“. Er erscheint, wenn Formen freigeschaltet sind oder die Kategorie Fertigprodukte gesetzt ist.
+- **Liste:** Rezepturen der Formen (`fertig_rezeptur_kandidaten()`), die aus offenen Aufträgen oben. Kunde, Anzahl offener Aufträge, Stand (angefragt/bepreist), Suche.
+- **Anfragen:** Angehakte Rezepturen gehen mit `aktion=fertig_anfragen` an `fertig_anfragen_stellen()`. Je Rezeptur entsteht eine Anfrage, dazu eine Sammel-Mail.
+- **Im Portal:** Der Lieferant sieht nur diese Rezepturen, mit Zusammensetzung.

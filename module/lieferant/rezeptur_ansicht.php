@@ -19,8 +19,9 @@ $r = $rid ? one("SELECT id, nummer, name, darreichungsform AS form, kapselgroess
 // bereits angefragt/bestellt haben (dann darf er sie fuer die Fremdfertigung natuerlich sehen). So kann
 // er keine fremden Rezepturen ueber die ID aufrufen, aber die bestellte sieht er immer.
 if ($r) {
-    $erlaubt = in_array((string)$r['form'], $fertigFormen, true)
-        || (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE lieferant_id=? AND rezeptur_id=?", [$lid, $rid]) > 0
+    // Nicht mehr allein über die freigeschaltete Form (11.11.2026) - sonst sah ein Lieferant jede Rezeptur dieser Form,
+    // auch Kundenrezepturen. Nur noch angefragt, bepreist oder bestellt.
+    $erlaubt = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE lieferant_id=? AND rezeptur_id=?", [$lid, $rid]) > 0
         || (int) scalar("SELECT COUNT(*) FROM rezeptur_lief_angebot WHERE lieferant_id=? AND rezeptur_id=?", [$lid, $rid]) > 0
         || (int) scalar("SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                          LEFT JOIN item i ON i.id=bp.item_id LEFT JOIN auftrag au ON au.id=bp.auftrag_id

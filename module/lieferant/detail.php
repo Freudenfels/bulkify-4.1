@@ -111,6 +111,12 @@ if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') =
          'rezeptur_id'       => (int)($_POST['rezeptur_id'] ?? 0)]);
     header('Location: ?p=lieferant&id=' . (int)$id . '&angefragt=1'); exit;
 }
+// Fertigprodukte gezielt anfragen (Nico 11.11.2026): angehakte Rezepturen -> je eine Fremdfertigungs-Anfrage + Sammel-Mail.
+if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fertig_anfragen') {
+    require_once BX_ROOT . '/core/fertig_anfrage.php';
+    $fa = fertig_anfragen_stellen((int)$id, (array)($_POST['rez'] ?? []), (string)($_POST['notiz'] ?? ''));
+    header('Location: ?p=lieferant&id=' . (int)$id . '&fertigangefragt=' . count($fa) . '#fertiganfragen'); exit;
+}
 if (!$neu && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
     $f = lieferant_angebot_annehmen((int)($_POST['angebot_id'] ?? 0));
     header('Location: ?p=lieferant&id=' . (int)$id . ($f === '' ? '&uebernommen=1' : '&fehler=' . urlencode($f))); exit;
@@ -360,6 +366,39 @@ if (!$neu) {
           </tr>
         <?php endforeach; ?>
       </tbody></table></div>
+    </div>
+    <?php endif; ?>
+    <?php // Rezepturen zum Bepreisen anfragen (11.11.2026): WIR wählen, der Lieferant sieht nur diese (mit Zusammensetzung).
+    if (!$neu && ($aktFormen || in_array('fertigprodukt', $aktKats, true))):
+      require_once BX_ROOT . '/core/fertig_anfrage.php';
+      $faKand = fertig_rezeptur_kandidaten((int)$id); ?>
+    <div class="bx-panel" id="fertiganfragen">
+      <h2 style="margin-top:0">Fertigprodukte anfragen <?= bx_hint('Rezepturen anhaken, die dieser Lieferant bepreisen soll. Je Rezeptur entsteht eine Fremdfertigungs-Anfrage (mit Zusammensetzung, CoA/Spec je Rohstoff), der Lieferant bekommt eine Sammel-Mail. Im Portal sieht er nur angefragte Rezepturen - keine freie Auswahl mehr.') ?></h2>
+      <?php if (isset($_GET['fertigangefragt'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block"><?= (int)$_GET['fertigangefragt'] ?> Rezeptur(en) angefragt.</div><?php endif; ?>
+      <p class="muted" style="margin-top:0;font-size:13px">Formen laut Stammdaten. Rezepturen aus offenen Aufträgen stehen oben. Schon angefragte bzw. bepreiste sind markiert.</p>
+      <form method="post">
+        <input type="hidden" name="aktion" value="fertig_anfragen">
+        <input type="search" id="faSuche" placeholder="Rezeptur, Nummer oder Kunde suchen" style="width:320px;margin-bottom:8px">
+        <div style="max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:8px">
+        <table class="bx-table" id="faTab" style="font-size:13px"><thead><tr><th style="width:28px"></th><th>Rezeptur</th><th>Form</th><th>Kunde</th><th class="bx-num">Offene Aufträge</th><th>Stand</th></tr></thead><tbody>
+        <?php foreach ($faKand as $fk): $faFrei = (int)$fk['angefragt'] === 0; ?>
+          <tr>
+            <td><input type="checkbox" name="rez[]" value="<?= (int)$fk['id'] ?>"<?= $faFrei ? '' : ' disabled' ?>></td>
+            <td style="white-space:normal"><a href="?p=rezeptur_detail&id=<?= (int)$fk['id'] ?>" target="_blank" rel="noopener"><?= h((string)$fk['nummer']) ?></a> <?= h((string)$fk['name']) ?></td>
+            <td><?= h(ucfirst((string)$fk['form'])) ?></td>
+            <td><?= $fk['kunde'] ? h((string)$fk['kunde']) : '<span class="muted">Katalog</span>' ?></td>
+            <td class="bx-num"><?= (int)$fk['auftraege'] ?: '<span class="muted">–</span>' ?></td>
+            <td><?= (int)$fk['bepreist'] > 0 ? bx_badge('bepreist', 'ok') : ((int)$fk['angefragt'] > 0 ? bx_badge('angefragt', 'info') : '') ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody></table></div>
+        <div class="bx-row" style="gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+          <input type="text" name="notiz" placeholder="Notiz an den Lieferanten (optional)" style="flex:1;min-width:260px">
+          <button class="btn btn-primary" type="submit" onclick="if(!document.querySelector('#faTab input:checked')){alert('Bitte mindestens eine Rezeptur anhaken.');return false;}">Angehakte beim Lieferanten anfragen</button>
+        </div>
+      </form>
+      <script>(function(){ var f=document.getElementById('faSuche'), t=document.getElementById('faTab'); if(!f||!t) return;
+        f.addEventListener('input', function(){ var q=f.value.trim().toLowerCase(); t.querySelectorAll('tbody tr').forEach(function(r){ r.style.display = (!q || r.textContent.toLowerCase().indexOf(q) >= 0) ? '' : 'none'; }); }); })();</script>
     </div>
     <?php endif; ?></section>
   <section data-panel="bestell" hidden><div class="bx-panel"><h2>Bestellungen (<?= count($l_bestellungen) ?>)</h2><?php $l_bestTabelle($l_bestellungen); ?></div>

@@ -53,3 +53,7 @@ Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur
 
 ## Neue Texte (11.11.2026)
 `alle_speichern` („Alle Preise speichern“) und `preis_ungueltig` („Preis nicht lesbar …“), jeweils auf DE, EN und ZH.
+
+## Fertigprodukt-Preise (11.11.2026)
+- Der Menüpunkt erscheint auch, wenn offene Fremdfertigungs-Anfragen da sind.
+- `rez_preise_leer` verweist auf „Bitte bepreisen“.
