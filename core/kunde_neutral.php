@@ -88,7 +88,14 @@ function kunde_lieferanten_namen(): array {
     $n = [];
     if (!function_exists('table_exists') || !table_exists('lieferanten')) return $n;
     $rechtsform = '/[\s,]+(gmbh(\s*&\s*co\.?\s*kg)?|ag|kg|ohg|ug|gbr|e\.?\s?k\.?|ltd\.?|limited|llc|inc\.?|co\.?,?\s*ltd\.?|s\.?r\.?l\.?|b\.?v\.?|sp\.?\s*z\s*o\.?\s*o\.?|s\.?a\.?|corp\.?|company)\.?$/iu';
-    foreach (all("SELECT firma, lieferantennummer, COALESCE(kategorien,'') AS kat FROM lieferanten WHERE firma IS NOT NULL AND firma<>''") as $l) {
+    // Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft oder gleicher Firmenname), nie ersetzen –
+    // sonst stünde im Portal dieses Kunden „bulkify“ statt seines eigenen Namens.
+    $kundenNamen = [];
+    try { foreach (all("SELECT LOWER(TRIM(firma)) AS f FROM kunden WHERE firma IS NOT NULL AND firma<>''") as $kk) $kundenNamen[(string)$kk['f']] = true; } catch (\Throwable $e) {}
+    $partnerSql = (function_exists('column_exists') && column_exists('lieferanten', 'ist_partner') ? " AND COALESCE(ist_partner,0)=0" : '')
+                . (function_exists('column_exists') && column_exists('lieferanten', 'kunde_id') ? " AND kunde_id IS NULL" : '');
+    foreach (all("SELECT firma, lieferantennummer, COALESCE(kategorien,'') AS kat FROM lieferanten WHERE firma IS NOT NULL AND firma<>''" . $partnerSql) as $l) {
+        if (isset($kundenNamen[mb_strtolower(trim((string)$l['firma']))])) continue;
         $kat = array_filter(array_map('trim', explode(',', (string)$l['kat'])));
         if ($kat && !array_diff($kat, ['labor'])) continue;   // Labore dürfen genannt werden
         $f = trim((string)$l['firma']);

@@ -20,3 +20,5 @@ DL-Schritte, KI-Info), `core/dokument_ui.php` (Liste + Freigabe-Schalter), `core
 `module/lager/laboranalysen.php`, `core/pdf_beleg.php`, `module/portal/_angebot_karte.php`, `core/mail.php`,
 `core/pdf_spec.php` (CoA: Lieferant nur Nummer, Methode), `core/coa_uebersicht.php`, `core/echtheit.php`,
 `module/produktion/_bericht_inhalt.php` (Notiz in der Kundenversion), `core/pdf_pib.php` (hochgeladenes PIB).
+
+Zusatz: Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft, gleicher Firmenname), werden in Texten nie ersetzt.
