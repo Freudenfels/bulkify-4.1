@@ -199,8 +199,35 @@ def cmd_mark():
     print(f'Deployter Stand: {after}')
 
 
+def cmd_upload_all():
+    # Testumgebung (Paket 12.11.2026): Vollupload ohne fremde Action - alle Dateien aus git, gleiche Ausschluesse.
+    res = git('ls-files')
+    files = [f for f in res.stdout.splitlines() if f and not EXCLUDE.search(f)]
+    with open('changed_filtered.txt', 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(files) + ('\n' if files else ''))
+    print(f'Vollupload: {len(files)} Dateien')
+    cmd_upload()
+
+
+def cmd_put(local, remote_rel):
+    # Einzelne Datei hochladen (Testumgebung: robots.txt nur dort).
+    root = remote_root()
+    client, sftp = connect()
+    try:
+        d = os.path.dirname(remote_rel)
+        ensure_dir(sftp, f'{root}/{d}' if d else root, set())
+        sftp.put(local, f'{root}/{remote_rel}')
+    finally:
+        sftp.close()
+        client.close()
+    print(f'hochgeladen: {remote_rel}')
+
+
 if __name__ == '__main__':
-    cmds = {'prep': cmd_prep, 'upload': cmd_upload, 'mark': cmd_mark}
+    cmds = {'prep': cmd_prep, 'upload': cmd_upload, 'mark': cmd_mark, 'upload_all': cmd_upload_all}
+    if len(sys.argv) == 4 and sys.argv[1] == 'put':
+        cmd_put(sys.argv[2], sys.argv[3])
+        sys.exit(0)
     if len(sys.argv) != 2 or sys.argv[1] not in cmds:
-        sys.exit('Aufruf: sftp_deploy.py prep|upload|mark')
+        sys.exit('Aufruf: sftp_deploy.py prep|upload|mark|upload_all  oder  put <lokal> <ziel-relativ>')
     cmds[sys.argv[1]]()
