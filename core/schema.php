@@ -6469,9 +6469,12 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
     } else {
         $steps[] = ['Qualitätsprüfung', 'Qualitätsprüfung abgeschlossen', $qcDone ? 'done' : ($umvDone && $etikDone && $prodDone ? 'current' : ''), $qcDone ? $d[5] : null, null];
     }
-    $steps[] = ['Abgeschlossen', 'Abgeschlossen', $versandbereit ? 'done' : '', $versandbereit ? $d[6] : null, null];
-    $steps[] = $ff ? ['Einlagern', 'Eingelagert', $abgeschlossen ? 'done' : ($versandbereit ? 'current' : ''), $abgeschlossen ? $d[7] : null, null]
-                   : ['Versenden', 'Versendet', $abgeschlossen ? 'done' : ($versandbereit ? 'current' : ''), $abgeschlossen ? $d[7] : null, null];
+    // „Abgeschlossen" nur, wenn wirklich alles fertig ist (Nico 11.11.2026): mit Labor erst bei gebuchter, nicht auffälliger
+    // Laboranalyse - auch wenn von Hand weiter gesetzt. Tatsächlich versendet = abgeschlossen. Mengen prüft der Teilmengen-Block unten.
+    $abgDone = $st === 'versendet' || ($versandbereit && (!$labor || $qcDone));
+    $steps[] = ['Abgeschlossen', 'Abgeschlossen', $abgDone ? 'done' : '', $abgDone ? $d[6] : null, null];
+    $steps[] = $ff ? ['Einlagern', 'Eingelagert', $abgeschlossen ? 'done' : ($abgDone ? 'current' : ''), $abgeschlossen ? $d[7] : null, null]
+                   : ['Versenden', 'Versendet', $abgeschlossen ? 'done' : ($abgDone ? 'current' : ''), $abgeschlossen ? $d[7] : null, null];
     // Teilmengen (Teilproduktion/Teilversand): Mengen gibt es nur für fertig gebuchte Ware (produktion_gebucht je PA)
     // und Versendetes (auftrag.versendet_menge). Ist davon erst ein Teil da, wird der Schritt „teilweise" (halber Punkt)
     // mit „X von Y Stk" – statt ganz offen oder ganz erledigt.
@@ -6568,6 +6571,18 @@ function auftrag_menge_offen(array $a): ?array {
     return ($ziel > 0 && $geb > 0 && $geb < $ziel) ? ['ziel' => $ziel, 'geb' => $geb, 'rest' => $ziel - $geb] : null;
 }
 
+// Ist der Auftrag laut Fortschritt fertig („Abgeschlossen" erledigt bzw. versendet)? Für Status-Texte wie „versandbereit":
+// kein „versandbereit", solange ein Schritt davor offen ist (Labor, Teilmenge). Request-Cache je Auftrag.
+function auftrag_fortschritt_fertig(array $a): bool {
+    static $c = [];
+    $id = (int)($a['id'] ?? 0);
+    if (isset($c[$id])) return $c[$id];
+    if (($a['status'] ?? '') === 'versendet') return $c[$id] = true;
+    if (($a['status'] ?? '') !== 'erledigt') return $c[$id] = false;
+    foreach (auftrag_fortschritt($a, true)['steps'] as $s) if ($s[1] === 'Abgeschlossen') return $c[$id] = $s[2] === 'done';
+    return $c[$id] = true;
+}
+
 // Kundensicht der neuen Kette (für das Portal, noch nicht eingebaut): interne Einkaufs-Stände der Etiketten (nicht bestellt / bestellt / auf Lager) sieht der Kunde
 // nur als „Etikettierung"; „Etiketten Daten fehlen" sieht er rot mit Upload-Link. Interne Untertexte (Liefertermin, abgefüllt) entfallen.
 function auftrag_fortschritt_kunde(array $steps): array {
@@ -6610,7 +6625,8 @@ function kunde_bestell_status_label(array $a, ?array $k = null): string {
     return match ($st) {
         'storniert'     => 'storniert',
         'versendet'     => $ff ? 'eingelagert (abgeschlossen)' : 'versendet (abgeschlossen)',
-        'erledigt'      => $ff ? 'wird eingelagert' : 'versandbereit',
+        'erledigt'      => (($a['kategorie'] ?? '') !== 'dienstleistung' && !empty($a['id']) && !auftrag_fortschritt_fertig($a)) ? 'in Produktion'
+                           : ($ff ? 'wird eingelagert' : 'versandbereit'),   // nur „versandbereit", wenn der Fortschritt fertig ist (11.11.2026)
         'in_produktion' => 'in Produktion',
         'offen'         => 'in Bearbeitung',
         default         => $st !== '' ? $st : 'in Bearbeitung',

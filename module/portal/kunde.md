@@ -468,3 +468,6 @@ In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. D
 ## Abgelaufene Angebote (11.11.2026)
 - Die Annahme wird serverseitig gesperrt, wenn `angebot_abgelaufen()`. Danach folgt die Meldung `abgelaufen=1`.
 - `aktion=angebot_aktualisierung` erzeugt eine Benachrichtigung ans Team und einen Verlaufseintrag. Danach folgt die Meldung `aktualisierung=1`.
+
+## Status-Badge folgt dem Fortschritt (11.11.2026)
+`$aufBadge` zeigt bei Status `erledigt` nur dann „versandbereit“, wenn `auftrag_fortschritt_fertig()` gilt (Labor da, Mengen vollständig), sonst „in Produktion“. So passen Kopf („Schritt x/y: Laboranalyse“) und Status zusammen.

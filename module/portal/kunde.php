@@ -1420,6 +1420,9 @@ $ffKunde = !empty($k['nutzt_fulfillment']);
 $aufBadge = function($a) use ($ffKunde) {
     $s = is_array($a) ? (string)($a['status'] ?? '') : (string)$a;
     if ($s === 'storniert' && is_array($a) && !empty($a['kontingent_id'])) return bx_badge('hinterlegt in Jahresmenge','info');
+    // Fortschritt (11.11.2026): „versandbereit" nur, wenn „Abgeschlossen" wirklich erledigt ist (Labor da, alle Mengen da).
+    if ($s === 'erledigt' && is_array($a) && !empty($a['id']) && ($a['kategorie'] ?? '') !== 'dienstleistung'
+        && function_exists('auftrag_fortschritt_fertig') && !auftrag_fortschritt_fertig($a)) return bx_badge('in Produktion','warn');
     return match ($s) {
         'offen'=>bx_badge('in Bearbeitung','info'),
         'in_produktion'=>bx_badge('in Produktion','warn'),

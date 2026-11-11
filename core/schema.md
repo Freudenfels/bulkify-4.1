@@ -620,3 +620,10 @@ Siehe `core/preis_gueltig.md`.
 - **`auftrag_menge_offen($a)`:** `['ziel','geb','rest']` oder null.
 - **Neue Spalten am Auftrag:** `fortschritt_ziel`, `rest_status` (kommt/storniert/teillieferung), `rest_erwartet`, `fortschritt_geprueft`.
 
+## Fortschritt: „Abgeschlossen“ nur, wenn alles fertig ist (11.11.2026)
+- **`auftrag_fortschritt()`:** „Abgeschlossen“ ist nur erledigt, wenn der Auftrag tatsächlich versendet ist oder versandbereit ist und Folgendes gilt:
+  - bei Labor: die Laboranalyse ist gebucht und nicht auffällig
+  - die Mengen sind vollständig (siehe Teil 1)
+  Das gilt auch, wenn der Stand von Hand weiter gesetzt ist. „Versenden“ bzw. „Einlagern“ wird erst danach aktiv.
+- **`auftrag_fortschritt_fertig($a)`:** Ist „Abgeschlossen“ erledigt? Ergebnis wird je Request gemerkt.
+- **`kunde_bestell_status_label()`:** zeigt bei Status `erledigt` nur dann „versandbereit“ bzw. „wird eingelagert“, wenn der Fortschritt fertig ist, sonst „in Produktion“.
