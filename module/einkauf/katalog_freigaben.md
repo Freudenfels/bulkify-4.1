@@ -29,3 +29,7 @@ Dieselben Funktionen nutzt der Reiter „Katalog" im Lieferantenkonto (`module/l
 
 ## Preis-Aktualisierungen aus dem Portal (Stand 2026-10-08)
 Hier landen auch **Preis-Aktualisierungen**, die ein Lieferant im Portal für einen ihm zugeordneten Artikel vorschlägt (`katalog_preis_vorschlag()`, Abschnitt „Von bulkify bei Ihnen geführt"). Diese Zeilen haben `item_id` gesetzt und `katalog_aehnliche()` zeigt den bestehenden Artikel als „gleicher Name"-Treffer → mit „Preis dorthin" wandert der neue Preis in `lieferant_preis` des Artikels (kein neuer Artikel).
+
+## Gültig bis (11.11.2026)
+- Die Liste hat die Spalte „Gültig bis“ mit dem Preis-Gültigkeitsdatum des Lieferanten (`lieferant_katalog.gueltig_bis`). Es stammt aus der Preis-Aktualisierung im Portal oder aus einer KI-gelesenen Preisliste.
+- Die Detailansicht zeigt es beim Preis.

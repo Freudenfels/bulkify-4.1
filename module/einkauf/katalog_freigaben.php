@@ -6,7 +6,7 @@
 // „Preis dorthin"), sowie „Als neuen Artikel anlegen" bzw. „ablehnen".
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
-require_once BX_ROOT . '/core/lieferant_katalog.php';
+require_once BX_ROOT . '/core/lieferant_katalog.php';   // lädt auch core/preis_gueltig.php (pg_anzeige)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $akt = (string)($_POST['aktion'] ?? '');
@@ -67,7 +67,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
   <?php else: ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr>
-      <th>Lieferant</th><th>Artikel</th><th>Typ</th><th class="bx-num">Preis</th><th>Im Bestand?</th><th></th>
+      <th>Lieferant</th><th>Artikel</th><th>Typ</th><th class="bx-num">Preis</th><th>Gültig bis</th><th>Im Bestand?</th><th></th>
     </tr></thead>
     <tbody>
     <?php foreach ($data as $d): $z = $d['z']; ?>
@@ -76,6 +76,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
         <td><?= h((string)$z['name']) ?><?php if (!empty($z['bio'])): ?> <?= bx_badge('Bio', 'ok') ?><?php endif; ?><?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h((string)$z['name_original']) ?></div><?php endif; ?></td>
         <td><?= h(anfrage_art_label($z['art'] === 'fertigprodukt' ? 'fertigprodukt' : 'rohstoff', (string)$z['form'])) ?></td>
         <td class="bx-num"><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?></td>
+        <td><?= $z['preis'] !== null ? pg_anzeige($z['gueltig_bis'] ?? null) : '<span class="muted">–</span>' ?></td>
         <td>
           <?php if ($d['stark']): ?>
             <?= bx_badge('vorhanden', 'ok') ?>
@@ -126,7 +127,7 @@ foreach ($data as $d): $z = $d['z']; $aehnlich = $d['aehnlich']; $ki = $d['ki'];
       <?php if (!empty($z['spezifikation'])): ?><tr><td>Spezifikation</td><td><?= h((string)$z['spezifikation']) ?></td></tr><?php endif; ?>
       <?php if (!empty($z['herkunft'])): ?><tr><td>Herkunft</td><td><?= h((string)$z['herkunft']) ?></td></tr><?php endif; ?>
       <?php if (!empty($z['bio'])): ?><tr><td>Bio</td><td>ja (Lieferantenangabe)</td></tr><?php endif; ?>
-      <tr><td>Preis</td><td><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?><?= $z['menge_ab'] !== null ? ' · ab ' . h($zahl($z['menge_ab'], 3)) : '' ?></td></tr>
+      <tr><td>Preis</td><td><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?><?= $z['menge_ab'] !== null ? ' · ab ' . h($zahl($z['menge_ab'], 3)) : '' ?><?= $z['preis'] !== null ? ' · ' . pg_anzeige($z['gueltig_bis'] ?? null) : '' ?></td></tr>
       <?php if (!empty($z['notiz'])): ?><tr><td>Notiz</td><td style="white-space:pre-line"><?= h((string)$z['notiz']) ?></td></tr><?php endif; ?>
     </tbody></table></div>
 
