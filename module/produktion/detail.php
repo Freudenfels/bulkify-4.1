@@ -250,7 +250,7 @@ $btnEinkauf = $offenerBedarf
 $produktName = (string)($pa['produkt_name'] ?? '') ?: (string)($pa['auftrag_produkt_bez'] ?? '');
 if ($produktName === '' && !empty($pa['rezeptur_name'])) $produktName = (string)$pa['rezeptur_name'] . (pa_ist_bulk($pa) ? ' · Bulk' : '');
 bx_head($pa['nummer'] . ($produktName !== '' ? ' · ' . $produktName : ''), 'Produktionsauftrag',
-        ($pa['status'] !== 'erledigt' ? bx_btn('Geführt produzieren', '?p=produktion_run&id=' . $id, 'primary') . ' ' : '')
+        ($pa['status'] !== 'erledigt' ? bx_btn('In der Werk-App produzieren', '/produktion/?p=werk', 'primary') . ' ' : '')
         . (!empty($pa['auftrag_id']) ? bx_btn('Zum Auftrag ' . (string)$pa['auftrag_nr'], '?p=auftrag&id=' . (int)$pa['auftrag_id'], 'ghost') . ' ' : '')
         . $btnEinkauf
         . pdf_btn('?p=produktionsauftrag_pdf&id=' . $id, 'Laufzettel drucken', false, 'Produktionsauftrag / Laufzettel als PDF') . ' '

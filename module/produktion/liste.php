@@ -1,6 +1,7 @@
 <?php
-// Produktions-Liste (Produktionsaufträge) – nach Reitern: Produktionsbereit / Wartet auf Material / Abgeschlossen.
-// Standard: nur produktionsbereite (alles Material da) + laufende. „Wartet auf Material" nur im eigenen Reiter.
+// Produktion – die EINE Liste (Nico 11.11.2026, plan-produktion-gefuehrt.md): Reiter Plan · Läuft · Fertig.
+// Plan = alles, was noch nicht begonnen hat (startklar, wartet auf Material, Material bestellt), in der Plan-Reihenfolge.
+// Ein Klick öffnet immer die PA-Seite (?p=produktionsauftrag). Alte Reiter (bereit/wartet/bestellt) zeigen auf Plan.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 nach_antwort(fn() => material_komplett_pruefen());   // „Material komplett"-Meldung, höchstens alle 5 Min. (auch für Lager-App-Buchungen)
@@ -8,8 +9,9 @@ nach_antwort(fn() => material_komplett_pruefen());   // „Material komplett"-Me
 $q    = trim($_GET['q'] ?? '');
 $sort = $_GET['sort'] ?? 'prio';
 $dir  = $_GET['dir']  ?? 'asc';
-$tab  = $_GET['tab']  ?? 'laufend';
-if (!in_array($tab, ['laufend', 'bereit', 'wartet', 'bestellt', 'erledigt'], true)) $tab = 'laufend';
+$tab  = $_GET['tab']  ?? 'plan';
+if (in_array($tab, ['bereit', 'wartet', 'bestellt'], true)) $tab = 'plan';   // alte Reiter -> Plan
+if (!in_array($tab, ['plan', 'laufend', 'erledigt'], true)) $tab = 'plan';
 
 // Teil 6 (10.11.2026): Sammel-Umstellung Eigen-/Fremdproduktion entfällt – der Weg wird je Auftrag im Pop-up „Weg festlegen“
 // bzw. im Reiter Beschaffungsweg festgelegt (eine Stelle, mit Premix und Lager).
@@ -124,11 +126,11 @@ $anzWartet   = count(array_filter($alle, $istWartet));
 $anzBestellt = count(array_filter($alle, $istBestellt));
 $anzErledigt = count(array_filter($alle, $istErledigt));
 
+$istPlan = fn($r) => $istBereit($r) || $istWartet($r) || $istBestellt($r);
+$anzPlan = count(array_filter($alle, $istPlan));
 if ($tab === 'erledigt')      $rows = array_filter($alle, $istErledigt);
-elseif ($tab === 'wartet')    $rows = array_filter($alle, $istWartet);
-elseif ($tab === 'bestellt')  $rows = array_filter($alle, $istBestellt);
-elseif ($tab === 'bereit')    $rows = array_filter($alle, $istBereit);
-else                          $rows = array_filter($alle, $istLaufend);
+elseif ($tab === 'laufend')   $rows = array_filter($alle, $istLaufend);
+else                          $rows = array_filter($alle, $istPlan);
 
 // Suche innerhalb des Reiters
 if ($q !== '') {
@@ -213,18 +215,11 @@ $cols = [
                      }],
     'fortschritt'  => ['label' => 'Fortschritt', 'render' => fn($r)=> (int)$r['n_done'].' / '.(int)$r['n_total']],
 ];
-// Auswahl-Checkbox nur dort, wo die Eigen/Fremd-Sammelumstellung greift (bereit/wartet).
-if (!in_array($tab, ['bereit', 'wartet'], true)) unset($cols['_sel']);
+unset($cols['_sel']);
 
-$TABS = [
-    'laufend'  => 'In Produktion',
-    'bereit'   => 'Produktionsbereit',
-    'wartet'   => 'Wartet auf Material',
-    'bestellt' => 'Material bestellt',
-    'erledigt' => 'Abgeschlossen',
-];
-$TABCOUNT = ['laufend' => $anzLaufend, 'bereit' => $anzBereit, 'wartet' => $anzWartet, 'bestellt' => $anzBestellt, 'erledigt' => $anzErledigt];
-$sub = ['laufend' => 'laufende Produktionen (schon begonnen)', 'bereit' => 'startklare Aufträge (Material da, noch nicht begonnen)', 'wartet' => 'Aufträge, denen Material fehlt (noch nicht bestellt)', 'bestellt' => 'Aufträge, deren fehlendes Material bestellt ist und unterwegs',  'erledigt' => 'abgeschlossene Produktionsaufträge'];
+$TABS = ['plan' => 'Plan', 'laufend' => 'Läuft', 'erledigt' => 'Fertig'];
+$TABCOUNT = ['plan' => $anzPlan, 'laufend' => $anzLaufend, 'erledigt' => $anzErledigt];
+$sub = ['plan' => 'Aufträge im Plan (noch nicht begonnen) – startklare oben, nicht machbare grau mit Grund', 'laufend' => 'laufende Produktionen (schon begonnen)', 'erledigt' => 'abgeschlossene Produktionsaufträge'];
 
 $flash = $_SESSION['prod_flash'] ?? null; unset($_SESSION['prod_flash']);
 $zeigeNeu = isset($_GET['neu']);
@@ -239,11 +234,10 @@ $kpi = function(string $label, int $wert, string $href, string $farbe = '', bool
 };
 echo '<div class="bx-cards" style="margin-bottom:16px">';
 if (has_role('admin')) $kpi('Beschaffungsweg offen', (int)$vorbereitungN, '?p=produktion_vorbereitung', '#f59e0b');
-$kpi('In Produktion', $anzLaufend, '?p=produktion&tab=laufend', '', $tab === 'laufend');
-$kpi('Produktionsbereit', $anzBereit, '?p=produktion&tab=bereit', 'var(--gruen)', $tab === 'bereit');
-$kpi('Wartet auf Material', $anzWartet, '?p=produktion&tab=wartet', '#f59e0b', $tab === 'wartet');
-$kpi('Material bestellt', $anzBestellt, '?p=produktion&tab=bestellt', '', $tab === 'bestellt');
-$kpi('Abgeschlossen', $anzErledigt, '?p=produktion&tab=erledigt', '', $tab === 'erledigt');
+$kpi('Startklar', $anzBereit, '?p=produktion&tab=plan', 'var(--gruen)', false);
+$kpi('Wartet auf Material', $anzWartet + $anzBestellt, '?p=produktion&tab=plan', '#f59e0b', false);
+$kpi('Läuft', $anzLaufend, '?p=produktion&tab=laufend', '', $tab === 'laufend');
+$kpi('Fertig', $anzErledigt, '?p=produktion&tab=erledigt', '', $tab === 'erledigt');
 echo '</div>';
 if (!empty($vorbereitungN) && has_role('admin'))
     echo '<div class="bx-panel badge-warn" style="padding:10px 14px">' . (int)$vorbereitungN
@@ -376,8 +370,6 @@ if ($zeigeNeu):
   <?php if ($q !== ''): ?><a class="btn btn-ghost btn-sm" href="?p=produktion&tab=<?= h($tab) ?>">zurücksetzen</a><?php endif; ?>
 </form>
 <?php
-if ($tab === 'wartet' && $rows)
-    echo '<div class="bx-panel" style="padding:10px 14px;font-size:13px;color:var(--muted)">Diese Aufträge sind noch nicht produzierbar – es fehlt Material. Im jeweiligen Auftrag siehst du, was fehlt, und kannst es bestellen. Sobald alles da ist, wandert der Auftrag automatisch nach „Produktionsbereit".</div>';
 
 bx_table($cols, array_values($rows), [
     'baseUrl' => '?p=produktion&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : ''),
@@ -388,9 +380,8 @@ bx_table($cols, array_values($rows), [
     'rowUrl'  => fn($r) => '?p=produktionsauftrag&id=' . $r['id'],
     'empty'   => match ($tab) {
         'laufend'  => 'Aktuell läuft keine Produktion.',
-        'wartet'   => 'Kein Auftrag wartet aktuell auf Material.',
         'erledigt' => 'Noch keine abgeschlossenen Produktionsaufträge.',
-        default    => 'Kein Auftrag ist aktuell startklar.',
+        default    => 'Nichts im Plan.',
     },
 ]);
 ?>

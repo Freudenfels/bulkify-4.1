@@ -28,6 +28,10 @@ $routen = [
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'dash';
 
+// Ein Weg (Nico 11.11.2026): Produzieren läuft in der Werk-App, geplant wird im Dashboard (Reiter Plan). Alte Links leiten weiter.
+if ($p === 'modus' || $p === 'run') weiter('?p=werk');
+if ($p === 'liste' || $p === 'kalender') weiter('/?p=produktion&tab=plan');
+
 if ($p === 'logout') { pr_logout(); weiter('?p=login'); }
 
 // Autologin nur lokal (Entwicklung), nie auf dem Server.

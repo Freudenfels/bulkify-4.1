@@ -246,6 +246,19 @@ $routes = [
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', $_GET['p']) : 'dashboard';
 
+// Produktion: EIN Weg (Nico 11.11.2026, plan-produktion-gefuehrt.md). Alte Seiten leiten weiter, nichts ist gelöscht:
+// Liste = ?p=produktion (Reiter Plan/Läuft/Fertig), Detail = ?p=produktionsauftrag, Nachtragen = Knopf auf der PA-Seite.
+if (in_array($p, ['produktion_neu', 'produktion_planung', 'kalender', 'produktion_run', 'easy_production'], true)) {
+    $umPa = (int)($_GET['id'] ?? $_GET['pa'] ?? 0);
+    $ziel = match ($p) {
+        'produktion_neu'  => '?p=produktion',
+        'produktion_run'  => $umPa ? '?p=produktionsauftrag&id=' . $umPa : '?p=produktion&tab=laufend',
+        'easy_production' => $umPa ? '?p=produktionsauftrag&id=' . $umPa . '&nachtragen=1#nachtragen' : '?p=produktion&tab=laufend',
+        default           => '?p=produktion&tab=plan',
+    };
+    header('Location: ' . $ziel); exit;
+}
+
 // Logout
 if ($p === 'logout') { auth_logout(); header('Location: ?p=login'); exit; }
 

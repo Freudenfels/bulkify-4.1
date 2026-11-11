@@ -6,16 +6,18 @@ require_once __DIR__ . '/auth.php';
 // Menü der Produktions-App (Nico 08.11.2026, wie die Lager-App): EINE flache Liste ohne Gruppen, größer, mit Icons.
 // Darunter, kleiner und abgesetzt: Archiv, Einstellungen, Werk-App, Zum Dashboard (+ Testdaten nur Admin).
 function pr_nav(): array {
-    return ['dash' => 'Übersicht', 'modus' => 'Produzieren', 'liste' => 'Aufträge', 'kalender' => 'Kalender',
-            'reinigung' => 'Reinigung', 'anleitungen' => 'Anleitungen'];
+    // Ein Weg (11.11.2026): „Produzieren“ = Werk-App, „Plan“ = Reiter Plan im Dashboard (modus/run/liste/kalender leiten weiter).
+    return ['dash' => 'Übersicht', 'werk' => 'Produzieren', 'plan' => 'Plan', 'reinigung' => 'Reinigung', 'anleitungen' => 'Anleitungen'];
 }
 function pr_nav_klein(): array {
-    return ['archiv' => 'Archiv', 'einstellungen' => 'Einstellungen', 'werk' => 'Werk-App (Mitarbeiter)'];
+    return ['archiv' => 'Archiv', 'einstellungen' => 'Einstellungen'];
 }
 // Linien-Icons (Stil Lucide, Inline-SVG in currentColor) – gleiche Art wie Lager-App und Dashboard-Menü „Einfach".
 function pr_nav_icon(string $key): string {
     static $i = [
         'dash'        => '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+        'werk'        => '<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>',
+        'plan'        => '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
         'modus'       => '<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>',
         'liste'       => '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
         'kalender'    => '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
@@ -54,7 +56,7 @@ function kopf(string $titel, string $aktiv = ''): void {
            . '<span class="bx-ver">' . h(BX_TITEL) . '</span></div><nav>';
         echo '<div class="pr-navflat">';
         foreach (pr_nav() as $route => $label)
-            echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . ' style="justify-content:flex-start">'
+            echo '<a href="' . ($route === 'plan' ? '/?p=produktion&amp;tab=plan' : '?p=' . h($route)) . '"' . ($aktiv === $route ? ' class="on"' : '') . ' style="justify-content:flex-start">'
                . pr_nav_icon($route) . '<span class="pr-navlbl">' . h($label) . '</span></a>';
         echo '</div><div class="pr-navklein">';
         foreach (pr_nav_klein() as $route => $label)

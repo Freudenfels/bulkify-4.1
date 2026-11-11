@@ -52,3 +52,21 @@ Kachel/Hinweis „Beschaffungsweg offen“ statt „Wartet auf Freigabe“ (04.1
 
 ## 10.11.2026 (Teil 6)
 Die Sammel-Umstellung „auf Eigenproduktion / auf Fremdproduktion (Zukauf)“ für markierte Aufträge entfällt (Aktion `art_bulk`, Auswahlspalte). Der Weg wird je Auftrag im Pop-up „Weg festlegen“ bzw. im Reiter Beschaffungsweg festgelegt.
+
+## Ein Weg (11.11.2026, plan-produktion-gefuehrt.md)
+Die Liste hat nur noch drei Reiter:
+- **Plan:** alles, was noch nicht begonnen hat (startklar, wartet auf Material, Material bestellt).
+- **Läuft**
+- **Fertig**
+
+Die alten Reiter `bereit`, `wartet` und `bestellt` zeigen auf Plan. Ein Klick öffnet immer die PA-Seite.
+
+Die alten Seiten leiten weiter (`public/index.php`), nichts ist gelöscht. Ihre Menüpunkte sind entfernt.
+
+| Alte Seite | geht auf |
+|---|---|
+| `produktion_neu` | `produktion` |
+| `produktion_planung` | Reiter Plan |
+| `kalender` | Reiter Plan |
+| `produktion_run` | PA-Seite bzw. Reiter Läuft |
+| `easy_production` | PA-Seite „Teilmenge nachtragen“ bzw. Reiter Läuft |

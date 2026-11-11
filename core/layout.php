@@ -35,7 +35,9 @@ function bx_nav_default(): array {
         // 'produktion_vorbereitung'), damit ein früher ausgeblendeter Eintrag im gespeicherten Menü ihn nicht verdeckt.
         // Soll-Kette 4c (04.11.2026): heißt jetzt „Beschaffungsweg offen“ – es gibt keine eigene Freigabe mehr, nur den Weg.
         'Produktion'   => ['produktionsfreigabe' => ['label'=>'Beschaffungsweg offen', 'route'=>'produktion_vorbereitung', 'href'=>'?p=produktion_vorbereitung'],
-                           'produktion' => 'Produktion', 'produktion_neu' => 'Produktion (neu)', 'easy_production' => 'Easy Production', 'produktion_planung' => 'Planung', 'produktion_run' => 'Geführte Produktion', 'maschinen' => 'Maschinen', 'kalender' => 'Kalender', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
+                           // Ein Weg (11.11.2026): Produktion (neu), Easy Production, Planung, Geführte Produktion und Kalender gehen in
+                           // ?p=produktion (Reiter Plan/Läuft/Fertig) bzw. die PA-Seite auf – alte Links leiten weiter (public/index.php).
+                           'produktion' => 'Produktion', 'maschinen' => 'Maschinen', 'aufgaben' => 'Aufgaben', 'versand' => 'Versand'],
         // Lager = EIN Punkt (Schritt 2 Soll-Handbuch): Lager 1 / Lager 2 sind Filter-Reiter auf der Seite (?ort=…), keine Menüpunkte.
         // Rohstoffe stehen seit Schritt 2 in der Gruppe Produkt.
         'Lager'        => [
@@ -197,7 +199,7 @@ function bx_anfrage_counts(): array {
 function bx_nav_werk(): array {
     return [
         'Start'            => ['werk' => 'Cockpit', 'aufgaben' => 'Aufgaben'],
-        'Produktion'       => ['produktion_run' => 'Geführte Produktion', 'produktion' => 'Produktionsaufträge', 'kalender' => 'Kalender'],
+        'Produktion'       => ['produktion' => 'Produktion'],   // ein Weg (11.11.2026): Plan/Läuft/Fertig, Werk-App fürs Tablet
         'Warenwirtschaft'  =>['einkaufsliste' => 'Bedarf',
                                'lager'        => ['label'=>'Warenlager', 'route'=>'lager', 'href'=>'?p=lager',             'ort'=>'alle'],
                                'lager_l1'     => ['label'=>'Lager 1',    'route'=>'lager', 'href'=>'?p=lager&ort=lager1', 'ort'=>'lager1'],
