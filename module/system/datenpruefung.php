@@ -68,6 +68,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dp_ab
     header('Location: ?p=datenpruefung&ok=' . rawurlencode($ok . ' Verknüpfung(en) ausgeführt' . ($fehl ? ', ' . $fehl . ' übersprungen (nicht mehr eindeutig)' : '') . '.') . '#' . $k); exit;
 }
 $CHECKS = [
+    // Block E (Abendpaket 11.11.2026): Etikett-Ersatz raus. (1) VORHER-Liste: offene/laufende PAs, die nach dem Entfernen des
+    // generischen Ersatz-Etiketts beim Etikettieren blockiert wären (Kundenetikett hat nicht genug Bestand). Nur Anzeige.
+    'etikett_ersatz_blockiert' => [
+        'titel' => 'Etikett: Produktionsaufträge, deren Kundenetikett zu wenig Bestand hat (Etikettieren blockiert)',
+        'info'  => 'Offene bzw. laufende Produktionsaufträge mit offenem Schritt „Etikettieren“, bei denen das Kundenetikett des Auftrags nicht reicht. '
+                 . 'Bis 11.11.2026 hat die Produktion dann still das generische Maß-Etikett des Behälters genommen (Spalte „heute“: über Ersatz). Seitdem ist dieser Ersatz entfernt: '
+                 . 'Etikettieren ist blockiert, bis die Kundenetiketten da sind (bestellen bzw. einbuchen) – Werk-App und Dashboard rechnen gleich. Nur Anzeige.',
+        'auf_klick' => true,
+        'sql'   => "SELECT pa.id AS _id, CONCAT('?p=produktionsauftrag&id=', pa.id) AS _link, a.nummer AS auftrag, pa.nummer AS pa, a.id AS _aid, a.produkt_id AS _pid,
+                           COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt, k.firma AS kunde
+                    FROM produktionsauftrag pa JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
+                    WHERE pa.status NOT IN ('erledigt','storniert') AND COALESCE(pa.zukauf_art,'') <> 'fertig' AND a.status NOT IN ('versendet','storniert')
+                      AND EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.station='Etikettieren' AND s.erledigt=0)
+                    ORDER BY a.nummer",
+        'zeilen' => function (array $rows): array {
+            $out = [];
+            foreach ($rows as $r) {
+                $aid = (int)$r['_aid']; $pid = (int)$r['_pid']; $paId = (int)$r['_id'];
+                if (!auftrag_braucht_etikett($aid) || auftrag_vollbedruckt($aid)) continue;
+                $eid = etikett_item_fuer_auftrag_kunde($aid, $pid);
+                $vid = (int) scalar("SELECT COALESCE(NULLIF(pa.verpackung_id,0), NULLIF(a.verpackung_id,0), p.verpackung_id, 0) FROM produktionsauftrag pa JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN produkt p ON p.id=a.produkt_id WHERE pa.id=?", [$paId]);
+                $gen = $vid > 0 ? (int)(etikett_id_fuer_behaelter($vid) ?? 0) : 0;
+                if ($eid <= 0) { $out[] = $r + ['kundenetikett' => 'keins', 'bestand' => '-', 'bedarf' => '-', 'heute' => $gen ? 'generisches Etikett (normaler Weg)' : '-']; continue; }
+                $soll = produktion_ziel_pakete($paId, null);
+                $brauch = $soll - produktion_verbraucht($paId, $eid) - ($gen > 0 && $gen !== $eid ? produktion_verbraucht($paId, $gen) : 0.0);
+                if ($brauch <= 0.5) continue;
+                $bk = (float) item_bestand($eid, true);
+                if ($bk + 0.0001 >= $brauch) continue;
+                $bg = $gen > 0 && $gen !== $eid ? (float) item_bestand($gen, true) : 0.0;
+                $nf = fn($x) => number_format((float)$x, 0, ',', '.');
+                $out[] = $r + ['kundenetikett' => (string) scalar("SELECT name FROM item WHERE id=?", [$eid]), 'bestand' => $nf($bk) . ' Stk', 'bedarf' => $nf($brauch) . ' Stk',
+                               'heute' => $bg + 0.0001 >= $brauch ? 'über Ersatz (generisch, ' . $nf($bg) . ' Stk da) - jetzt blockiert' : 'fehlt schon heute'];
+            }
+            return $out;
+        },
+        'korrektur' => '– (nur anzeigen; Kundenetiketten bestellen bzw. einbuchen. Alte generische Etiketten nicht mehr für Kundenprodukte verwenden.)',
+    ],
+    // Block E Teil 1: Aufträge, die noch an einem alten/generischen Etikett hängen (kein eigenes Kundenetikett mit Design).
+    // Knopf „Update-Etikett erzeugen": aktuelle Kundenetikett-Version aus dem freigegebenen Design (kundenetikett_nach_freigabe),
+    // an Produkt + Kunde und den Auftrag gebunden. Ohne Design: „Design fehlt", kein leeres Etikett.
+    'etikett_update_noetig' => [
+        'titel' => 'Etikett: Aufträge ohne aktuelles Kundenetikett (Update-Etikett erzeugen)',
+        'info'  => 'Offene Aufträge mit Etikett, deren Etikett noch das alte/generische ist oder deren Kundenetikett kein Design hat (Altbestand vor dem Kundenetikett-Fix). '
+                 . '„Update-Etikett erzeugen“ legt die aktuelle Kundenetikett-Version aus dem freigegebenen Design des Auftrags an (neue Version, Maß aus der TrimBox) und bindet sie an Produkt + Kunde und den Auftrag – ab dann wird sie gedruckt, eingebucht und beim Etikettieren gezogen. '
+                 . 'Ohne freigegebenes Design steht „Design fehlt“ (kein Knopf, kein leeres Etikett).',
+        'auf_klick' => true,
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer AS auftrag, a.produkt_id AS _pid, a.kunde_id AS _kid,
+                           COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt, k.firma AS kunde, a.status
+                    FROM auftrag a JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
+                    WHERE a.status IN ('offen','in_produktion') AND a.kunde_id IS NOT NULL AND COALESCE(p.handelsware,0)=0
+                    ORDER BY a.nummer",
+        'zeilen' => function (array $rows): array {
+            $out = [];
+            foreach ($rows as $r) {
+                $aid = (int)$r['_id']; $pid = (int)$r['_pid']; $kid = (int)$r['_kid'];
+                if (!auftrag_braucht_etikett($aid) || auftrag_vollbedruckt($aid)) continue;
+                $eid = etikett_item_fuer_auftrag_kunde($aid, $pid);
+                $e = $eid > 0 ? one("SELECT id, name, produkt_id, kunde_id, etikett_dokument_id FROM item WHERE id=?", [$eid]) : null;
+                $eigen = $e && (int)$e['produkt_id'] === $pid && (int)$e['kunde_id'] === $kid;
+                if ($eigen && !empty($e['etikett_dokument_id'])) continue;   // aktuelles Kundenetikett mit Design -> nicht in der Liste
+                $design = etikett_freigegeben($aid) && etikett_datei($aid);
+                $out[] = $r + ['etikett_jetzt' => $e ? (string)$e['name'] . ($eigen ? ' (ohne Design)' : ' (generisch/fremd)') : 'keins',
+                               'design' => $design ? 'freigegeben' : 'Design fehlt', '_design' => $design ? 1 : 0];
+            }
+            return $out;
+        },
+        'korrektur' => 'Update-Etikett erzeugen: kundenetikett_nach_freigabe(<Auftrag>) + auftrag_kundenetikett_sicherstellen(<Auftrag>) – neue Version aus dem freigegebenen Design, gebunden an Produkt + Kunde und Auftrag.',
+        'fix'   => ['waehlbar' => fn(array $r) => !empty($r['_design']),
+                    'aktion' => function (array $r): int {
+                        $aid = (int)$r['_id'];
+                        $vor = (int) scalar("SELECT COALESCE(etikett_item_id,0) FROM auftrag WHERE id=?", [$aid]);
+                        kundenetikett_nach_freigabe($aid);
+                        $neu = auftrag_kundenetikett_sicherstellen($aid);
+                        if ($neu > 0) log_aktivitaet('auftrag', $aid, 'team', 'Update-Etikett erzeugt (Datenprüfung): Kundenetikett ' . (string) scalar("SELECT name FROM item WHERE id=?", [$neu]) . ' gebunden.', 'notiz');
+                        return $neu > 0 && $neu !== $vor ? 1 : ($neu > 0 ? 1 : 0);
+                    }],
+    ],
     // Block C Teil 3 (Abendpaket 11.11.2026): Testdaten auf live. Nur auf Klick. Aktive Einträge mit „test", „zztest", „durchlauf",
     // „dummy" (auch E2E) im Namen oder in der Nummer und E-Mails @example.com/.org. Dazu Reste gelöschter Lieferanten (z. B. id 6,
     // Shandong Health Ingredients: Preise, Anfragen LA-…, Bestellungen BE-TEST ohne Lieferant) – die nur zeigen, nichts löschen.

@@ -154,3 +154,7 @@ Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführ
 **testdaten_live (Block C Teil 3, 11.11.2026, nur auf Klick):** aktive Lieferanten, Kunden, Produkte, Artikel und Rezepturen mit test/zztest/durchlauf/dummy/E2E im Namen oder in der Nummer sowie E-Mails @example.com/.org. Knopf je Zeile „inaktiv setzen“ (gesperrt bzw. Status inaktiv, Rezeptur über `rezeptur_inaktiv_setzen`). Dazu nur zur Info: Bestellungen mit TEST/E2E in der Nummer oder ohne vorhandenen Lieferanten, Lieferantenpreise und Anfragen (LA-…) gelöschter Lieferanten. `_id` = Typ × 10.000.000 + id.
 
 **Lose Bulk-Artikel zusammenführen (Block D, 11.11.2026):** Beheben nutzt `artikel_zusammenfuehren_voll()` mit Sperre statt des alten Wegs.
+
+**Etikett (Block E, 11.11.2026, beide nur auf Klick)**
+- **etikett_ersatz_blockiert:** offene/laufende PAs mit offenem „Etikettieren“, deren Kundenetikett nicht reicht. Spalte „heute“: lief bisher still über das generische Ersatz-Etikett. Seit Block E Teil 2 sind diese PAs beim Etikettieren blockiert. Nur Anzeige.
+- **etikett_update_noetig:** offene Aufträge ohne aktuelles Kundenetikett mit Design (generisch/fremd/ohne Design). Der Knopf „Update-Etikett erzeugen“ (nur mit freigegebenem Design) ruft `kundenetikett_nach_freigabe()` + `auftrag_kundenetikett_sicherstellen()` auf. Ergebnis: neue Version aus dem Design, Maß aus der TrimBox, gebunden an Produkt + Kunde und Auftrag. Sonst steht „Design fehlt“.
