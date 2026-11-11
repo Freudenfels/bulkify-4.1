@@ -6,3 +6,5 @@
 - Darunter steht immer ein Knopf „Design öffnen“. Lädt die Vorschau nicht (pdf.js nicht erreichbar oder Datei kaputt), erscheint ein Hinweis mit diesem Knopf.
 
 Genutzt in der Lager-App (Wareneingang → „Etiketten einbuchen“, Quelle `?p=dok&id=`) und im Dashboard-Wareneingang (`?p=dokument&id=`).
+
+Auch genutzt auf der Auftragsseite (Reiter Details, unter den Kacheln) seit 11.11.2026.

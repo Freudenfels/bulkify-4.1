@@ -355,3 +355,10 @@ Jede Karte zeigt immer „Bedarf für diesen Auftrag“ (volle Menge). Ist schon
 - **Ohne Datum:** Ein Schritt kann erledigt sein, ohne dass ihn jemand gemeldet hat. Das passiert, wenn ein späterer Schritt erledigt ist, z. B. Laboranalyse abgeschlossen, dann gilt Etikettiert mit. Die Karte zeigt dann „ohne Datum, mit späterem Schritt abgehakt“.
 - **Wer hat abgeschlossen:** Erledigte Schritte zeigen „abgeschlossen von …“, soweit das System es weiß. Die Angabe kommt aus `auftrag_fortschritt()`, 7. Feld je Schritt, siehe `core/schema.md`. Ist niemand bekannt, steht nichts da. Das gilt z. B. für Schritte, die ein späterer Schritt automatisch mit abgehakt hat.
 
+## Etikett als Bild im Reiter Details (11.11.2026)
+Unter den Kacheln steht das Etikett-Design jetzt direkt als Bild. Nico wollte es bei AB-3297 sehen, ohne erst das Stift-Fenster zu öffnen.
+- **Woher:** dieselbe Quelle wie im Stift-Fenster, also `etikett_datei()` bzw. `etikett_quelle()` (auch aus einer Vorbestellung).
+- **Darstellung:** PDF-Seite 1 zeichnet `assets/etikett_vorschau.js` (pdf.js) als Bild, Bilddateien werden direkt gezeigt. Darüber stehen Badge und Dateiname, darunter „Design öffnen“.
+- **Klick:** Ein Klick auf das Bild öffnet das Etikett-Fenster (nur mit Stift-Recht).
+- **Ohne Design:** Gibt es kein Design oder braucht der Auftrag kein Etikett, entfällt der Block.
+

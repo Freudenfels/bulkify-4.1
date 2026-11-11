@@ -1019,6 +1019,20 @@ if (has_role('admin') || has_role('sales')):
 <div class="bx-panel" data-panel="details">
   <?php if (isset($_GET['kok']) || isset($_GET['vpok']) || isset($_GET['knok']) || isset($_GET['ltok']) || isset($_GET['etikettok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Gespeichert.</div><?php endif; ?>
   <?php $kachelnRender(); // Kennzahl-Kacheln; änderbare Werte per Stift (Fenster unten) ?>
+  <?php // Etikett als Bild direkt sichtbar (Nico 11.11.2026, AB-3297): bisher nur im Stift-Fenster. PDF -> Seite 1 als Bild (pdf.js).
+  if (auftrag_braucht_etikett($id) && ($etBild = etikett_datei($id) ?: etikett_quelle($id))):
+      $etBildExt = strtolower(pathinfo((string)($etBild['datei_orig'] ?: $etBild['datei']), PATHINFO_EXTENSION));
+      if ($etBildExt === 'pdf' || in_array($etBildExt, ['jpg','jpeg','png','gif','webp','avif','bmp','svg'], true)): ?>
+  <div style="margin:0 0 16px">
+    <div class="muted" style="font-size:13px;margin-bottom:6px"><?= h($designLbl) ?> <?= $etikettBadge ?> <span style="font-size:12px">· <?= h((string)($etBild['datei_orig'] ?: 'Design')) ?><?= !empty($etBild['alt']) ? ' · aus einer Vorbestellung' : '' ?></span></div>
+    <div id="etBildVorschau" style="width:440px;max-width:100%"<?= $darfStift ? ' title="Klicken: Etikett-Fenster öffnen" data-dlg-open="dlgEtikett"' : '' ?>></div>
+  </div>
+  <script src="/assets/etikett_vorschau.js"></script>
+  <script>(function(){ var el = document.getElementById('etBildVorschau');
+    bxEtikettVorschau(el, '?p=dokument&id=<?= (int)$etBild['id'] ?>', <?= $etBildExt === 'pdf' ? 'true' : 'false' ?>);
+    if (el.dataset.dlgOpen) { el.style.cursor = 'pointer'; el.addEventListener('click', function(e){ if (e.target.closest('a')) return; var d = document.getElementById(el.dataset.dlgOpen); if (d) d.showModal(); }); }
+  })();</script>
+  <?php endif; endif; ?>
   <?php // Stift-Fenster (Teil 1): je änderbarer Kachel genau dieses Feld. Liegen außerhalb jeder Tabelle/jedes Formulars.
   if ($darfStift):
       $dlgRez = !empty($rezeptur['id']) ? one("SELECT id, darreichungsform, kapselgroesse_id, tabletten_form, einheit_fuellmenge FROM rezeptur WHERE id=?", [(int)$rezeptur['id']]) : null;
