@@ -6,6 +6,7 @@
 // Stelle, mit Preis und Link zur Rezeptur/zum Lieferanten.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" am Angebotspreis
 
 // E1: offene (unbeantwortete) Massenanfragen eines Lieferanten bereinigen (nur Admin).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anfragen_bereinigen' && has_role('admin')) {
@@ -40,7 +41,7 @@ if ($q !== '') {
 $rows = all("SELECT la.id, la.nummer, la.art, la.betreff, la.menge, la.einheit, la.status, la.angelegt,
                     la.item_id, la.rezeptur_id, la.lieferant_id, la.coa_gewuenscht, l.firma,
                     ag.preis AS ang_preis, ag.einheit AS ang_einheit, ag.waehrung AS ang_waehrung,
-                    ag.mindestmenge AS ang_min, ag.lieferzeit_tage AS ang_lz,
+                    ag.mindestmenge AS ang_min, ag.lieferzeit_tage AS ang_lz, ag.gueltig_bis AS ang_bis,
                     (SELECT COUNT(*) FROM dokument d WHERE d.typ IN ('coa','spec','beides','analyse')
                        AND ((d.objekt_typ='lieferant' AND d.lieferant_id=la.lieferant_id)
                             OR (la.item_id>0 AND d.objekt_typ='item' AND d.objekt_id=la.item_id))) AS coa_docs,
@@ -184,6 +185,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c
         <td class="bx-num">
           <?php if ($hatPreis): ?>
             <strong style="font-weight:600"><?= $eur($r['ang_preis'], $r['ang_waehrung']) ?></strong><?= $r['ang_einheit'] ? ' <span class="muted">/ ' . h($r['ang_einheit']) . '</span>' : '' ?>
+            <?php if (!empty($r['ang_bis'])): ?><div><?= pg_anzeige($r['ang_bis']) ?></div><?php endif; ?>
             <?php if ($r['ang_min'] || $r['ang_lz']): ?><div class="muted" style="font-size:11px"><?= $r['ang_min'] ? 'ab ' . $menge($r['ang_min'], $r['ang_einheit']) : '' ?><?= ($r['ang_min'] && $r['ang_lz']) ? ' · ' : '' ?><?= $r['ang_lz'] ? (int)$r['ang_lz'] . ' Tage' : '' ?></div><?php endif; ?>
           <?php else: ?>
             <span class="muted">ausstehend</span>

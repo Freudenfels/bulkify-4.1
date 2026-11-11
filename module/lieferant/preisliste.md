@@ -24,3 +24,7 @@
 
 ## Einheiten übersetzt (11.11.2026)
 Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache des Lieferanten, z. B. Kapsel → capsule / 粒. kg, g, L und ml bleiben unverändert.
+
+## Preis-Gültigkeit (11.11.2026)
+- Der Dialog „Preis aktualisieren“ hat das Feld „Preis gültig bis“. Es geht an `lieferant_katalog.gueltig_bis` und bei der Übernahme an `lieferant_preis`.
+- Die aktuellen Preise zeigen „gültig bis …“ bzw. „abgelaufen seit …“.

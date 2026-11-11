@@ -202,3 +202,8 @@ In den Stammdaten stehen bei Rohstoffen hinter der CAS-Nummer die Felder „MOQ 
 - Eine leere Menge bedeutet keine MOQ.
 - Die Kachel „MOQ (unsere)“ zeigt den Wert, die Notiz steht im Tooltip.
 Siehe `core/rohstoff_moq.md`.
+
+## Preis-Gültigkeit (11.11.2026)
+- Die Lieferantenpreise haben die Spalte „Gültig“ (unbegrenzt, gültig bis, läuft bald ab, abgelaufen).
+- „Preis hinzufügen“ hat das Feld „Preis gültig bis“. Bei „Preis schwankt“ ist es vorbelegt.
+Siehe `core/preis_gueltig.md`.

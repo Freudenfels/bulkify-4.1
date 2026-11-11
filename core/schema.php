@@ -1956,6 +1956,11 @@ function init_schema(): void {
     ensure_column('item', 'moq_menge', "DECIMAL(12,3) NULL");
     ensure_column('item', 'moq_einheit', "VARCHAR(10) NULL");
     ensure_column('item', 'moq_notiz', "VARCHAR(190) NULL");
+    // Preis-Gültigkeit (Nico 11.11.2026, core/preis_gueltig.php): „gültig bis" an jedem Lieferantenpreis, leer = unbegrenzt.
+    foreach (['lieferant_preis', 'lieferant_angebot', 'rezeptur_lief_angebot', 'lieferant_preisliste', 'produkt_lieferant_preis', 'lieferant_katalog'] as $pgT)
+        if (table_exists($pgT)) ensure_column($pgT, 'gueltig_bis', "DATE NULL");
+    ensure_column('item', 'preis_schwankt', "TINYINT(1) NOT NULL DEFAULT 0");   // Rohstoff mit schwankendem Preis (z. B. Whey)
+    ensure_column('item', 'preis_gueltig_tage', "INT NULL");                     // Standard-Gültigkeit in Tagen
     // Lieferanten-Kürzel: je Lieferant ein kurzes Suffix aus dem Namen (Buxtrade→BX, Wellgreen→WG …).
     // Damit lässt sich derselbe Rohstoff je Lieferant eindeutig kennzeichnen: Kennung = R-Nummer + Kürzel.
     ensure_column('lieferanten', 'kuerzel', "VARCHAR(10) NULL");
@@ -7226,20 +7231,26 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
     $variante = mb_substr(trim((string)($opt['variante'] ?? '')), 0, 190) ?: null;
     $kapVor   = (int)($opt['kapsel_vorschlag_id'] ?? 0) ?: null;
     $kapGrund = mb_substr(trim((string)($opt['kapsel_vorschlag_grund'] ?? '')), 0, 255) ?: null;
+    // Preis-Gültigkeit (11.11.2026): gilt für das ganze Angebot inkl. Staffeln; leer = unbegrenzt.
+    $gBis = (isset($opt['gueltig_bis']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$opt['gueltig_bis'])) ? (string)$opt['gueltig_bis'] : null;
     $vorhanden = one("SELECT id FROM lieferant_angebot WHERE anfrage_id=?", [$anfrage_id]);
     if ($vorhanden) {
         q("UPDATE lieferant_angebot SET preis=?, einheit=?, preis_basis=?, mindestmenge=?, lieferzeit_tage=?, notiz=?, incoterm=?, versandart=?, variante=?, kapsel_vorschlag_id=?, kapsel_vorschlag_grund=?, status='offen', angelegt=UTC_TIMESTAMP() WHERE id=?",
           [$preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, $inco, $vers, $variante, $kapVor, $kapGrund, (int)$vorhanden['id']]);
         $aid = (int)$vorhanden['id'];
         q("DELETE FROM lieferant_angebot_staffel WHERE angebot_id=?", [$aid]);
+        try { q("UPDATE lieferant_angebot SET gueltig_bis=? WHERE id=?", [$gBis, $aid]); } catch (Throwable $e) {}
     } else {
         q("INSERT INTO lieferant_angebot (anfrage_id,lieferant_id,preis,einheit,preis_basis,mindestmenge,lieferzeit_tage,notiz,incoterm,versandart,variante,kapsel_vorschlag_id,kapsel_vorschlag_grund) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
           [$anfrage_id, $lieferant_id, $preis, $einheit ?: null, $preis_basis, $mindestmenge, $lieferzeit, trim($notiz) ?: null, $inco, $vers, $variante, $kapVor, $kapGrund]);
         $aid = insert_id();
+        try { q("UPDATE lieferant_angebot SET gueltig_bis=? WHERE id=?", [$gBis, $aid]); } catch (Throwable $e) {}
     }
+    $stGesehen = [];
     foreach ($staffeln as $s) {
         $m = (float)($s[0] ?? 0); $pr = (float)($s[1] ?? 0);
         if ($m <= 0 || $pr <= 0) continue;
+        $sk = number_format($m, 3, '.', ''); if (isset($stGesehen[$sk])) continue; $stGesehen[$sk] = 1;   // gleiche Menge nur einmal
         q("INSERT INTO lieferant_angebot_staffel (angebot_id,menge_ab,preis) VALUES (?,?,?)", [$aid, $m, $pr]);
     }
     q("UPDATE lieferant_anfrage SET status='beantwortet' WHERE id=?", [$anfrage_id]);
@@ -7260,8 +7271,8 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
             }
             q("DELETE FROM lieferant_preis WHERE item_id=? AND lieferant_id=?", [$pm, $lieferant_id]);
             foreach ($zeilen as [$zm, $zp])
-                q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart) VALUES (?,?,?,?,?,CURDATE(),?,?)",
-                  [$pm, $lieferant_id, $zm, $zp, 'EUR', $inco, $vers]);
+                q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?,?,CURDATE(),?,?,?)",
+                  [$pm, $lieferant_id, $zm, $zp, 'EUR', $inco, $vers, $gBis]);
             if (function_exists('item_ek_aus_lieferantenpreis')) item_ek_aus_lieferantenpreis($pm);
             log_aktivitaet('item', $pm, 'lieferant', 'Premix-Preis ' . number_format($pe, 2, ',', '.') . ' €/kg' . (count($zeilen) > 1 ? ' (+' . (count($zeilen) - 1) . ' Staffel)' : '') . ' aus ' . $a['nummer'] . '.', 'angebot', 'lieferant_anfrage', $anfrage_id);
         }
@@ -7298,11 +7309,11 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
                    ?: one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? ORDER BY id LIMIT 1", [$rezId, $lieferant_id]))
                 : one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? AND menge=? ORDER BY id LIMIT 1", [$rezId, $lieferant_id, $zm]);
             if (!$ex) {
-                q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,menge,status,stand,quelle_anfrage_id,angelegt) VALUES (?,?,?,?,?, 'angeboten', CURDATE(), ?, NOW())",
-                  [$rezId, $lieferant_id, $zp > 0 ? $zp : null, $rEinheit, $zm, $anfrage_id]);
+                q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,menge,status,stand,quelle_anfrage_id,angelegt,gueltig_bis) VALUES (?,?,?,?,?, 'angeboten', CURDATE(), ?, NOW(), ?)",
+                  [$rezId, $lieferant_id, $zp > 0 ? $zp : null, $rEinheit, $zm, $anfrage_id, $gBis]);
                 $neu = true;
             } elseif (abs((float)$ex['preis'] - $zp) < 0.00005) {
-                q("UPDATE rezeptur_lief_angebot SET einheit=?, stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL, quelle_anfrage_id=? WHERE id=?", [$rEinheit, $anfrage_id, (int)$ex['id']]);
+                q("UPDATE rezeptur_lief_angebot SET einheit=?, stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL, quelle_anfrage_id=?, gueltig_bis=? WHERE id=?", [$rEinheit, $anfrage_id, $gBis, (int)$ex['id']]);
             } else {
                 q("UPDATE rezeptur_lief_angebot SET einheit=?, preis_vorschlag=?, vorschlag_am=NOW(), quelle_anfrage_id=? WHERE id=?", [$rEinheit, $zp > 0 ? $zp : null, $anfrage_id, (int)$ex['id']]);
                 $vorschlag = true;
@@ -7359,8 +7370,8 @@ function lieferant_angebot_annehmen(int $angebot_id): string {
     $basis = ((int)($an['preis_basis'] ?? 1)) === 1000 ? 1000 : 1;
     $inco = $an['incoterm'] ?: null; $vers = $an['versandart'] ?: null;   // Lieferbedingung vom Angebot mitnehmen
     foreach ($zeilen as $z)
-        q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart) VALUES (?,?,?,?,?,CURDATE(),?,?)",
-          [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, (string)($an['waehrung'] ?: 'EUR'), $inco, $vers]);
+        q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?,?,CURDATE(),?,?,?)",
+          [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, (string)($an['waehrung'] ?: 'EUR'), $inco, $vers, ($an['gueltig_bis'] ?? null) ?: null]);
     item_ek_aus_lieferantenpreis($item);
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
     q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);
@@ -7385,9 +7396,9 @@ function lieferant_fertig_angebot_annehmen(int $angebot_id, array $an): string {
         q("DELETE FROM produkt_lieferant_preis WHERE produkt_id=? AND lieferant_id=?", [(int)$p['id'], $lief]);
         $groesse = (int)($p['einheiten_pro_packung'] ?? 0) > 0 ? ((int)$p['einheiten_pro_packung'] . ' Stk') : null;
         foreach ($zeilen as $z)
-            q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,menge_ab,preis,einheit,groesse,waehrung,incoterm,versandart,stand,quelle)
-               VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),'angebot')",
-              [(int)$p['id'], $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, $form, $groesse, $wae, $inco, $vers]);
+            q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,menge_ab,preis,einheit,groesse,waehrung,incoterm,versandart,stand,quelle,gueltig_bis)
+               VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),'angebot',?)",
+              [(int)$p['id'], $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, $form, $groesse, $wae, $inco, $vers, ($an['gueltig_bis'] ?? null) ?: null]);
     }
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
     q("UPDATE lieferant_anfrage SET status='geschlossen' WHERE id=?", [(int)$an['anfrage_id']]);

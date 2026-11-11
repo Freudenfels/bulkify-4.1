@@ -4,6 +4,8 @@
 // Dashboard-Datei (braucht core/schema.php + core/anfrage_ui.php für das Anfrage-Popup). Die bulkify-Spezifikation zählt
 // NICHT als Unterlage – sie wird nur erzeugt.
 
+require_once __DIR__ . '/preis_gueltig.php';   // „gültig bis" im Pop-up
+
 // Stand je Rohstoff: dok (Lieferanten-Unterlage vorhanden), anfragen, beantwortet, offen, letzte, lieferanten.
 function rohstoff_unterlagen_stand(array $item_ids): array {
     $ids = array_values(array_unique(array_filter(array_map('intval', $item_ids))));
@@ -122,6 +124,7 @@ function rohstoff_erfassen_dialog(string $zurueck): string {
       . '<div class="bx-field"><label>Preis je kg (EUR, netto)</label><input type="text" inputmode="decimal" name="preis" placeholder="z. B. 24,50"></div>'
       . '<div class="bx-field"><label>ab Menge (kg)</label><input type="text" inputmode="decimal" name="menge_ab" placeholder="z. B. 25"></div>'
       . '</div>'
+      . (function_exists('pg_eingabe') ? '<div style="margin:0 0 12px">' . pg_eingabe('gueltig_bis', null) . '</div>' : '')
       . '<div class="muted" style="font-size:12px;margin:-4px 0 14px">Weitere Staffel: Fenster erneut öffnen und die nächste Menge eintragen. Der EK des Rohstoffs folgt dem günstigsten Lieferantenpreis.</div>'
       . '<div class="bx-grid">'
       . '<div class="bx-field"><label>Unterlage</label><input type="file" name="dok" accept=".pdf,.jpg,.jpeg,.png"></div>'
@@ -132,7 +135,7 @@ function rohstoff_erfassen_dialog(string $zurueck): string {
       . '<button class="btn btn-primary" type="submit">Speichern</button>'
       . '</form></div>'
       . '<script>function bxRohErfassen(id,name){var d=document.getElementById("bxRohErfassen");if(!d)return;var f=d.querySelector("form");'
-      . 'f.preis.value="";f.menge_ab.value="";f.dok.value="";f.item_id.value=id;document.getElementById("bxRohErfassenName").textContent=name;d.style.display="flex";}</script>';
+      . 'f.preis.value="";f.menge_ab.value="";if(f.gueltig_bis)f.gueltig_bis.value=(arguments[2]||"");f.dok.value="";f.item_id.value=id;document.getElementById("bxRohErfassenName").textContent=name;d.style.display="flex";}</script>';
 }
 // Rückmeldung nach dem Speichern (auf der aufrufenden Seite oben ausgeben).
 function rohstoff_erfassen_meldung(): string {

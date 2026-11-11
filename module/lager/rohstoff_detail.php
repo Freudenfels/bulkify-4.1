@@ -5,6 +5,7 @@ require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badge
 require_once BX_ROOT . '/core/rohstoff_moq.php';  // eigene MOQ (unsere Mindestmenge)
+require_once BX_ROOT . '/core/preis_gueltig.php'; // „gültig bis" je Lieferantenpreis
 
 // Labels aus der zentralen Quelle (Block K): fertig = Bulkware, verkaufsfertig = Fertigprodukt. Keys unverändert
 // (nur die für einen Warenlager-Artikel gültigen Kategorien; leerkapsel ist ein Rohstoff mit Form kapselhuelle).
@@ -31,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis
     $mengeab = (float)str_replace(',', '.', $_POST['lp_menge_ab'] ?? '0');
     $inco = in_array($_POST['lp_incoterm'] ?? '', array_keys(incoterm_liste()), true) ? $_POST['lp_incoterm'] : null;
     $vers = in_array($_POST['lp_versandart'] ?? '', array_keys(versandart_liste()), true) ? $_POST['lp_versandart'] : null;
-    if ($lid && $preis > 0) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart) VALUES (?,?,?,?, 'EUR', CURDATE(), ?, ?)", [(int)$id, $lid, $mengeab, $preis, $inco, $vers]);
+    if ($lid && $preis > 0) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?, 'EUR', CURDATE(), ?, ?, ?)", [(int)$id, $lid, $mengeab, $preis, $inco, $vers, pg_lesen((string)($_POST['lp_gueltig_bis'] ?? ''))]);
     item_ek_aus_lieferantenpreis((int)$id);   // leerer/automatischer EK folgt dem günstigsten Lieferantenpreis
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1#'); exit;
 }
@@ -1686,15 +1687,16 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
     <?php if (isset($_GET['angefragt'])): ?><div class="badge-ok" style="padding:8px 12px;margin:10px 0"><?= (int)$_GET['angefragt'] ?> Preisanfrage(n) verschickt<?= isset($_GET['gemailt']) && (int)$_GET['gemailt'] > 0 ? ', davon ' . (int)$_GET['gemailt'] . ' per E-Mail' : '' ?>.</div><?php endif; ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <?php $VERS = versandart_liste(); ?>
-      <thead><tr><th>Lieferant</th><th>Kennung</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th></th></tr></thead>
+      <thead><tr><th>Lieferant</th><th>Kennung</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Gültig</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$preise): ?><tr><td colspan="8" class="muted">Noch keine Preise. Unten eintragen oder per Preisanfrage einholen.</td></tr><?php endif; ?>
+      <?php if (!$preise): ?><tr><td colspan="9" class="muted">Noch keine Preise. Unten eintragen oder per Preisanfrage einholen.</td></tr><?php endif; ?>
       <?php $best = $preise ? (float)$preise[0]['preis'] : null; foreach ($preise as $pz): $ist_best = $best !== null && abs((float)$pz['preis'] - $best) < 0.0001; ?>
         <tr<?= $ist_best ? ' style="font-weight:600"' : '' ?>>
           <td><?= h($pz['firma'] ?: '–') ?> <?= $ist_best ? bx_badge('günstigster','ok') : '' ?></td>
           <td class="muted"><?= h(rohstoff_lief_kennung($it['artikelnummer'] ?? '', $pz['lief_kuerzel'] ?? '') ?: '–') ?></td>
           <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pz['menge_ab'],3,',','.'),'0'),',') ?> <?= h($it['einheit']) ?></td>
           <td class="bx-num"><?= number_format((float)$pz['preis'], (float)$pz['preis']<1?4:2, ',', '.') ?> <?= h($pz['waehrung']) ?>/<?= h($it['preis_bezug']) ?></td>
+          <td><?= pg_anzeige($pz['gueltig_bis'] ?? null) ?></td>
           <td><?= $pz['incoterm'] ? h($pz['incoterm']) : '<span class="muted">–</span>' ?></td>
           <td><?= !empty($pz['versandart']) ? h($VERS[$pz['versandart']] ?? $pz['versandart']) : '<span class="muted">–</span>' ?></td>
           <td><?= $pz['stand'] ? h(date('d.m.Y', strtotime($pz['stand']))) : '' ?></td>
@@ -1716,6 +1718,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
         <select name="lp_incoterm"><option value="">– offen –</option><?php foreach (incoterm_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field" style="margin:0;width:130px"><label>Versandart</label>
         <select name="lp_versandart"><option value="">– offen –</option><?php foreach (versandart_liste() as $k=>$lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+      <?= pg_eingabe('lp_gueltig_bis', pg_vorbelegung((int)$id)) ?>
       <button class="btn btn-ghost btn-sm" type="submit">Preis hinzufügen</button>
     </form>
   </div>

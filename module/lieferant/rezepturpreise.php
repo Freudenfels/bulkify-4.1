@@ -5,6 +5,7 @@
 // 4-Wochen-Regel: sind die Preise aelter als das Intervall, erscheint ein Hinweis + „Alle als aktuell bestaetigen".
 require_once BX_ROOT . '/module/lieferant/portal_layout.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" je Preis (11.11.2026)
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid  = aktueller_lieferant_id();
@@ -55,6 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $n = 0; $nv = 0; $falsch = 0;
         foreach ((array)($_POST['preis'] ?? []) as $aid => $roh) {
             $roh = trim((string)$roh); $vorher = trim((string)($_POST['vorher'][$aid] ?? ''));
+            $gNeu = pg_lesen((string)($_POST['gueltig'][$aid] ?? '')); $gAlt = trim((string)($_POST['gueltig_vorher'][$aid] ?? ''));
+            if ((string)$gNeu !== $gAlt) { q("UPDATE rezeptur_lief_angebot SET gueltig_bis=?, stand=CURDATE() WHERE id=? AND lieferant_id=?", [$gNeu, (int)$aid, $lid]); if ($roh === $vorher) $n++; }
             if ($roh === $vorher) continue;
             $preis = zahl_lesen($roh, false, $spr);
             if ($roh !== '' && $preis <= 0) { $falsch++; continue; }   // nicht lesbar -> nichts überschreiben
@@ -79,8 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $form  = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
         // Nur freigeschaltete Formen + keine Dublette.
         if ($rid > 0 && in_array($form, $fertigFormen, true) && !scalar("SELECT id FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=?", [$rid, $lid])) {
-            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt) VALUES (?,?,?,?, 'angeboten', CURDATE(), NOW())",
-              [$rid, $lid, $preis > 0 ? $preis : null, $formEinheit($form)]);
+            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt,gueltig_bis) VALUES (?,?,?,?, 'angeboten', CURDATE(), NOW(), ?)",
+              [$rid, $lid, $preis > 0 ? $preis : null, $formEinheit($form), pg_lesen((string)($_POST['gueltig_bis'] ?? ''))]);
             rezeptur_produkt_matrizen_auffrischen($rid);   // Matrix auffrischen -> Fertigpreis automatisch im Angebot
         }
         header('Location: ' . $ziel . '&ok=1'); exit;
@@ -98,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: ' . $ziel); exit;
 }
 
-$rows = all("SELECT la.id, la.preis, la.preis_vorschlag, la.einheit, la.stand, r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
+$rows = all("SELECT la.id, la.preis, la.preis_vorschlag, la.einheit, la.stand, la.gueltig_bis, r.id AS rezeptur_id, r.nummer, r.name, r.darreichungsform AS form
              FROM rezeptur_lief_angebot la JOIN rezeptur r ON r.id=la.rezeptur_id
              WHERE la.lieferant_id=? ORDER BY r.name", [$lid]);
 // Rezepturen, die der Lieferant noch NICHT bepreist hat – NUR in den freigeschalteten Formen.
@@ -157,7 +160,7 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
   <?php else: ?>
   <form method="post" id="rpForm" style="margin:0"><input type="hidden" name="aktion" value="preis_save_alle"></form>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?></th><th><?= h(lp_t('form_lbl')) ?></th><th class="bx-num" style="width:300px;white-space:nowrap"><?= h(lp_t('ihr_preis')) ?></th><th style="width:120px"><?= h(lp_t('stand')) ?></th><th style="width:50px"></th></tr></thead>
+    <thead><tr><th><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?></th><th><?= h(lp_t('form_lbl')) ?></th><th class="bx-num" style="width:300px;white-space:nowrap"><?= h(lp_t('ihr_preis')) ?></th><th style="width:170px"><?= h(['de' => 'Gültig bis', 'en' => 'Valid until', 'zh' => '有效期至'][$spr] ?? 'Valid until') ?></th><th style="width:120px"><?= h(lp_t('stand')) ?></th><th style="width:50px"></th></tr></thead>
     <tbody>
     <?php foreach ($rows as $r): $alt = $r['stand'] ? (int) floor((time() - strtotime((string)$r['stand'])) / 86400) : null; ?>
       <tr>
@@ -174,6 +177,9 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
             <div class="muted" style="font-size:11px;margin-top:4px;color:var(--gruen)"><?= h(lp_t('vorschlag_offen')) ?>: <?= h($num($r['preis_vorschlag'])) ?> €</div>
           <?php endif; ?>
         </td>
+        <td><input type="hidden" form="rpForm" name="gueltig_vorher[<?= (int)$r['id'] ?>]" value="<?= h((string)($r['gueltig_bis'] ?? '')) ?>">
+            <input type="date" form="rpForm" class="rp-preis" name="gueltig[<?= (int)$r['id'] ?>]" value="<?= h((string)($r['gueltig_bis'] ?? '')) ?>" style="width:auto">
+            <div><?= pg_anzeige($r['gueltig_bis'] ?? null, $spr) ?></div></td>
         <td><?= $r['stand'] ? h(date('d.m.Y', strtotime((string)$r['stand']))) . ($alt !== null && $alt > $intervall ? ' <span style="color:#8f231b">!</span>' : '') : '<span class="muted">–</span>' ?></td>
         <td><form method="post" style="margin:0" onsubmit="return confirm('<?= h(lp_t('loeschen')) ?>?');"><input type="hidden" name="aktion" value="preis_del"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">&times;</button></form></td>
       </tr>
@@ -192,6 +198,7 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
       <datalist id="rezDL"><?php foreach ($offen as $o): $lbl = trim($o['name'] . ($o['nummer'] ? ' · ' . $o['nummer'] : '')); ?><option value="<?= h($lbl) ?>"></option><?php endforeach; ?></datalist>
     </div>
     <div class="bx-field" style="margin:0;width:140px"><label><?= h(lp_t('ihr_preis')) ?> (€)</label><input type="text" name="preis" inputmode="decimal"></div>
+    <?= pg_eingabe('gueltig_bis', null, ['sprache' => $spr]) ?>
     <a id="rezAnsehen" class="btn btn-ghost" href="#" target="_blank" rel="noopener" hidden><?= h(lp_t('rez_ansehen')) ?></a>
     <button class="btn btn-primary" type="submit"><?= h(lp_t('hinzufuegen')) ?></button>
   </form>

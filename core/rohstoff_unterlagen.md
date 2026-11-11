@@ -24,3 +24,7 @@ Als Unterlage zählen Spezifikation, CoA und Analyse des Lieferanten am Rohstoff
 - `rohstoff_erfassen_meldung()` zeigt die Rückmeldung nach dem Speichern.
 
 Der Kasten „Unterlagen der Rohstoffe“ hat je Zeile diesen Knopf statt des Links „Unterlage hochladen“. Siehe `module/anfrage/rohstoff_erfassen.md`.
+
+## Preis-Gültigkeit (11.11.2026)
+- Das Pop-up „Preis & Unterlagen“ enthält das Feld „Preis gültig bis“ (`pg_eingabe`).
+- `bxRohErfassen(id, name, vorbelegung)` setzt optional das Datum vor.

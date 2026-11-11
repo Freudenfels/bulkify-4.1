@@ -5,6 +5,7 @@
 // Route: ?p=lief_anfrage_detail&id=<anfrage_id>  (auch &nr=LA-123). Ziel aus globaler Suche, Liste und Chat.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" am Angebotspreis
 require_once BX_ROOT . '/core/nachricht.php';
 
 $id = (int)($_GET['id'] ?? 0);
@@ -133,6 +134,7 @@ $coaFehlt = $coaReq && $ang && !$coaDocs;
     <div class="bx-grid">
       <div><div class="k muted">Preis</div><div><strong><?= $zahl($ang['preis'], 4) ?> <?= $cur ?></strong> / <?= $basis === 1000 ? '1.000 ' : '' ?><?= h($ang['einheit'] ? einheit_wort((string)$ang['einheit'], $basis) : '–') ?></div></div>
       <?php if ($ang['mindestmenge']): ?><div><div class="k muted">Mindestmenge (MOQ)</div><div><?= $zahl($ang['mindestmenge'], 3) ?></div></div><?php endif; ?>
+      <div><div class="k muted">Preis gültig</div><div><?= pg_anzeige($ang['gueltig_bis'] ?? null) ?></div></div>
       <?php if ($ang['lieferzeit_tage']): ?><div><div class="k muted">Lieferzeit</div><div><?= (int)$ang['lieferzeit_tage'] ?> Tage</div></div><?php endif; ?>
       <?php $terms = array_filter([(string)($ang['incoterm'] ?? ''), !empty($ang['versandart']) ? ($VERSL[$ang['versandart']] ?? $ang['versandart']) : '']);
             if ($terms): ?><div><div class="k muted">Lieferbedingung</div><div style="color:var(--gruen)"><?= h(implode(' · ', $terms)) ?></div></div><?php endif; ?>

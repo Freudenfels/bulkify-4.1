@@ -18,3 +18,6 @@ Eigenes Panel zwischen „Anfrage" und „Angebot des Lieferanten": Status **ang
 
 ## KI-Steckbrief (11.11.2026)
 Geht es um einen Rohstoff, steht unter dem Block „Anfrage“ der Block „Steckbrief“ (nur intern), siehe `core/rohstoff_steckbrief.md`.
+
+## Preis-Gültigkeit (11.11.2026)
+Der Block „Angebot des Lieferanten“ zeigt „Preis gültig“.

@@ -5,6 +5,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
+require_once BX_ROOT . '/core/preis_gueltig.php';
 
 $zurueck = (string)($_POST['zurueck'] ?? '');
 if (!preg_match('/^\?p=[a-z0-9_]+[^\s<>"]*$/i', $zurueck)) $zurueck = '?p=rohstoff_unterlagen';
@@ -19,7 +20,7 @@ $ab    = max(0.0, zahl_lesen((string)($_POST['menge_ab'] ?? ''), true));
 $r = ['re_ok' => $iid];
 if ($preis > 0 && !$lid) $r['re_ohnelief'] = 1;
 if ($lid && $preis > 0) {
-    q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,quelle) VALUES (?,?,?,?, 'EUR', CURDATE(), 'manuell')", [$iid, $lid, $ab, $preis]);
+    q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,quelle,gueltig_bis) VALUES (?,?,?,?, 'EUR', CURDATE(), 'manuell', ?)", [$iid, $lid, $ab, $preis, pg_lesen((string)($_POST['gueltig_bis'] ?? ''))]);
     item_ek_aus_lieferantenpreis($iid);
     log_aktivitaet('item', $iid, 'team', 'Lieferantenpreis erfasst: ' . number_format($preis, 2, ',', '.') . ' EUR/kg ab ' . number_format($ab, 0, ',', '.') . ' kg ('
         . scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]) . ')', 'preis', 'item', $iid);

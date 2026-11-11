@@ -42,3 +42,5 @@ Nico hat gemeldet: Ein Lieferant hatte auf seiner Seite „Fertigprodukt-Preise�
 - Der Block erscheint bei Typ „Alle“ oder „Fertigprodukte“ und Preis-Tab „Alle“ oder „Preis da“. Die Suche gilt auch hier.
 - Der Tab „Preis da“ zeigt die Zahl zusätzlich, z. B. „Preis da (3 + 10 Portal)“. Oben steht ein Hinweis mit Sprung zum Block.
 
+## Preis-Gültigkeit (11.11.2026)
+Unter dem Angebotspreis steht „gültig bis …“ bzw. „abgelaufen seit …“, wenn der Lieferant ein Datum angegeben hat.

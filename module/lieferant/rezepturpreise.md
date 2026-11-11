@@ -33,3 +33,6 @@ Eine Lieferantin (Mingyan) hat alle Preise eingetragen, danach waren sie weg. Bi
 - **Rückmeldung:** „Gespeichert (n)“ bzw. „Vorschlag (n)“. Das Team bekommt eine Benachrichtigung „Neue Fremdfertigungspreise“ mit Link zur Lieferantenseite.
 - **Warnung beim Verlassen:** Wer die Seite mit ungespeicherten Eingaben verlässt, wird vom Browser gewarnt.
 - **Zahlen-Eingabe:** `zahl_lesen()` versteht jetzt auch Vollbreiten-Ziffern aus chinesischer Eingabe („０．０５“, „。“) sowie Zusätze wie „€“, „¥“ oder „/粒“.
+
+## Preis-Gültigkeit (11.11.2026)
+Je Zeile gibt es die Spalte „Gültig bis“ mit Datumsfeld im gemeinsamen Formular, auch beim Hinzufügen. Eine geänderte Gültigkeit wird mit „Alle Preise speichern“ gesichert, auch ohne Preisänderung.

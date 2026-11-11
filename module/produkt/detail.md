@@ -50,3 +50,5 @@ Ohne Charge steht „noch nicht produziert“ (bei offen oder in Produktion) bzw
 
 Oben stehen die Summen (Aufträge, Kunden, Stk) und ein Suchfeld, das nach Kunde, Auftrag oder Charge filtert. „Auch stornierte zeigen“ (`&bst=alle`) blendet stornierte Aufträge grau ein. Die Daten kommen aus `core/produkt_bestellungen.php`.
 
+## Preis-Gültigkeit (11.11.2026)
+Ein Zukaufpreis von Hand hat das Feld „Preis gültig bis“ (`produkt_lieferant_preis.gueltig_bis`).

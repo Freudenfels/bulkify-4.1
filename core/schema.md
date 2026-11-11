@@ -589,3 +589,10 @@ Jeder Schritt hat ein 7. Feld mit dem Namen der Person, die ihn abgeschlossen ha
 
 ## item: MOQ-Spalten (11.11.2026)
 `moq_menge` (DECIMAL 12,3), `moq_einheit`, `moq_notiz`: unsere Mindestmenge je Rohstoff, siehe `core/rohstoff_moq.md`.
+
+## Preis-Gültigkeit (11.11.2026)
+- `gueltig_bis` (DATE) an `lieferant_preis`, `lieferant_angebot`, `rezeptur_lief_angebot`, `lieferant_preisliste`, `produkt_lieferant_preis` und `lieferant_katalog`.
+- `item.preis_schwankt` und `item.preis_gueltig_tage`.
+- `lieferant_angebot_speichern()` nimmt `$opt['gueltig_bis']` und gibt das Datum an Premix- und Fremdfertigungspreise weiter. Gleiche Staffelmengen werden nur einmal gespeichert.
+- `lieferant_angebot_annehmen()` und `lieferant_fertig_angebot_annehmen()` übernehmen das Datum.
+Siehe `core/preis_gueltig.md`.

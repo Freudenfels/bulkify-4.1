@@ -37,3 +37,8 @@ Die KI liest, was in der Liste steht – sie prüft nicht, ob der Lieferant den 
 `katalog_preis_vorschlag($lieferant_id,$item_id,$preis,$menge_ab,$einheit,$waehrung)` – der Lieferant schlägt für einen ihm zugeordneten Artikel einen neuen Preis vor. Legt (mit Isolationsprüfung: Artikel muss ihm zugeordnet sein) eine normale `lieferant_katalog`-Zeile an (`status='neu'`, `item_id` gesetzt). **Nie direkt live** – das Team übernimmt sie in der Katalog-Freigabe über „Preis dorthin" (`katalog_aehnliche()` findet den Artikel per Namens-/CAS-Treffer), wodurch der Preis in `lieferant_preis` des bestehenden Artikels wandert.
 
 **06.11.2026:** Nach „Preis übernehmen“ zieht `item_ek_aus_lieferantenpreis()` den EK am Artikel nach (nur wenn leer/automatisch).
+
+## Preis-Gültigkeit (11.11.2026)
+- `katalog_preis_vorschlag()` hat den Parameter `gueltig_bis`.
+- Die KI-Anweisung kennt das Feld `gueltig_bis` und liest es nur, wenn es im Dokument steht.
+- Bei der Übernahme geht das Datum an `lieferant_preis`.

@@ -9,6 +9,8 @@ require_once __DIR__ . '/ki.php';
 require_once __DIR__ . '/schema.php';
 
 // Was eine Katalogzeile beschreiben kann. Schlüssel = Spalte, Wert = Klartext für die KI.
+require_once __DIR__ . '/preis_gueltig.php';   // „gültig bis" aus Dokumenten und Preis-Aktualisierungen
+
 function katalog_felder(): array {
     return [
         'name'          => 'Bezeichnung des Artikels auf DEUTSCH (bei fremdsprachigen Listen ins Deutsche übersetzen)',
@@ -24,6 +26,7 @@ function katalog_felder(): array {
         'waehrung'      => 'Währung, z. B. EUR oder USD',
         'einheit'       => 'Bezugsgröße des Preises: kg, g, L, Stk',
         'menge_ab'      => 'Ab welcher Menge dieser Preis gilt (Mindestmenge/MOQ) als Zahl',
+        'gueltig_bis'   => 'Bis wann der Preis gilt, nur wenn im Dokument angegeben (z. B. "valid until", "gültig bis", "有效期"), als Datum JJJJ-MM-TT; steht nur eine Dauer da (z. B. 14 Tage), vom Dokumentdatum aus rechnen',
         'notiz'         => 'Sonstiges in einem kurzen Satz',
     ];
 }
@@ -89,6 +92,8 @@ function katalog_einlesen(int $lieferant_id, string $pfad, ?int $dokument_id = n
            ($z['menge_ab'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$z['menge_ab']) : null,
            mb_substr(trim((string)($z['notiz'] ?? '')), 0, 500) ?: null,
            gmdate('Y-m-d H:i:s')]);
+        // Preis-Gültigkeit aus dem Dokument (11.11.2026), nur wenn die KI ein Datum gefunden hat.
+        if (function_exists('pg_lesen') && ($gb = pg_lesen((string)($z['gueltig_bis'] ?? '')))) { try { q("UPDATE lieferant_katalog SET gueltig_bis=? WHERE id=?", [$gb, insert_id()]); } catch (Throwable $e) {} }
         $n++;
     }
     log_aktivitaet('lieferant', $lieferant_id, 'lieferant', $n . ' Katalogzeile(n) aus einer hochgeladenen Liste gelesen.', 'katalog');
@@ -247,9 +252,10 @@ function katalog_uebernehmen(int $zeile_id, ?int $item_id = null, bool $preis_ue
     if ($preis_uebernehmen && $z['preis'] !== null && (float)$z['preis'] > 0) {
         $ab = $z['menge_ab'] !== null ? (float)$z['menge_ab'] : 0;
         $vorhanden = scalar("SELECT id FROM lieferant_preis WHERE item_id=? AND lieferant_id=? AND menge_ab=?", [$item_id, (int)$z['lieferant_id'], $ab]);
-        if ($vorhanden) q("UPDATE lieferant_preis SET preis=?, waehrung=?, stand=CURDATE() WHERE id=?", [(float)$z['preis'], $z['waehrung'] ?: 'EUR', (int)$vorhanden]);
-        else q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand) VALUES (?,?,?,?,?,CURDATE())",
-               [$item_id, (int)$z['lieferant_id'], $ab, (float)$z['preis'], $z['waehrung'] ?: 'EUR']);
+        $zBis = ($z['gueltig_bis'] ?? null) ?: null;
+        if ($vorhanden) q("UPDATE lieferant_preis SET preis=?, waehrung=?, stand=CURDATE(), gueltig_bis=? WHERE id=?", [(float)$z['preis'], $z['waehrung'] ?: 'EUR', $zBis, (int)$vorhanden]);
+        else q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,gueltig_bis) VALUES (?,?,?,?,?,CURDATE(),?)",
+               [$item_id, (int)$z['lieferant_id'], $ab, (float)$z['preis'], $z['waehrung'] ?: 'EUR', $zBis]);
         if (function_exists('item_ek_aus_lieferantenpreis')) item_ek_aus_lieferantenpreis((int)$item_id);
     }
     q("UPDATE lieferant_katalog SET status='uebernommen', item_id=?, entschieden=? WHERE id=?", [$item_id, gmdate('Y-m-d H:i:s'), $zeile_id]);
@@ -282,7 +288,7 @@ function lieferant_gefuehrte_artikel(int $lieferant_id): array {
     $ids = array_map(fn($r) => (int)$r['id'], $items);
     $in  = implode(',', $ids);
     $preise = [];
-    foreach (all("SELECT item_id, menge_ab, preis, waehrung, stand FROM lieferant_preis
+    foreach (all("SELECT item_id, menge_ab, preis, waehrung, stand, gueltig_bis FROM lieferant_preis
                   WHERE lieferant_id = ? AND item_id IN ($in) ORDER BY item_id, menge_ab", [$lieferant_id]) as $p)
         $preise[(int)$p['item_id']][] = $p;
     $wirk = [];
@@ -306,7 +312,7 @@ function lieferant_gefuehrte_artikel(int $lieferant_id): array {
 // ein hochgeladener Katalog – eine Pruef-Zeile in lieferant_katalog an (status 'neu', mit item_id). Das Team
 // uebernimmt sie in der Katalog-Freigabe ("Preis dorthin") -> Preis wandert in lieferant_preis des Artikels.
 // Nie direkt live. Rueckgabe ['ok'=>bool, 'msg'=>'…'].
-function katalog_preis_vorschlag(int $lieferant_id, int $item_id, float $preis, ?float $menge_ab, string $einheit = '', string $waehrung = 'EUR'): array {
+function katalog_preis_vorschlag(int $lieferant_id, int $item_id, float $preis, ?float $menge_ab, string $einheit = '', string $waehrung = 'EUR', ?string $gueltig_bis = null): array {
     if ($lieferant_id <= 0 || $item_id <= 0) return ['ok'=>false, 'msg'=>'Angaben fehlen.'];
     if ($preis <= 0) return ['ok'=>false, 'msg'=>'Bitte einen Preis größer 0 angeben.'];
     // Nur fuer einen Artikel, der dem Lieferanten wirklich zugeordnet ist (Isolation).
@@ -322,6 +328,8 @@ function katalog_preis_vorschlag(int $lieferant_id, int $item_id, float $preis, 
        $preis, mb_substr(trim($waehrung), 0, 3) ?: 'EUR', mb_substr(trim($einheit), 0, 20) ?: null,
        $menge_ab !== null ? $menge_ab : 0,
        'Preis-Aktualisierung des Lieferanten für den vorhandenen Artikel „' . $it['name'] . '".', gmdate('Y-m-d H:i:s')]);
+    // Preis-Gültigkeit (11.11.2026) an die Katalogzeile; wird bei der Übernahme an den Lieferantenpreis weitergegeben.
+    if ($gueltig_bis !== null) { try { q("UPDATE lieferant_katalog SET gueltig_bis=? WHERE id=?", [$gueltig_bis, insert_id()]); } catch (Throwable $e) {} }
     log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Preis-Aktualisierung für „' . $it['name'] . '" vorgeschlagen (wartet auf Prüfung).', 'katalog');
     return ['ok'=>true, 'msg'=>''];
 }

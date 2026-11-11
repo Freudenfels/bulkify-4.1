@@ -5,6 +5,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
+require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" an Zukaufpreisen
 require_once BX_ROOT . '/core/spec_ki.php';             // Spec/CoA am Produkt per KI auslesen
 require_once BX_ROOT . '/core/anfrage_ui.php';          // „Beim Lieferanten anfragen" (Fertigprodukt-Anfrage)
 require_once BX_ROOT . '/core/produkt_kalkulation.php'; // Kosten je Packung, Beschaffung, Kunden (nur lesen)
@@ -44,8 +45,8 @@ if ($istPost && !$neu) {
         $inco  = array_key_exists($_POST['zk_incoterm'] ?? '', incoterm_liste()) ? $_POST['zk_incoterm'] : null;
         $vers  = array_key_exists($_POST['zk_versandart'] ?? '', versandart_liste()) ? $_POST['zk_versandart'] : null;
         $zkEinh = ($_POST['zk_einheit'] ?? '') === 'packung' ? 'packung' : (($_POST['zk_einheit'] ?? '') === 'kg' ? 'kg' : 'kapsel');
-        if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand) VALUES (?,?,?,?,?,?,?,?, 'EUR', CURDATE())",
-            [$pid, $lid, $lname ?: null, $mab, $preis, $zkEinh, $inco, $vers]);
+        if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand,gueltig_bis) VALUES (?,?,?,?,?,?,?,?, 'EUR', CURDATE(), ?)",
+            [$pid, $lid, $lname ?: null, $mab, $preis, $zkEinh, $inco, $vers, pg_lesen((string)($_POST['zk_gueltig_bis'] ?? ''))]);
         $zurueck('&zkok=1&tab=beschaffung', 'zukauf'); exit;
     }
     if ($aktion === 'zk_preis_del') { q("DELETE FROM produkt_lieferant_preis WHERE id=? AND produkt_id=?", [(int)($_POST['preis_id'] ?? 0), $pid]); $zurueck('&tab=beschaffung', 'zukauf'); exit; }
@@ -586,6 +587,7 @@ if (!$istExtern):
       <div class="bx-field" style="margin:0;width:150px"><label>je</label><select name="zk_einheit"><option value="kapsel"<?= $istHandel ? '' : ' selected' ?>>Kapsel / Stk (lose)</option><option value="packung"<?= $istHandel ? ' selected' : '' ?>>Packung (fertige Ware)</option><option value="kg">kg (Mischung/Pulver)</option></select></div>
       <div class="bx-field" style="margin:0;width:110px"><label>Incoterm</label><select name="zk_incoterm"><option value="">–</option><?php foreach (incoterm_liste() as $k => $lbl): ?><option value="<?= $k ?>"><?= h($k) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field" style="margin:0;width:120px"><label>Versand</label><select name="zk_versandart"><option value="">–</option><?php foreach (versandart_liste() as $k => $lbl): ?><option value="<?= $k ?>"><?= h($lbl) ?></option><?php endforeach; ?></select></div>
+      <?= pg_eingabe('zk_gueltig_bis', null) ?>
     </div>
     <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
   </form>

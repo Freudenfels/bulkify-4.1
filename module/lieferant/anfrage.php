@@ -1,6 +1,7 @@
 <?php
 // Lieferantenportal – Preisanfragen beantworten. Route: ?p=lieferant_anfrage[&id=<ID>]
 require_once BX_ROOT . '/module/lieferant/portal_layout.php';
+require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" am Angebot (11.11.2026)
 require_once BX_ROOT . '/core/dokument_ui.php';
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
@@ -67,9 +68,17 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $hauptMenge = zahl_lesen((string)($_POST['menge_haupt'] ?? ''), true, $spr);
             $hauptPreis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
             // Leere "ab Menge" => der Hauptpreis gilt ab 1 (nicht verwerfen). So zaehlt der eingetragene Preis immer.
-            if ($hauptPreis > 0) $staffeln[] = [$hauptMenge > 0 ? $hauptMenge : 1, $hauptPreis];
-            foreach (($_POST['s_menge'] ?? []) as $i2 => $m)
-                $staffeln[] = [zahl_lesen((string)$m, true, $spr), zahl_lesen((string)($_POST['s_preis'][$i2] ?? ''), false, $spr)];
+            $weitere = [];
+            foreach (($_POST['s_menge'] ?? []) as $i2 => $m) {
+                $wm = zahl_lesen((string)$m, true, $spr); $wp = zahl_lesen((string)($_POST['s_preis'][$i2] ?? ''), false, $spr);
+                if ($wm > 0 && $wp > 0) $weitere[] = [$wm, $wp];
+            }
+            // Ohne eigene Menge gilt der Hauptpreis „ab 1" - aber nicht zusätzlich, wenn eine Staffel denselben Preis schon
+            // trägt (Wellgreen LA-5032: 0,0319 stand „ab 1" und „ab 30.000"). Dann zählt nur die Staffel.
+            $gleichePreisStaffel = false;
+            foreach ($weitere as [$wm, $wp]) if (abs($wp - $hauptPreis) < 0.0000001) $gleichePreisStaffel = true;
+            if ($hauptPreis > 0 && ($hauptMenge > 0 || !$gleichePreisStaffel)) $staffeln[] = [$hauptMenge > 0 ? $hauptMenge : 1, $hauptPreis];
+            foreach ($weitere as $w) $staffeln[] = $w;
             $fehler = lieferant_angebot_speichern($id, $lid,
                 $hauptPreis,
                 trim((string)($_POST['einheit_roh'] ?? $_POST['einheit'] ?? '')),
@@ -79,7 +88,8 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 ['incoterm' => (string)($_POST['incoterm'] ?? ''), 'versandart' => (string)($_POST['versandart'] ?? ''),
                  'variante' => (string)($_POST['variante'] ?? ''),
                  'kapsel_vorschlag_id' => (int)($_POST['kapsel_vorschlag_id'] ?? 0),
-                 'kapsel_vorschlag_grund' => (string)($_POST['kapsel_vorschlag_grund'] ?? '')]);
+                 'kapsel_vorschlag_grund' => (string)($_POST['kapsel_vorschlag_grund'] ?? ''),
+                 'gueltig_bis' => pg_lesen((string)($_POST['gueltig_bis'] ?? ''))]);
             // Antwort da -> aus einer Rezepturanfrage angelegten Rohstoff-Entwurf in den Katalog heben.
             if ($fehler === '' && $a['item_id']) rohstoff_entwurf_aktivieren((int)$a['item_id']);
             if ($fehler === '' && mail_bereit()) mail_team_preisanfrage($id);
@@ -223,7 +233,8 @@ if (!$a):
     // Die Einheit steht schon in der Anfrage (dort wird sie automatisch gesetzt) – der Lieferant
     // muss sie nicht raten. Ein bereits abgegebenes Angebot behält seine eigene Einheit.
     $einheit = trim((string)($ang['einheit'] ?? '')) ?: (trim((string)($a['einheit'] ?? '')) ?: trim((string)($a['item_einheit'] ?? '')));
-    $zahl = fn($x, $n) => $x === '' || $x === null ? '' : rtrim(rtrim(number_format((float)$x, $n, '.', ''), '0'), '.');
+    // Zahlen in der Schreibweise der Portalsprache (deutsch 0,0319 - vorher stand 0.0319). Die Eingabe liest zahl_lesen() in derselben Sprache.
+    $zahl = fn($x, $n) => $x === '' || $x === null ? '' : lp_num($x, $n);
 ?>
   <h1 style="margin-bottom:4px"><?= h($a['nummer']) ?></h1>
   <p class="bx-sub"><a href="?p=lieferant_anfrage">&larr; <?= h(lp_t('anfragen')) ?></a></p>
@@ -312,6 +323,7 @@ if (!$a):
         <?php foreach ($staffeln as $s): ?><tr><td><?= h(lp_t('staffel')) ?></td><td><?= h($zahl($s['preis'], 4)) ?> · <?= h(lp_t('ab_menge')) ?> <?= h($zahl($s['menge_ab'], 3)) ?> <?= h(lp_einheit($einheit, (float)$s['menge_ab'])) ?></td></tr><?php endforeach; ?>
         <?php if ($ang['mindestmenge']): ?><tr><td><?= h(lp_t('moq')) ?></td><td><?= h($zahl($ang['mindestmenge'], 3)) ?> <?= h(lp_einheit($einheit, (float)$ang['mindestmenge'])) ?></td></tr><?php endif; ?>
         <?php if ($ang['lieferzeit_tage']): ?><tr><td><?= h(lp_t('lieferzeit')) ?></td><td><?= (int)$ang['lieferzeit_tage'] ?></td></tr><?php endif; ?>
+        <tr><td><?= h(['de' => 'Gültigkeit', 'en' => 'Validity', 'zh' => '有效期'][lp_sprache()] ?? 'Validity') ?></td><td><?= pg_anzeige($ang['gueltig_bis'] ?? null, lp_sprache()) ?></td></tr>
         <?php $curInco = (string)($ang['incoterm'] ?? ''); $curVers = (string)($ang['versandart'] ?? ''); $terms = array_filter([$curInco, $curVers !== '' ? lp_t('vers_' . $curVers) : '']); ?>
         <?php if ($terms): ?><tr><td><?= h(lp_t('incoterm')) ?> / <?= h(lp_t('versandart')) ?></td><td><?= h(implode(' · ', $terms)) ?></td></tr><?php endif; ?>
         <?php if (trim((string)($ang['notiz'] ?? '')) !== ''): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($ang['notiz']) ?></td></tr><?php endif; ?>
@@ -325,6 +337,7 @@ if (!$a):
         <?php foreach ($staffeln as $s): if (($s['preis'] ?? '') === '' ) continue; ?><tr><td><?= h(lp_t('staffel')) ?></td><td><?= h($zahl($s['preis'], 4)) ?> · <?= h(lp_t('ab_menge')) ?> <?= h($zahl($s['menge_ab'], 3)) ?> <?= h(lp_einheit($einheit, (float)$s['menge_ab'])) ?></td></tr><?php endforeach; ?>
         <?php if (!empty($ang['mindestmenge'])): ?><tr><td><?= h(lp_t('moq')) ?></td><td><?= h($zahl($ang['mindestmenge'], 3)) ?> <?= h(lp_einheit($einheit, (float)$ang['mindestmenge'])) ?></td></tr><?php endif; ?>
         <?php if (!empty($ang['lieferzeit_tage'])): ?><tr><td><?= h(lp_t('lieferzeit')) ?></td><td><?= (int)$ang['lieferzeit_tage'] ?></td></tr><?php endif; ?>
+        <tr><td><?= h(['de' => 'Gültigkeit', 'en' => 'Validity', 'zh' => '有效期'][lp_sprache()] ?? 'Validity') ?></td><td><?= pg_anzeige($ang['gueltig_bis'] ?? null, lp_sprache()) ?></td></tr>
         <?php $sInco = (string)($ang['incoterm'] ?? ''); $sVers = (string)($ang['versandart'] ?? ''); $sTerms = array_filter([$sInco, $sVers !== '' ? lp_t('vers_' . $sVers) : '']); ?>
         <?php if ($sTerms): ?><tr><td><?= h(lp_t('incoterm')) ?> / <?= h(lp_t('versandart')) ?></td><td><?= h(implode(' · ', $sTerms)) ?></td></tr><?php endif; ?>
         <?php if (trim((string)($ang['notiz'] ?? '')) !== ''): ?><tr><td><?= h(lp_t('notiz')) ?></td><td style="white-space:pre-line"><?= h($ang['notiz']) ?></td></tr><?php endif; ?>
@@ -419,6 +432,7 @@ if (!$a):
         });
       })();
       </script>
+      <div style="margin:0 0 12px"><?= pg_eingabe('gueltig_bis', ($ang['gueltig_bis'] ?? null) ?: null, ['sprache' => lp_sprache()]) ?></div>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
       <?php $coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1;
         // CoA/Spezifikation je EINGESETZTEM Rohstoff (nicht eine Unterlage fürs Produkt). Schon am Rohstoff

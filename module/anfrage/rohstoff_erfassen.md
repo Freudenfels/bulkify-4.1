@@ -17,3 +17,6 @@ Die Rückmeldung zeigt `rohstoff_erfassen_meldung()` oben auf der Seite (Preis g
 - Übersicht „Rohstoff-Unterlagen“: letzte Spalte je Rohstoff
 - Kasten „Unterlagen der Rohstoffe“ auf Anfrage- und Rezepturseite: je Zeile
 - Rohstoff-Anfrage: unter „Rohstoff-Preis berechnen“ und je Alternative
+
+## Preis-Gültigkeit (11.11.2026)
+Das Pop-up hat „Preis gültig bis“. Der Wert geht an `lieferant_preis.gueltig_bis`.

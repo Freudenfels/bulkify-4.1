@@ -8,6 +8,7 @@
 require_once BX_ROOT . '/module/lieferant/portal_layout.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/lieferant_katalog.php';
+require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" je Preis
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid  = aktueller_lieferant_id();
@@ -21,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = katalog_preis_vorschlag($lid, (int)($_POST['item_id'] ?? 0),
             trim((string)($_POST['preis'] ?? '')) !== '' ? zahl_lesen((string)$_POST['preis'], false, $spr) : 0.0,
             trim((string)($_POST['menge_ab'] ?? '')) !== '' ? zahl_lesen((string)$_POST['menge_ab'], true, $spr) : null,
-            (string)($_POST['einheit'] ?? ''), (string)($_POST['waehrung'] ?? 'EUR'));
+            (string)($_POST['einheit'] ?? ''), (string)($_POST['waehrung'] ?? 'EUR'), pg_lesen((string)($_POST['gueltig_bis'] ?? '')));
         header('Location: ' . $ziel . ($r['ok'] ? '&preis_ok=1' : '&fehler=' . urlencode($r['msg']))); exit;
     }
     // Alt-Format (freie Zeilen ohne Staffel) – wie bisher direkt pflegbar.
@@ -121,7 +122,7 @@ if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6
         <td style="font-size:13px">
           <?php if (!$g['preise']): ?><span class="muted"><?= h(lp_t('kein_preis')) ?></span>
           <?php else: foreach ($g['preise'] as $p): ?>
-            <div><?= h(lp_num($p['preis'], 4)) ?> <?= h((string)($p['waehrung'] ?: 'EUR')) ?><?= $g['einheit'] ? ' / ' . h(lp_einheit((string)$g['einheit'], 1)) : '' ?><?php if ((float)$p['menge_ab'] > 0): ?> <span class="muted">· <?= h(lp_t('ab_menge')) ?> <?= h(lp_num($p['menge_ab'], 3)) ?></span><?php endif; ?></div>
+            <div><?= h(lp_num($p['preis'], 4)) ?> <?= h((string)($p['waehrung'] ?: 'EUR')) ?><?= $g['einheit'] ? ' / ' . h(lp_einheit((string)$g['einheit'], 1)) : '' ?><?php if ((float)$p['menge_ab'] > 0): ?> <span class="muted">· <?= h(lp_t('ab_menge')) ?> <?= h(lp_num($p['menge_ab'], 3)) ?></span><?php endif; ?> <?= pg_anzeige($p['gueltig_bis'] ?? null, $spr, false) ?></div>
           <?php endforeach; endif; ?>
         </td>
         <td class="bx-num" style="white-space:nowrap">
@@ -152,6 +153,7 @@ if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6
       <div class="bx-field" style="max-width:120px"><label><?= h(lp_t('einheit')) ?></label><input type="text" name="einheit" id="pf_einheit" placeholder="kg" maxlength="20"></div>
       <div class="bx-field" style="max-width:140px"><label><?= h(lp_t('ab_menge')) ?></label><input type="text" name="menge_ab" class="lp-menge"></div>
     </div>
+    <div style="margin:4px 0 10px"><?= pg_eingabe('gueltig_bis', null, ['sprache' => $spr]) ?></div>
     <div class="bx-row" style="gap:8px;margin-top:6px">
       <button class="btn btn-primary" type="submit"><?= h(lp_t('senden')) ?></button>
       <button type="button" class="btn btn-ghost" onclick="document.getElementById('dlgPreis').close()"><?= h(lp_t('abbrechen')) ?></button>
