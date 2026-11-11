@@ -75,3 +75,9 @@ Gilt vor den älteren Absätzen oben (Anfragen-Gruppe mit 4 Punkten und Lager-Gr
 
 ## Rohstoff-Unterlagen (10.11.2026)
 Unter der Gruppe **Anfragen** steht neu `rohstoff_unterlagen` („Rohstoff-Unterlagen“, Seite `module/anfrage/rohstoff_unterlagen.php`). Im Menü „Einfach“ steht der Punkt direkt nach Anfragen, mit eigenem Icon (Dokument mit Ausrufezeichen). In gespeicherten Menü-Layouts landet er automatisch hinter „Anfragen“.
+- `bx_rscombo_script()` (11.11.2026, Nico: „Dropdowns immer mit Eingabe“): **jedes** `<select>` mit mehr als 10 Einträgen wird automatisch zum Suchfeld, nicht nur `class="rscombo"` (das erzwingt es weiter auch bei weniger).
+  - Auch nachträglich eingefügte Selects (neue Zeilen wie „+ Position“, Pop-ups) über einen MutationObserver.
+  - Ausnahme: `data-norscombo` am Select oder an einem Eltern-Element; Mehrfachauswahl und `size>1` bleiben nativ.
+  - Optionen werden bei jedem Öffnen frisch aus dem Select gelesen (per JS neu befüllte Listen bleiben aktuell); Werte, die andere Skripte setzen, werden nachgezogen.
+  - Die leere Option (z. B. „Lager / allgemein“) erscheint als Platzhalter und oben in der Liste, damit man zurück auf leer wählen kann. Lange Einträge laufen beim Darüberfahren durch (Marquee), `title` zeigt den vollen Text.
+

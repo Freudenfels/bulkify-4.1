@@ -410,6 +410,10 @@ body.bx-zieht{cursor:col-resize;user-select:none}
 .rs-list .rs-opt:hover,.rs-list .rs-opt.hl{background:var(--row-hover)}
 .rs-list .rs-opt .muted{font-size:12px}
 .rs-empty{padding:8px 12px;color:var(--muted);font-size:13px}
+.rs-list .rs-opt.rs-leer{color:var(--muted)}
+.rs-list .rs-opt.rs-akt{color:var(--gruen)}
+.rs-combo.rs-disabled .rs-input{opacity:.6;cursor:not-allowed}
+.rs-input{text-overflow:ellipsis}
 
 /* Stift-Kacheln + Bearbeiten-Fenster (Auftrag, Reiter Details – 08.11.2026) */
 .bx-stift{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;padding:0;flex:0 0 auto}
