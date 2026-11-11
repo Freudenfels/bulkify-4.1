@@ -53,5 +53,8 @@ Nach **jeder** Änderung an den Memory-/MD-Dateien im Memory-Ordner **alle** `.m
 - Dort **nichts löschen**, was nicht aus dem Memory-Ordner stammt.
 - Diese Kopie ist nur ein **Abzug** für Nico/Drive, **nicht** die Quelle – gearbeitet wird weiter im Memory-Ordner.
 
+## Pläne vor dem Bauen (Regel Nico 11.11.2026)
+Muss bei einer größeren Anweisung vor dem Bauen ein Vorschlag/Plan an Nico (welche Seiten, welche Tabellen, Entscheidungen), dann den Plan **immer als `plan-<thema>.md`** in den Drive-Ordner `G:\Meine Ablageulkify v4 md` legen und im Chat in einem Satz darauf hinweisen. Nach Freigabe Nicos Ergänzungen in dieselbe Datei einarbeiten.
+
 ## Wer
 Ansprechpartner: **Nico** (thomalla@freudenfels.de). Stil: direkt, knapp, umsetzungsorientiert.
