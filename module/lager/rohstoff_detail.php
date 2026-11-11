@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1#'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis_del' && !$neu) {
+    lp_verlauf_sichern((int)$id, null, (int)($_POST['preis_id'] ?? 0));   // in den Preisverlauf, nicht spurlos weg
     q("DELETE FROM lieferant_preis WHERE id=? AND item_id=?", [(int)($_POST['preis_id'] ?? 0), (int)$id]);
     item_ek_aus_lieferantenpreis((int)$id);
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1'); exit;
@@ -1704,9 +1705,15 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
       <thead><tr><th>Lieferant</th><th>Kennung</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Gültig</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th></th></tr></thead>
       <tbody>
       <?php if (!$preise): ?><tr><td colspan="9" class="muted">Noch keine Preise. Unten eintragen oder per Preisanfrage einholen.</td></tr><?php endif; ?>
-      <?php $best = $preise ? (float)$preise[0]['preis'] : null; foreach ($preise as $pz): $ist_best = $best !== null && abs((float)$pz['preis'] - $best) < 0.0001; ?>
-        <tr<?= $ist_best ? ' style="font-weight:600"' : '' ?>>
-          <td><?= h($pz['firma'] ?: '–') ?> <?= $ist_best ? bx_badge('günstigster','ok') : '' ?></td>
+      <?php // „günstigster" nur unter den GÜLTIGEN Preisen (abgelaufene grau, nie still bevorzugt).
+            $pgGueltig = array_filter($preise, fn($x) => pg_status($x['gueltig_bis'] ?? null) !== 'abgelaufen');
+            $best = $pgGueltig ? min(array_map(fn($x) => (float)$x['preis'], $pgGueltig)) : ($preise ? (float)$preise[0]['preis'] : null);
+            foreach ($preise as $pz): $pzAbg = pg_status($pz['gueltig_bis'] ?? null) === 'abgelaufen'; $ist_best = !$pzAbg && $best !== null && abs((float)$pz['preis'] - $best) < 0.0001; ?>
+        <tr<?= $pzAbg ? ' style="opacity:.55"' : ($ist_best ? ' style="font-weight:600"' : '') ?>>
+          <td><?= h($pz['firma'] ?: '–') ?> <?= $ist_best ? bx_badge('günstigster','ok') : '' ?>
+            <?php if ($pzAbg && (int)$pz['lieferant_id'] > 0): ?><button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" data-name="<?= $v('name') ?>" data-lieferant="<?= (int)$pz['lieferant_id'] ?>"
+              data-staffel="<?= h(implode(', ', array_map(fn($x) => rtrim(rtrim(number_format((float)$x['menge_ab'], 3, '.', ''), '0'), '.'), array_filter($preise, fn($x) => (int)$x['lieferant_id'] === (int)$pz['lieferant_id'] && (float)$x['menge_ab'] > 0)))) ?>"
+              onclick="bxAnfrageOeffnen(<?= (int)$id ?>,this)">neu anfragen</button><?php endif; ?></td>
           <td class="muted"><?= h(rohstoff_lief_kennung($it['artikelnummer'] ?? '', $pz['lief_kuerzel'] ?? '') ?: '–') ?></td>
           <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pz['menge_ab'],3,',','.'),'0'),',') ?> <?= h($it['einheit']) ?></td>
           <td class="bx-num"><?= number_format((float)$pz['preis'], (float)$pz['preis']<1?4:2, ',', '.') ?> <?= h($pz['waehrung']) ?>/<?= h($it['preis_bezug']) ?></td>
@@ -1735,6 +1742,25 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
       <?= pg_eingabe('lp_gueltig_bis', pg_vorbelegung((int)$id)) ?>
       <button class="btn btn-ghost btn-sm" type="submit">Preis hinzufügen</button>
     </form>
+    <?php // Preisverlauf (Teil 3): ersetzte/gelöschte Preise bleiben als Historie sichtbar - z. B. wie sich Whey entwickelt.
+      $pvRows = [];
+      try { $pvRows = all("SELECT v.*, COALESCE(l.firma, v.lieferant_name, '') AS firma FROM lieferant_preis_verlauf v LEFT JOIN lieferanten l ON l.id=v.lieferant_id
+                           WHERE v.item_id=? ORDER BY COALESCE(v.stand, DATE(v.archiviert_am)) DESC, v.id DESC LIMIT 200", [(int)$id]); } catch (Throwable $e) {}
+      $pvAlle = array_merge(array_map(fn($x) => $x + ['_aktuell' => 1], $preise), array_map(fn($x) => $x + ['_aktuell' => 0], $pvRows));
+      usort($pvAlle, fn($a, $b) => strcmp((string)($b['stand'] ?? ''), (string)($a['stand'] ?? '')));
+      if ($pvAlle): ?>
+    <details style="margin-top:14px"><summary style="cursor:pointer">Preisverlauf (<?= count($pvAlle) ?>)</summary>
+      <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table" style="font-size:13px">
+        <thead><tr><th>Datum</th><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Gültig bis</th><th></th></tr></thead>
+        <tbody><?php foreach ($pvAlle as $pv): ?>
+          <tr<?= !$pv['_aktuell'] ? ' style="opacity:.7"' : '' ?>><td><?= $pv['stand'] ? h(date('d.m.Y', strtotime((string)$pv['stand']))) : '–' ?></td><td><?= h((string)($pv['firma'] ?: '–')) ?></td>
+            <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pv['menge_ab'], 3, ',', '.'), '0'), ',') ?></td>
+            <td class="bx-num"><?= number_format((float)$pv['preis'], (float)$pv['preis'] < 1 ? 4 : 2, ',', '.') ?> <?= h((string)($pv['waehrung'] ?: 'EUR')) ?></td>
+            <td><?= pg_anzeige($pv['gueltig_bis'] ?? null) ?></td><td class="muted" style="font-size:12px"><?= $pv['_aktuell'] ? 'aktuell' : 'ersetzt ' . h(fmt_zeit($pv['archiviert_am'], 'd.m.Y')) ?></td></tr>
+        <?php endforeach; ?></tbody>
+      </table></div>
+    </details>
+    <?php endif; ?>
   </div>
 </section>
 <?php if (!$neu):

@@ -52,3 +52,6 @@ Oben stehen die Summen (Aufträge, Kunden, Stk) und ein Suchfeld, das nach Kunde
 
 ## Preis-Gültigkeit (11.11.2026)
 Ein Zukaufpreis von Hand hat das Feld „Preis gültig bis“ (`produkt_lieferant_preis.gueltig_bis`).
+
+## Abgelaufene Preise in der Kalkulation (11.11.2026)
+Ein Weg mit abgelaufenem Rohstoffpreis zeigt „unsicher: Preis abgelaufen“ statt „unvollständig“. Die Zeile nennt das Ablaufdatum und verlinkt auf den Reiter Einkauf des Rohstoffs.

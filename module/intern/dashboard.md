@@ -9,3 +9,6 @@
 **Technik:** rechnet die Zahlen live per `scalar()`/`all()` über die Modul-Tabellen; keine eigenen Daten.
 
 Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftrags zählen hier nicht mehr (`pa_aktiv_sql()`, 03.11.2026). Anlass: Leberkomplex 10.000, ein in ein Kontingent umgewandelter Auftrag, dessen Produktionsauftrag weiterlief. (Zähler „Produktion offen“)
+
+## Preis-Gültigkeit (11.11.2026)
+Beim Aufruf läuft einmal am Tag `pg_bald_pruefen()`. Bald ablaufende Preise in offenen Angeboten erzeugen eine Benachrichtigung.

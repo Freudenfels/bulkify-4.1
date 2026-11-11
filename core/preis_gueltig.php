@@ -149,3 +149,33 @@ function pg_anfrage_schwankung(array $a): array {
     return $out;
 }
 
+
+// Teil 3: bald ablaufende Preise (≤ 3 Tage), die in einem OFFENEN Angebot stecken -> Benachrichtigung (einmal je Preis und Datum).
+// Läuft höchstens einmal am Tag (app_meta pg_bald_check), angestoßen vom Dashboard. Später Aufgabe in „Zu erledigen".
+function pg_bald_pruefen(): int {
+    if (!function_exists('meta_get') || meta_get('pg_bald_check', '') === pg_heute()) return 0;
+    meta_set('pg_bald_check', pg_heute());
+    $n = 0;
+    try {
+        $bald = all("SELECT lp.item_id, MIN(lp.gueltig_bis) AS bis, i.name FROM lieferant_preis lp JOIN item i ON i.id=lp.item_id
+                     WHERE lp.gueltig_bis IS NOT NULL AND lp.gueltig_bis BETWEEN ? AND ? GROUP BY lp.item_id, i.name", [pg_heute(), pg_plus_tage(3)]);
+        foreach ($bald as $b) {
+            $iid = (int)$b['item_id'];
+            // Offene Angebote (Entwurf oder gesendet, noch gültig), in denen der Rohstoff steckt: als Rohstoff-Position oder in einer Rezeptur.
+            $ang = all("SELECT DISTINCT a.id, a.nummer FROM angebot a JOIN angebot_position ap ON ap.angebot_id=a.id
+                        LEFT JOIN rezeptur_zutat z ON z.rezeptur_id=ap.rezeptur_id
+                        WHERE a.status IN ('offen','gesendet') AND (a.gueltig_bis IS NULL OR a.gueltig_bis >= ?)
+                          AND (z.item_id=? OR (ap.quelle='rohstoff' AND ap.artikelnr=(SELECT artikelnummer FROM item WHERE id=?)))
+                        LIMIT 10", [pg_heute(), $iid, $iid]);
+            if (!$ang) continue;
+            $key = 'pg_bald_' . $iid . '_' . $b['bis'];
+            if (meta_get($key, '') === '1') continue;
+            meta_set($key, '1');
+            benachrichtigung_add('Preis läuft bald ab: ' . $b['name'] . ' (bis ' . pg_datum($b['bis']) . ')',
+                'Steckt in offenen Angeboten: ' . implode(', ', array_column($ang, 'nummer')) . '. Neu anfragen oder Angebotsgültigkeit prüfen.',
+                '?p=rohstoff&id=' . $iid . '&tab=ek', 'sonstiges', true);
+            $n++;
+        }
+    } catch (Throwable $e) {}
+    return $n;
+}

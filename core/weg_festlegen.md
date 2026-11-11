@@ -18,3 +18,6 @@
 **Eingesetzt:** Reiter Beschaffungsweg (Auftrag), Bestellen-Seite (Block „warten auf Festlegung des Wegs“), „Beschaffungsweg offen“, PA-Seite (vor Produktionsbeginn), alte Seite `?p=bedarf`. Später kommt „Zu erledigen“ dazu.
 
 - Karte Premix ohne Preis: „Premix anfragen“ öffnet direkt die Premix-Anfrage auf der Rezepturseite (`&premix_anfrage=1`). Karte Zukauf fertig: „Angebot anfragen“ (`&fertig_anfrage=1`).
+
+## Abgelaufene Preise (11.11.2026)
+Einzelrohstoffe mit nur abgelaufenem Preis zeigen „Preis abgelaufen seit … - neu anfragen“ (Link zum Reiter Einkauf des Rohstoffs). Die Summe zeigt dann „(unsicher: Preis abgelaufen)“.

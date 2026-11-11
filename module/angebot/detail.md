@@ -211,3 +211,8 @@ Andere Behälter behalten das Häkchen „bedruckt / kundenspezifisch (ohne Etik
 - **Rohstoff-Positionen:** die angebotene Menge.
 - **Rezeptur-Positionen:** die benötigte Rohstoffmenge für die Auftragsmenge, von der kleinsten bis zur größten Option.
 Steht dort „unter MOQ“, ist das nur ein Hinweis und keine Sperre.
+
+## Abgelaufene EK-Preise (11.11.2026)
+- In „Rohstoffkosten je Lieferant“ steht bei einem nur abgelaufenen Preis „Preis abgelaufen seit … - neu anfragen“. Der Knopf „neu anfragen“ ist vorbelegt mit demselben Lieferanten und denselben Staffeln.
+- Darunter steht „Summe unsicher“.
+- Bei gültigen Preisen steht „gültig bis“.

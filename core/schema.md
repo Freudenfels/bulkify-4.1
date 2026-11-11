@@ -596,3 +596,9 @@ Jeder Schritt hat ein 7. Feld mit dem Namen der Person, die ihn abgeschlossen ha
 - `lieferant_angebot_speichern()` nimmt `$opt['gueltig_bis']` und gibt das Datum an Premix- und Fremdfertigungspreise weiter. Gleiche Staffelmengen werden nur einmal gespeichert.
 - `lieferant_angebot_annehmen()` und `lieferant_fertig_angebot_annehmen()` übernehmen das Datum.
 Siehe `core/preis_gueltig.md`.
+
+## Preis-Gültigkeit in der Kalkulation (11.11.2026)
+- `lp_gueltig_auswahl()` bevorzugt gültige Preise.
+- `lp_verlauf_sichern()` schreibt in die Tabelle `lieferant_preis_verlauf`.
+- Die Rückgaben von `rohstoff_bester_lieferant()`, `rohstoff_ek_detail()`, `angebot_rohstoffkosten()` und `auftrag_beschaffungswege()` sind erweitert.
+Siehe `core/preis_gueltig.md`.

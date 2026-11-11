@@ -2,6 +2,8 @@
 // Start-Dashboard (intern) – Team-Cockpit mit echten Zahlen
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/preis_gueltig.php';
+if (function_exists('pg_bald_pruefen')) { try { pg_bald_pruefen(); } catch (Throwable $e) {} }   // einmal am Tag: bald ablaufende Preise in offenen Angeboten melden
 
 // Damit auf einer frischen DB Zahlen da sind
 seed_anfrage_if_empty(); seed_angebot_if_empty(); seed_charge_if_empty();

@@ -36,3 +36,7 @@ Einheitliche Kundenanzeige auf der Produktseite: „Kürzel (Firma)", z. B. „F
 
 ## Premix-Preise am Premix-Artikel (Teil 7)
 `produkt_beschaffung()` nimmt Lieferantenpreise am Premix-Artikel der Rezeptur als eigene Premix-Gruppe auf (Quelle „Premix-Artikel“, Badge „Premix je kg“). Die Kalkulation rechnet den Premix-Weg mit Premix je kg × Füllgewicht + Leerkapseln. Sie las den Premix-Artikel schon vorher.
+
+## Preis-Gültigkeit (11.11.2026)
+- Zukauf, Premix und Einzelrohstoffe nehmen nur gültige Preise, solange es welche gibt.
+- Ein abgelaufener Rohstoffpreis setzt die Zeile auf `abgelaufen` und den Weg auf `unsicher`, „vollständig“ ist dann nein.

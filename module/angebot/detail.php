@@ -5,6 +5,7 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badges
 require_once BX_ROOT . '/core/rohstoff_moq.php';  // eigene MOQ je Rohstoff: Hinweis „unter MOQ"
+require_once BX_ROOT . '/core/preis_gueltig.php'; // Preis-Gültigkeit: abgelaufene EK-Preise markieren, Angebotsgültigkeit
 require_once BX_ROOT . '/core/ki.php';           // KI-Angebots-PDF-Erfassung
 require_once BX_ROOT . '/core/dienstleistung.php'; // DL-Katalog-Positionen (dl_position_add) + Kundenwunsch bei DL-Angeboten
 
@@ -1119,13 +1120,19 @@ if (!$neu):
           <td class="bx-num"><?= $z['ek'] !== null ? h($nfrk($z['ek'], 4)) . ' &euro;' : '<span style="color:#8f231b">&ndash;</span>' ?></td>
           <td><?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span class="muted">&ndash;</span>' ?></td>
           <td class="bx-num"><?= $z['kosten'] !== null ? h($nfrk($z['kosten'])) . ' &euro;' : '<span class="muted">?</span>' ?></td>
-          <td><?= ($z['ek_quelle'] ?? '') === 'ek' ? bx_badge('EK am Rohstoff', 'info') : anfrage_badge((int)$z['item_id']) ?></td>
-          <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($z['name']) ?>" data-menge="<?= h(rtrim(rtrim(number_format((float)$z['bedarf'], 3, '.', ''), '0'), '.')) ?>" data-einheit="<?= h($z['bezug']) ?>" onclick="bxAnfrageOeffnen(<?= (int)$z['item_id'] ?>,this)">Preis anfragen</button></td>
+          <td><?= !empty($z['abgelaufen']) ? '<span style="color:#8f231b;font-size:12px">Preis abgelaufen seit ' . h(date('d.m.Y', strtotime((string)$z['abgelaufen']))) . ' - neu anfragen</span>'
+                  : ((($z['ek_quelle'] ?? '') === 'ek' ? bx_badge('EK am Rohstoff', 'info') : anfrage_badge((int)$z['item_id']))
+                     . (!empty($z['gueltig_bis']) ? '<div>' . pg_anzeige($z['gueltig_bis']) . '</div>' : '')
+                     . (!empty($z['abgelaufen_ignoriert']) ? '<div class="muted" style="font-size:11px">abgelaufene Preise anderer Lieferanten nicht genutzt</div>' : '')) ?></td>
+          <td style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" data-name="<?= h($z['name']) ?>" data-menge="<?= h(rtrim(rtrim(number_format((float)$z['bedarf'], 3, '.', ''), '0'), '.')) ?>" data-einheit="<?= h($z['bezug']) ?>"<?= !empty($z['abgelaufen']) && !empty($z['lieferant_id']) ? ' data-lieferant="' . (int)$z['lieferant_id'] . '" data-staffel="' . h(implode(', ', array_map(fn($x) => rtrim(rtrim(number_format((float)$x, 3, '.', ''), '0'), '.'), array_column(all("SELECT DISTINCT menge_ab FROM lieferant_preis WHERE item_id=? AND lieferant_id=? AND menge_ab>0 ORDER BY menge_ab", [(int)$z['item_id'], (int)$z['lieferant_id']]), 'menge_ab')))) . '"' : '' ?> onclick="bxAnfrageOeffnen(<?= (int)$z['item_id'] ?>,this)"><?= !empty($z['abgelaufen']) ? 'neu anfragen' : 'Preis anfragen' ?></button></td>
         </tr>
       <?php endforeach; ?>
         <tr style="font-weight:600"><td colspan="4">Rohstoffkosten gesamt (gr&ouml;&szlig;te Menge)</td><td class="bx-num"><?= h($nfrk($rk['summe'])) ?> &euro;</td><td colspan="2"></td></tr>
       </tbody>
     </table></div>
+    <?php if (!empty($rk['unsicher'])): ?>
+      <div style="margin-top:10px;color:#8f231b;font-size:13px">Summe unsicher: <?= (int)$rk['unsicher'] ?> Rohstoff(e) nur mit abgelaufenem Preis &ndash; neu anfragen, bevor du darauf ein Angebot baust.</div>
+    <?php endif; ?>
     <?php if ($rk['ohne_preis'] > 0): ?>
       <div style="margin-top:10px;color:#8f231b;font-size:13px"><?= (int)$rk['ohne_preis'] ?> Rohstoff(e) ohne Lieferantenpreis &ndash; bitte zuerst anfragen, sonst ist die Kalkulation unvollst&auml;ndig.</div>
     <?php endif; ?>

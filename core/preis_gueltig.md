@@ -54,3 +54,23 @@ Stand 11.11.2026, Auftrag von Nico. Anlass: Manche Rohstoffpreise halten nur kur
 - **Pflicht im Lieferantenportal:** Ohne Gültigkeit wird nichts gespeichert, mit Meldung auf DE, EN oder ZH. Das gilt bei „Anfrage beantworten“, wenn der angefragte Artikel schwankt, und beim Dialog Rohstoff-Preise.
 - **Hinweis in der Anfrage:** Oben steht „Preis schwankt - bitte Gültigkeit angeben“.
 - **Premix, Bulk und Fremdfertigung (Anfrage an einer Rezeptur):** Enthält die Rezeptur einen schwankenden Rohstoff, kommt nur ein Hinweis mit dessen Namen, keine Pflicht. Die Vorbelegung nimmt die kürzeste Gültigkeit. Die Logik steckt in `pg_anfrage_schwankung($anfrage)`.
+
+## Teil 3: Abgelaufene Preise in der Kalkulation
+- **Nie still verwenden:** Alle Preis-Abfragen laufen über `lp_gueltig_auswahl()` in core/schema.php, also `pg_auswahl()`.
+  - Gibt es einen gültigen Preis, gilt nur dieser, auch bei der Wahl des günstigsten.
+  - Gibt es nur abgelaufene, gilt der letzte. Er ist markiert („Preis abgelaufen seit … - neu anfragen“), und die Summe ist „unsicher“.
+- **Betroffene Funktionen:**
+  - `rohstoff_bester_lieferant()` und `rohstoff_ek_detail()`, beide mit den neuen Schlüsseln `abgelaufen`, `abgelaufen_ignoriert`, `gueltig_bis` und `lieferant_id`
+  - `item_ek_aus_lieferantenpreis()`
+  - `angebot_rohstoffkosten()`, mit dem neuen Zähler `unsicher`
+  - `auftrag_beschaffungswege()`: Fremdfertigung, Premix und Einzelrohstoffe, jede Position mit `abgelaufen`, der Weg mit `unsicher`
+  - `produkt_lieferant_preise()` und `_pkg()`
+  - `core/produkt_kalkulation.php`: Zukauf-Kandidaten, Premix und Einzelrohstoffe. Ein abgelaufener Preis gibt `unsicher` und „vollständig = nein“.
+- **Anzeige:**
+  - Angebot, Tabelle „Rohstoffkosten je Lieferant“: Status „Preis abgelaufen seit …“, Knopf „neu anfragen“, darunter „Summe unsicher“. Bei gültigen Preisen steht „gültig bis“ und gegebenenfalls „abgelaufene Preise anderer Lieferanten nicht genutzt“.
+  - Pop-up „Weg festlegen“ (Beschaffungsweg): Hinweis je Position und „(unsicher: Preis abgelaufen)“.
+  - Produktseite, Kalkulation: „unsicher: Preis abgelaufen“.
+  - Rohstoffseite: abgelaufene Preise grau, „günstigster“ nur unter gültigen Preisen.
+- **„neu anfragen“:** öffnet das Anfrage-Pop-up mit demselben Lieferanten vorausgewählt (`data-lieferant`) und denselben Staffelmengen (`data-staffel`). Weitere Lieferanten lassen sich dazuwählen.
+- **Preisverlauf:** Neue Tabelle `lieferant_preis_verlauf`. `lp_verlauf_sichern()` schreibt alte Preise hinein, bevor sie ersetzt oder gelöscht werden. Das gilt bei Angebot annehmen, Premix-Antwort und Löschen am Rohstoff. Auf der Rohstoffseite (Reiter Einkauf) steht der klappbare „Preisverlauf“ mit aktuellen und ersetzten Preisen (Datum, Lieferant, ab Menge, Preis, gültig bis).
+- **Bald ablaufend:** Läuft ein Preis in höchstens 3 Tagen ab, erscheint „läuft bald ab“. `pg_bald_pruefen()` läuft einmal am Tag beim Aufruf des Dashboards. Steckt ein solcher Preis in einem offenen Angebot (Entwurf oder gesendet), geht eine Benachrichtigung „Preis läuft bald ab“ an das Team, einmal je Rohstoff und Datum.

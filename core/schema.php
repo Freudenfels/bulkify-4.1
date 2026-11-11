@@ -6824,14 +6824,36 @@ function vk_fuer_kunde(float $vk, ?int $kunde_id): float {
 // werden aktuell nicht umgerechnet (später ergänzbar).
 // Günstigsten Lieferanten für einen Rohstoff bei einer Menge finden.
 // Rückgabe: ['lieferant_id'=>…, 'firma'=>…, 'preis'=>…] oder null, wenn kein Lieferantenpreis existiert.
+// Preis-Gültigkeit (Nico 11.11.2026, core/preis_gueltig.php): gültige Preise bevorzugen, abgelaufene nur als letzte
+// Möglichkeit (dann markiert). Zeilen brauchen das Feld gueltig_bis.
+function lp_gueltig_auswahl(array $rows): array {
+    require_once __DIR__ . '/preis_gueltig.php';
+    return pg_auswahl($rows);
+}
+// Alte Lieferantenpreise vor dem Ersetzen in den Preisverlauf schreiben (Historie am Rohstoff, z. B. Whey-Entwicklung).
+function lp_verlauf_sichern(int $item_id, ?int $lieferant_id = null, ?int $preis_id = null): void {
+    try {
+        q("CREATE TABLE IF NOT EXISTS lieferant_preis_verlauf (
+            id INT AUTO_INCREMENT PRIMARY KEY, item_id INT NOT NULL, lieferant_id INT NULL, lieferant_name VARCHAR(190) NULL,
+            menge_ab DECIMAL(12,3) NULL, preis DECIMAL(12,4) NULL, waehrung VARCHAR(3) NULL, stand DATE NULL, gueltig_bis DATE NULL,
+            archiviert_am DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_item (item_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $w = "item_id=?"; $args = [$item_id];
+        if ($lieferant_id !== null) { $w .= " AND lieferant_id=?"; $args[] = $lieferant_id; }
+        if ($preis_id !== null) { $w .= " AND id=?"; $args[] = $preis_id; }
+        q("INSERT INTO lieferant_preis_verlauf (item_id,lieferant_id,lieferant_name,menge_ab,preis,waehrung,stand,gueltig_bis,archiviert_am)
+           SELECT item_id,lieferant_id,lieferant_name,menge_ab,preis,waehrung,stand,gueltig_bis,UTC_TIMESTAMP() FROM lieferant_preis WHERE $w", $args);
+    } catch (Throwable $e) { /* best effort */ }
+}
 function rohstoff_bester_lieferant(int $item_id, float $menge): ?array {
     // Passende Staffel je Lieferant: größte Staffel, deren menge_ab <= Bedarf. Liegt der Bedarf
     // unter allen Staffeln (unter MOQ), gilt die KLEINSTE Staffel – so viel müsste man mindestens abnehmen.
-    $rows = all("SELECT lp.lieferant_id, lp.preis, lp.menge_ab, l.firma FROM lieferant_preis lp
+    $rows = all("SELECT lp.lieferant_id, lp.preis, lp.menge_ab, lp.gueltig_bis, l.firma FROM lieferant_preis lp
                  LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
                  WHERE lp.item_id=? AND (lp.waehrung IS NULL OR lp.waehrung='EUR')
                  ORDER BY lp.lieferant_id, lp.menge_ab", [$item_id]);
     if (!$rows) return null;
+    $gSel = lp_gueltig_auswahl($rows); $rows = $gSel['rows'];   // gültige bevorzugen (auch bei „günstigster")
     $jeLief = [];
     foreach ($rows as $r) {
         $lid = (int)$r['lieferant_id'];
@@ -6842,6 +6864,12 @@ function rohstoff_bester_lieferant(int $item_id, float $menge): ?array {
     foreach ($jeLief as $lid => $d) {
         $pr = $d['passend'] ?? $d['kleinste'];
         if ($best === null || $pr < $best['preis']) $best = ['lieferant_id'=>$lid, 'firma'=>$d['firma'], 'preis'=>$pr, 'unter_moq'=>($d['passend'] === null)];
+    }
+    if ($best) {
+        $best['abgelaufen'] = $gSel['abgelaufen'];                       // nur abgelaufene Preise da -> Datum, sonst null
+        $best['abgelaufen_ignoriert'] = $gSel['abgelaufen_ignoriert'];   // daneben gab es abgelaufene (evtl. billigere)
+        $bis = array_filter(array_map(fn($r) => (int)$r['lieferant_id'] === (int)$best['lieferant_id'] ? (string)($r['gueltig_bis'] ?? '') : '', $rows));
+        $best['gueltig_bis'] = $bis ? min($bis) : null;
     }
     return $best;
 }
@@ -6873,7 +6901,7 @@ function angebot_rohstoffkosten(int $angebot_id): array {
         $e = rezeptur_einheiten_gesamt($rid, (float)$p['stueck'], (float) round((float)$p['menge']));
         if ($e > ($maxEinheiten[$rid] ?? 0)) $maxEinheiten[$rid] = $e;
     }
-    $zeilen = []; $summe = 0.0; $ohne = 0;
+    $zeilen = []; $summe = 0.0; $ohne = 0; $unsicher = 0;
     foreach ($maxEinheiten as $rid => $einheiten) {
         foreach (all("SELECT z.item_id, z.menge_mg, i.name, i.preis_bezug, i.einheit, i.dichte
                       FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=?", [$rid]) as $z) {
@@ -6895,10 +6923,13 @@ function angebot_rohstoffkosten(int $angebot_id): array {
                 'ek'        => $best['preis'] ?? null, 'lieferant' => $best['firma'] ?? '',
                 'lieferant_id' => $best['lieferant_id'] ?? 0, 'kosten' => $kosten,
                 'ek_quelle' => $best ? ($best['quelle'] ?? 'lieferant') : '',
+                'abgelaufen' => $best['abgelaufen'] ?? null, 'gueltig_bis' => $best['gueltig_bis'] ?? null,
+                'abgelaufen_ignoriert' => !empty($best['abgelaufen_ignoriert']),
             ];
+            if (!empty($best['abgelaufen'])) $unsicher++;
         }
     }
-    return ['zeilen'=>$zeilen, 'summe'=>$summe, 'ohne_preis'=>$ohne];
+    return ['zeilen'=>$zeilen, 'summe'=>$summe, 'ohne_preis'=>$ohne, 'unsicher'=>$unsicher];
 }
 // EK-Preis am Artikel aus den Lieferantenpreisen übernehmen (Nico 06.11.2026: „wieso wird der EK nicht übernommen?").
 // EK = günstigster Einstiegspreis (kleinste Staffel je Lieferant, nur EUR). Gesetzt wird nur, wenn der EK noch leer ist
@@ -6912,9 +6943,9 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
         $auto = (int)($it['ek_auto'] ?? 0) === 1;
         if (!$auto && (float)$it['ek_preis'] > 0) return;
         $best = null; $seen = [];
-        foreach (all("SELECT lieferant_id, lieferant_name, preis FROM lieferant_preis
+        foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, lieferant_name, preis, gueltig_bis FROM lieferant_preis
                       WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR')
-                      ORDER BY lieferant_id, lieferant_name, menge_ab ASC, preis ASC", [$item_id]) as $r) {
+                      ORDER BY lieferant_id, lieferant_name, menge_ab ASC, preis ASC", [$item_id]))['rows'] as $r) {
             $k = (int)$r['lieferant_id'] . '|' . (string)$r['lieferant_name'];
             if (isset($seen[$k])) continue;   // erste Zeile je Lieferant = kleinste Staffel
             $seen[$k] = true;
@@ -6930,17 +6961,24 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
 // Davon der günstigste Lieferant. Fallback: flacher item.ek_preis.
 // rohstoff_ek_detail(): dasselbe mit Mindestmenge des gewählten Lieferanten (kleinste Staffel; nur gesetzt, wenn die Menge darunter liegt).
 function rohstoff_ek_detail(int $item_id, float $menge): ?array {
-    $rows = all("SELECT lieferant_id, lieferant_name, menge_ab, preis FROM lieferant_preis
+    $rows = all("SELECT lieferant_id, lieferant_name, menge_ab, preis, gueltig_bis FROM lieferant_preis
                  WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR')", [$item_id]);
-    $je = [];
-    foreach ($rows as $r) $je[(int)$r['lieferant_id'] . '|' . (string)$r['lieferant_name']][] = [(float)$r['menge_ab'], (float)$r['preis']];
+    $gSel = lp_gueltig_auswahl($rows); $rows = $gSel['rows'];   // gültige Preise bevorzugen, abgelaufene nur markiert
+    $je = []; $bisJe = [];
+    foreach ($rows as $r) {
+        $k = (int)$r['lieferant_id'] . '|' . (string)$r['lieferant_name'];
+        $je[$k][] = [(float)$r['menge_ab'], (float)$r['preis']];
+        if ((string)($r['gueltig_bis'] ?? '') !== '') $bisJe[$k] = isset($bisJe[$k]) ? min($bisJe[$k], (string)$r['gueltig_bis']) : (string)$r['gueltig_bis'];
+    }
     $best = null;
-    foreach ($je as $st) {
+    foreach ($je as $k => $st) {
         usort($st, fn($a, $b) => $a[0] <=> $b[0]);
         $p = $st[0][1];                                         // kleinste Staffel
         foreach ($st as [$ab, $pr]) if ($ab <= $menge + 1e-9) $p = $pr;   // größte passende Staffel
-        if ($best === null || $p < $best['preis']) $best = ['preis' => $p, 'mindest' => $st[0][0] > $menge + 1e-9 ? $st[0][0] : null];
+        if ($best === null || $p < $best['preis']) $best = ['preis' => $p, 'mindest' => $st[0][0] > $menge + 1e-9 ? $st[0][0] : null,
+                                                             'lieferant_id' => (int) explode('|', $k)[0], 'gueltig_bis' => $bisJe[$k] ?? null];
     }
+    if ($best) { $best['abgelaufen'] = $gSel['abgelaufen']; $best['abgelaufen_ignoriert'] = $gSel['abgelaufen_ignoriert']; }
     return $best;
 }
 function rohstoff_ek_bei_menge(int $item_id, float $menge): ?float {
@@ -7269,6 +7307,7 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
                 if ($m <= 0 || $pr <= 0) continue;
                 $zeilen[] = [round($m / $fk, 3), ($preis_basis === 1000 ? $pr / 1000 : $pr) * $fk];
             }
+            lp_verlauf_sichern($pm, $lieferant_id);
             q("DELETE FROM lieferant_preis WHERE item_id=? AND lieferant_id=?", [$pm, $lieferant_id]);
             foreach ($zeilen as [$zm, $zp])
                 q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?,?,CURDATE(),?,?,?)",
@@ -7361,7 +7400,8 @@ function lieferant_angebot_annehmen(int $angebot_id): string {
         return 'Diese Anfrage hängt an keinem Artikel – die Preise lassen sich nicht automatisch übernehmen.';
     }
     $item = (int)$an['item_id']; $lief = (int)$an['lieferant_id'];
-    // Alte Staffeln dieses Lieferanten fuer diesen Artikel ersetzen – sonst mischen sich Staende.
+    // Alte Staffeln dieses Lieferanten fuer diesen Artikel ersetzen – sonst mischen sich Staende. Vorher in den Preisverlauf.
+    lp_verlauf_sichern($item, $lief);
     q("DELETE FROM lieferant_preis WHERE item_id=? AND lieferant_id=?", [$item, $lief]);
     $zeilen = all("SELECT menge_ab, preis FROM lieferant_angebot_staffel WHERE angebot_id=? ORDER BY menge_ab", [$angebot_id]);
     if (!$zeilen) $zeilen = [['menge_ab' => (float)($an['mindestmenge'] ?: 0), 'preis' => (float)$an['preis']]];
@@ -8508,8 +8548,8 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         usort($l, fn($x, $y) => $x['gesamt'] <=> $y['gesamt']);
         return $l;
     };
-    $angRows = all("SELECT lieferant_id, menge, preis, LOWER(COALESCE(einheit,'')) AS einheit FROM rezeptur_lief_angebot
-                    WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis > 0", [$rid, rezeptur_stamm_id($rid)]);
+    $angRows = lp_gueltig_auswahl(all("SELECT lieferant_id, menge, preis, LOWER(COALESCE(einheit,'')) AS einheit, gueltig_bis FROM rezeptur_lief_angebot
+                    WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis > 0", [$rid, rezeptur_stamm_id($rid)]))['rows'];
     // (a) fertige Kapseln/Tabletten: Fremdfertigungs-Angebote je Stück + Zukaufpreise je Einheit am Produkt.
     $mengeA = $schuett ? $einh / 1000 : $einh;     // Schüttgut: fertige Mischung in kg
     $za = [];
@@ -8523,12 +8563,12 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         $pm = rezeptur_premixitem($rid, false);
         $zb = [];
         foreach ($angRows as $r) if ($r['einheit'] === 'kg') $zb[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
-        if ($pm) foreach (all("SELECT lieferant_id, menge_ab, preis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]) as $r)
+        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]))['rows'] as $r)
             $zb[] = [(int)$r['lieferant_id'], (float)$r['menge_ab'], (float)$r['preis']];
         $out['wege']['premix'] = ['menge' => $kg, 'menge_voll' => $kgVoll, 'einheit' => 'kg', 'angebote' => $angebote(staffel_je_lieferant($zb, $kg), $kg), 'zusatz' => $kapZeile, 'item_id' => $pm, 'label' => 'Premix (fertige Mischung)'];
     }
     // (c) Einzelrohstoffe: Rezeptur × Menge, Staffelpreis zur Menge (sonst EK am Rohstoff), ohne Preis nur die Menge.
-    $pos = []; $summe = 0.0; $luecke = false;
+    $pos = []; $summe = 0.0; $luecke = false; $unsicher = false;
     foreach ($roh as $r) {
         $it = one("SELECT ek_preis, preis_bezug FROM item WHERE id=?", [(int)$r['item_id']]);
         $m = (float)$r['benoetigt']; $e = (string)$r['einheit'];
@@ -8539,11 +8579,13 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         $g = $p !== null ? $p * $mBezug : null;
         if ($g === null) $luecke = true; else $summe += $g;
         // Mindestmenge des gewählten Lieferanten: Bedarf unter seiner kleinsten Staffel -> Hinweis (der Preis gilt trotzdem).
+        if (!empty($ekD['abgelaufen'])) $unsicher = true;   // nur abgelaufener Preis -> Summe unsicher (nie still)
         $pos[] = ['item_id' => (int)$r['item_id'], 'name' => (string)$r['name'], 'menge' => $m, 'voll' => $r['voll'] ?? null, 'einheit' => $e, 'preis' => $p, 'gesamt' => $g,
-                  'mindest' => $ekD['mindest'] ?? null, 'bezug' => (string)($it['preis_bezug'] ?? $e)];
+                  'mindest' => $ekD['mindest'] ?? null, 'bezug' => (string)($it['preis_bezug'] ?? $e),
+                  'abgelaufen' => $ekD['abgelaufen'] ?? null, 'lieferant_id' => $ekD['lieferant_id'] ?? 0, 'gueltig_bis' => $ekD['gueltig_bis'] ?? null];
     }
     if ($kapZeile) { $pos[] = $kapZeile; if ($kapZeile['gesamt'] === null) $luecke = true; else $summe += $kapZeile['gesamt']; }
-    $out['wege']['rohstoffe'] = ['menge' => $kg, 'menge_voll' => $kgVoll, 'einheit' => 'kg', 'positionen' => $pos, 'gesamt' => $summe, 'luecke' => $luecke, 'label' => 'Einzelrohstoffe (Eigenproduktion)'];
+    $out['wege']['rohstoffe'] = ['menge' => $kg, 'menge_voll' => $kgVoll, 'einheit' => 'kg', 'positionen' => $pos, 'gesamt' => $summe, 'luecke' => $luecke, 'unsicher' => $unsicher, 'label' => 'Einzelrohstoffe (Eigenproduktion)'];
     return $out;
 }
 // --- Beschaffungsweg: vorhandenen Bestand & offene Bestellungen koppeln (Nico 05.11.2026) -----------------------
@@ -10425,9 +10467,9 @@ function produkt_lieferant_preise(int $produkt_id, float $stueck = 0): array {
     if ($produkt_id <= 0 || !table_exists('produkt_lieferant_preis')) return [];
     $out = [];
     $ep = null;
-    foreach (all("SELECT lieferant_id, menge_ab, preis, einheit FROM produkt_lieferant_preis
+    foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, einheit, gueltig_bis FROM produkt_lieferant_preis
                   WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')
-                  ORDER BY menge_ab ASC", [$produkt_id]) as $r) {
+                  ORDER BY menge_ab ASC", [$produkt_id]))['rows'] as $r) {
         $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
         // Preis je PACKUNG (St-24) -> je Einheit umrechnen (Preis / Einheiten je Packung, Staffel × Einheiten je Packung).
         if (in_array(strtolower(trim((string)$r['einheit'])), ['packung', 'pkg', 'pkg.', 'packungen'], true)) {
@@ -10446,8 +10488,8 @@ function produkt_lieferant_preise_pkg(int $produkt_id, float $packungen = 0): ar
     if ($produkt_id <= 0 || !table_exists('produkt_lieferant_preis')) return [];
     $ep = max(1, (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [$produkt_id]));
     $rows = [];
-    foreach (all("SELECT lieferant_id, menge_ab, preis, einheit FROM produkt_lieferant_preis
-                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$produkt_id]) as $r) {
+    foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, einheit, gueltig_bis FROM produkt_lieferant_preis
+                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$produkt_id]))['rows'] as $r) {
         $jePkg = in_array(strtolower(trim((string)$r['einheit'])), ['packung', 'pkg', 'pkg.', 'packungen'], true);
         $rows[] = ['lid'=>(int)$r['lieferant_id'], 'ab'=>$jePkg ? (float)$r['menge_ab'] : (float)$r['menge_ab'] / $ep,
                    'preis'=>$jePkg ? (float)$r['preis'] : (float)$r['preis'] * $ep];

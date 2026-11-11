@@ -212,3 +212,8 @@ Siehe `core/preis_gueltig.md`.
 - Die Stammdaten enthalten „Preis schwankt“ (Haken) und die Gültigkeit in Tagen. Gespeichert wird nur, wenn das Feld im Formular war (Marker `preis_gueltig_tage_feld`).
 - Die Kachel „Preis schwankt“ zeigt die Tage.
 - „gültig bis“ wird beim Preis-Hinzufügen vorbelegt.
+
+## Abgelaufene Preise und Preisverlauf (11.11.2026)
+- Abgelaufene Lieferantenpreise sind grau und haben den Knopf „neu anfragen“ (vorbelegt). „günstigster“ gilt nur unter den gültigen Preisen.
+- Wird ein Preis gelöscht, geht er vorher in den Preisverlauf.
+- Unter dem Formular steht klappbar der „Preisverlauf“ mit aktuellen und ersetzten Preisen.

@@ -547,7 +547,7 @@ if (!$istExtern):
   <div class="bx-cards">
   <?php foreach ($kalk['wege'] as $wk => $w): ?>
     <div class="bx-card"<?= $wk === $kalk['standard'] ? ' style="box-shadow:0 0 0 2px var(--gruen)"' : '' ?>><div class="k"><?= h($w['label']) ?><?= $wk === $kalk['standard'] ? ' · Standard' : '' ?></div>
-      <div class="v" style="font-size:16px"><?= $w['inhalt_summe'] > 0 && $w['vollstaendig'] ? $eur2($w['summe']) : ($w['inhalt_summe'] > 0 ? $eur2($w['summe']) . ' <span style="color:var(--warn);font-size:12px">unvollständig</span>' : '<span class="muted">kein Preis</span>') ?></div>
+      <div class="v" style="font-size:16px"><?= $w['inhalt_summe'] > 0 && $w['vollstaendig'] ? $eur2($w['summe']) : ($w['inhalt_summe'] > 0 ? $eur2($w['summe']) . ' <span style="color:var(--warn);font-size:12px">' . (!empty($w['unsicher']) ? 'unsicher: Preis abgelaufen' : 'unvollständig') . '</span>' : '<span class="muted">kein Preis</span>') ?></div>
       <div class="muted" style="font-size:12px">Inhalt <?= $w['inhalt_summe'] > 0 ? $eur($w['inhalt_summe']) : '–' ?> + Verpackung</div></div>
   <?php endforeach; ?>
   </div>
@@ -706,7 +706,7 @@ if (!$istExtern):
           <?php foreach ($wegKeys as $wk): ?><td class="bx-num"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>><?= !empty($v['leer']) ? '<span class="muted">–</span>' : $zelle($v) ?></td><?php endforeach; ?></tr>
       <?php endforeach; ?>
       <tr><td>Herstellung <span class="muted" style="font-size:12px">kein Satz hinterlegt – nicht gerechnet</span></td><?php foreach ($wegKeys as $wk): ?><td class="bx-num muted"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>>–</td><?php endforeach; ?></tr>
-      <tr style="font-weight:600"><td>Summe je Packung</td><?php foreach ($kalk['wege'] as $wk => $w): ?><td class="bx-num"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>><?= $w['inhalt_summe'] > 0 ? $eur2($w['summe']) : '–' ?><?= !$w['vollstaendig'] ? '<div style="color:var(--warn);font-size:11px;font-weight:400">unvollständig</div>' : '' ?></td><?php endforeach; ?></tr>
+      <tr style="font-weight:600"><td>Summe je Packung</td><?php foreach ($kalk['wege'] as $wk => $w): ?><td class="bx-num"<?= $wk === $kalk['standard'] ? ' style="background:var(--row-hover)"' : '' ?>><?= $w['inhalt_summe'] > 0 ? $eur2($w['summe']) : '–' ?><?= !$w['vollstaendig'] ? '<div style="color:var(--warn);font-size:11px;font-weight:400">' . (!empty($w['unsicher']) ? 'unsicher: Preis abgelaufen' : 'unvollständig') . '</div>' : '' ?></td><?php endforeach; ?></tr>
     </tbody>
   </table></div>
   <p class="muted" style="font-size:12px;margin-top:8px">Staffel nach Menge wie im Auftrag: je Lieferant die größte Staffel, deren Mindestmenge bei <?= $nf0($km) ?> Pkg erreicht ist; darunter gilt die kleinste Staffel (Hinweis Mindestmenge). Fehlt ein Preis, wird nicht mit 0 gerechnet – die Summe ist dann unvollständig. Bisher zeigte die Seite nur Rohstoff-EK am Rohstoff + EK aller Stücklisten-Artikel (ohne Zukauf, ohne Staffel).</p>

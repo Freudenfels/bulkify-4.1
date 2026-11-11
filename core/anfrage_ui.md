@@ -44,3 +44,8 @@ Der Live-Formatter des Mengen-Staffel-Felds (`#bxAnfMenge`, Tausenderpunkte je k
 
 ## Leerkapseln (10.11.2026)
 `lieferanten_fuer_anfrage('leerkapsel')` liefert Lieferanten mit der Kategorie `leerkapsel` oder `rohstoff`. Eine Rohstoff-Anfrage (`'rohstoff'`) bleibt streng. Ein Lieferant, der nur Leerkapseln führt, taucht dort also nicht auf.
+
+## „neu anfragen“ (11.11.2026)
+`bxAnfrageOeffnen(itemId, btn)` liest zusätzlich zwei Angaben vom Knopf:
+- `data-lieferant`: Nur dieser Lieferant ist vorausgewählt, weitere lassen sich dazuwählen.
+- `data-staffel`: Die Mengen werden mit Komma als Staffel ins Mengenfeld geschrieben.

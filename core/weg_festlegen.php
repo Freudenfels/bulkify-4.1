@@ -21,7 +21,7 @@ function beschaffungsweg_karten(int $auftrag_id, string $zurueck = '', bool $pop
     $bwPreis = fn($x) => (float)$x < 1 ? number_format((float)$x, 4, ',', '.') . ' €' : number_format((float)$x, 2, ',', '.') . ' €';
     $bwKost = [];
     foreach ($bw['wege'] as $k => $w) {
-        if ($k === 'rohstoffe') { if (!$w['luecke'] && $w['gesamt'] > 0) $bwKost[$k] = $w['gesamt']; }
+        if ($k === 'rohstoffe') { if (!$w['luecke'] && $w['gesamt'] > 0) $bwKost[$k] = $w['gesamt']; }   // abgelaufen: Summe zählt, steht aber als „unsicher" da
         elseif (!empty($w['angebote'])) $bwKost[$k] = $w['angebote'][0]['gesamt'] + (($w['zusatz']['gesamt'] ?? 0) ?: 0);
     }
     $bwBest = $bwKost ? array_search(min($bwKost), $bwKost, true) : '';
@@ -80,10 +80,10 @@ function beschaffungsweg_karten(int $auftrag_id, string $zurueck = '', bool $pop
         <?php foreach ($w['positionen'] as $ps): ?>
           <tr><td style="white-space:normal"><?= $bwLink($ps) ?></td>
               <td class="bx-num"><?php if ($bwTeil && $ps['voll'] !== null): ?><?= h($bwM($ps['voll'], $ps['einheit'])) ?><div class="muted" style="font-size:11px">Rest <?= h($bwM($ps['menge'], $ps['einheit'])) ?></div><?php else: ?><?= h($bwM($ps['menge'], $ps['einheit'])) ?><?php endif; ?></td>
-              <td class="bx-num"><?= $ps['gesamt'] !== null ? h($bwE($ps['gesamt'])) : '<span class="muted">kein Preis</span>' ?><?php if (!empty($ps['mindest'])): ?><div class="muted" style="font-size:11px">Mindestmenge <?= h($bwM($ps['mindest'], $ps['bezug'] ?? $ps['einheit'])) ?></div><?php endif; ?></td></tr>
+              <td class="bx-num"><?= $ps['gesamt'] !== null ? h($bwE($ps['gesamt'])) : '<span class="muted">kein Preis</span>' ?><?php if (!empty($ps['mindest'])): ?><div class="muted" style="font-size:11px">Mindestmenge <?= h($bwM($ps['mindest'], $ps['bezug'] ?? $ps['einheit'])) ?></div><?php endif; ?><?php if (!empty($ps['abgelaufen'])): ?><div style="font-size:11px;color:#8f231b">Preis abgelaufen seit <?= h(date('d.m.Y', strtotime((string)$ps['abgelaufen']))) ?> - <a href="?p=rohstoff&id=<?= (int)$ps['item_id'] ?>&tab=ek" target="_blank" rel="noopener">neu anfragen</a></div><?php elseif (!empty($ps['gueltig_bis']) && function_exists('pg_anzeige')): ?><div><?= pg_anzeige($ps['gueltig_bis']) ?></div><?php endif; ?></td></tr>
         <?php endforeach; ?>
         </tbody></table>
-        <div style="margin-top:8px"><?= $w['gesamt'] > 0 ? 'Summe ' . h($bwE($w['gesamt'])) . ($bwTeil ? ' <span class="muted" style="font-size:12px">für den Rest</span>' : '') : '' ?><?= $w['luecke'] ? ' <span class="muted" style="font-size:12px">(nicht vollständig: Preise fehlen)</span>' : '' ?></div>
+        <div style="margin-top:8px"><?= $w['gesamt'] > 0 ? 'Summe ' . h($bwE($w['gesamt'])) . ($bwTeil ? ' <span class="muted" style="font-size:12px">für den Rest</span>' : '') : '' ?><?= $w['luecke'] ? ' <span class="muted" style="font-size:12px">(nicht vollständig: Preise fehlen)</span>' : '' ?><?= !empty($w['unsicher']) ? ' <span style="font-size:12px;color:#8f231b">(unsicher: Preis abgelaufen)</span>' : '' ?></div>
         <div class="muted" style="font-size:12px;margin-top:4px">Beschaffung über die Bedarfsliste (meist mehrere Lieferanten).</div>
       <?php else: ?>
         <?php if (!$w['angebote']): ?>

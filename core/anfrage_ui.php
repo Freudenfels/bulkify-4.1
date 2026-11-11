@@ -237,9 +237,14 @@ function bxAnfrageOeffnen(itemId, btn){
   if (mEl) mEl.value = (mv && parseFloat(mv) > 0) ? Math.round(parseFloat(mv)).toLocaleString('de-DE') : '';
   var mLbl = document.getElementById('bxAnfMengeLbl');
   if (mLbl) mLbl.textContent = (mv && parseFloat(mv) > 0 && meinh) ? ('Menge (' + meinh + ')') : 'Menge (optional)';
+  // „neu anfragen" (abgelaufener Preis, 11.11.2026): gleiche Staffel-Mengen und derselbe Lieferant vorbelegt; weitere dazuwählbar.
+  var stf = btn && btn.getAttribute('data-staffel');
+  if (mEl && stf) mEl.value = stf;
+  var lfv = btn && btn.getAttribute('data-lieferant');
+  document.querySelectorAll('#bxAnfrageOverlay input[name="anf_lieferant[]"]').forEach(function(c){ c.checked = !!lfv && c.value === lfv; });
   var name = btn && btn.getAttribute('data-name');
   document.getElementById('bxAnfrageItem').textContent = name
-    ? ('Preis für „' + name + '" – bei welchen Lieferanten anfragen?')
+    ? ((lfv ? 'Neu anfragen: ' : 'Preis für ') + '„' + name + '" – bei welchen Lieferanten anfragen?')
     : 'Bei welchen Lieferanten möchten Sie anfragen?';
   document.getElementById('bxAnfrageOverlay').style.display='flex';
 }
