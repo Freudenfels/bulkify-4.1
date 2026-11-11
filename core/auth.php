@@ -88,6 +88,7 @@ function route_rollen_map(): array {
         'produktion_neu'     => ['admin'],   // Produktion (neu) – im Aufbau, erst nur Admin
         'produktionsauftrag' => ['production', 'labor', 'fulfillment'],
         'produktionsauftrag_pdf' => ['production', 'labor', 'fulfillment'],
+        'chargenprotokoll'   => ['production', 'labor', 'fulfillment'],   // Chargenprotokoll je Unter-Charge (11.11.2026)
         'produktion_run'     => ['production', 'labor', 'fulfillment'],   // geführte Mitarbeiter-Produktion
         'produktion_bericht' => ['production', 'labor', 'fulfillment'],   // Produktionsbericht (Herstellprotokoll)
         'versand'            => ['fulfillment', 'production', 'labor'],

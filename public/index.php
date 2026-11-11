@@ -185,6 +185,7 @@ $routes = [
     'produktion_neu'     => 'produktion/neu.php',       // Produktion (neu): neue Übersicht im Aufbau, ersetzt später die Liste
     'produktionsauftrag' => 'produktion/detail.php',
     'produktionsauftrag_pdf' => 'produktion/pdf.php',   // Laufzettel fürs Werk (Druck/Download)
+    'chargenprotokoll'   => 'produktion/chargenprotokoll.php',   // Chargenprotokoll je Unter-Charge (PDF, 11.11.2026)
     'produktion_run'     => 'produktion/run.php',
     'produktion_bericht' => 'produktion/bericht.php',
     'kalender'           => 'produktion/kalender.php',

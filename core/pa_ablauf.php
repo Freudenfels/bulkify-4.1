@@ -367,3 +367,6 @@ function pa_abschliessen(int $pa_id, string $rest_wahl, string $von): array {
     pa_ereignis($pa_id, null, 'abschluss', $txt, $rest_wahl, '', '', $von);
     return ['ok' => true, 'msg' => $txt, 'abgeschlossen' => true];
 }
+
+// Chargenprotokoll je Unter-Charge (Teil 7)
+require_once __DIR__ . '/pa_protokoll.php';
