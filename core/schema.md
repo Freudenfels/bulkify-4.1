@@ -656,3 +656,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 - **`rezeptur_testdaten_inaktiv_einmal()`:** setzt einmalig RZ-4023, RZ-4033 und RZ-4034 auf inaktiv (app_meta `rz_test_inaktiv_1111`, von Nico ausdrücklich erlaubt).
 
 `item_zusammenfuehren()` ist seit 11.11.2026 nur noch eine Hülle für `artikel_zusammenfuehren_voll()` (eine Logik mit Sperre bei anderer Kapselgröße, Füllgewicht, Material, Einheit, Warenart).
+
+`auftrag_material_loesen()` (11.11.2026): Lief die Zuordnung über eine ganze Bestellposition, wird deren `auftrag_id` beim Lösen zurückgesetzt (wie `auftrag_deckung_loesen()`).

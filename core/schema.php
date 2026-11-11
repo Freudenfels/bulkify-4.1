@@ -8431,9 +8431,14 @@ function auftrag_material_zuordnen(int $auftrag_id, int $item_id, string $quelle
 }
 // Zuordnung (Reservierung) aufheben – nur Reservierungen DIESES Auftrags.
 function auftrag_material_loesen(int $auftrag_id, int $res_id): bool {
-    $r = one("SELECT id, item_id FROM reservierung WHERE id=? AND auftrag_id=? AND status='aktiv'", [$res_id, $auftrag_id]);
+    $r = one("SELECT id, item_id, bestellung_position_id FROM reservierung WHERE id=? AND auftrag_id=? AND status='aktiv'", [$res_id, $auftrag_id]);
     if (!$r) return false;
     q("UPDATE reservierung SET status='storniert' WHERE id=?", [$res_id]);
+    // Block D (11.11.2026, Fable 3.6/5.2b): lief die Zuordnung über eine ganze Bestellposition, nimmt das Lösen auch deren
+    // auftrag_id zurück – wie auftrag_deckung_loesen(). Sonst zählt die Position weiter als „für diesen Auftrag bestellt".
+    $bpL = (int)($r['bestellung_position_id'] ?? 0);
+    if ($bpL && (int) scalar("SELECT COUNT(*) FROM reservierung WHERE bestellung_position_id=? AND auftrag_id=? AND status='aktiv'", [$bpL, $auftrag_id]) === 0)
+        q("UPDATE bestellung_position SET auftrag_id=NULL WHERE id=? AND auftrag_id=? AND item_id IS NOT NULL", [$bpL, $auftrag_id]);
     log_aktivitaet('auftrag', $auftrag_id, 'team', 'Material-Zuordnung aufgehoben (' . (string) scalar("SELECT name FROM item WHERE id=?", [(int)$r['item_id']]) . ').', 'notiz');
     if (function_exists('bedarf_bump')) bedarf_bump();
     return true;
