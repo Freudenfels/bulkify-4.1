@@ -99,6 +99,7 @@ Bearbeitet werden beide an der Bestellung im Block „Wareneingang zuordnen“.
 - **Knöpfe je Bestellung**: als geliefert schließen, Rest storniert, stornieren (nur solange nicht eingegangen), jeweils mit Rückfrage. „Öffnen“ bleibt.
 - Die Knöpfe senden per AJAX (`aktion=dp_abgl`, Antwort JSON aus `bestellung_abgleich_aktion()`); bei Erfolg verschwindet die Zeile, die Meldung steht über der Tabelle. Gleiche Funktionen wie an der Bestellung (`webe_*`, `bestellung_stornieren`), Verknüpfen landet im Änderungsprotokoll (Quelle `datenpruefung`) und im Verlauf der Bestellung.
 - **„Alle eindeutigen verknüpfen (N)“** über der Tabelle: nur Positionen mit genau einem Vorschlag, gleicher Artikel, Menge passt, ohne Konflikt. Vorher Bestätigung mit der Liste der Paare. Der Server prüft jedes Paar erneut (`aktion=dp_abgl_sammel`) und überspringt, was nicht mehr eindeutig ist.
+- **Je Position, nicht je Bestellung** (Fix 11.11.2026, BE-2888): Beide Prüfungen listen eine Bestellung, solange mindestens eine offene Position ohne Charge da ist (`BA_POS_OFFEN`: Menge > 0, nicht Rest-storniert, geliefert < 98 %, keine Charge). Vorher flog eine Bündel-Bestellung nach der ersten Verknüpfung komplett raus. Nach „verknüpfen“ verschwindet nur die Position, die Zeile erst, wenn nichts mehr offen ist (Antwort `offen`).
 
 Weitere Prüfpunkte:
 - **nachträglich angelegte Bestellung prüfen**: Beheben = als geprüft markieren.

@@ -101,12 +101,18 @@ function bestellung_abgleich_panel(array $b): string {
 }
 
 // ---- Datenprüfung: alles in der Zeile (Nico 11.11.2026) ------------------------------------------------------------
+// Offene Position (Alias bp): Menge > 0, nicht Rest-storniert, noch nicht (fast) voll geliefert, keine Charge verknüpft.
+// Je Position, nicht je Bestellung: eine Bündel-Bestellung bleibt in der Datenprüfung, bis jede Position erledigt ist (BE-2888, 11.11.2026).
+if (!defined('BA_POS_OFFEN')) define('BA_POS_OFFEN', "bp.menge>0 AND bp.rest_storniert_am IS NULL AND COALESCE(bp.geliefert_menge,0) < bp.menge*0.98 AND NOT EXISTS (SELECT 1 FROM charge cx WHERE cx.bestellung_position_id=bp.id)");
+function bestellung_abgleich_offen_anzahl(int $bestellung_id): int {
+    return (int) scalar("SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=? AND " . BA_POS_OFFEN, [$bestellung_id]);
+}
 // Offene Positionen einer Bestellung mit ihren Vorschlägen (für die Datenprüfungs-Zeile).
 function bestellung_abgleich_positionen(int $bestellung_id): array {
     $out = [];
     foreach (all("SELECT bp.id, bp.menge, bp.einheit, COALESCE(bp.geliefert_menge,0) AS geliefert, bp.bezeichnung, i.name AS artikel
                   FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
-                  WHERE bp.bestellung_id=? AND bp.menge>0 AND bp.rest_storniert_am IS NULL ORDER BY bp.sort, bp.id", [$bestellung_id]) as $p) {
+                  WHERE bp.bestellung_id=? AND " . BA_POS_OFFEN . " ORDER BY bp.sort, bp.id", [$bestellung_id]) as $p) {
         $p['vorschlaege'] = bestellung_abgleich_vorschlaege((int)$p['id'], 5);
         $out[] = $p;
     }
@@ -133,7 +139,7 @@ function bestellung_abgleich_zelle(array $r, array $konflikte): string {
     $h = ''; $bid = (int)$r['_id']; $nr = (string)$r['nummer'];
     foreach (($r['_pos'] ?? []) as $p) {
         $v = $p['vorschlaege'];
-        $h .= '<div style="margin:0 0 6px"><div style="font-size:13px"><strong style="font-weight:600">' . h((string)($p['artikel'] ?: $p['bezeichnung'])) . '</strong> <span class="muted">· bestellt ' . $mz($p['menge']) . ' ' . h((string)$p['einheit']) . ' · geliefert ' . $mz($p['geliefert']) . '</span></div>';
+        $h .= '<div data-dp-pos="' . (int)$p['id'] . '" style="margin:0 0 6px"><div style="font-size:13px"><strong style="font-weight:600">' . h((string)($p['artikel'] ?: $p['bezeichnung'])) . '</strong> <span class="muted">· bestellt ' . $mz($p['menge']) . ' ' . h((string)$p['einheit']) . ' · geliefert ' . $mz($p['geliefert']) . '</span></div>';
         if (!$v) { $h .= '<div class="muted" style="font-size:12px">keine passende Charge</div></div>'; continue; }
         $gleicheMenge = count($v) > 1 && count(array_unique(array_map(fn($c) => (string)round((float)$c['menge_bp'], 3), $v))) < count($v);
         if ($gleicheMenge) $h .= '<div style="font-size:12px;color:#8a6d1f">mehrere passende Chargen - bitte wählen</div>';
@@ -178,7 +184,8 @@ function bestellung_abgleich_aktion(string $aktion, int $bestellung_id, int $bp_
         aenderung_protokollieren('charge', $charge_id, ['bestellung_position_id' => null], ['bestellung_position_id' => $bp_id], 'datenpruefung');
         $cnr = (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#', id)) FROM charge WHERE id=?", [$charge_id]);
         log_aktivitaet('bestellung', $bestellung_id, 'team', 'Charge ' . $cnr . ' mit der Bestellung verknüpft (Datenprüfung).', 'status');
-        return ['ok' => true, 'msg' => $nr . ': Charge ' . $cnr . ' verknüpft.'];
+        $offen = bestellung_abgleich_offen_anzahl($bestellung_id);
+        return ['ok' => true, 'offen' => $offen, 'msg' => $nr . ': Charge ' . $cnr . ' verknüpft.' . ($offen ? ' Noch ' . $offen . ' Position(en) offen.' : '')];
     }
     if ($aktion === 'geliefert') {
         webe_als_geliefert_schliessen($bestellung_id, $wer);

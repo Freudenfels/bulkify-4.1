@@ -70,15 +70,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dp_ab
 $CHECKS = [
     // Einkauf gerade ziehen, Teil 4 (10.11.2026): Altlasten. Verknüpfen/Schließen passiert an der Bestellung (Block „Wareneingang zuordnen").
     'be_ohne_we' => [
-        'titel' => 'Einkauf: offene Bestellung ohne Wareneingang (mit Vorschlägen)',
-        'info'  => 'Bestellt bzw. gesendet, älter als 14 Tage, an keiner Position hängt eine eingebuchte Charge. Spalte „Vorschläge“ = Positionen, zu denen es eine passende vorhandene Charge gibt (gleicher Lieferant, gleicher oder ähnlicher Artikel, passende Menge, Eingang nach dem Bestelldatum). Öffnen führt zur Bestellung, Block „Wareneingang zuordnen“: verknüpfen, als geliefert schließen oder stornieren – je Position, auch bei Bündel-Bestellungen.',
+        'titel' => 'Einkauf: offene Bestellung, Position ohne Wareneingang (mit Vorschlägen)',
+        'info'  => 'Bestellt bzw. gesendet, älter als 14 Tage, mindestens eine offene Position ohne eingebuchte Charge (je Position, nicht je Bestellung - Bündel-Bestellungen bleiben drin, bis jede Position erledigt ist). Spalte „Vorschläge“ = Positionen, zu denen es eine passende vorhandene Charge gibt (gleicher Lieferant, gleicher oder ähnlicher Artikel, passende Menge, Eingang nach dem Bestelldatum). Öffnen führt zur Bestellung, Block „Wareneingang zuordnen“: verknüpfen, als geliefert schließen oder stornieren – je Position, auch bei Bündel-Bestellungen.',
         'sql'   => "SELECT b.id AS _id, CONCAT('?p=bestellung&id=', b.id, '#abgleich') AS _link, b.nummer, COALESCE(l.firma, b.online_haendler) AS lieferant, b.status, b.station,
                            COALESCE(b.bestelldatum, DATE(b.angelegt)) AS bestellt_am,
                            (SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0) AS positionen
                     FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
                     WHERE b.status IN ('gesendet','bestellt') AND b.angekommen_am IS NULL
                       AND COALESCE(b.bestelldatum, DATE(b.angelegt)) < DATE_SUB(CURDATE(), INTERVAL 14 DAY)
-                      AND NOT EXISTS (SELECT 1 FROM bestellung_position bp JOIN charge c ON c.bestellung_position_id=bp.id WHERE bp.bestellung_id=b.id)
+                      AND EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND " . BA_POS_OFFEN . ")
                     ORDER BY COALESCE(b.bestelldatum, DATE(b.angelegt))",
         // Alles in der Zeile (Nico 11.11.2026): Inhalt, Vorschläge mit „verknüpfen", Knöpfe je Bestellung (AJAX, ohne Neuladen).
         'zeilen' => fn(array $rows): array => dp_abgleich_zeilen($rows),
@@ -87,14 +87,13 @@ $CHECKS = [
         'ohne_fix' => 'Je Vorschlag „verknüpfen“, je Bestellung „als geliefert schließen“, „Rest storniert“ oder „stornieren“ – direkt hier, die Zeile verschwindet danach. „Öffnen“ führt weiter zur Bestellung.',
     ],
     'be_eingegangen_ohne_charge' => [
-        'titel' => 'Einkauf: Bestellung „eingegangen“ ohne verknüpfte Charge',
-        'info'  => 'Status geliefert bzw. angekommen, aber an keiner Position hängt eine eingebuchte Charge (z. B. „Als angekommen markieren“ ohne Einbuchen). Die Ware zählt dann weder als unterwegs noch sicher als Bestand dieser Bestellung. Spalte „Vorschläge“ wie oben. Öffnen → „Wareneingang zuordnen“.',
+        'titel' => 'Einkauf: Bestellung „eingegangen“, Position ohne verknüpfte Charge',
+        'info'  => 'Status geliefert bzw. angekommen, aber mindestens eine offene Position ohne eingebuchte Charge (je Position: die Bestellung bleibt drin, bis jede Position verknüpft, als geliefert geschlossen oder storniert ist) (z. B. „Als angekommen markieren“ ohne Einbuchen). Die Ware zählt dann weder als unterwegs noch sicher als Bestand dieser Bestellung. Spalte „Vorschläge“ wie oben. Öffnen → „Wareneingang zuordnen“.',
         'sql'   => "SELECT b.id AS _id, CONCAT('?p=bestellung&id=', b.id, '#abgleich') AS _link, b.nummer, COALESCE(l.firma, b.online_haendler) AS lieferant, b.status, b.angekommen_am,
                            (SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0) AS positionen
                     FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
                     WHERE (b.status='geliefert' OR b.angekommen_am IS NOT NULL) AND b.status<>'storniert' AND b.nachtraeglich_grund IS NULL
-                      AND EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0 AND bp.rest_storniert_am IS NULL)
-                      AND NOT EXISTS (SELECT 1 FROM bestellung_position bp JOIN charge c ON c.bestellung_position_id=bp.id WHERE bp.bestellung_id=b.id)
+                      AND EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND " . BA_POS_OFFEN . ")
                     ORDER BY b.id DESC",
         // Alles in der Zeile (Nico 11.11.2026): Inhalt, Vorschläge mit „verknüpfen", Knöpfe je Bestellung (AJAX, ohne Neuladen).
         'zeilen' => fn(array $rows): array => dp_abgleich_zeilen($rows),
@@ -1303,7 +1302,12 @@ document.addEventListener('click', function (e) {
   fetch('?p=datenpruefung', {method: 'POST', body: fd, credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (j) {
     var pan = tr ? tr.closest('.bx-panel') : null, msg = pan ? pan.querySelector('[id^="dpMsg-"]') : null;
     if (msg) { msg.textContent = j.msg || ''; msg.style.color = j.ok ? 'var(--gruen)' : '#8f231b'; }
-    if (j.ok && tr) tr.remove(); else { b.disabled = false; if (!msg) alert(j.msg || 'Fehler'); }
+    if (j.ok && tr) {
+      var pd = b.closest('[data-dp-pos]');
+      if (b.dataset.dpabgl === 'verknuepfen' && j.offen > 0 && pd) {   // weitere Positionen offen: nur diese Position ausblenden
+        pd.innerHTML = '<div style="font-size:12px;color:var(--gruen)">' + (j.msg || 'verknüpft') + '</div>';
+      } else tr.remove();
+    } else { b.disabled = false; if (!msg) alert(j.msg || 'Fehler'); }
   }).catch(function () { b.disabled = false; alert('Fehler beim Speichern - bitte Seite neu laden.'); });
 });
 </script>

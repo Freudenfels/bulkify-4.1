@@ -21,4 +21,5 @@
 - `bestellung_abgleich_eindeutig($pos, $konflikte)`: der eine Vorschlag, wenn genau einer, gleicher Artikel, Menge passt, kein Konflikt; sonst null. Grundlage für „Alle eindeutigen verknüpfen“.
 - `bestellung_abgleich_zelle()`, `bestellung_abgleich_knoepfe()`, `bestellung_abgleich_inhalt()`: HTML der Spalten Vorschläge, Knöpfe, Inhalt.
 - `bestellung_abgleich_aktion($aktion, $bid, $bp, $charge)`: verknuepfen / geliefert / rest / storno, Rückgabe `['ok','msg']`. Verknüpfen nur, wenn die Position zur Bestellung gehört und die Charge noch frei ist.
+- `BA_POS_OFFEN` (SQL-Bedingung, Alias `bp`) und `bestellung_abgleich_offen_anzahl($bid)`: offene Position = Menge > 0, nicht Rest-storniert, geliefert < 98 %, keine Charge. Gilt für die Datenprüfung und `bestellung_abgleich_positionen()`; „verknuepfen“ liefert zusätzlich `offen`.
 
