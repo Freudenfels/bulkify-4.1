@@ -27,6 +27,8 @@ function inv_diff_setzen(array $inv, array $d): int {
     $alt = one("SELECT id, status FROM lg_inventur_diff WHERE inventur_id=? AND obj=? AND gebinde_id=? AND charge_id=? AND art" . ($d['art'] === 'falscher_platz' ? "='falscher_platz'" : "<>'falscher_platz'") . ($d['obj'] === 'k' ? " AND zaehlung_id=?" : "") . " ORDER BY id DESC LIMIT 1",
                array_merge([(int)$inv['id'], $d['obj'], (int)$d['gebinde_id'], (int)$d['charge_id']], $d['obj'] === 'k' ? [(int)$d['zaehlung_id']] : []));
     if ($alt && in_array((string)$alt['status'], ['gebucht', 'offen_gelassen'], true)) return (int)$alt['id'];
+    // Angestoßene Nachzählung bleibt stehen, bis die zweite Person gezählt hat (inv_nachzaehlung_uebernehmen setzt vorher 'offen').
+    if ($alt && (string)$alt['status'] === 'nachzaehlen') return (int)$alt['id'];
     $f = ['bereich_id', 'zaehlung_id', 'obj', 'gebinde_id', 'charge_id', 'item_id', 'art', 'soll', 'soll_einheit', 'ist', 'einheit', 'diff', 'diff_prozent', 'wert_eur', 'soll_ort', 'ist_ort', 'status', 'erster_zaehler', 'notiz'];
     $v = array_map(fn($k) => $d[$k] ?? null, $f);
     if ($alt) { q("UPDATE lg_inventur_diff SET " . implode(',', array_map(fn($k) => "$k=?", $f)) . " WHERE id=?", array_merge($v, [(int)$alt['id']])); return (int)$alt['id']; }
