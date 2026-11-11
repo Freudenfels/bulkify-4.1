@@ -6,6 +6,7 @@
 require_once BX_ROOT . '/module/lieferant/portal_layout.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" je Preis (11.11.2026)
+require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Kennzeichen „Unterlagen fehlen“ (Paket 12.11.2026 Teil 4)
 require_once BX_ROOT . '/core/fertig_anfrage.php';  // Zusammensetzung in der Zeile; nur angefragte Rezepturen (11.11.2026)
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
@@ -195,6 +196,7 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
           <?php if (($r['preis_vorschlag'] ?? null) !== null && (float)$r['preis_vorschlag'] > 0): ?>
             <div class="muted" style="font-size:11px;margin-top:4px;color:var(--gruen)"><?= h(lp_t('vorschlag_offen')) ?>: <?= h($num($r['preis_vorschlag'])) ?> €</div>
           <?php endif; ?>
+          <?php if (($r['preis'] ?? null) !== null && ($luB = lu_badge($lid, 0, (int)$r['rezeptur_id'], $spr)) !== ''): ?><div style="margin-top:4px"><?= $luB ?> <a href="?p=lieferant_unterlagen" style="font-size:12px"><?= h(lp_t('unterlagen_menu')) ?></a></div><?php endif; ?>
         </td>
         <td><input type="hidden" form="rpForm" name="gueltig_vorher[<?= (int)$r['id'] ?>]" value="<?= h((string)($r['gueltig_bis'] ?? '')) ?>">
             <input type="date" form="rpForm" class="rp-preis" name="gueltig[<?= (int)$r['id'] ?>]" value="<?= h((string)($r['gueltig_bis'] ?? '')) ?>" style="width:auto">

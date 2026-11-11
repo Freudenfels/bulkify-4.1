@@ -108,3 +108,6 @@ Der Block „warten auf die Festlegung des Wegs“ zeigt je Auftrag Links zu Auf
 **Doppelbestellung (11.11.2026):** Vor dem Anlegen prüft `core/bestellung_doppelt.php` offene Bestellungen desselben Artikels bzw. Auftrags. Treffer: Pop-up mit Link, weiter nur mit „Trotzdem bestellen“ (steht im Verlauf).
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+Fehlen Unterlagen des Lieferanten, wird die Bestellung nur als Entwurf angelegt (nicht gesendet, keine Mail); Hinweis mit Links. Gilt auch für „Vorsorglich“ und „Direkt bestellt“.

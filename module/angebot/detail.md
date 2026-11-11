@@ -223,3 +223,6 @@ Steht dort „unter MOQ“, ist das nur ein Hinweis und keine Sperre.
 - Ein abgelaufenes, gesendetes Angebot zeigt den Knopf „Verlängern bis …“ (`aktion=angebot_verlaengern`).
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+Rohstoffkosten: Kennzeichen „Unterlagen fehlen“ beim gewählten Lieferanten (kalkulieren erlaubt, bestellen erst mit Unterlagen).

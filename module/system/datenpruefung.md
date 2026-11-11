@@ -158,3 +158,6 @@ Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführ
 **Etikett (Block E, 11.11.2026, beide nur auf Klick)**
 - **etikett_ersatz_blockiert:** offene/laufende PAs mit offenem „Etikettieren“, deren Kundenetikett nicht reicht. Spalte „heute“: lief bisher still über das generische Ersatz-Etikett. Seit Block E Teil 2 sind diese PAs beim Etikettieren blockiert. Nur Anzeige.
 - **etikett_update_noetig:** offene Aufträge ohne aktuelles Kundenetikett mit Design (generisch/fremd/ohne Design). Der Knopf „Update-Etikett erzeugen“ (nur mit freigegebenem Design) ruft `kundenetikett_nach_freigabe()` + `auftrag_kundenetikett_sicherstellen()` auf. Ergebnis: neue Version aus dem Design, Maß aus der TrimBox, gebunden an Produkt + Kunde und Auftrag. Sonst steht „Design fehlt“.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+„Rohstoff angefragt ohne Dokument“: Knöpfe in der Zeile – Unterlage hochladen (CoA/Spec) oder bei allen angefragten Lieferanten über das Portal anfordern.

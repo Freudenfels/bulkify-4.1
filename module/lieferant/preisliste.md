@@ -32,3 +32,6 @@ Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache de
 ## Preis schwankt (11.11.2026)
 - Der Knopf „Preis aktualisieren“ trägt `data-pg` (Vorbelegung). Das Feld wird vorbelegt und ist dann Pflicht.
 - Der Server prüft zusätzlich und speichert ohne Datum nichts.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+Kennzeichen „Unterlagen fehlen“ am Preis mit Link auf „Fehlende Unterlagen“.

@@ -60,12 +60,12 @@ function lieferant_unterlage_speichern(int $lieferant_id, string $file_key, stri
     $fn = 'lief_' . $lieferant_id . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
     if (!move_uploaded_file($_FILES[$file_key]['tmp_name'], BX_UPLOADS . '/' . $fn)) return 0;
     $typ = in_array($typ, ['coa', 'spec'], true) ? $typ : 'spec';
-    $objekt_typ = $objekt_typ === 'item' ? 'item' : 'lieferant';
-    $oid = $objekt_typ === 'item' ? $objekt_id : $lieferant_id;
+    $objekt_typ = in_array($objekt_typ, ['item', 'rezeptur'], true) ? $objekt_typ : 'lieferant';   // rezeptur: Spezifikation des Gesamtprodukts (Paket 12.11.2026)
+    $oid = $objekt_typ !== 'lieferant' ? $objekt_id : $lieferant_id;
     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von) VALUES (?,?,?,?,?,?,?,0,'lieferant')",
       [$objekt_typ, $oid, $typ, $lieferant_id, ($titel !== '' ? mb_substr($titel, 0, 190) : null), $fn, mb_substr($orig, 0, 255)]);
     $did = (int) insert_id();
-    log_aktivitaet($objekt_typ === 'item' ? 'item' : 'lieferant', $oid, 'lieferant', strtoupper($typ) . ' vom Lieferanten mit dem Preisangebot hochgeladen.', 'dokument', 'dokument', $did);
+    log_aktivitaet($objekt_typ === 'item' ? 'item' : ($objekt_typ === 'rezeptur' ? 'rezeptur' : 'lieferant'), $oid, 'lieferant', strtoupper($typ) . ' vom Lieferanten mit dem Preisangebot hochgeladen.', 'dokument', 'dokument', $did);
     return $did;
 }
 
@@ -74,7 +74,7 @@ function lieferant_unterlage_speichern(int $lieferant_id, string $file_key, stri
 function lieferant_dateien(int $lieferant_id): array {
     return all("SELECT d.*, i.name AS item_name
                 FROM dokument d LEFT JOIN item i ON (d.objekt_typ='item' AND i.id=d.objekt_id)
-                WHERE (d.objekt_typ='lieferant' AND d.objekt_id=?) OR (d.objekt_typ='item' AND d.lieferant_id=?)
+                WHERE (d.objekt_typ='lieferant' AND d.objekt_id=?) OR (d.objekt_typ IN ('item','rezeptur') AND d.lieferant_id=?)
                 ORDER BY d.id DESC", [$lieferant_id, $lieferant_id]);
 }
 
@@ -84,7 +84,7 @@ function lieferant_darf_datei(int $lieferant_id, int $dok_id): ?array {
     if ($lieferant_id <= 0 || $dok_id <= 0) return null;
     return one("SELECT * FROM dokument WHERE id=? AND (
                    (objekt_typ='lieferant' AND objekt_id=?)
-                OR (objekt_typ='item' AND lieferant_id=?)
+                OR (objekt_typ IN ('item','rezeptur') AND lieferant_id=?)
                 OR (objekt_typ='nachricht' AND lieferant_id=?)
                 OR (objekt_typ='bestellung' AND lieferant_id=? AND objekt_id IN (SELECT id FROM bestellung WHERE lieferant_id=?)))",
                [$dok_id, $lieferant_id, $lieferant_id, $lieferant_id, $lieferant_id, $lieferant_id]);

@@ -4,6 +4,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/bestellung_doppelt.php';
+require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Paket 12.11.2026 Teil 4: Bestellen erst mit Unterlagen
 
 // Warnung bei Doppelbestellung (Sofortfix 11.11.2026): vor „Vorsorglich" und „Bestellen" (alle drei Modi) die offenen
 // Bestellungen der gewählten Artikel bzw. Bulk-Produkte prüfen. Treffer ohne Bestätigung -> Pop-up, nichts wird angelegt.
@@ -63,6 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
     if ($iid > 0 && $menge > 0 && scalar("SELECT id FROM item WHERE id=?", [$iid])) {
         $bid = bestellung_erstellen([['item_id'=>$iid, 'menge'=>$menge, 'auftrag_id'=>0]], [], $sup, date('Y-m-d'));
         if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
+        if ($bid && !$online && ($luS = lu_bestellen_sperre($bid)) !== '') {   // Unterlagen fehlen: nur Entwurf, nicht senden
+            header('Location: ?p=bestellung&id=' . $bid . '&fehler=' . urlencode('Als Entwurf angelegt, nicht gesendet. ' . $luS) . '#unterlagen'); exit;
+        }
         if ($bid) {
             if ($direkt) {
                 bestellung_direkt_abschliessen($bid, (string)($_POST['di_datum'] ?? ''), (string)($_POST['di_eta'] ?? ''), trim('Vorsorglich · ' . trim((string)($_POST['di_notiz'] ?? '')), ' ·'));
@@ -171,7 +175,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
           [$onHaendler, $onZahlart ?: null, $onPreis > 0 ? $onPreis : null, $onWaehr, $notiz, $bid]);
     };
     // Lieferanten-Weg: an den Account gesendet (wartet auf Bestätigung) + Mail. Direkt-Weg: bestellt + bestätigt, KEINE Mail.
-    $finalLief = function(int $bid) use ($direkt, $datum) {
+    $luEntwurf = [];
+    $finalLief = function(int $bid) use ($direkt, $datum, &$luEntwurf) {
+        // Paket 12.11.2026 Teil 4: fehlen Unterlagen des Lieferanten, bleibt die Bestellung Entwurf (nicht gesendet).
+        if (lu_bestellen_sperre($bid) !== '') { $luEntwurf[] = $bid; return; }
         if ($direkt) { bestellung_direkt_abschliessen($bid, (string)$datum, (string)($_POST['di_eta'] ?? ''), trim((string)($_POST['di_notiz'] ?? ''))); return; }
         q("UPDATE bestellung SET bestellart='lieferant', status='gesendet' WHERE id=?", [$bid]);   // Notiz bleibt; „wartet auf Bestätigung" zeigt die Statuskette
         if (mail_bereit()) mail_lieferant_bestellung($bid);
@@ -199,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
             $n++; $finalLief($bid); bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         }
     }
-    header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal : '')); exit;
+    header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal : '') . ($luEntwurf ? '&lu_entwurf=' . implode(',', $luEntwurf) : '')); exit;
 }
 
 $aggAlle = bedarf_aggregiert(false);
@@ -299,6 +306,14 @@ render_header('einkaufsliste', 'Bestellen');
 bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von drei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung), „Direkt bestellt" (Telefon/Mail – sofort bestellt und bestätigt, keine Mail) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Alles landet unter „Bestellt".',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (Händler gespeichert, Preis falls angegeben)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : 'Lieferant ohne aktiven Account/Preis. Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
+if (!empty($_GET['lu_entwurf'])) {   // Paket 12.11.2026 Teil 4: nicht gesendet, weil Unterlagen des Lieferanten fehlen
+    $luL = [];
+    foreach (array_filter(array_map('intval', explode(',', (string)$_GET['lu_entwurf']))) as $luB) {
+        $luNr = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$luB]);
+        if ($luNr !== '') $luL[] = '<a href="?p=bestellung&id=' . $luB . '#unterlagen">' . h($luNr) . '</a>';
+    }
+    if ($luL) echo '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px">Nicht gesendet, nur als Entwurf angelegt – Unterlagen des Lieferanten fehlen: ' . implode(', ', $luL) . '. Die Liste der fehlenden Unterlagen steht an der Bestellung; der Lieferant sieht sie im Portal.</div>';
+}
 if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Online bestellt" fehlt Händler/Quelle. Bitte die Positionen erneut anhaken und den Händler angeben.</div>';
 if (isset($_GET['vorsorgportal'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Dieser Lieferant hat keinen aktiven Account oder keinen Preis – über das Portal nicht bestellbar. Bitte „Direkt bestellt (Telefon/Mail)" oder „Online bestellt" nutzen.</div>';
 if (isset($_GET['direktfehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Direkt bestellt" bitte einen Lieferanten wählen.</div>';

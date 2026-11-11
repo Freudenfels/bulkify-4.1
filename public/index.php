@@ -113,6 +113,7 @@ $routes = [
     'lieferant_logo'         => 'lieferant/logo.php',
     'lieferant_nachrichten'  => 'lieferant/nachrichten.php',
     'lieferant_dateien'      => 'lieferant/dateien.php',
+    'lieferant_unterlagen'   => 'lieferant/unterlagen.php',   // Paket 12.11.2026 Teil 4: Aufgabenliste fehlende Unterlagen
     'lieferant_katalog'      => 'lieferant/katalog.php',
     'lieferant_hilfe'        => 'lieferant/hilfe.php',
     'lieferant_ueber'        => 'lieferant/ueber_uns.php',   // Portal „Über uns" (wer ist bulkify, Vision)

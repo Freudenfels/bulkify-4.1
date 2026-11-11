@@ -67,6 +67,7 @@ foreach ($posRows as $r) {
         $best[$bid]['bulk_basis'][mb_strtolower($basisName((string)$r['produkt']))] = true;
 }
 $rows = array_values($best);
+require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Kennzeichen „Unterlagen fehlen“ (Paket 12.11.2026 Teil 4)
 
 if ($q !== '') {
     $needle = mb_strtolower($q);
@@ -109,7 +110,10 @@ $cols = [
     'nummer'          => ['label'=>'Bestellung', 'sort'=>true, 'render'=>function($r) {
         $nr = '<a href="?p=bestellung&id=' . (int)$r['id'] . '" onclick="event.stopPropagation()">' . h((string)$r['nummer']) . '</a>';   // Teil 8
         $n  = count($r['bulk_basis']);
-        return $nr . ($n >= 2 ? ' ' . bx_badge('Bündel: ' . $n . ' Produkte', 'warn') : '');
+        // Paket 12.11.2026 Teil 4: offene Bestellung, aber Unterlagen des Lieferanten fehlen (Liste an der Bestellung).
+        $luF = (!in_array((string)$r['status'], ['geliefert', 'storniert'], true) && (int)($r['lieferant_id'] ?? 0) > 0) ? lu_bestellung_fehlt((int)$r['id']) : [];
+        return $nr . ($n >= 2 ? ' ' . bx_badge('Bündel: ' . $n . ' Produkte', 'warn') : '')
+             . ($luF ? ' <a href="?p=bestellung&id=' . (int)$r['id'] . '#unterlagen" onclick="event.stopPropagation()" title="' . h(lu_liste_text($luF)) . '">' . bx_badge('Unterlagen fehlen', 'warn') . '</a>' : '');
     }],
     'auftrag'         => ['label'=>'Auftrag', 'render'=>fn($r)=> $r['auftraege'] ? implode(', ', array_map(fn($aid, $anr) => '<a href="?p=auftrag&id=' . (int)$aid . '" onclick="event.stopPropagation()">' . h($anr !== '' ? $anr : '#' . $aid) . '</a>', array_keys($r['auftraege']), $r['auftraege'])) : '<span class="muted">Lager</span>'],
     'lieferant_firma' => ['label'=>'Lieferant', 'sort'=>true, 'render'=>fn($r)=> $r['lieferant_firma'] !== '' ? h($r['lieferant_firma']) : '<span class="muted">extern</span>'],

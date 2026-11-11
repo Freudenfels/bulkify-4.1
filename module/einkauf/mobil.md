@@ -16,3 +16,6 @@ Beides sind **dieselben Aktionen wie auf der Detailseite** (`einkauf/detail.php`
 
 ## 10.11.2026
 „Geliefert“ öffnet den Wareneingang mit der Position (`?p=wareneingang&bp=…`). Ein pauschales Einbuchen ohne Charge/MHD gibt es nicht mehr.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+„bestellt“ erst mit vollständigen Unterlagen.

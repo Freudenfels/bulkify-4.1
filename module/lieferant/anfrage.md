@@ -86,3 +86,6 @@ Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache de
 - **Angefragter Artikel schwankt:** Oben steht der Hinweis „Preis schwankt - bitte Gültigkeit angeben“. Das Feld ist vorbelegt und Pflicht, ohne Datum wird nicht gespeichert.
 - **Rezeptur, Premix oder Bulk mit schwankendem Rohstoff:** nur der Hinweis mit Namen.
 Siehe `pg_anfrage_schwankung()`.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+CoA/Spec je Rohstoff ist keine Pflicht mehr: der Preis wird immer gespeichert und trägt sonst das Kennzeichen „Unterlagen fehlen“. Neu: Zeile „Spezifikation des Gesamtprodukts“ (Fremdfertigung/Premix/Bulk), Liste „Diese Unterlagen fehlen noch“ mit Upload in der Zeile, Kennzeichen in der Anfrage-Liste. Siehe core/lieferant_unterlagen.md.

@@ -1136,12 +1136,13 @@ if (!$neu):
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Rohstoff</th><th class="bx-num">Ben&ouml;tigt</th><th class="bx-num">EK / Einheit</th><th>Lieferant</th><th class="bx-num">Kosten</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      <?php foreach ($rk['zeilen'] as $z): ?>
+      <?php require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Paket 12.11.2026 Teil 4: Hinweis „Unterlagen fehlen“ (kalkulieren erlaubt, bestellen erst mit Unterlagen)
+      foreach ($rk['zeilen'] as $z): ?>
         <tr>
           <td><a href="?p=rohstoff&id=<?= (int)$z['item_id'] ?>"><?= h($z['name']) ?></a></td>
           <td class="bx-num"><?= h($nfrk($z['bedarf'], $z['bedarf'] < 1 ? 3 : 1)) ?> <?= h($z['bezug']) ?></td>
           <td class="bx-num"><?= $z['ek'] !== null ? h($nfrk($z['ek'], 4)) . ' &euro;' : '<span style="color:#8f231b">&ndash;</span>' ?></td>
-          <td><?= $z['lieferant'] !== '' ? h($z['lieferant']) : '<span class="muted">&ndash;</span>' ?></td>
+          <td><?= $z['lieferant'] !== '' ? h($z['lieferant']) . (!empty($z['lieferant_id']) ? lu_badge((int)$z['lieferant_id'], (int)$z['item_id']) : '') : '<span class="muted">&ndash;</span>' ?></td>
           <td class="bx-num"><?= $z['kosten'] !== null ? h($nfrk($z['kosten'])) . ' &euro;' : '<span class="muted">?</span>' ?></td>
           <td><?= !empty($z['abgelaufen']) ? '<span style="color:#8f231b;font-size:12px">Preis abgelaufen seit ' . h(date('d.m.Y', strtotime((string)$z['abgelaufen']))) . ' - neu anfragen</span>'
                   : ((($z['ek_quelle'] ?? '') === 'ek' ? bx_badge('EK am Rohstoff', 'info') : anfrage_badge((int)$z['item_id']))

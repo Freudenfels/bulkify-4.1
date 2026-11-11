@@ -11,6 +11,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id     = (int)($_POST['id'] ?? 0);
     $st     = $id ? (string) scalar("SELECT status FROM bestellung WHERE id=?", [$id]) : '';
     if ($id && $aktion === 'bestellt' && $st === 'offen') {
+        require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Paket 12.11.2026 Teil 4: erst mit Unterlagen
+        if (($luS = lu_bestellen_sperre($id)) !== '') { header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode($luS) . '#unterlagen'); exit; }
         q("UPDATE bestellung SET status='bestellt', bestelldatum=COALESCE(bestelldatum, CURDATE()) WHERE id=?", [$id]);
         if (function_exists('mail_bereit') && mail_bereit() && function_exists('mail_lieferant_bestellung')) mail_lieferant_bestellung($id);
         header('Location: ?p=einkauf_mobil&ok=bestellt#b' . $id); exit;

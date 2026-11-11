@@ -566,3 +566,31 @@ function bch_coa_dialoge(array $b): string {
         . '})();</script>';
     return $o;
 }
+
+// Paket 12.11.2026 Teil 4: „versendet“ nur mit CoA je Charge. Gilt für Fremdfertigung, Premix und Bulk sowie für Rohstoffe
+// (CoA der Rohstoff-Charge); Verpackung, Etiketten und Verbrauchsmaterial brauchen keine CoA. Rückgabe: Liste offener Punkte
+// in der gewünschten Sprache ([] = alles da). Eine Charge ohne eigene Chargen-Zeile zählt als fehlend.
+function bestellung_versand_coa_fehlt(int $bestellung_id, string $sprache = 'de'): array {
+    require_once __DIR__ . '/charge_norm.php';
+    $t = bch_t($sprache);
+    $out = [];
+    foreach (bch_positionen($bestellung_id) as $p) {
+        $kat = (string)($p['kategorie'] ?? '');
+        $bp  = one("SELECT item_id, auftrag_id, bezeichnung FROM bestellung_position WHERE id=?", [(int)$p['id']]);
+        $bulkOhneArtikel = empty($bp['item_id']) && preg_match('/^(Bulk|Premix):/u', (string)($bp['bezeichnung'] ?? ''));
+        if (!in_array($kat, ['rohstoff', 'fertig'], true) && !$bulkOhneArtikel) continue;
+        $zeilen = bch_zeilen((int)$p['id']);
+        $coas = array_values(array_filter(bch_dokumente($bestellung_id, (int)$p['id']), fn($d) => (string)$d['typ'] === 'coa'));
+        if (!$zeilen) { $out[] = $p['name'] . ': ' . $t('Charge und CoA fehlen', 'batch and CoA missing', '缺少批号和 CoA'); continue; }
+        foreach ($zeilen as $z) {
+            $nr = (string)$z['charge_nr'];
+            $hat = false;
+            foreach ($coas as $d) {
+                $dn = trim((string)($d['charge_nr'] ?? ''));
+                if (($dn !== '' && charge_gleich($dn, $nr)) || ($dn === '' && count($zeilen) === 1)) { $hat = true; break; }
+            }
+            if (!$hat) $out[] = $p['name'] . ' · ' . $t('Charge', 'batch', '批号') . ' ' . $nr . ': ' . $t('CoA fehlt', 'CoA missing', '缺少 CoA');
+        }
+    }
+    return $out;
+}

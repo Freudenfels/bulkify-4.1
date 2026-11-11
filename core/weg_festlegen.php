@@ -91,7 +91,7 @@ function beschaffungsweg_karten(int $auftrag_id, string $zurueck = '', bool $pop
         <?php else: ?>
           <table class="bx-table" style="font-size:13px"><tbody>
           <?php foreach ($w['angebote'] as $ag): ?>
-            <tr><td style="white-space:normal"><?= h($ag['lieferant']) ?></td><td class="bx-num"><?= h($bwPreis($ag['preis'])) ?>/<?= h($w['einheit']) ?></td><td class="bx-num"><?= h($bwE($ag['gesamt'])) ?></td>
+            <tr><td style="white-space:normal"><?= h($ag['lieferant']) ?><?php if (is_file(BX_ROOT . '/core/lieferant_unterlagen.php')) { require_once BX_ROOT . '/core/lieferant_unterlagen.php'; echo lu_badge((int)($ag['lieferant_id'] ?? 0), $k === 'premix' ? rezeptur_premixitem((int)$bw['rezeptur_id'], false) : 0, $k === 'premix' ? 0 : (int)$bw['rezeptur_id']); } ?></td><td class="bx-num"><?= h($bwPreis($ag['preis'])) ?>/<?= h($w['einheit']) ?></td><td class="bx-num"><?= h($bwE($ag['gesamt'])) ?></td>
               <td style="text-align:right"><?php if ($ist && $bwAdmin && $w['menge'] > 0.0001): ?>
                 <form method="post" action="<?= h($bwAct) ?>" style="margin:0" onsubmit="return confirm('Bestellung bei <?= h(addslashes($ag['lieferant'])) ?> als Entwurf anlegen (<?= h($bwM($w['menge'], $w['einheit'])) ?>)?')">
                   <input type="hidden" name="aktion" value="beschaffung_bestellen"><?= $bwZur ?><input type="hidden" name="weg" value="<?= h($k) ?>"><input type="hidden" name="lieferant_id" value="<?= (int)$ag['lieferant_id'] ?>">

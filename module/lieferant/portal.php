@@ -16,6 +16,13 @@ lp_shell_start('lieferant_portal');
 ?>
 <h1 style="margin-bottom:4px"><?= h(lp_t('willkommen')) ?>, <?= h($lf['ansprechpartner'] ?: $lf['firma']) ?></h1>
 <p class="bx-sub"><?= h(lp_t('portal')) ?> · <?= h($lf['firma']) ?></p>
+<?php require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Paket 12.11.2026 Teil 4: Hinweis auf fehlende Unterlagen
+  $luN = count(lu_offen_lieferant((int)$lf['id']));
+  if ($luN > 0): ?>
+  <div class="bx-panel" style="border-left:3px solid var(--warn);padding:10px 14px;margin:12px 0;max-width:760px">
+    <?= h(['de' => 'Es fehlen noch Unterlagen (' . $luN . '). Ohne sie können wir nicht bestellen.', 'en' => 'Documents are still missing (' . $luN . '). We cannot order without them.', 'zh' => '仍缺少文件（' . $luN . '）。缺少文件我们无法下单。'][lp_sprache()] ?? '') ?>
+    <a href="?p=lieferant_unterlagen"><?= h(lp_t('unterlagen_menu')) ?></a></div>
+<?php endif; ?>
 
 <div class="pt-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:16px 0;max-width:760px">
   <div class="bx-panel" style="margin:0"><div class="muted" style="font-size:12px"><?= h(lp_t('offene_best')) ?></div>

@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/module/lieferant/portal_layout.php';
 require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" am Angebot (11.11.2026)
 require_once BX_ROOT . '/core/dokument_ui.php';
+require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Paket 12.11.2026 Teil 4: Preis ohne Unterlagen, Kennzeichen, Aufgabenliste
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid = aktueller_lieferant_id();
@@ -48,19 +49,11 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aktion === 'angebot' && $angGesperrt) {
         $fehler = lp_t('angebot_gesperrt');
     } elseif ($aktion === 'angebot') {
-        // CoA/Spezifikation ist je EINGESETZTEM Rohstoff Pflicht (nicht eine Unterlage fürs Produkt).
-        // Der Preis wird nur gespeichert, wenn zu JEDEM Rohstoff etwas vorliegt – schon am Rohstoff
-        // hinterlegt ODER jetzt mitgeschickt. CoA oder Spec, eins genügt.
+        // CoA/Spezifikation je EINGESETZTEM Rohstoff (CoA oder Spec, eins genügt) – seit 12.11.2026 (Entscheidung Nico)
+        // KEINE Pflicht mehr beim Preis: der Preis wird immer gespeichert und trägt sonst das Kennzeichen „Unterlagen fehlen“
+        // (core/lieferant_unterlagen.php). Bestellen geht erst mit vollständigen Unterlagen.
         $pflicht = lief_anfrage_pflicht_rohstoffe($a);
-        $fehlend = [];
-        foreach ($pflicht as $iid => $info) {
-            $fk  = 'rohstoff_datei_' . $iid;
-            $neu = !empty($_FILES[$fk]['name']) && ($_FILES[$fk]['error'] ?? 1) === UPLOAD_ERR_OK;
-            if (!$info['hat_dok'] && !$neu) $fehlend[] = $info['name'];
-        }
-        if ($fehlend) {
-            $fehler = lp_t('roh_unterlage_fehlt') . ' ' . implode(', ', $fehlend);
-        } elseif ($pgSchw['pflicht'] && !pg_lesen((string)($_POST['gueltig_bis'] ?? ''))) {
+        if ($pgSchw['pflicht'] && !pg_lesen((string)($_POST['gueltig_bis'] ?? ''))) {
             $fehler = ['de' => 'Bitte angeben, wie lange Ihr Preis gilt (Preis gültig bis).', 'en' => 'Please state how long your price is valid (price valid until).', 'zh' => '请注明您的价格有效期（价格有效期至）。'][lp_sprache()] ?? 'Please state how long your price is valid.';
         } else {
             // Die erste Zeile ist der Hauptpreis mit der Menge, für die er gilt – sie zählt als
@@ -103,6 +96,9 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($fehler === '') {
                 require_once BX_ROOT . '/core/lieferant_dateien.php';
                 $unterlagen = [];
+                // Spezifikation des Gesamtprodukts (Fremdfertigung/Premix/Bulk) – am Lieferanten und der Rezeptur.
+                $luRez = (int)($a['rezeptur_id'] ?? 0) ?: lu_item_rezeptur((int)($a['item_id'] ?? 0));
+                if ($luRez > 0) { $did = lu_upload($lid, 'produkt_spec_datei', 'produkt', 0, $luRez, 'spec'); if ($did) $unterlagen[] = ['did' => $did, 'item' => 0]; }
                 if ($pflicht) {
                     foreach ($pflicht as $iid => $info) {
                         $fk = 'rohstoff_datei_' . $iid;
@@ -127,6 +123,11 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($aktion === 'lu_upload') {   // Aufgabenliste „Diese Unterlagen fehlen noch“: Upload in der Zeile
+        $r = lu_upload_post($lid);
+        header('Location: ?p=lieferant_anfrage&id=' . $id . ($r['ok'] ? '&ok=1&unterlagen=1' : '&fehler=' . urlencode(lp_t('datei_fehler'))));
+        lu_upload_nachlauf((int)$r['did']);
+        exit;
     } elseif ($aktion === 'nachricht') {
         $fehler = nachricht_post_verarbeiten($lid, 'lieferant', (string)(current_user()['name'] ?? 'Lieferant'), 'lieferant_anfrage', $id, lp_sprache());
     } elseif ($aktion === 'dokument' && $a['item_id']) {
@@ -189,7 +190,7 @@ if (!$a):
     // offene Liste sauber und abgegebene Angebote verschwinden daraus.
     $offen = array_values(array_filter($liste, fn($r) => ($r['status'] ?? '') === 'offen'));
     $beant = array_values(array_filter($liste, fn($r) => ($r['status'] ?? '') !== 'offen'));
-    $anfrageTabelle = function(array $zeilen) use ($anzName, $lid): void { /* $lid nur Kontext */ ?>
+    $anfrageTabelle = function(array $zeilen) use ($anzName, $lid): void { /* $lid: Kennzeichen „Unterlagen fehlen“ */ ?>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th><?= h(lp_t('nummer')) ?></th><th><?= h(lp_t('artikel')) ?></th><th class="bx-num"><?= h(lp_t('gewuenscht')) ?></th><th class="bx-num"><?= h(lp_t('ihr_preis')) ?></th><th><?= h(lp_t('status')) ?></th><th></th></tr></thead>
       <tbody><?php foreach ($zeilen as $r): $href = '?p=lieferant_anfrage&id=' . (int)$r['id']; ?>
@@ -198,7 +199,7 @@ if (!$a):
                 <?php $typL = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? ''), lp_sprache()); ?>
                 <?php if ($typL !== ''): ?><div class="muted" style="font-size:12px"><?= h($typL) ?></div><?php endif; ?></td>
             <td class="bx-num"><?= $r['menge'] ? h(lp_num($r['menge'])) . ' ' . h(lp_einheit($r['einheit'] ?: ($r['item_einheit'] ?? ''), (float)$r['menge'])) : '–' ?></td>
-            <td class="bx-num"><?= ($r['preis'] !== null && $r['preis'] !== '') ? h(lp_num($r['preis'], 4)) . ($r['ang_einheit'] ? ' / ' . h(lp_einheit($r['ang_einheit'], 1)) : '') : '<span class="muted">–</span>' ?></td>
+            <td class="bx-num"><?= ($r['preis'] !== null && $r['preis'] !== '') ? h(lp_num($r['preis'], 4)) . ($r['ang_einheit'] ? ' / ' . h(lp_einheit($r['ang_einheit'], 1)) : '') . lu_badge($lid, (int)($r['item_id'] ?? 0), (int)($r['rezeptur_id'] ?? 0), lp_sprache()) : '<span class="muted">–</span>' ?></td>
             <td><?= $r['status'] === 'offen' ? h(lp_t('anfrage_offen')) : h(lp_t('anfrage_beant')) ?></td>
             <td class="bx-num"><span class="muted" style="font-size:18px">&#8250;</span></td></tr>
       <?php endforeach; ?></tbody>
@@ -245,6 +246,7 @@ if (!$a):
     <div class="bx-panel" style="border-left:3px solid var(--warn);padding:10px 14px;margin-bottom:12px"><?= h(['de' => 'Preis schwankt - bitte Gültigkeit angeben', 'en' => 'Price fluctuates - please state how long it is valid', 'zh' => '价格波动 - 请注明有效期'][$pgL] ?? 'Price fluctuates - please state how long it is valid') ?><?= !$pgSchw['pflicht'] ? ' <span class="muted">(' . h(implode(', ', $pgSchw['namen'])) . ')</span>' : '' ?></div>
   <?php endif; ?>
   <p class="bx-sub"><a href="?p=lieferant_anfrage">&larr; <?= h(lp_t('anfragen')) ?></a></p>
+  <?php if ($ang): echo lu_panel($lid, '?p=lieferant_anfrage&id=' . (int)$id, lp_sprache(), ['item_id' => (int)($a['item_id'] ?? 0), 'rezeptur_id' => (int)($a['rezeptur_id'] ?? 0)]); endif; ?>
   <?php if (($a['status'] ?? '') === 'zurueckgezogen'): ?>
     <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-bottom:12px"><?= h(lp_t('anfrage_zurueck')) ?></div>
   <?php endif; ?>
@@ -455,9 +457,18 @@ if (!$a):
             <td style="min-width:160px"><?= h($info['name']) ?></td>
             <td style="width:110px"><?php if ($info['hat_dok']): ?><span style="color:var(--gruen)"><?= h(lp_t('roh_liegt_vor')) ?></span><?php else: ?><span class="muted"><?= h(lp_t('roh_fehlt')) ?></span><?php endif; ?></td>
             <td style="width:140px"><select name="rohstoff_typ_<?= (int)$iid ?>"><option value="spec"><?= h(lp_t('spezifikation')) ?></option><option value="coa">CoA</option></select></td>
-            <td><input type="file" name="rohstoff_datei_<?= (int)$iid ?>" accept="application/pdf,image/*"<?= $info['hat_dok'] ? '' : ' required' ?>></td>
+            <td><input type="file" name="rohstoff_datei_<?= (int)$iid ?>" accept="application/pdf,image/*"></td>
           </tr>
         <?php endforeach; ?>
+        <?php $luRezF = (int)($a['rezeptur_id'] ?? 0) ?: lu_item_rezeptur((int)($a['item_id'] ?? 0));
+          if ($luRezF > 0): $hatPs = lu_produkt_spec($lid, $luRezF); ?>
+          <tr>
+            <td style="min-width:160px"><?= h(lp_t('produkt_spec')) ?></td>
+            <td style="width:110px"><?php if ($hatPs): ?><span style="color:var(--gruen)"><?= h(lp_t('roh_liegt_vor')) ?></span><?php else: ?><span class="muted"><?= h(lp_t('roh_fehlt')) ?></span><?php endif; ?></td>
+            <td style="width:140px"><?= h(lp_t('spezifikation')) ?></td>
+            <td><input type="file" name="produkt_spec_datei" accept="application/pdf,image/*"></td>
+          </tr>
+        <?php endif; ?>
         </tbody></table></div>
       </div>
       <?php else: ?>

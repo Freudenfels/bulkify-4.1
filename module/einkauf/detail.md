@@ -83,3 +83,6 @@ Block „Wareneingang zuordnen“ (`#abgleich`, aus `core/bestellung_abgleich.ph
 - **„Wareneingang zuordnen“:** zeigt Mengen-Abweichungen und hat zusätzlich „Menge korrigieren und verknüpfen“ (Aktionen `abgl_korr_verknuepfen`, `abgl_loesen`).
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+„als bestellt markieren“ erst mit vollständigen Unterlagen (sonst grau mit Grund + Link). Admin: „trotzdem bestellen“ mit Pflicht-Grund (Verlauf). Kasten „Unterlagen des Lieferanten fehlen“ mit Upload im Namen des Lieferanten (aktion lu_upload).

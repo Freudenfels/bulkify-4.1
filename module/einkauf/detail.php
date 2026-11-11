@@ -88,7 +88,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             mb_substr(trim((string)($_POST['tracking'] ?? '')), 0, 120) ?: null, (int)$id]);
         header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
     }
+    if ($aktion === 'lu_upload' && !$neu) {   // Paket 12.11.2026 Teil 4: Unterlage intern nachreichen (Liste „Unterlagen fehlen“)
+        require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+        $lidB = (int) scalar("SELECT lieferant_id FROM bestellung WHERE id=?", [(int)$id]);
+        $r = lu_upload_post($lidB, 'team');
+        header('Location: ?p=bestellung&id=' . $id . ($r['ok'] ? '&ok=1' : '&fehler=' . urlencode('Datei nicht gespeichert (PDF oder Bild).')) . '#unterlagen');
+        lu_upload_nachlauf((int)$r['did']);
+        exit;
+    }
     if ($aktion === 'bestellt' && !$neu) {
+        // Paket 12.11.2026 Teil 4: Bestellen erst mit vollständigen Unterlagen des Lieferanten; Ausnahme nur Admin mit Grund.
+        require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+        $luGrund = trim((string)($_POST['lu_grund'] ?? ''));
+        if (lu_bestellen_sperre((int)$id) !== '') {
+            if (!has_role('admin') || $luGrund === '') { header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode(lu_bestellen_sperre((int)$id)) . '#unterlagen'); exit; }
+            lu_ausnahme_setzen((int)$id, $luGrund, (string)(current_user()['name'] ?? 'Admin'));
+        }
         q("UPDATE bestellung SET status='bestellt' WHERE id=?", [(int)$id]);
         // Der Lieferant erfährt es per Mail – wenn der Versand eingerichtet ist. Ein Fehler stoppt nichts.
         $f = mail_bereit() ? mail_lieferant_bestellung((int)$id) : '';
@@ -336,7 +351,15 @@ if (!$neu) {
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" title="Diesen Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form> ';
     if ($b['status'] !== 'offen' && $posGesamt === 0) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese leere Bestellung löschen?\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Diese Bestellung hat keine Positionen – löschen">Leere Bestellung löschen</button></form> ';
     if ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung zurückziehen und löschen? Der Bedarf erscheint wieder unter „Zu bestellen“.\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung ist noch nicht angekommen – zurückziehen und löschen (Bedarf kommt zurück)">Bestellung zurückziehen</button></form> ';
-    if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
+    if ($b['status'] === 'offen') {
+        require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+        $luSperre = lu_bestellen_sperre((int)$id);
+        if ($luSperre === '') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
+        else {   // Paket 12.11.2026 Teil 4: grau mit Grund + Link zur Liste; Admin kann mit Pflicht-Grund trotzdem bestellen
+            echo '<button class="btn btn-ghost btn-sm" type="button" disabled title="' . h($luSperre) . '">als bestellt markieren</button> <a href="#unterlagen" style="font-size:12px">Unterlagen fehlen</a> ';
+            if (has_role('admin')) echo '<form method="post" style="display:inline" onsubmit="return this.lu_grund.value.trim().length > 0;"><input type="hidden" name="aktion" value="bestellt"><input type="text" name="lu_grund" required placeholder="Grund für die Ausnahme" style="width:200px"> <button class="btn btn-ghost btn-sm" type="submit" title="Nur Admin: trotz fehlender Unterlagen bestellen (wird im Verlauf vermerkt)">trotzdem bestellen</button></form> ';
+        }
+    }
     if ($b['status'] === 'gesendet' && (int)($b['bestaetigt'] ?? 0) !== 1)
         echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung als telefonisch bestätigt markieren? Status bestellt, keine Mail.\');"><input type="hidden" name="aktion" value="telefonisch_bestaetigt"><button class="btn btn-primary btn-sm" type="submit" title="Lieferant hat am Telefon bestätigt – ohne weitere Mail">Telefonisch bestätigt</button></form>';
     if (in_array((string)$b['status'], ['bestellt', 'gesendet'], true) && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit" title="Öffnet den Wareneingang mit dieser Bestellung">Wareneingang buchen</button></form> ';
@@ -422,6 +445,14 @@ if (!$neu) {
     echo bestellung_abgleich_panel($b);
     // Chargen & Dokumente je Position: Charge, MHD, CoA, Spezifikation – Team und Lieferant (Portal) pflegen dieselbe Liste.
     require_once BX_ROOT . '/core/bestellung_chargen.php';
+    // Paket 12.11.2026 Teil 4: welche Unterlagen des Lieferanten fehlen noch (Bestellen gesperrt, bis alles da ist).
+    require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+    $luF = in_array((string)$b['status'], ['offen', 'gesendet', 'bestellt'], true) ? lu_bestellung_fehlt((int)$id) : [];
+    if ($luF) {
+        echo '<div class="bx-panel" id="unterlagen" style="border-left:3px solid var(--warn)"><h2 style="margin-top:0">Unterlagen des Lieferanten fehlen</h2>'
+           . '<p class="muted" style="margin-top:0">' . (lu_ausnahme((int)$id) !== '' ? 'Admin-Ausnahme: ' . h(lu_ausnahme((int)$id)) : 'Bestellen geht erst, wenn alles da ist. Der Lieferant sieht dieselbe Liste im Portal unter „Fehlende Unterlagen“.') . '</p>'
+           . lu_panel((int)$b['lieferant_id'], '?p=bestellung&id=' . (int)$id, 'de', ['liste' => $luF], true) . '</div>';
+    }
     echo bestellung_chargen_panel($b, 'team', 'de');
 
     // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.

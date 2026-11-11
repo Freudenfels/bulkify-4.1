@@ -23,3 +23,6 @@ Intern `module/lieferant/detail.php` (Reiter „Dokumente"), Portal `module/lief
 - `bestell_dokumente($id, $nur_allgemein)`: mit `true` ohne die je Position abgelegten CoA/Spezifikationen (die zeigt `core/bestellung_chargen.php`).
 - `bestell_dok_upload`: Typ Rechnung wird abgelehnt, wenn zur Bestellung schon eine Rechnung liegt.
 - Neu `bestellung_team_rechnung_hochladen($bestellung_id)`: Lieferantenrechnung durch das Team (`dokument` typ rechnung, `hochgeladen_von='team'`, Spalten `rechnung_nr`, `dok_datum`, `betrag`, `waehrung`).
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+Ablageort rezeptur: Spezifikation des Gesamtprodukts je Lieferant (lieferant_unterlage_speichern, Liste, Download-Recht).

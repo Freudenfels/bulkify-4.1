@@ -38,3 +38,6 @@ Ein Bestell-CoA gilt für eine Charge – es **überschreibt den Rohstoff nicht*
 1. **Anzeigen:** `bch_item_dokumente($item)` – Rohstoffseite, Reiter Dokumente, Block „Unterlagen aus Bestellungen“ (CoA/Spezifikation, Charge, Bestellung, Datum, Prüfstatus).
 2. **Nur Fehlendes ergänzen** beim „Geprüft – übernehmen“ (`bch_rohstoff_ergaenzen`): Grenzwerte nur, wenn der Rohstoff noch **gar keine** hat; Wirkstoffe nur, wenn noch keine da sind, sonst nur der **Gehalt**, wo er fehlt. Danach `spec_nach_datenaenderung()` – Erst-Daten werden automatisch freigegeben, sonst „wartet auf Freigabe“ (Kunde sieht bis dahin die alte Version). Meldung oben („Am Rohstoff ergänzt: …“), Eintrag im Rohstoff-Verlauf.
 3. **Unterschiede melden** (`bch_rohstoff_unterschiede`): Im Popup Kasten „Anders als am Rohstoff – wird nicht automatisch geändert“ (Wirkstoffgehalt CoA vs. Rohstoff, Grenzwert CoA vs. unsere Spezifikation) mit Link zur Rohstoffseite.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+bestellung_versand_coa_fehlt(): „versendet“ nur mit CoA je Charge (Rohstoff, Fremdfertigung, Premix, Bulk); geprüft in bestellung_station_setzen().

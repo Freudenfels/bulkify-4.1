@@ -67,6 +67,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dp_ab
     $k = preg_replace('/[^a-z_]/', '', (string)($_POST['pruefung'] ?? ''));
     header('Location: ?p=datenpruefung&ok=' . rawurlencode($ok . ' Verknüpfung(en) ausgeführt' . ($fehl ? ', ' . $fehl . ' übersprungen (nicht mehr eindeutig)' : '') . '.') . '#' . $k); exit;
 }
+// Paket 12.11.2026 Teil 4: Knöpfe in der Zeile „Rohstoff angefragt ohne Dokument“ – Unterlage hochladen (im Namen des
+// zuletzt angefragten Lieferanten) bzw. bei allen angefragten Lieferanten über das Portal anfordern (Nachricht + Aufgabenliste).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['dp_lu_upload', 'dp_lu_anfordern'], true)) {
+    require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+    $iid = (int)($_POST['item_id'] ?? 0);
+    $name = (string) scalar("SELECT name FROM item WHERE id=?", [$iid]);
+    $msg = '';
+    if ($name !== '' && $_POST['aktion'] === 'dp_lu_upload') {
+        $lidU = (int) scalar("SELECT lieferant_id FROM lieferant_anfrage WHERE item_id=? AND lieferant_id IS NOT NULL ORDER BY id DESC LIMIT 1", [$iid]);
+        $_POST['lu_art'] = 'roh'; $_POST['lu_item'] = $iid; $_POST['lu_rez'] = 0;
+        $r = $lidU ? lu_upload_post($lidU, 'team') : ['ok' => false, 'did' => 0];
+        $msg = $r['ok'] ? 'Unterlage zu ' . $name . ' gespeichert.' : 'Datei nicht gespeichert (PDF oder Bild).';
+        header('Location: ?p=datenpruefung&' . ($r['ok'] ? 'ok=' : 'err=') . rawurlencode($msg) . '#rohstoff_angefragt_ohne_dok');
+        lu_upload_nachlauf((int)$r['did']);
+        exit;
+    }
+    if ($name !== '' && $_POST['aktion'] === 'dp_lu_anfordern') {
+        require_once BX_ROOT . '/core/nachricht.php';
+        $n = 0;
+        foreach (all("SELECT DISTINCT lieferant_id FROM lieferant_anfrage WHERE item_id=? AND lieferant_id IS NOT NULL AND COALESCE(status,'')<>'zurueckgezogen'", [$iid]) as $l) {
+            nachricht_senden((int)$l['lieferant_id'], 'team', (string)(current_user()['name'] ?? 'Team'),
+                'Bitte laden Sie zu „' . $name . '“ eine CoA oder Spezifikation hoch (Portal → Fehlende Unterlagen). Ohne Unterlagen können wir nicht bestellen. / Please upload a CoA or specification for “' . $name . '” (portal → Missing documents). We cannot order without documents.',
+                'item', $iid);
+            $n++;
+        }
+        log_aktivitaet('item', $iid, 'team', 'Unterlagen bei ' . $n . ' Lieferant(en) angefordert (Datenprüfung).', 'status');
+        header('Location: ?p=datenpruefung&ok=' . rawurlencode('Bei ' . $n . ' Lieferant(en) angefordert: ' . $name . '.') . '#rohstoff_angefragt_ohne_dok'); exit;
+    }
+    header('Location: ?p=datenpruefung#rohstoff_angefragt_ohne_dok'); exit;
+}
 $CHECKS = [
     // Block E (Abendpaket 11.11.2026): Etikett-Ersatz raus. (1) VORHER-Liste: offene/laufende PAs, die nach dem Entfernen des
     // generischen Ersatz-Etiketts beim Etikettieren blockiert wären (Kundenetikett hat nicht genug Bestand). Nur Anzeige.
@@ -318,7 +348,8 @@ $CHECKS = [
                            MAX(la.coa_gewuenscht) AS coa_angefordert,
                            (SELECT COUNT(DISTINCT z.rezeptur_id) FROM rezeptur_zutat z WHERE z.item_id=i.id) AS rezepturen,
                            (SELECT COUNT(*) FROM dokument d JOIN bestellung_position bp ON bp.id=d.bestellung_position_id
-                             WHERE d.objekt_typ='bestellung' AND d.typ='coa' AND bp.item_id=i.id) AS coa_an_bestellung
+                             WHERE d.objekt_typ='bestellung' AND d.typ='coa' AND bp.item_id=i.id) AS coa_an_bestellung,
+                           '' AS aktionen
                     FROM item i
                     JOIN lieferant_anfrage la ON la.item_id=i.id
                     LEFT JOIN lieferanten l ON l.id=la.lieferant_id
@@ -327,7 +358,16 @@ $CHECKS = [
                       AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id AND d.typ IN ('spec','coa','beides','analyse'))
                     GROUP BY i.id, i.artikelnummer, i.name
                     ORDER BY ((SELECT COUNT(*) FROM rezeptur_zutat z2 WHERE z2.item_id=i.id) > 0) DESC, (COUNT(DISTINCT ag.id) > 0) DESC, MAX(la.angelegt) DESC, i.name",
-        'ohne_fix' => 'Nur Anzeige: beim Lieferanten nachfordern oder am Rohstoff hochladen (Öffnen).',
+        'ohne_fix' => 'Knöpfe in der Zeile: Unterlage hochladen oder bei den angefragten Lieferanten anfordern (Portal-Nachricht, erscheint dort unter „Fehlende Unterlagen“).',
+        // Paket 12.11.2026 Teil 4: Knöpfe in der Zeile
+        'html' => ['aktionen' => fn($r) => '<form method="post" enctype="multipart/form-data" style="margin:0 0 6px;display:flex;gap:6px;align-items:center;flex-wrap:nowrap">'
+            . '<input type="hidden" name="aktion" value="dp_lu_upload"><input type="hidden" name="item_id" value="' . (int)$r['_id'] . '">'
+            . '<select name="lu_typ" style="width:auto"><option value="coa">CoA</option><option value="spec">Spec</option></select>'
+            . '<input type="file" name="lu_datei" accept="application/pdf,image/*" required style="max-width:170px">'
+            . '<button class="btn btn-ghost btn-sm" type="submit">Hochladen</button></form>'
+            . '<form method="post" style="margin:0" onsubmit="return confirm(&#39;Bei allen angefragten Lieferanten über das Portal anfordern?&#39;);">'
+            . '<input type="hidden" name="aktion" value="dp_lu_anfordern"><input type="hidden" name="item_id" value="' . (int)$r['_id'] . '">'
+            . '<button class="btn btn-ghost btn-sm" type="submit">Beim Lieferanten anfordern</button></form>'],
     ],
     'rohstoff_kundenanfrage_ohne_dok' => [
         'titel' => 'Rohstoff: in Kunden-Anfragen bzw. offenen Rezepturen, aber ohne Lieferanten-Dokumente',

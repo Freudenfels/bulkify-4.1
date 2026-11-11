@@ -27,3 +27,6 @@ Die laufende Liste zeigt alles außer `geliefert` **und `storniert`** – aufget
 Bestellnummer und Auftrag (AB) je Zeile sind anklickbar (neue Spalte „Auftrag“, „Lager“ ohne Auftragsbezug). Die Suche findet auch die AB-Nummer.
 
 **Cron-Adresse (Sofortfix 11.11.2026):** nur für Admin und maskiert (`19be••••••••433b`). Vollständig erst über „Vollständig anzeigen (zum Einrichten)“.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+Kennzeichen „Unterlagen fehlen“ an offenen Bestellungen (Link auf die Liste an der Bestellung).

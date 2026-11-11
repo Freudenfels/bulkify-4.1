@@ -9,6 +9,7 @@ require_once BX_ROOT . '/module/lieferant/portal_layout.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/lieferant_katalog.php';
 require_once BX_ROOT . '/core/preis_gueltig.php';   // „gültig bis" je Preis
+require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Kennzeichen „Unterlagen fehlen“ (Paket 12.11.2026 Teil 4)
 if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 
 $lid  = aktueller_lieferant_id();
@@ -125,7 +126,7 @@ if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6
           <?php if (!$g['preise']): ?><span class="muted"><?= h(lp_t('kein_preis')) ?></span>
           <?php else: foreach ($g['preise'] as $p): ?>
             <div><?= h(lp_num($p['preis'], 4)) ?> <?= h((string)($p['waehrung'] ?: 'EUR')) ?><?= $g['einheit'] ? ' / ' . h(lp_einheit((string)$g['einheit'], 1)) : '' ?><?php if ((float)$p['menge_ab'] > 0): ?> <span class="muted">· <?= h(lp_t('ab_menge')) ?> <?= h(lp_num($p['menge_ab'], 3)) ?></span><?php endif; ?> <?= pg_anzeige($p['gueltig_bis'] ?? null, $spr, false) ?></div>
-          <?php endforeach; endif; ?>
+          <?php endforeach; echo lu_badge($lid, (int)$g['id'], 0, $spr) ? '<div>' . lu_badge($lid, (int)$g['id'], 0, $spr) . ' <a href="?p=lieferant_unterlagen" style="font-size:12px">' . h(lp_t('unterlagen_menu')) . '</a></div>' : ''; endif; ?>
         </td>
         <td class="bx-num" style="white-space:nowrap">
           <button type="button" class="btn btn-ghost btn-sm bx-preis-akt"

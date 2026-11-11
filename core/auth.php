@@ -144,6 +144,7 @@ function route_rollen_map(): array {
         'lieferant_logo'          => ['*'],
         'lieferant_nachrichten'   => ['*'],
         'lieferant_dateien'       => ['*'],
+        'lieferant_unterlagen'    => ['*'],   // Paket 12.11.2026 Teil 4
         'lieferant_katalog'       => ['*'],
         'lieferant_preisliste'    => ['*'],
         'lieferant_rezepturpreise'=> ['*'],

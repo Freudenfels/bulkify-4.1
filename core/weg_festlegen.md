@@ -21,3 +21,6 @@
 
 ## Abgelaufene Preise (11.11.2026)
 Einzelrohstoffe mit nur abgelaufenem Preis zeigen „Preis abgelaufen seit … - neu anfragen“ (Link zum Reiter Einkauf des Rohstoffs). Die Summe zeigt dann „(unsicher: Preis abgelaufen)“.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+Kennzeichen „Unterlagen fehlen“ an Lieferantenpreisen für Bulk/Premix.

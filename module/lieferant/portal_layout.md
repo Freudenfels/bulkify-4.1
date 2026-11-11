@@ -59,3 +59,6 @@ Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur
 - `rez_preise_leer` verweist auf „Bitte bepreisen“.
 
 Text `hinweis_bulkify` (DE/EN/ZH): Beschriftung für den Hinweis an den Lieferanten an der Bestellung.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+Menüpunkt „Fehlende Unterlagen“ mit Zähler; Texte produkt_spec, datei_fehler, unterlagen_menu; Hinweistext ohne Pflicht.

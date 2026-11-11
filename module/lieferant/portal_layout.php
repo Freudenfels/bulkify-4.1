@@ -177,10 +177,13 @@ function lp_t(string $key, string $sprache = ''): string {
         'variante'        => ['de'=>'Ihre konkrete Variante / Gehalt', 'en'=>'Your specific variant / content', 'zh'=>'您的具体品种/含量'],
         'variante_hint'   => ['de'=>'z. B. "Magnesiumbisglycinat, 13 % Magnesium" – genau das Produkt, das Sie anbieten.', 'en'=>'e.g. "Magnesium bisglycinate, 13% magnesium" – exactly the product you offer.', 'zh'=>'例如“甘氨酸镁，含镁13%”——即您所提供的具体产品。'],
         'spec_pflicht'    => ['de'=>'Bitte die Spezifikation zu diesem Rohstoff hochladen (Pflicht).', 'en'=>'Please upload the specification for this raw material (required).', 'zh'=>'请上传该原料的规格书（必填）。'],
-        'roh_unterlage_titel' => ['de'=>'CoA / Spezifikation je Rohstoff (Pflicht)', 'en'=>'CoA / Specification per raw material (required)', 'zh'=>'每种原料的 CoA / 规格书（必填）'],
-        'roh_unterlage_hinweis' => ['de'=>'Bitte zu JEDEM eingesetzten Rohstoff eine CoA ODER Spezifikation beifügen – eine Unterlage je Rohstoff genügt (nicht eine fürs Produkt). Liegt bereits eine vor, ist kein erneuter Upload nötig. Ohne vollständige Unterlagen wird der Preis nicht gespeichert.',
-                              'en'=>'Please attach a CoA OR specification for EACH raw material used – one document per raw material is enough (not one for the product). If one is already on file, no re-upload is needed. Without complete documents the price is not saved.',
-                              'zh'=>'请为所用的每一种原料提供 CoA 或规格书——每种原料一份即可（而非整个产品一份）。若已存有，则无需再次上传。文件不齐全时不会保存报价。'],
+        'roh_unterlage_titel' => ['de'=>'CoA / Spezifikation je Rohstoff', 'en'=>'CoA / Specification per raw material', 'zh'=>'每种原料的 CoA / 规格书'],
+        'produkt_spec'    => ['de'=>'Spezifikation des Gesamtprodukts', 'en'=>'Specification of the finished product', 'zh'=>'成品规格书'],
+        'datei_fehler'    => ['de'=>'Die Datei konnte nicht gespeichert werden (PDF oder Bild, nicht zu groß).', 'en'=>'The file could not be saved (PDF or image, not too large).', 'zh'=>'文件无法保存（请上传 PDF 或图片，且不要过大）。'],
+        'unterlagen_menu' => ['de'=>'Fehlende Unterlagen', 'en'=>'Missing documents', 'zh'=>'缺失文件'],
+        'roh_unterlage_hinweis' => ['de'=>'Bitte zu JEDEM eingesetzten Rohstoff eine CoA ODER Spezifikation beifügen – eine Unterlage je Rohstoff genügt. Liegt bereits eine vor, ist kein erneuter Upload nötig. Ihren Preis können Sie auch ohne Unterlagen abgeben; er trägt dann das Kennzeichen „Unterlagen fehlen“. Bestellen können wir erst, wenn alle Unterlagen da sind.',
+                              'en'=>'Please attach a CoA OR specification for EACH raw material used – one document per raw material is enough. If one is already on file, no re-upload is needed. You can submit your price without documents; it is then marked “documents missing”. We can only order once all documents are here.',
+                              'zh'=>'请为所用的每一种原料提供 CoA 或规格书——每种原料一份即可。若已存有，则无需再次上传。没有文件也可以提交报价，但会被标记为“缺少文件”。文件齐全后我们才能下单。'],
         'roh_liegt_vor'   => ['de'=>'liegt vor', 'en'=>'on file', 'zh'=>'已存'],
         'roh_fehlt'       => ['de'=>'fehlt', 'en'=>'missing', 'zh'=>'缺失'],
         'roh_unterlage_fehlt' => ['de'=>'Zu diesen Rohstoffen fehlt noch eine CoA oder Spezifikation:', 'en'=>'A CoA or specification is still missing for these raw materials:', 'zh'=>'以下原料仍缺少 CoA 或规格书：'],
@@ -509,6 +512,7 @@ function lp_shell_start(string $aktiv): void {
         'lieferant_katalog'     => lp_t('katalog'),
         'lieferant_preisliste'  => lp_t('preisliste'),
         'lieferant_rezepturpreise' => lp_t('rez_preise_menu'),
+        'lieferant_unterlagen'  => lp_t('unterlagen_menu'),   // Paket 12.11.2026 Teil 4: Aufgabenliste fehlender Unterlagen
         'lieferant_dateien'     => lp_t('dateien_menu'),
         'lieferant_profil'      => lp_t('profil'),
         'lieferant_ueber'       => lp_t('ueber_uns'),
@@ -524,6 +528,10 @@ function lp_shell_start(string $aktiv): void {
         if ($offeneAnf > 0) $badges['lieferant_anfrage'] = $offeneAnf;
         $neu = nachrichten_ungelesen($lid, 'lieferant');
         if ($neu > 0) $badges['lieferant_nachrichten'] = $neu;
+        if (is_file(BX_ROOT . '/core/lieferant_unterlagen.php')) {
+            require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+            try { $nLu = count(lu_offen_lieferant($lid)); if ($nLu > 0) $badges['lieferant_unterlagen'] = $nLu; } catch (\Throwable $e) {}
+        }
     }
     // Kleiner runder Zähler – inline gestylt, damit er ohne Portal-CSS funktioniert.
     $zaehler = fn(int $n) => ' <span style="display:inline-block;min-width:18px;height:18px;line-height:18px;text-align:center;'

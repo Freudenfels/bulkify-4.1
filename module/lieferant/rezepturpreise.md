@@ -42,3 +42,6 @@ Je Zeile gibt es die Spalte „Gültig bis“ mit Datumsfeld im gemeinsamen Form
 - **Block „Bitte bepreisen“:** offene Fremdfertigungs-Anfragen an diesen Lieferanten ohne Preis. Jede Zeile hat die Zusammensetzung aufklappbar und den Knopf „Angebot abgeben“ zur Anfrage.
 - **Bepreiste Zeilen:** Auch dort ist die Zusammensetzung aufklappbar (`fertig_zusammensetzung_html`).
 - **`preis_add`:** nimmt nur noch Rezepturen an, die bei diesem Lieferanten angefragt sind.
+
+## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
+Kennzeichen „Unterlagen fehlen“ am Fertigprodukt-Preis (Rohstoff-Unterlagen + Spezifikation des Gesamtprodukts) mit Link auf „Fehlende Unterlagen“.

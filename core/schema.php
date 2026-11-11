@@ -1084,7 +1084,8 @@ function init_schema(): void {
     // Bestellung: Ablauf beim Lieferanten. Er bestaetigt mit geplantem Termin und pflegt danach
     // die Stationen; "versendet" verlangt Versandanbieter, Versandart und Sendungsnummer.
     ensure_column('bestellung', 'bestaetigt', "TINYINT(1) NOT NULL DEFAULT 0");
-    ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
+    ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");
+    ensure_column('bestellung', 'unterlagen_ausnahme', "VARCHAR(255) NULL");   // Paket 12.11. Teil 4: Admin bestellt trotz fehlender Unterlagen (Grund)   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
     ensure_column('rezeptur', 'status_vor_inaktiv', "VARCHAR(20) NULL");   // Block C 11.11.2026: Status vor „inaktiv" (für Wieder aktivieren)
     ensure_column('item', 'gesperrt_durch_rezeptur', "INT NULL");          // Block C: mit der Rezeptur gesperrter Bulk-/Premix-Artikel
     ensure_column('item', 'ek_abgelaufen_seit', "DATE NULL");              // Block D: Auto-EK stammt aus einem inzwischen abgelaufenen Preis
@@ -7858,6 +7859,12 @@ function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $we
     if ($ziel === 'eingegangen') return $m('Diesen Schritt setzt bulkify beim Wareneingang.', 'This step is set by bulkify on goods receipt.', '此步骤由 bulkify 在收货时设置。');
     if ($ziel === 'versendet' && (trim((string)$b['versandanbieter']) === '' || trim((string)$b['versandart']) === '' || trim((string)$b['tracking']) === ''))
         return $m('Für „versendet" fehlen Versandanbieter, Versandart oder Sendungsnummer.', 'For "shipped" the carrier, shipping method or tracking number is missing.', '缺少承运商、运输方式或物流单号，无法设置为“已发货”。');
+    // Paket 12.11.2026 Teil 4: „versendet“ nur mit der CoA des gelieferten Produkts je Charge (Bereich „Chargen & Dokumente“).
+    if ($ziel === 'versendet') {
+        require_once __DIR__ . '/bestellung_chargen.php';
+        $coaFehlt = bestellung_versand_coa_fehlt($bestellung_id, $sprache === 'de' ? 'de' : ($sprache === 'zh' ? 'zh' : 'en'));
+        if ($coaFehlt) return $m('Bitte CoA der Charge hochladen (unter „Chargen & Dokumente“): ', 'Please upload the CoA of the batch (under “Batches & documents”): ', '请上传批次的 CoA（在“批次与文件”中）：') . implode('; ', $coaFehlt);
+    }
     q("UPDATE bestellung SET station=? WHERE id=?", [$ziel, $bestellung_id]);
     // Der interne Status laeuft mit: sobald der Lieferant produziert, ist die Bestellung "bestellt".
     // 'gesendet' = aus der Einkaufsliste an den Lieferanten-Account gesendet (S-03) – zählt wie 'offen'.
