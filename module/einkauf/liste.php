@@ -143,12 +143,16 @@ if (!$archiv):
 </div>
 <?php endif;
     if (function_exists('has_role') && has_role('admin')):
-        $cronUrl = (function_exists('mail_basis_url') ? mail_basis_url() : '') . '/einkauf_cron.php?token=' . einkauf_cron_token();
+        // Sofortfix 11.11.2026: Token nur maskiert; vollständig erst auf ausdrücklichen Klick (nur Admin).
+        $cronTok = einkauf_cron_token(); $cronZeigen = !empty($_GET['cron_zeigen']);
+        $cronUrl = (function_exists('mail_basis_url') ? mail_basis_url() : '') . '/einkauf_cron.php?token='
+                 . ($cronZeigen ? $cronTok : substr($cronTok, 0, 4) . str_repeat('•', 8) . substr($cronTok, -4));
 ?>
 <details class="bx-panel" style="padding:10px 16px;margin-bottom:12px">
   <summary style="cursor:pointer;font-size:13px" class="muted">Automatische Erinnerungen (Cron) einrichten</summary>
   <p class="muted" style="font-size:13px;margin:8px 0 0">Server-Cron (z. B. 1× täglich) diese URL aufrufen – erinnert alle überfälligen, unbestätigten Portal-Bestellungen (max. 1×/24 h je Bestellung):</p>
   <code style="display:block;word-break:break-all;background:var(--panel-2);padding:8px 10px;border-radius:8px;margin-top:6px;font-size:12px"><?= h($cronUrl) ?></code>
+  <?php if (!$cronZeigen): ?><a class="btn btn-ghost btn-sm" style="margin-top:6px" href="?p=einkauf&cron_zeigen=1">Vollständig anzeigen (zum Einrichten)</a><?php endif; ?>
 </details>
 <?php endif; endif; ?>
 <form class="bx-listbar" method="get">
