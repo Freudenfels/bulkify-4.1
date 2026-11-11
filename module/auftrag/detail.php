@@ -276,6 +276,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $neu = (string)($_POST['status'] ?? '');
     if (!in_array($neu, ['offen','in_produktion','erledigt','versendet'], true)) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Ungültiger Status.')); exit; }
     $alt = (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]);
+    // Sofortfix 11.11.2026: von Hand „versendet" bei offenem Labor/offener Menge nur mit Pflicht-Grund (Hinweis statt Sperre).
+    if ($neu === 'versendet' && $neu !== $alt && ($voT = auftrag_versendet_offen_text(['id' => $id])) !== '') {
+        $voG = trim((string)($_POST['versendet_grund'] ?? ''));
+        if ($voG === '') { header('Location: ?p=auftrag&id=' . $id . '&versendetfrage=status'); exit; }
+        log_aktivitaet('auftrag', $id, 'team', 'Trotzdem auf versendet gesetzt (' . $voT . ') von ' . (current_user()['name'] ?? 'Team') . '. Grund: ' . mb_substr($voG, 0, 500), 'status', 'auftrag', $id);
+    }
     if ($neu !== $alt) {
         q("UPDATE auftrag SET status=?, status_datum=CURDATE() WHERE id=?", [$neu, $id]);
         log_aktivitaet('auftrag', $id, 'team', 'Status geändert: ' . $alt . ' -> ' . $neu, 'status', 'auftrag', $id);
@@ -328,6 +334,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $neuStatus = $idx >= $last ? 'versendet' : ($idx >= 6 ? 'erledigt' : ($idx >= 3 ? 'in_produktion' : 'offen'));
     $ovVal = $idx > 0 ? $idx : null;
     $alt = one("SELECT status, phase_override FROM auftrag WHERE id=?", [$id]);
+    // Sofortfix 11.11.2026: von Hand „versendet" bei offenem Labor/offener Menge nur mit Pflicht-Grund (Hinweis statt Sperre).
+    if ($neuStatus === 'versendet' && (string)($alt['status'] ?? '') !== 'versendet' && ($voT = auftrag_versendet_offen_text(['id' => $id])) !== '') {
+        $voG = trim((string)($_POST['versendet_grund'] ?? ''));
+        if ($voG === '') { header('Location: ?p=auftrag&id=' . $id . '&versendetfrage=phase&ph=' . $idx . (isset($_POST['rest']) ? '&rest=' . rawurlencode((string)$_POST['rest']) : '') . '#schritte'); exit; }
+        log_aktivitaet('auftrag', $id, 'team', 'Trotzdem auf versendet gesetzt (' . $voT . ') von ' . (current_user()['name'] ?? 'Team') . '. Grund: ' . mb_substr($voG, 0, 500), 'status', 'auftrag', $id);
+    }
     q("UPDATE auftrag SET phase_override=?, status=?, status_datum=CURDATE() WHERE id=?", [$ovVal, $neuStatus, $id]);
     if ((int)($alt['phase_override'] ?? -1) !== (int)($ovVal ?? -1) || (string)($alt['status'] ?? '') !== $neuStatus)
         log_aktivitaet('auftrag', $id, 'team', 'Fortschritt gesetzt: ' . ($phasen[$idx] ?? ('Stufe ' . $idx)) . ' (Status ' . $neuStatus . ')', 'status', 'auftrag', $id);
@@ -1346,6 +1358,23 @@ if (has_role('admin') || has_role('sales')):
   <?php if (isset($_GET['statusok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Status aktualisiert – der Kunde sieht es sofort.</div><?php endif; ?>
   <?php if (($_GET['restok'] ?? '') === 'kommt'): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Gespeichert: Rest kommt noch – der Schritt bleibt teilweise.</div><?php endif; ?>
   <?php if (($_GET['restok'] ?? '') === 'teil'): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Teillieferung: die vorhandene Menge unter <a href="?p=versand">Versand</a> versenden. Der Kunde sieht „Teilweise versendet“.</div><?php endif; ?>
+  <?php // Pop-up „trotzdem versendet?" (Sofortfix 11.11.2026): Labor/Menge offen -> Pflicht-Grund, geht in den Verlauf.
+    $vfArt = (string)($_GET['versendetfrage'] ?? '');
+    if (in_array($vfArt, ['status', 'phase'], true) && ($vfT = auftrag_versendet_offen_text($a)) !== ''): ?>
+  <dialog id="dlgVersendet" class="bx-dialog" style="max-width:560px" open>
+    <h2 style="margin-top:0"><?= h($vfT) ?> - trotzdem versendet?</h2>
+    <p class="muted" style="margin-top:0">Der Auftrag ist noch nicht fertig. Wenn er trotzdem raus ist, bitte kurz den Grund nennen. Grund und Name stehen im Verlauf. „Abgeschlossen“ bleibt offen, solange das Labor läuft.</p>
+    <form method="post" style="margin:0">
+      <?php if ($vfArt === 'status'): ?><input type="hidden" name="aktion" value="status_schnell"><input type="hidden" name="status" value="versendet">
+      <?php else: ?><input type="hidden" name="aktion" value="phase_setzen"><input type="hidden" name="phase" value="<?= (int)($_GET['ph'] ?? 0) ?>"><?php if (isset($_GET['rest'])): ?><input type="hidden" name="rest" value="<?= h((string)$_GET['rest']) ?>"><?php endif; ?><?php endif; ?>
+      <div class="bx-field"><label>Grund (Pflicht)</label><textarea name="versendet_grund" rows="2" required placeholder="z. B. Kunde wollte die Ware vorab, Labor wird nachgereicht"></textarea></div>
+      <div class="bx-row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+        <a class="btn btn-ghost" href="?p=auftrag&id=<?= (int)$a['id'] ?>#schritte">Abbrechen</a>
+        <button class="btn btn-primary" type="submit">Trotzdem versendet</button>
+      </div>
+    </form>
+  </dialog>
+  <?php endif; ?>
   <?php // Pop-up „Was ist mit dem Rest?" (Teil 2, 11.11.2026)
     $rfIdx = (int)($_GET['restfrage'] ?? 0);
     if (in_array($rfIdx, [4, 5, 6], true) && ($rfMo = auftrag_menge_offen($a))): $rfN = fn($x) => number_format((int)$x, 0, ',', '.'); ?>

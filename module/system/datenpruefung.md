@@ -141,3 +141,5 @@ Die Prüfung `fortschritt_hand_weiter` läuft **nur auf Klick** (`?p=datenpruefu
 Geklärt wird das in der Lager-Inventur mit der Ursache „Einheitenfehler“: Faktor und Einheit der Charge werden korrigiert, gelöscht wird nichts.
 
 Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführen** (`artikel_dubletten`, Seite „Artikel zusammenführen“). Sonst wird auf zwei Artikel gezählt.
+
+**fortschritt_hand_weiter (11.11.2026):** schließt versendete Aufträge nicht mehr aus (AB-3244/3245: versendet bei laufendem Labor). Spalte „Schritt“ zeigt dann „Status versendet“. „Zurücksetzen“ lässt den Status versendet stehen und entfernt nur die Hand-Stufe.

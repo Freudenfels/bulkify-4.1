@@ -6489,7 +6489,8 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
     }
     // „Abgeschlossen" nur, wenn wirklich alles fertig ist (Nico 11.11.2026): mit Labor erst bei gebuchter, nicht auffälliger
     // Laboranalyse - auch wenn von Hand weiter gesetzt. Tatsächlich versendet = abgeschlossen. Mengen prüft der Teilmengen-Block unten.
-    $abgDone = $st === 'versendet' || ($versandbereit && (!$labor || $qcDone));
+    // Sofortfix 11.11.2026: auch bei Status „versendet" (von Hand) bleibt „Abgeschlossen" offen, solange das Labor läuft - der Kunde sieht „Laboranalyse läuft".
+    $abgDone = $versandbereit && (!$labor || $qcDone);
     $steps[] = ['Abgeschlossen', 'Abgeschlossen', $abgDone ? 'done' : '', $abgDone ? $d[6] : null, null];
     $steps[] = $ff ? ['Einlagern', 'Eingelagert', $abgeschlossen ? 'done' : ($abgDone ? 'current' : ''), $abgeschlossen ? $d[7] : null, null]
                    : ['Versenden', 'Versendet', $abgeschlossen ? 'done' : ($abgDone ? 'current' : ''), $abgeschlossen ? $d[7] : null, null];
@@ -6611,6 +6612,23 @@ function auftrag_fortschritt_fertig(array $a): bool {
     if (($a['status'] ?? '') !== 'erledigt') return $c[$id] = false;
     foreach (auftrag_fortschritt($a, true)['steps'] as $s) if ($s[1] === 'Abgeschlossen') return $c[$id] = $s[2] === 'done';
     return $c[$id] = true;
+}
+// Was ist noch offen, wenn ein Auftrag von Hand auf „versendet" gesetzt wird? (Sofortfix 11.11.2026, AB-3244/3245)
+// Rückgabe '' = nichts offen, sonst z. B. „Labor läuft noch / Menge 175 von 500". Keine Sperre - nur Anlass für die Pflicht-Begründung.
+function auftrag_versendet_offen_text(array $a): string {
+    if (empty($a['id'])) return '';
+    if (!isset($a['kunde_id'], $a['menge'])) { $a = one("SELECT * FROM auftrag WHERE id=?", [(int)$a['id']]) ?: $a; }
+    if (($a['kategorie'] ?? '') === 'dienstleistung') return '';
+    $t = [];
+    $labor = kunde_will_labortest((int)($a['kunde_id'] ?? 0)) || !empty($a['laboranalyse_gebucht']);
+    if ($labor) {
+        $lt = auftrag_labortest_status((int)$a['id'], isset($a['produkt_id']) ? (int)$a['produkt_id'] : null);
+        if (($lt['status'] ?? '') !== 'abgeschlossen') $t[] = ($lt['status'] ?? '') === 'auffaellig' ? 'Laborbefund auffällig' : 'Labor läuft noch';
+    }
+    $mf = auftrag_mengenfortschritt((int)$a['id']);
+    $ziel = max((int)($a['menge'] ?? 0), (int)$mf['ziel']); $fz = (int)($a['fortschritt_ziel'] ?? 0); if ($fz > 0) $ziel = min($ziel, $fz);
+    if ($ziel > 0 && (int)$mf['gebucht'] < $ziel) $t[] = 'Menge ' . number_format((int)$mf['gebucht'], 0, ',', '.') . ' von ' . number_format($ziel, 0, ',', '.');
+    return implode(' / ', $t);
 }
 // Status, wie ihn Kunde und Lager sehen (Sofortfix 11.11.2026): „erledigt" heißt nur dann versandbereit, wenn „Abgeschlossen"
 // wirklich erledigt ist (alle Mengen da, Labor da). Sonst 'in_produktion'. Dienstleistungen unverändert.

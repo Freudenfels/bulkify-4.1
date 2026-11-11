@@ -302,8 +302,8 @@ $CHECKS = [
         'auf_klick' => true,
         'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, k.firma AS kunde, a.status, a.phase_override
                     FROM auftrag a LEFT JOIN kunden k ON k.id = a.kunde_id
-                    WHERE a.status NOT IN ('storniert','versendet') AND COALESCE(a.kategorie,'') <> 'dienstleistung'
-                      AND (a.phase_override >= 4 OR a.status = 'erledigt') AND COALESCE(a.fortschritt_geprueft,0) = 0
+                    WHERE a.status <> 'storniert' AND COALESCE(a.kategorie,'') <> 'dienstleistung'
+                      AND (a.phase_override >= 4 OR a.status IN ('erledigt','versendet')) AND COALESCE(a.fortschritt_geprueft,0) = 0
                     ORDER BY a.id DESC",
         'zeilen' => function (array $rows): array {
             $out = []; $ph = auftrag_phasen(false);
@@ -314,12 +314,12 @@ $CHECKS = [
                 $labor = kunde_will_labortest((int)$a['kunde_id']) || !empty($a['laboranalyse_gebucht']);
                 $lt = $labor ? auftrag_labortest_status((int)$a['id'], isset($a['produkt_id']) ? (int)$a['produkt_id'] : null) : null;
                 $handHoch = (int)($a['phase_override'] ?? 0);
-                $laborOffen = $labor && ($lt['status'] ?? '') !== 'abgeschlossen' && ($a['status'] === 'erledigt' || $handHoch >= 6);
+                $laborOffen = $labor && ($lt['status'] ?? '') !== 'abgeschlossen' && (in_array($a['status'], ['erledigt', 'versendet'], true) || $handHoch >= 6);   // versendet nicht mehr ausgeschlossen (11.11.)
                 if (!$mo && !$laborOffen) continue;
                 $zielV = max((int)$a['menge'], (int)$mf['ziel']);
                 $out[] = ['_id' => (int)$a['id'], '_link' => $r['_link'], '_geb' => (int)$mf['gebucht'], '_mo' => $mo ? 1 : 0,
                           'nummer' => $r['nummer'], 'kunde' => $r['kunde'],
-                          'schritt' => $handHoch > 0 ? ($ph[$handHoch] ?? ('Stufe ' . $handHoch)) . ' (von Hand)' : ($a['status'] === 'erledigt' ? 'Status versandbereit' : '–'),
+                          'schritt' => $handHoch > 0 ? ($ph[$handHoch] ?? ('Stufe ' . $handHoch)) . ' (von Hand)' : ($a['status'] === 'erledigt' ? 'Status versandbereit' : ($a['status'] === 'versendet' ? 'Status versendet' : '–')),
                           'ist_soll' => number_format((int)$mf['gebucht'], 0, ',', '.') . ' / ' . number_format($zielV, 0, ',', '.') . ' Stk',
                           'labor' => $labor ? (['abgeschlossen' => 'abgeschlossen', 'laeuft' => 'läuft', 'auffaellig' => 'auffällig'][$lt['status'] ?? ''] ?? 'offen') : 'kein Labor'];
             }

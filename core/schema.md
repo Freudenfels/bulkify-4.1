@@ -639,3 +639,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 
 ## auftrag_status_kunde() (Sofortfix 11.11.2026)
 `auftrag_status_kunde($a)` gibt den Status zurück, wie Kunde und Lager ihn sehen: „erledigt“ bleibt nur, wenn `auftrag_fortschritt_fertig()` sagt, dass „Abgeschlossen“ wirklich erledigt ist (alle Mengen da, Labor da). Sonst 'in_produktion'. Dienstleistungen unverändert. Fehlende Felder lädt die Funktion selbst nach. Eine Stelle für Portal-Startseite, „Meine Anfragen“, Etiketten-Seite und (per Loopback) die Lager-App.
+
+`auftrag_versendet_offen_text($a)` (11.11.2026): '' oder „Labor läuft noch / Menge 175 von 500“ – Anlass für die Pflicht-Begründung beim Hand-„versendet“. In `auftrag_fortschritt()` gilt „Abgeschlossen“ bei versendet mit offenem Labor als **nicht** erledigt.
