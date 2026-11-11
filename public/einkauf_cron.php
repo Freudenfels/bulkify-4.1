@@ -23,4 +23,9 @@ if ($token === '' || $given === '' || !hash_equals($token, $given)) {
 
 $tage = max(1, min(30, (int)($_GET['tage'] ?? 3)));          // ab wie vielen Tagen überfällig
 $r = einkauf_erinnerungen_cron($tage, 24);
-ec_out(200, ['ok' => true, 'gesendet' => (int)$r['gesendet'], 'geprueft' => (int)$r['geprueft']]);
+// Block D (11.11.2026): täglich auch bald ablaufende Preise (Rohstoff, Zukauf, Fremdfertigung) und Auto-EK aus abgelaufenen Preisen –
+// nicht nur, wenn jemand das Dashboard öffnet. pg_bald_pruefen läuft höchstens einmal am Tag (app_meta pg_bald_check).
+require_once __DIR__ . '/../core/preis_gueltig.php';
+$bald = 0; $ekAbg = 0;
+try { $bald = pg_bald_pruefen(); $ekAbg = pg_ek_abgelaufen_pruefen(); } catch (\Throwable $e) {}
+ec_out(200, ['ok' => true, 'gesendet' => (int)$r['gesendet'], 'geprueft' => (int)$r['geprueft'], 'preise_bald' => $bald, 'ek_abgelaufen' => $ekAbg]);

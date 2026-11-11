@@ -215,5 +215,51 @@ function pg_bald_pruefen(): int {
             $n++;
         }
     } catch (Throwable $e) {}
+    // Block D (11.11.2026, Fable 14.14): auch Zukauf (produkt_lieferant_preis) und Fremdfertigung/Premix (rezeptur_lief_angebot).
+    $n += pg_bald_pruefen_quelle("SELECT z.produkt_id AS oid, MIN(z.gueltig_bis) AS bis, p.name FROM produkt_lieferant_preis z JOIN produkt p ON p.id=z.produkt_id
+                                  WHERE z.gueltig_bis IS NOT NULL AND z.gueltig_bis BETWEEN ? AND ? GROUP BY z.produkt_id, p.name",
+                                 "SELECT DISTINCT a.id, a.nummer FROM angebot a WHERE a.produkt_id=? AND a.status IN ('offen','gesendet') AND (a.gueltig_bis IS NULL OR a.gueltig_bis >= ?) LIMIT 10",
+                                 'produkt', 'Zukaufpreis', '?p=produkt&id=');
+    $n += pg_bald_pruefen_quelle("SELECT r.id AS oid, MIN(a.gueltig_bis) AS bis, r.name FROM rezeptur_lief_angebot a JOIN rezeptur r ON r.id=a.rezeptur_id
+                                  WHERE a.gueltig_bis IS NOT NULL AND a.gueltig_bis BETWEEN ? AND ? GROUP BY r.id, r.name",
+                                 "SELECT DISTINCT an.id, an.nummer FROM angebot an JOIN angebot_position ap ON ap.angebot_id=an.id
+                                  WHERE ap.rezeptur_id=? AND an.status IN ('offen','gesendet') AND (an.gueltig_bis IS NULL OR an.gueltig_bis >= ?) LIMIT 10",
+                                 'rezeptur', 'Fremdfertigungs-/Premixpreis', '?p=rezeptur_detail&id=');
+    return $n;
+}
+// Bald ablaufende Preise einer Quelle (Produkt-Zukauf, Rezeptur-Fremdfertigung) -> Benachrichtigung + Aufgabe, wenn sie in einem
+// offenen Angebot stecken. Einmal je Objekt und Datum (app_meta pg_bald_<typ>_<id>_<datum>).
+function pg_bald_pruefen_quelle(string $sqlBald, string $sqlAngebote, string $typ, string $was, string $link): int {
+    $n = 0;
+    try {
+        foreach (all($sqlBald, [pg_heute(), pg_plus_tage(3)]) as $b) {
+            $oid = (int)$b['oid'];
+            $ang = all($sqlAngebote, [$oid, pg_heute()]);
+            if (!$ang) continue;
+            $key = 'pg_bald_' . $typ . '_' . $oid . '_' . $b['bis'];
+            if (meta_get($key, '') === '1') continue;
+            meta_set($key, '1');
+            benachrichtigung_add($was . ' läuft bald ab: ' . $b['name'] . ' (bis ' . pg_datum($b['bis']) . ')',
+                'Steckt in offenen Angeboten: ' . implode(', ', array_column($ang, 'nummer')) . '. Neu anfragen oder Angebotsgültigkeit prüfen.', $link . $oid, 'sonstiges', true);
+            if (function_exists('aufgabe_neu') && table_exists('aufgabe')) {
+                try { aufgabe_neu($was . ' neu anfragen: ' . $b['name'] . ' (gültig bis ' . pg_datum($b['bis']) . ')',
+                        'Der Preis läuft bald ab und steckt in offenen Angeboten: ' . implode(', ', array_column($ang, 'nummer')) . '.', 1, null, (string)$b['bis'], null, $typ, $oid); } catch (Throwable $e) {}
+            }
+            $n++;
+        }
+    } catch (Throwable $e) {}
+    return $n;
+}
+// Täglich (Cron): Auto-EK, dessen Lieferantenpreise inzwischen alle abgelaufen sind, bekommt das Kennzeichen „aus abgelaufenem Preis"
+// (item_ek_aus_lieferantenpreis setzt es; der EK selbst bleibt). Block D, 11.11.2026.
+function pg_ek_abgelaufen_pruefen(): int {
+    $n = 0;
+    try {
+        foreach (all("SELECT i.id FROM item i WHERE i.ek_auto=1 AND i.ek_abgelaufen_seit IS NULL
+                        AND EXISTS (SELECT 1 FROM lieferant_preis lp WHERE lp.item_id=i.id AND lp.preis>0)
+                        AND NOT EXISTS (SELECT 1 FROM lieferant_preis lp WHERE lp.item_id=i.id AND lp.preis>0 AND (lp.gueltig_bis IS NULL OR lp.gueltig_bis >= CURDATE()))") as $r) {
+            item_ek_aus_lieferantenpreis((int)$r['id']); $n++;
+        }
+    } catch (Throwable $e) {}
     return $n;
 }
