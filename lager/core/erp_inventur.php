@@ -104,14 +104,18 @@ function erp_inv_item(int $id): ?array {
 // Gewicht einer Kapsel in mg (Füllgewicht der Rezeptur + Leerkapsel) für „Bulk-Sack wiegen" - wie in der Produktion (4.8).
 // 0 = unbekannt (dann ist es keine Kapsel-Bulkware bzw. es muss eingegeben werden).
 function erp_inv_kapsel_mg(int $item_id, int $charge_id = 0): float {
-    $r = one("SELECT r.einheit_fuellmenge AS fuell, r.darreichungsform AS df,
+    $r = one("SELECT r.einheit_fuellmenge AS ff, (SELECT COALESCE(SUM(z.menge_mg),0) FROM rezeptur_zutat z WHERE z.rezeptur_id=r.id) AS zut, r.darreichungsform AS df,
                      COALESCE(kc.leergewicht_mg, ki.leergewicht_mg, kr.leergewicht_mg) AS leer
               FROM item i LEFT JOIN rezeptur r ON r.id=i.rezeptur_id
               LEFT JOIN charge c ON c.id=? LEFT JOIN kapselgroesse kc ON kc.id=c.kapselgroesse_id
               LEFT JOIN kapselgroesse ki ON ki.id=i.kapselgroesse_id LEFT JOIN kapselgroesse kr ON kr.id=r.kapselgroesse_id
               WHERE i.id=?", [$charge_id, $item_id]);
-    if (!$r || !in_array((string)$r['df'], ['kapsel', 'softgel'], true) || (float)$r['fuell'] <= 0) return 0.0;
-    return round((float)$r['fuell'] + (float)($r['leer'] ?? 0), 2);
+    if (!$r || !in_array((string)$r['df'], ['kapsel', 'softgel'], true)) return 0.0;
+    // Füllgewicht je Kapsel: einheit_fuellmenge (Altdaten in g, sonst mg), sonst Summe der Rezepturzeilen (mg je Einheit).
+    $ff = (float)($r['ff'] ?? 0);
+    $fuell = $ff > 0 ? ($ff < 5 ? $ff * 1000 : $ff) : (float)$r['zut'];
+    if ($fuell <= 0) return 0.0;
+    return round($fuell + (float)($r['leer'] ?? 0), 2);
 }
 // Wert in € einer Menge zum EK (item.ek_preis je preis_bezug). null = nicht umrechenbar (z. B. Stk gegen kg).
 function erp_inv_wert(array $o, float $menge, string $einheit): ?float {
