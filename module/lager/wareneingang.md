@@ -68,3 +68,5 @@ Beim Buchen mit „Zur Bestellung“ setzt `bestellung_lieferung_erfassen()` an 
 - Das Feld „Zur Bestellung“ entfällt. Mengen werden deutsch eingegeben (`7.000`).
 
 - Artikelsuche (ohne Bestellung) findet auch Synonyme. Die Kapselgröße bzw. das Füllgewicht steht fett im Treffer (Teil 5).
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

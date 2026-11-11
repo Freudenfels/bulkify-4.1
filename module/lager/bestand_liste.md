@@ -33,3 +33,5 @@ Der Mengen-Helfer `$mng($x,$e)` zeigt Bestände mit Charge-Einheit `g`/`ml` jetz
 
 ## Reiter Etiketten (08.11.2026)
 Eigener Reiter „Etiketten“ (`?p=lager&kat=etikett`): Verpackungs-Artikel mit `verpackung_rolle=etikett`. Der Reiter „Verpackung“ zeigt Etiketten nicht mehr (nur noch Behälter, Deckel, Beutel usw.). „Alle“ unverändert.
+
+**Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).

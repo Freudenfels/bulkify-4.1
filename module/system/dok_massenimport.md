@@ -36,3 +36,5 @@ die Zuordnung auf Dokument + Charge. Details: `core/dokimport.md`.
 ## PRG-Aktionen
 `upload`, `zuordnen`, `skip`/`unskip`, `lief_setzen`, `lief_alle`, `neu_anlegen`/`neu_alle` (mit Dubletten-Schutz),
 `import`, `abbrechen` – alle mit Redirect auf `?p=dok_massenimport`.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

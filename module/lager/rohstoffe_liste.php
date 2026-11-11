@@ -45,6 +45,9 @@ if ($kat === 'alle')            $rows = all("SELECT * FROM item");
 elseif ($istKapsel)             $rows = all("SELECT * FROM item WHERE kategorie='rohstoff' AND form='kapselhuelle'");
 elseif ($kat === 'rohstoff')    $rows = all("SELECT * FROM item WHERE kategorie='rohstoff' AND (form<>'kapselhuelle' OR form IS NULL)");
 else                            $rows = all("SELECT * FROM item WHERE kategorie=?", [$kat]);
+// Block C (11.11.2026): gesperrte Artikel standardmäßig ausgeblendet (Schalter oben).
+$inaktivAus = 0;
+if (!bx_inaktiv_an()) { $vor = count($rows); $rows = array_values(array_filter($rows, fn($r) => (int)($r['gesperrt'] ?? 0) === 0)); $inaktivAus = $vor - count($rows); }
 // Art-/Form-Filter (serverseitig, wie kat/fehlt). Greift für Rohstoffe; bei Leerkapseln ohne Wirkung.
 if ($artF !== '')  $rows = array_values(array_filter($rows, fn($r) => (string)($r['art'] ?? '') === $artF));
 if ($formF !== '') $rows = array_values(array_filter($rows, fn($r) => (string)($r['form'] ?? '') === $formF));
@@ -211,7 +214,7 @@ $neuBtn  = ($istKapsel ? bx_btn('Neue Leerkapsel', '?p=rohstoff&id=neu&form=kaps
          . ' ' . bx_btn('Specs/CoAs Massen-Import', '?p=dok_massenimport', 'ghost');
 $fehltLbl = ['irgendwas'=>'etwas fehlt','lief'=>'ohne Lieferant','preis'=>'ohne Preis','spec'=>'ohne Spec','coa'=>'ohne CoA'][$fehlt] ?? '';
 render_header('rohstoffe', $titel);
-bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), $neuBtn);
+bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), bx_inaktiv_schalter($inaktivAus) . ' ' . $neuBtn);
 if (isset($_GET['artfill'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">Stoffklasse (Art) bei <strong>' . (int)$_GET['artfill'] . '</strong> Rohstoff(en) automatisch vorbelegt. Leer gebliebene bitte am Rohstoff pflegen.</div>';
 if (isset($_GET['nfall'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px"><strong>' . (int)$_GET['nfall'] . '</strong> Rohstoffe gegen den EU-Novel-Food-Katalog geprüft (mit Datum gespeichert): <strong style="color:var(--err)">' . (int)($_GET['nfnf'] ?? 0) . ' Novel Food</strong>, ' . (int)($_GET['nfpr'] ?? 0) . ' zu prüfen, Rest konform.</div>';
 if (isset($_GET['kiok']))  echo '<div class="bx-panel badge-ok" style="padding:10px 14px">KI-Kurzinfo erzeugt und gespeichert – sie wird dir und dem Kunden als „KI-Info" angezeigt.</div>';

@@ -133,7 +133,7 @@ $it = $neu ? ['gesperrt'=>0] : one("SELECT * FROM item WHERE id=? AND kategorie=
 if (!$it) { $neu = true; $it = ['gesperrt'=>0]; }
 $v = fn($k) => h((string)($it[$k] ?? ''));
 $gesperrt = (int)($it['gesperrt'] ?? 0) === 1;
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($it['haupt_lieferant_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 $ROLLEN = verpackung_rollen();
 $rolle  = ($it['verpackung_rolle'] ?? '') ?: 'primaer';
 seed_kapselgroesse_if_empty();

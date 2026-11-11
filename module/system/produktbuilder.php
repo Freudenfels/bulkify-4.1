@@ -68,7 +68,7 @@ if ($vorschlag) {
     $charge = pb_charge($vorschlag, $einh);
 }
 
-$kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
+$kunden = all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 // Lager-Rohstoffe für die Auswahl (mit Gehalt des Leitwirkstoffs + ob CoA/Spec vorhanden).
 $rohstoffe = all("SELECT i.id, i.name, i.artikelnummer,
     (SELECT COALESCE(iw.gehalt_wert, iw.gehalt_prozent) FROM item_wirkstoff iw WHERE iw.item_id=i.id AND COALESCE(iw.gehalt_wert,iw.gehalt_prozent) IS NOT NULL ORDER BY iw.sort,iw.id LIMIT 1) AS gw,

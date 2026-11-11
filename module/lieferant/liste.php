@@ -10,6 +10,9 @@ $sort = $_GET['sort'] ?? 'firma';
 $dir  = $_GET['dir']  ?? 'asc';
 
 $rows = all("SELECT * FROM lieferanten");
+// Block C (11.11.2026): gesperrte Lieferanten standardmäßig ausgeblendet; offene Bewerbungen (gesperrt bis Freigabe) bleiben sichtbar.
+$inaktivAus = 0;
+if (!bx_inaktiv_an()) { $vor = count($rows); $rows = array_values(array_filter($rows, fn($r) => (int)($r['gesperrt'] ?? 0) === 0 || (string)($r['quelle'] ?? '') === 'bewerbung')); $inaktivAus = $vor - count($rows); }
 
 if ($q !== '') {
     $needle = mb_strtolower($q);
@@ -57,7 +60,7 @@ $cols = [
 ];
 
 render_header('lieferanten', 'Lieferanten');
-bx_head('Lieferanten', count($rows) . ' Einträge', bx_btn('Neuer Lieferant', '?p=lieferant&id=neu', 'primary'));
+bx_head('Lieferanten', count($rows) . ' Einträge', bx_inaktiv_schalter($inaktivAus) . ' ' . bx_btn('Neuer Lieferant', '?p=lieferant&id=neu', 'primary'));
 $bewOffen = count(array_filter($rows, fn($r) => (int)$r['gesperrt'] === 1 && (string)($r['quelle'] ?? '') === 'bewerbung'));
 if ($bewOffen > 0) echo '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px">'
     . '<strong>' . $bewOffen . ' neue Lieferanten-Bewerbung(en)</strong> warten auf Freigabe – in der Spalte „Status" mit <em>Bewerbung</em> markiert. Zum Freigeben den Lieferanten öffnen.</div>';

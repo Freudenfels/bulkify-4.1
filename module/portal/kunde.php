@@ -1692,7 +1692,7 @@ if ($meineProduktIds) {
     $meineProdukte = all("SELECT p.id, COALESCE(NULLIF(pkn.name,''), NULLIF(p.kundenname,''), p.name) AS name, r.darreichungsform
         FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
                LEFT JOIN produkt_kunde_name pkn ON pkn.produkt_id=p.id AND pkn.kunde_id=" . (int)$kid . "
-        WHERE p.id IN ($phMp) AND COALESCE(p.status,'aktiv')<>'archiviert' ORDER BY name", array_keys($meineProduktIds));
+        WHERE p.id IN ($phMp) AND COALESCE(p.status,'aktiv') NOT IN ('archiviert','inaktiv') ORDER BY name", array_keys($meineProduktIds));
 }
 $primVerp  = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND gesperrt=0 ORDER BY name");
 $stdStueck = std_stueckzahlen();

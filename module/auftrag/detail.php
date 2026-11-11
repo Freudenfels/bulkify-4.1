@@ -1235,7 +1235,7 @@ if (has_role('admin') || has_role('sales')):
           <input type="hidden" name="aktion" value="rezeptur_verknuepfen">
           <select name="rezeptur_id" class="rscombo" style="min-width:240px" required>
             <option value="">– Rezeptur wählen –</option>
-            <?php foreach (all("SELECT id, nummer, name FROM rezeptur ORDER BY nummer DESC") as $rz): ?>
+            <?php foreach (all("SELECT id, nummer, name FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' ORDER BY nummer DESC") as $rz): ?>
               <option value="<?= (int)$rz['id'] ?>"><?= h($rz['nummer']) ?><?= $rz['name'] ? ' · ' . h($rz['name']) : '' ?></option>
             <?php endforeach; ?>
           </select>

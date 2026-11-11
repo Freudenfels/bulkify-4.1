@@ -221,3 +221,5 @@ Siehe `core/preis_gueltig.md`.
 **Preise je 1.000 Stk (Sofortfix 11.11.2026):** Lieferantenpreis und EK sind Textfelder (Komma erlaubt, `zahl_lesen()`) mit Auswahl „je Stk / je 1.000 Stk“. Gespeichert wird je Bezugseinheit mit 6 Nachkommastellen (2,95 je 1.000 = 0,002950). Anzeige unter 0,01 € als „2,95 € / 1.000 Stk“.
 
 **Bestand korrigieren an der Charge (Block B, 11.11.2026):** läuft über `core/charge_korrektur.php`, mit Art, Grund-Auswahl und Notiz. Die Ursprungsmenge wird nicht mehr still überschrieben, es entsteht eine Korrekturbewegung.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Lieferanten-/Kunden-Auswahl ohne gesperrte (der gewählte bleibt). In den Lieferantenpreisen ist ein gesperrter Lieferant grau markiert („Lieferant gesperrt“) und nie „günstigster“.

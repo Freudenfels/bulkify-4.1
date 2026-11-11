@@ -73,7 +73,7 @@ function nummer_zurueckgeben(string $nummer): void {
 // Lesen: alle Kunden (für Zuordnung/Abgleich im Import). Nur id + firma + ust_id + kundennummer.
 function erp_kunden_alle(): array {
     if (!tabelle_da('kunden')) return [];
-    return all("SELECT id, firma, kundennummer, ust_id FROM kunden ORDER BY firma");
+    return all("SELECT id, firma, kundennummer, ust_id FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 }
 // Interne Kunden-Kürzel (kunden.kuerzel) als Map id => Kürzel – nur für interne Tabellen (kunde_link/kunde_anzeige in ui.php).
 function erp_kunden_kuerzel(): array {

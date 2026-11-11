@@ -448,7 +448,7 @@ function erp_kunde_verkaufsfertig(int $kunde_id): array {
 // Alle Kunden fuer die Auswahl beim Versand (Warenausgang-Planung).
 function erp_kunden_liste(): array {
     if (!tabelle_da('kunden')) return [];
-    return all("SELECT id, firma FROM kunden ORDER BY firma");
+    return all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 }
 
 // Produkt-Katalog eines Kunden fuer den Lieferschein-Generator: je Produkt Name, verknuepftes verkaufsfertiges
@@ -595,7 +595,7 @@ function erp_fulfillment_kunden(): array {
     if (!tabelle_da('kunden')) return [];
     $hat = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='kunden' AND COLUMN_NAME='nutzt_fulfillment'");
-    $w = $hat ? 'WHERE nutzt_fulfillment=1' : '';
+    $w = $hat ? 'WHERE nutzt_fulfillment=1 AND COALESCE(gesperrt,0)=0' : '';   // Block C: gesperrte nicht auswählbar
     return all("SELECT id, firma FROM kunden $w ORDER BY firma");
 }
 
@@ -980,7 +980,7 @@ function erp_items_l2(): array {
 
 function erp_lieferanten(): array {
     if (!tabelle_da('lieferanten')) return [];
-    return all("SELECT id, firma FROM lieferanten ORDER BY firma");
+    return all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 }
 
 // Firmennamen in bedeutende Wort-Tokens zerlegen (Rechtsform-/Fuellwoerter weg), damit

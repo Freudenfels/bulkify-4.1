@@ -124,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
     }
 }
 
-$kunden = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
+$kunden = all("SELECT id, firma, kundennummer FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 // Leistungs-Katalog (Dienstleistungen) zum Auswählen statt nur Freitext – z. B. Fulfillment, Lagerung, Laboranalyse.
 $dlKatalog = function_exists('bu_dienstleistungen_katalog') ? bu_dienstleistungen_katalog() : [];
 $dlkJs = [];

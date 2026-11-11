@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $namen = all("SELECT lieferant, COUNT(*) AS n FROM ek_import WHERE lieferant IS NOT NULL AND lieferant<>'' AND lieferant_id IS NULL GROUP BY lieferant ORDER BY n DESC");
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 $offenMitTreffer = 0; $offenOhne = 0;
 foreach ($namen as $z) { if (ek_lief_ist_muell((string)$z['lieferant'])) continue; if (ek_lieferant_kandidat((string)$z['lieferant'])) $offenMitTreffer++; else $offenOhne++; }
 $verknuepft = (int) scalar("SELECT COUNT(DISTINCT lieferant) FROM ek_import WHERE lieferant_id IS NOT NULL");

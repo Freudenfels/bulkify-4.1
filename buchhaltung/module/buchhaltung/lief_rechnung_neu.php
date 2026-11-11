@@ -116,7 +116,7 @@ if ($preWaehrung !== 'EUR') {
 }
 
 $waehrungen = kr_waehrungen();
-$lieferanten = all("SELECT id, firma, waehrung, land FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma, waehrung, land FROM lieferanten WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($vorLieferant ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 $bestellungen = all("SELECT b.id, b.nummer, l.firma FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id ORDER BY b.id DESC LIMIT 100");
 // JS-Karten: Lieferant -> Währung und Währung -> Vorschlagskurs (aus Cache, ohne Netz).
 $mapWaehrung = [];

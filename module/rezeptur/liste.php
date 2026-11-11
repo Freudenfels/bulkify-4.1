@@ -26,9 +26,11 @@ $rows = all("SELECT r.*, k.firma AS kunde_firma, kg.name AS kaps_name,
                 WHERE z.rezeptur_id=r.id AND z.item_id IS NOT NULL
                   AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=z.item_id AND d.typ IN ('spec','coa','analyse'))) AS dok_fehlen
              FROM rezeptur r LEFT JOIN kunden k ON k.id=r.kunde_id LEFT JOIN kapselgroesse kg ON kg.id=r.kapselgroesse_id
-             WHERE r.kunde_id IS NULL OR r.status IN ('eingefroren','freigegeben','vorschlag','entwurf')");
+             WHERE r.kunde_id IS NULL OR r.status IN ('eingefroren','freigegeben','vorschlag','entwurf','inaktiv')");
 // Suche ist LIVE (clientseitig, siehe Script unten) – es werden immer alle Zeilen gerendert und beim
 // Tippen sofort gefiltert. $q dient nur zum Vorbefüllen (z. B. per Deep-Link).
+$inaktivAus = 0;   // Block C (11.11.2026): Status „inaktiv" standardmäßig ausgeblendet
+if (!bx_inaktiv_an()) { $vor = count($rows); $rows = array_values(array_filter($rows, fn($r) => (string)($r['status'] ?? '') !== 'inaktiv')); $inaktivAus = $vor - count($rows); }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
 // Formulierung (Zutaten) je Rezeptur in EINER Abfrage – als Unterscheidungshilfe bei gleichnamigen Rezepturen.
@@ -129,7 +131,7 @@ $cols = [
 render_header('rezeptur', 'Rezepturen');
 $umbauN = count(rezepturen_zu_ueberarbeiten());   // Rezepturen mit nicht gematchten Rohstoffen
 bx_head('Rezepturen', count($rows) . ' Einträge',
-        bx_btn('Produktbuilder (KI)', '?p=produktbuilder') . ' '
+        bx_inaktiv_schalter($inaktivAus) . ' ' . bx_btn('Produktbuilder (KI)', '?p=produktbuilder') . ' '
         . ($umbauN ? bx_btn('Überarbeiten (' . $umbauN . ')', '?p=rezeptur_umbau') . ' ' : '')
         . bx_btn('Neue Rezeptur', '?p=rezeptur_detail&id=neu', 'primary'));
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Rezeptur gelöscht.</div>';

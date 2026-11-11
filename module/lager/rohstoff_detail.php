@@ -509,7 +509,7 @@ $it = $neu ? $neuDefault : one("SELECT * FROM item WHERE id=?", [(int)$id]);
 if (!$it) { $neu = true; $it = $neuDefault; }
 $v = fn($key) => h((string)($it[$key] ?? ''));
 $gesperrt = (int)($it['gesperrt'] ?? 0) === 1;
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($it['haupt_lieferant_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 seed_kapselgroesse_if_empty();
 $KAPSELN = all("SELECT id, name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg ASC");
 seed_naehrstoff_if_empty();
@@ -623,12 +623,12 @@ $resNum = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ','
 $fremd_gesamt = $neu ? 0 : item_fremdbestand((int)$id);
 $fremdJeKunde = $neu ? [] : item_fremdbestand_je_kunde((int)$id);
 $fremdJeEinheit = $neu ? [] : item_fremdbestand_je_einheit((int)$id);
-$fremdKunden  = all("SELECT id, firma FROM kunden ORDER BY firma");
+$fremdKunden  = all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($it['fremd_besitzer_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 // Ins Fremdlager (Lager 2) nur für Fulfillment-Kunden umbuchen (bulkify-4-1-lager2, S-16).
-$flKunden     = all("SELECT id, firma FROM kunden WHERE nutzt_fulfillment=1 ORDER BY firma");
+$flKunden     = all("SELECT id, firma FROM kunden WHERE nutzt_fulfillment=1 AND COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 if (!$neu) seed_lieferant_preis_if_empty();
-$preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma, l.kuerzel AS lief_kuerzel FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
-$preis_lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$preise = $neu ? [] : all("SELECT lp.*, COALESCE(l.firma, lp.lieferant_name) AS firma, l.kuerzel AS lief_kuerzel, COALESCE(l.gesperrt,0) AS lief_gesperrt FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id WHERE lp.item_id=? ORDER BY lp.preis ASC, lp.menge_ab ASC", [(int)$id]);
+$preis_lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 
 function bx_bald(string $modul): void {
     echo '<div class="bx-tablewrap"><table class="bx-table"><tbody><tr><td class="muted">'
@@ -1701,12 +1701,13 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
       <tbody>
       <?php if (!$preise): ?><tr><td colspan="9" class="muted">Noch keine Preise. Unten eintragen oder per Preisanfrage einholen.</td></tr><?php endif; ?>
       <?php // „günstigster" nur unter den GÜLTIGEN Preisen (abgelaufene grau, nie still bevorzugt).
-            $pgGueltig = array_filter($preise, fn($x) => pg_status($x['gueltig_bis'] ?? null) !== 'abgelaufen');
+            $pgGueltig = array_filter($preise, fn($x) => pg_status($x['gueltig_bis'] ?? null) !== 'abgelaufen' && empty($x['lief_gesperrt']));   // Block C: gesperrte Lieferanten nie „günstigster"
             $best = $pgGueltig ? min(array_map(fn($x) => (float)$x['preis'], $pgGueltig)) : ($preise ? (float)$preise[0]['preis'] : null);
-            foreach ($preise as $pz): $pzAbg = pg_status($pz['gueltig_bis'] ?? null) === 'abgelaufen'; $ist_best = !$pzAbg && $best !== null && abs((float)$pz['preis'] - $best) < 0.0001; ?>
+            foreach ($preise as $pz): $pzAbg = pg_status($pz['gueltig_bis'] ?? null) === 'abgelaufen' || !empty($pz['lief_gesperrt']); $ist_best = !$pzAbg && $best !== null && abs((float)$pz['preis'] - $best) < 0.0001; ?>
         <tr<?= $pzAbg ? ' style="opacity:.55"' : ($ist_best ? ' style="font-weight:600"' : '') ?>>
           <td><?= h($pz['firma'] ?: '–') ?> <?= $ist_best ? bx_badge('günstigster','ok') : '' ?>
-            <?php if ($pzAbg && (int)$pz['lieferant_id'] > 0): ?><button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" data-name="<?= $v('name') ?>" data-lieferant="<?= (int)$pz['lieferant_id'] ?>"
+            <?= !empty($pz['lief_gesperrt']) ? bx_badge('Lieferant gesperrt', 'err') : '' ?>
+            <?php if ($pzAbg && empty($pz['lief_gesperrt']) && (int)$pz['lieferant_id'] > 0): ?><button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" data-name="<?= $v('name') ?>" data-lieferant="<?= (int)$pz['lieferant_id'] ?>"
               data-staffel="<?= h(implode(', ', array_map(fn($x) => rtrim(rtrim(number_format((float)$x['menge_ab'], 3, '.', ''), '0'), '.'), array_filter($preise, fn($x) => (int)$x['lieferant_id'] === (int)$pz['lieferant_id'] && (float)$x['menge_ab'] > 0)))) ?>"
               onclick="bxAnfrageOeffnen(<?= (int)$id ?>,this)">neu anfragen</button><?php endif; ?></td>
           <td class="muted"><?= h(rohstoff_lief_kennung($it['artikelnummer'] ?? '', $pz['lief_kuerzel'] ?? '') ?: '–') ?></td>

@@ -10,6 +10,9 @@ $sort = $_GET['sort'] ?? 'aktualisiert';
 $dir  = $_GET['dir']  ?? 'desc';
 
 $rows = all("SELECT * FROM kunden");
+// Block C (11.11.2026): gesperrte Kunden standardmäßig ausgeblendet; Selbst-Registrierungen, die auf Freigabe warten, bleiben sichtbar.
+$inaktivAus = 0;
+if (!bx_inaktiv_an()) { $vor = count($rows); $rows = array_values(array_filter($rows, fn($r) => (int)($r['gesperrt'] ?? 0) === 0 || (string)($r['quelle'] ?? '') === 'registrierung')); $inaktivAus = $vor - count($rows); }
 
 // Marken je Kunde (White-Label) – für Anzeige und Suche
 $markenByKunde = [];
@@ -46,7 +49,7 @@ $cols = [
 $kiKopf = '<button type="button" class="btn btn-ghost" onclick="document.getElementById(\'kundeKiDlg\').showModal()">Kunde aus Text (KI)</button>'
         . ' ' . bx_btn('Neuer Kunde', '?p=kunde&id=neu', 'primary');
 render_header('kunden', 'Kunden');
-bx_head('Kunden', count($rows) . ' Einträge', $kiKopf);
+bx_head('Kunden', count($rows) . ' Einträge', bx_inaktiv_schalter($inaktivAus) . ' ' . $kiKopf);
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Kunde gelöscht (' . (int)$_GET['geloescht'] . ' Datensätze entfernt).</div>';
 if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['kifehler']) . '</div>';
 ?>

@@ -22,3 +22,5 @@ Lieferant (nicht managebar, kein Portal). Diese Seite schließt die Lücke.
 Liste je Text-Name: Zeilenzahl · Vorschlag (bestehender Lieferant oder „neu"). Pro Name
 „verknüpfen"/„neu anlegen" oder Dropdown auf einen anderen Lieferanten. Bulk: „Alle mit
 Treffer verknüpfen" + „Alle übrigen anlegen". Müll-Namen werden ignoriert.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

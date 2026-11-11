@@ -31,3 +31,5 @@ In der Rohstoff-/Nicht-Kapsel-Ansicht zwei Spalten: **Bedarf** (Summe `need` aus
 
 ## Spalte MOQ (11.11.2026)
 Neben „Preis ab“ steht unsere Mindestmenge (`item.moq_menge` + Einheit), die Notiz als Tooltip. Die Spalte ist sortierbar. Siehe `core/rohstoff_moq.md`.
+
+**Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).

@@ -11,3 +11,5 @@
 5. Button „Neue Verpackung" (Nummer VP-… automatisch).
 
 **Zusammenhang:** Ein **Produkt** = Rezeptur + **Verpackung** + Kunde. Diese Liste liefert die Verpackungen dafür.
+
+**Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).

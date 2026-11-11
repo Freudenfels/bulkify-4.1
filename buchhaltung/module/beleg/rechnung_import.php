@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'impor
     }
 }
 
-$kunden = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
+$kunden = all("SELECT id, firma, kundennummer FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
 render_header('rechnungen', 'Alt-Rechnungen importieren');

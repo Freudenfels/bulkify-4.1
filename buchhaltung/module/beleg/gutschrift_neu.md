@@ -21,3 +21,5 @@ Füllt die Positionszeilen zum Prüfen/Anpassen; leere Vorlagezeilen werden erse
 - Text einfügen: „Positionen übernehmen" versucht das Spaltenformat; klappt das nicht, wird **automatisch roh**
   übernommen. Zusätzlicher Button **„Roh übernehmen"**: jede nicht-leere Zeile = eine Position, Betrag am
   Zeilenende wird Preis (Menge 1). So geht nichts mehr verloren – nur noch Beträge/Mengen prüfen.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

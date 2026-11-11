@@ -216,7 +216,7 @@ if (!$b) { $neu = true; $b = ['status'=>'offen']; }
 $v = fn($k) => h((string)($b[$k] ?? ''));
 $geliefert = ($b['status'] ?? '') === 'geliefert';
 
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($b['lieferant_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 $items = all("SELECT i.id, i.name, i.einheit, i.ek_preis, i.kategorie, CONCAT_WS(' ', NULLIF(i.synonym,''), NULLIF(i.synonyme,'')) AS syn,
                      COALESCE(kgi.name, kgr.name) AS kg_name, IF(r.darreichungsform IN ('kapsel','softgel','tablette'), r.einheit_fuellmenge, NULL) AS fuell_mg
               FROM item i LEFT JOIN kapselgroesse kgi ON kgi.id=i.kapselgroesse_id LEFT JOIN rezeptur r ON r.id=i.rezeptur_id LEFT JOIN kapselgroesse kgr ON kgr.id=r.kapselgroesse_id

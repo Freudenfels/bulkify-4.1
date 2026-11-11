@@ -23,3 +23,5 @@ Die Prüfung selbst (Anlegen / ablehnen) passiert im Lieferantenkonto, Reiter **
 ## Kategorie Leerkapseln (10.11.2026)
 Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur Leerkapseln verkaufen. Sie steht neben Rohstoff, Verpackung, Verbrauch, Maschine, Labor und Fertige Produkte und wird wie diese in `lieferanten.kategorien` gespeichert.
 Die Spalte Kategorien zeigt jetzt Klartext statt der Schlüssel, z. B. „Rohstoff, Leerkapseln“. Die Suche findet „leerkapsel“.
+
+**Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).

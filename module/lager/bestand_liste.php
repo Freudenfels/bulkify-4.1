@@ -40,6 +40,9 @@ elseif ($kat === 'etikett')    { $where = "i.kategorie='verpackung' AND COALESCE
 elseif ($kat === 'verpackung') { $where = "i.kategorie='verpackung' AND COALESCE(i.verpackung_rolle,'')<>'etikett'"; $params = []; }
 else                           { $where = "i.kategorie=?"; $params = [$kat]; }
 
+// Block C (11.11.2026): gesperrte Artikel standardmäßig ausgeblendet – auch mit „auch leere anzeigen" (Schalter oben).
+$inaktivAus = bx_inaktiv_an() ? 0 : (int) scalar("SELECT COUNT(*) FROM item i WHERE $where AND COALESCE(i.gesperrt,0)=1", $params);
+if (!bx_inaktiv_an()) $where .= " AND COALESCE(i.gesperrt,0)=0";
 $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_menge,i.mindestbestand,
              i.elektrisch,i.pruef_intervall_monate,i.letzte_pruefung,i.fremdprodukt,
              (SELECT GROUP_CONCAT(DISTINCT k.firma ORDER BY k.firma SEPARATOR ', ')
@@ -175,7 +178,7 @@ $aktion = $istBM
     : bx_btn('Wareneingang', '?p=wareneingang', 'primary');
 
 render_header('lager', 'Warenlager');
-bx_head('Warenlager', count($rows) . ' Artikel' . ($ort !== 'alle' ? ' · ' . $ORTE[$ort] : ''), $aktion);
+bx_head('Warenlager', count($rows) . ' Artikel' . ($ort !== 'alle' ? ' · ' . $ORTE[$ort] : ''), bx_inaktiv_schalter($inaktivAus) . ' ' . $aktion);
 $ortQ = $ort !== 'alle' ? '&ort=' . $ort : '';
 ?>
 <?php // Lager-Sicht: Alle (totale Übersicht) · Lager 1 (unser Bestand) · Lager 2 (Fremdlager/Kundenware). ?>

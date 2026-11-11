@@ -17,3 +17,5 @@ vorbelegt. Kleine JS-Logik schaltet Währung/Kurs-Feld/Labels live um (Kurs-Vors
 
 ## Upload alter/neuer Rechnungen (neu)
 Original-Lieferantenrechnung (PDF/Foto) hochladbar: „KI auslesen & vorbefüllen" speichert die Datei, liest sie per KI aus (be_ki_auslesen) und befüllt Lieferant (Namensabgleich), Rechnungsnr, Datum, Netto, USt, Währung vor. Beim Speichern wird die Datei an die Eingangsrechnung gehängt (lieferant_rechnung.datei). KI nicht eingerichtet -> Datei wird trotzdem gespeichert, Felder manuell.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

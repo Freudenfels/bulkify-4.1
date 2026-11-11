@@ -17,6 +17,8 @@ $rows = all("SELECT p.*, k.firma AS kunde_firma, r.name AS rezeptur_name, r.numm
              LEFT JOIN kunden k ON k.id=p.kunde_id
              LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
              LEFT JOIN item v ON v.id=p.verpackung_id");
+$inaktivAus = 0;   // Block C (11.11.2026): inaktive Produkte standardmäßig ausgeblendet
+if (!bx_inaktiv_an()) { $vor = count($rows); $rows = array_values(array_filter($rows, fn($r) => (string)($r['status'] ?? '') !== 'inaktiv')); $inaktivAus = $vor - count($rows); }
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, function($r) use ($needle) {
@@ -58,7 +60,7 @@ $cols = [
 ];
 
 render_header('produkte', 'Produkte');
-bx_head('Produkte', count($rows) . ' Einträge', bx_btn('Kundenpreise', '?p=kundenpreise', 'ghost') . ' ' . bx_btn('Neues Produkt', '?p=produkt&id=neu', 'primary'));
+bx_head('Produkte', count($rows) . ' Einträge', bx_inaktiv_schalter($inaktivAus) . ' ' . bx_btn('Kundenpreise', '?p=kundenpreise', 'ghost') . ' ' . bx_btn('Neues Produkt', '?p=produkt&id=neu', 'primary'));
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produkt gelöscht.</div>';
 ?>
 <form class="bx-listbar" method="get">

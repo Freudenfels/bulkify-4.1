@@ -18,3 +18,5 @@ Kartons, Verbrauchsgüter, Inventar, Maschinen, Sonstiges.
   farbig markiert; Liste aller fälligen über `pruefungen_faellig()`.
 
 Angezeigt wird das im **Warenlager** (`bestand_liste.php`) über die Typ-Reiter.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

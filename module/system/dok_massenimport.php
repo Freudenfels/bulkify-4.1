@@ -235,7 +235,7 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
     dokimport_hashes_nachtragen($jobId);        // Inhalts-Hashes nachtragen (aeltere Jobs)
     $zeilen = dokimport_zeilen($jobId);
     // Lieferanten (Aussteller) für die Zuordnung. Durchsuchbares Dropdown (rscombo).
-    $lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+    $lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
     $liefSelect = function ($selId, string $name = 'lieferant_id') use ($lieferanten) {
         $out = '<select name="' . $name . '" class="rscombo" data-ph="Lieferant suchen…" style="min-width:190px;font-size:12px"><option value="0">– kein Lieferant –</option>';
         foreach ($lieferanten as $l) {

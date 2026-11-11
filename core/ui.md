@@ -35,3 +35,5 @@ Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … �
 `kunde_nachricht_panel($kunde_id, $auftrag_id, $angebot_id, $dataPanel)`: Verlauf der Kunden-Nachrichten + Antwortformular (aktion=kunde_nachricht) für Auftrag/Angebot.
 
 Dark Mode (03.11.2026): Die Chat-Blasen von `bx_chat()` sind im Dark Mode dunkel getönt (Team grün, Gegenstelle lime) mit heller Schrift. Auch verlinkte Einträge (↗) und das Datum sind lesbar (`public/assets/app.css`). Vorher blieben die Flächen hell, Links nutzten die helle Dark-Mode-Schrift.
+
+**Schalter (Block C, 11.11.2026):** `bx_inaktiv_an()` / `bx_inaktiv_schalter($anzahl)` – Listen blenden Gesperrte/Inaktive standardmäßig aus, `?inaktiv=1` zeigt sie (Knopf im Seitenkopf mit Anzahl).

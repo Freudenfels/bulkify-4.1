@@ -25,3 +25,5 @@
 - **Flüssig** → Volumen (ml).
 
 **Verkauf-Sicht (Rollen):** Der Reiter **Verkauf** (VK-Aufschlag + VK-Staffel) wird nur angezeigt, wenn `darf_verkauf()` (core/auth.php) wahr ist – Produktionsmitarbeiter (Werk-Bereich) sehen ihn NICHT (EK/Einkauf bleibt). Beim Speichern durch eine Produktionsrolle wird `vk_aufschlag_prozent` NICHT auf null gesetzt, sondern der vorhandene Wert erhalten.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

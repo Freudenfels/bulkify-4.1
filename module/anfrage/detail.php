@@ -166,7 +166,7 @@ $rezEntwurf  = $rezId && in_array($rezStatus, ['entwurf', 'abgelehnt'], true);
 $rezSyncbar  = $rezId && in_array($rezStatus, ['entwurf', 'abgelehnt', 'vorschlag'], true);
 $rezVerbindlich = $rezId && in_array($rezStatus, ['freigegeben', 'eingefroren'], true);
 
-$kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
+$kunden = all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($a['kunde_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 // hat_dok = es liegt mind. ein Dokument (CoA/Spec/Analyse …) am Rohstoff -> „Papiere vorhanden". Eine Abfrage für alle.
 $rohstoffe = all("SELECT i.id, i.name, i.artikelnummer, i.synonym, i.cas,
                          EXISTS(SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id) AS hat_dok

@@ -191,7 +191,7 @@ if ($istPost && $neu && $aktion === 'anlegen') {
 }
 
 // ---------------------------------------------------------------- Daten
-$kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
+$kunden = all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [$neu ? 0 : (int) scalar("SELECT COALESCE(kunde_id,0) FROM produkt WHERE id=?", [(int)$id])]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 $rscombo = fn(array $liste) => count($liste) > 10 ? ' class="rscombo"' : '';
 $optListe = function (array $rows, $cur, string $leer = '– keine –', ?callable $lbl = null) {
     $o = '<option value="">' . h($leer) . '</option>';
@@ -203,7 +203,7 @@ $verpListe = fn(string $rolle, int $pid = 0) => all("SELECT id, name FROM item W
                                                        AND (? <> 'etikett' OR produkt_id IS NULL OR produkt_id=?) ORDER BY name", [$rolle, $rolle, $pid]);
 
 if ($neu) {
-    $rezepte = all("SELECT id, name, darreichungsform FROM rezeptur ORDER BY name");
+    $rezepte = all("SELECT id, name, darreichungsform FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' ORDER BY name");   // Block C: inaktive Rezepturen nicht auswählbar
     $glaeser = $verpListe('primaer');
     $istExtern = isset($_GET['extern']);
     render_header('produkte', 'Neues Produkt');
@@ -346,7 +346,7 @@ if ($darf) {
       . $fld('Standard-Name für Kunden (Fallback) ' . bx_hint('Gilt beim Kunden, wenn im Reiter Kunden kein eigener Name steht. Leer = interner Name.'), '<input type="text" name="kundenname" value="' . h((string)($p['kundenname'] ?? '')) . '">'),
         'Gleiche Namen werden automatisch mit v2, v3 … nummeriert.');
     if (!$istExtern) {
-        $rezepte = all("SELECT id, name, darreichungsform FROM rezeptur ORDER BY name");
+        $rezepte = all("SELECT id, name, darreichungsform FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' OR id=? ORDER BY name", [(int)$rid]);   // Block C: inaktive nicht auswählbar
         echo $dlg('dlgRez', 'Rezeptur', 'rezeptur', '<select name="rezeptur_id"' . $rscombo($rezepte) . ' style="width:100%">' . $optListe($rezepte, $rid, '– keine –', fn($r) => $r['name'] . ' · ' . ($DFORM[$r['darreichungsform']] ?? $r['darreichungsform'])) . '</select>',
                   'Die Zusammensetzung steht im Reiter Rezeptur. Ändern der Zutaten an der Rezeptur selbst.');
         $kgr = all("SELECT id, name, fuellmenge_mg FROM kapselgroesse ORDER BY fuellmenge_mg");

@@ -19,3 +19,5 @@ Gleiche Logik wie im Dashboard – wird von `core/mail.php` für Portal-Links in
 
 **Blocker 1 (2026-11-03):** `produkt_aus_rezeptur` legt weiter nur kundenneutrale Katalogprodukte an; `erp_produkt_slots_neutral()` (Spiegel von `produkt_slots_neutral()` im Dashboard) sorgt dafür, dass dabei nie ein bedruckter Kundenbeutel (-> neutraler Basis-Behälter) oder ein Kundenetikett / kundenspezifischer Deckel, Karton, Beipack im Slot landet.
 - erp_kunden_kuerzel() (08.11.2026): liest kunden.kuerzel als Map id => Kürzel (nur gepflegte; fehlt die Spalte, leere Map). Genutzt von kunde_kuerzel() in ui.php.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

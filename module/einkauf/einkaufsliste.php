@@ -215,7 +215,7 @@ $bulkBedarf = array_values(array_filter(bedarf_bulk(false), fn($b) => $b['zu_bes
 $freiBedarf = freibedarf_offen();
 $nachBedarf = meldebestand_bedarf();   // Meldebestand-Nachbestellungen (Lagerartikel unter Mindestbestand)
 $ohneFestlegung = auftraege_ohne_festlegung();   // Aufträge ohne Eigen/Fremd-Festlegung -> noch kein Bedarf, nur Hinweis
-$lieferanten = all("SELECT id, firma, waehrung FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma, waehrung FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 // Währung je Lieferant (viele China-Lieferanten in USD, nicht EUR). Default aus dem Lieferanten-Stamm.
 $liefWaehr = [];
 foreach ($lieferanten as $l) $liefWaehr[(int)$l['id']] = (string)($l['waehrung'] ?: 'EUR');

@@ -221,3 +221,5 @@ Steht dort „unter MOQ“, ist das nur ein Hinweis und keine Sperre.
 - „Gültig bis“ ist mit dem kürzesten EK-Preis vorbelegt, wenn der vor dem Standard liegt.
 - Gilt das Angebot länger, kommt ein Hinweis mit dem Knopf „Gültigkeit auf … setzen“ (`aktion=gueltig_ek_setzen`).
 - Ein abgelaufenes, gesendetes Angebot zeigt den Knopf „Verlängern bis …“ (`aktion=angebot_verlaengern`).
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

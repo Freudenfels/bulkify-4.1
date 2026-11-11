@@ -16,6 +16,8 @@ $sort = $_GET['sort'] ?? 'name';
 $dir  = $_GET['dir']  ?? 'asc';
 
 $rows = all("SELECT * FROM item WHERE kategorie='verpackung'");
+$inaktivAus = 0;   // Block C (11.11.2026): gesperrte standardmäßig ausgeblendet
+if (!bx_inaktiv_an()) { $vor = count($rows); $rows = array_values(array_filter($rows, fn($r) => (int)($r['gesperrt'] ?? 0) === 0)); $inaktivAus = $vor - count($rows); }
 if ($q !== '') {
     $needle = mb_strtolower($q);
     $rows = array_filter($rows, function($r) use ($needle) {
@@ -42,7 +44,7 @@ $cols = [
 ];
 
 render_header('verpackungen', 'Verpackungen');
-bx_head('Verpackungen', count($rows) . ' Einträge', bx_btn('Neue Verpackung', '?p=verpackung&id=neu', 'primary'));
+bx_head('Verpackungen', count($rows) . ' Einträge', bx_inaktiv_schalter($inaktivAus) . ' ' . bx_btn('Neue Verpackung', '?p=verpackung&id=neu', 'primary'));
 ?>
 <form class="bx-listbar" method="get">
   <input type="hidden" name="p" value="verpackungen">

@@ -81,3 +81,5 @@ Block „Wareneingang zuordnen“ (`#abgleich`, aus `core/bestellung_abgleich.ph
 **Block B (11.11.2026)**
 - **Block „Verknüpfte Chargen“** unter den Positionen: jede Charge einzeln mit Link, „Menge korrigieren“ (Chargenseite) und „Verknüpfung lösen“ (nur Admin, mit Rückfrage).
 - **„Wareneingang zuordnen“:** zeigt Mengen-Abweichungen und hat zusätzlich „Menge korrigieren und verknüpfen“ (Aktionen `abgl_korr_verknuepfen`, `abgl_loesen`).
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

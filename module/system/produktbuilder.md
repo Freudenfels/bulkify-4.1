@@ -32,3 +32,5 @@ Konstante.
 Bestellmenge. Flüssig: Einheiten = Flaschen × Tropfen/Flasche; sonst direkt Anzahl Einheiten. Gesamt je
 Rohstoff = mg je Bezug × Einheiten (g/kg). Beispiel 100× 30-ml-Flaschen D3/K2: 750 g D3-Öl + 750 g K2-Öl +
 1350 g MCT = 2850 g (= 30 ml × 0,95 × 100). Gegengeprüft.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

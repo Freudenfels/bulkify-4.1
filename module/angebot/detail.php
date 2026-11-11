@@ -399,8 +399,8 @@ if ($neu) {
 if (!$a) { $neu = true; $a = ['status'=>'offen']; }
 $v = fn($k) => h((string)($a[$k] ?? ''));
 
-$kunden   = all("SELECT id, firma, portal_token FROM kunden ORDER BY firma");
-$produkte = all("SELECT id, name FROM produkt ORDER BY name");
+$kunden   = all("SELECT id, firma, portal_token FROM kunden WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($a['kunde_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
+$produkte = all("SELECT id, name FROM produkt WHERE COALESCE(status,'')<>'inaktiv' OR id=? ORDER BY name", [(int)($a['produkt_id'] ?? 0)]);   // Block C: inaktive Produkte nicht auswählbar
 // Kataloge für „Position hinzufügen" (Typ zuerst)
 $rezepturKatalog = all("SELECT id, name, darreichungsform FROM rezeptur WHERE status IN ('entwurf','vorschlag','eingefroren','freigegeben') ORDER BY name");
 $rohstoffKatalog = all("SELECT id, name, artikelnummer, preis_bezug, beschaffenheit, dev FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
@@ -530,7 +530,7 @@ if (!$neu):
       <input type="hidden" name="aktion" value="rezeptur_verknuepfen">
       <select name="rezeptur_id" class="rscombo" style="min-width:240px" required>
         <option value="">– Rezeptur wählen –</option>
-        <?php foreach (all("SELECT id, nummer, name FROM rezeptur ORDER BY nummer DESC") as $rz): ?>
+        <?php foreach (all("SELECT id, nummer, name FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' ORDER BY nummer DESC") as $rz): ?>
           <option value="<?= (int)$rz['id'] ?>"><?= h($rz['nummer']) ?><?= $rz['name'] ? ' · ' . h($rz['name']) : '' ?></option>
         <?php endforeach; ?>
       </select>

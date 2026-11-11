@@ -17,3 +17,5 @@
    erscheinen als Banner (`?kifehler=`).
 
 **Regel / Muster:** Diese Datei ist die **Vorlage** für alle weiteren Listen (Lieferanten, Partner …): Daten holen → suchen → sortieren → `bx_table()`. Keine eigene Tabellen-Optik.
+
+**Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).

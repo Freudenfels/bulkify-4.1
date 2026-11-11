@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ex
     if ($vorKidPost) $_GET['kunde_id'] = $vorKidPost;   // Kunde-Auswahl beibehalten
 }
 
-$kunden  = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
+$kunden  = all("SELECT id, firma, kundennummer FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 $ustStd  = rtrim(rtrim(number_format((float) meta_get('ust_inland', 19), 2, '.', ''), '0'), '.');
 $vorKid  = (int)($_GET['kunde_id'] ?? ($_POST['kunde_id'] ?? 0));
 

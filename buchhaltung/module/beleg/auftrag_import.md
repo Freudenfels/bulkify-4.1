@@ -40,3 +40,5 @@ rezeptur_finden_oder_anlegen, produkt_aus_rezeptur) waren beim Ausgliedern in /b
 worden – der Import lief ins Leere (undefinierte Funktion). Sie sind jetzt in core/erp.php (Naht) portiert.
 Einschränkung: importierte Produkte bekommen (noch) KEINE Preismatrix; diese ist im Dashboard nacherzeugbar.
 Mehrfach-Upload (bis 5 PDFs) ist offen (Entscheidung „erst nur reparieren").
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

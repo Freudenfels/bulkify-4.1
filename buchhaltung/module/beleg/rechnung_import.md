@@ -25,3 +25,5 @@ dem **Original-PDF** als Download. So erscheinen auch Alt-Rechnungen im Kundenpo
 
 ## Route & Rechte
 `?p=rechnung_import` → `public/index.php`; Rolle **finance** (`core/auth.php`). Verlinkt aus der Rechnungen-Liste.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

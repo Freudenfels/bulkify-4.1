@@ -51,3 +51,5 @@ Im Kopf der Detailseite steht für **Admins** ein roter Knopf **„Anfrage lösc
 
 ## Unterlagen der Rohstoffe (10.11.2026)
 Ganz oben steht der Kasten aus `core/rohstoff_unterlagen.php`. Er zeigt, welche zugeordneten Rohstoffe (auch automatisch vorgeschlagene) und welche Zutaten der Rezeptur keine Spezifikation oder CoA vom Lieferanten haben und ob sie schon angefragt sind. Mit Häkchen und „Ausgewählte beim Lieferanten anfragen“ geht eine Sammelanfrage mit CoA/Spezifikation raus.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.

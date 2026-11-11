@@ -61,7 +61,7 @@ $it = $neu
 if (!$it) { $neu = true; $it = ['kategorie' => 'inventar', 'elektrisch' => 0, 'pruef_intervall_monate' => 12]; }
 $v = fn($k) => h((string)($it[$k] ?? ''));
 $elektrisch  = (int)($it['elektrisch'] ?? 0) === 1;
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($it['haupt_lieferant_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 $pruef = !$neu ? pruefung_status($it) : null;
 
 render_header('lager', $neu ? 'Neues Betriebsmittel' : $it['name']);

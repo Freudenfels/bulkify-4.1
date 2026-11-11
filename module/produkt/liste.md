@@ -14,3 +14,5 @@
 5. Button „Neues Produkt" (Nummer P-… automatisch).
 
 Knopf „Kundenpreise“ öffnet die zentrale Kundenpreis-Liste (`?p=kundenpreise`).
+
+**Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).

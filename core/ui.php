@@ -12,6 +12,15 @@ function bx_head(string $titel, string $sub = '', string $aktionen = ''): void {
     echo '</div>';
 }
 
+// Block C (11.11.2026): Gesperrt/inaktiv ist in Listen standardmäßig ausgeblendet. Schalter ?inaktiv=1 zeigt sie wieder
+// (alle anderen GET-Parameter bleiben). $ausgeblendet = wie viele gerade ausgeblendet sind (Zahl am Knopf).
+function bx_inaktiv_an(): bool { return !empty($_GET['inaktiv']); }
+function bx_inaktiv_schalter(int $ausgeblendet = 0): string {
+    $p = $_GET; if (bx_inaktiv_an()) unset($p['inaktiv']); else $p['inaktiv'] = 1;
+    $lbl = bx_inaktiv_an() ? 'Inaktive/gesperrte ausblenden' : 'Inaktive/gesperrte anzeigen' . ($ausgeblendet > 0 ? ' (' . $ausgeblendet . ')' : '');
+    return '<a class="btn btn-ghost" href="?' . h(http_build_query($p)) . '">' . h($lbl) . '</a>';
+}
+
 function bx_btn(string $label, string $href, string $variant = 'ghost'): string {
     return '<a class="btn btn-' . h($variant) . '" href="' . h($href) . '">' . h($label) . '</a>';
 }

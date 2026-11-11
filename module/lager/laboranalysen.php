@@ -116,7 +116,7 @@ $labMenge = function (array $p) use ($labWort): string {
 $ffProdukte = lager2_produkte();
 // Rohstoffe & (zugekaufte) Fertigware als Ziel fuer Lieferanten-Analysen. Grosse Liste -> im Formular live gefiltert.
 $rohItems   = all("SELECT id, name, kategorie, artikelnummer FROM item WHERE kategorie IN ('rohstoff','fertig','verkaufsfertig') ORDER BY (kategorie<>'rohstoff'), name");
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 $liste = laboranalysen_alle($suche);
 $kiBereit = ki_bereit();
 

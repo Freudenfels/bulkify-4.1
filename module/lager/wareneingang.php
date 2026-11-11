@@ -120,7 +120,7 @@ $items = all("SELECT i.id, i.name, i.kategorie, i.einheit, i.verpackung_rolle, C
               LEFT JOIN kunden k ON k.id=i.kunde_id
               LEFT JOIN kapselgroesse kgi ON kgi.id=i.kapselgroesse_id LEFT JOIN rezeptur r ON r.id=i.rezeptur_id LEFT JOIN kapselgroesse kgr ON kgr.id=r.kapselgroesse_id
               WHERE i.kategorie IN ('rohstoff','verpackung','fertig','verkaufsfertig') AND i.gesperrt=0 ORDER BY i.name");
-$lieferanten = all("SELECT id, firma FROM lieferanten ORDER BY firma");
+$lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 $bpListe = webe_offene_positionen('', 800);   // Teil 1: erwartete Lieferungen je Position (Artikel fest aus der Bestellung)
 // Erwartete Lieferungen (bestellt, noch nicht angekommen) – optionaler Bestellbezug beim Einbuchen.
 $offeneBestellungen = all("SELECT b.id, b.nummer, COALESCE(l.firma,'') AS lieferant FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id

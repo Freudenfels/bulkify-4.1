@@ -106,3 +106,5 @@ Der Block „warten auf die Festlegung des Wegs“ zeigt je Auftrag Links zu Auf
 **Notiz (11.11.2026):** „wartet auf Bestätigung“ wird nicht mehr in die Notiz geschrieben, den Stand zeigt die Statuskette. „Vorsorglich“ und „Direkt bestellt“ **ergänzen** eine vorhandene Notiz, statt sie zu überschreiben.
 
 **Doppelbestellung (11.11.2026):** Vor dem Anlegen prüft `core/bestellung_doppelt.php` offene Bestellungen desselben Artikels bzw. Auftrags. Treffer: Pop-up mit Link, weiter nur mit „Trotzdem bestellen“ (steht im Verlauf).
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
