@@ -14,6 +14,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f = fn($k) => trim($_POST[$k] ?? '');
     $aktion = $_POST['aktion'] ?? '';
     // Lebenszyklus setzen
+    // Block C (11.11.2026): Rezeptur inaktiv setzen / wieder aktivieren (nur Admin) – Bulk-/Premix-Artikel mit gesperrt.
+    if (!$neu && in_array($aktion, ['inaktiv_setzen', 'reaktivieren'], true) && has_role('admin')) {
+        $rI = rezeptur_inaktiv_setzen((int)$id, $aktion === 'inaktiv_setzen', (string)(current_user()['name'] ?? ''));
+        header('Location: ?p=rezeptur_detail&id=' . $id . '&inaktivmsg=' . rawurlencode($rI['msg'])); exit;
+    }
     if (!$neu && $aktion === 'status_setzen') {
         $ziel = $_POST['ziel'] ?? '';
         if (in_array($ziel, ['entwurf','vorschlag','freigegeben','eingefroren'], true)) {
@@ -137,8 +142,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($altName !== '' && $altName !== $f('name') && mb_stripos($synonyme, $altName) === false) {
                 $synonyme = trim(($synonyme !== '' ? $synonyme . ', ' : '') . $altName);
             }
+            // Block C: „inaktiv" nur über die eigenen Knöpfe (sperrt Bulk/Premix mit) – das Formular ändert den Status dann nicht.
+            $stAlt = (string) scalar("SELECT status FROM rezeptur WHERE id=?", [(int)$id]);
+            $stNeu = ($stAlt === 'inaktiv' || $f('status') === 'inaktiv') ? $stAlt : $f('status');
             q("UPDATE rezeptur SET name=?,synonyme=?,kunde_id=?,darreichungsform=?,kapselgroesse_id=?,exklusiv=?,status=?,notiz=? WHERE id=?",
-              [$f('name'), $synonyme ?: null, $kunde_id, $f('darreichungsform'), $kapsGr, $exkl, $f('status'), $f('notiz'), (int)$id]);
+              [$f('name'), $synonyme ?: null, $kunde_id, $f('darreichungsform'), $kapsGr, $exkl, $stNeu, $f('notiz'), (int)$id]);
         }
         // Zutaten synchronisieren
         q("DELETE FROM rezeptur_zutat WHERE rezeptur_id=?", [(int)$id]);
@@ -182,7 +190,7 @@ $imUmbau = !$neu && isset($_SESSION['rez_unlock'][(int)$id]) && has_role('admin'
 $gesperrt = !$neu && in_array($status, ['freigegeben','eingefroren'], true);
 $locked = $gesperrt && !$imUmbau;
 
-$kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
+$kunden = all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($r['kunde_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
 $zutaten = $neu ? [] : all("SELECT * FROM rezeptur_zutat WHERE rezeptur_id=? ORDER BY sort, id", [(int)$id]);
 // Lieferanten-Angebote für die Fremdfertigung dieser Rezeptur (u. a. aus dem v3-Import).
 $liefAngebote = $neu ? [] : all("SELECT la.*, l.firma FROM rezeptur_lief_angebot la LEFT JOIN lieferanten l ON l.id=la.lieferant_id
@@ -269,6 +277,7 @@ if (!$neu && !empty($r['basis_rezeptur_id'])) {
     if ($bn) echo '<div class="bx-panel" style="padding:10px 14px;background:var(--panel-2);border-color:var(--gruen)"><strong>Vom Kunden weiterentwickelt</strong> aus Basis <a href="?p=rezeptur_detail&id=' . (int)$bn['id'] . '">' . h($bn['nummer'] . ' ' . $bn['name']) . '</a>.</div>';
 }
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['inaktivmsg'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['inaktivmsg']) . '</div>';   // Block C
 if (isset($_GET['fa_ges'])) { $fm = (int)($_GET['fa_match'] ?? 0); $fg = (int)$_GET['fa_ges'];
   echo '<div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen)">Aus Fastaction angelegt: <strong>' . $fm . ' von ' . $fg . '</strong> Zutaten automatisch einem Rohstoff zugeordnet. <strong>Bitte jede Zeile prüfen</strong> (Rohstoff, Menge, Kapselgröße), dann speichern. Nicht zugeordnete Zeilen brauchen noch die Rohstoff-Auswahl.</div>'; }
 if (isset($_GET['gesendet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Vorschlag an den Kunden gesendet – er sieht ihn jetzt in seinem Portal. Änderungen hier speichern und ggf. „Erneut als Vorschlag senden".</div>';
@@ -297,8 +306,12 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
 <?php if (!$neu): ?>
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center">
-    <div>Status: <?= match($status){'entwurf'=>bx_badge('Entwurf'),'vorschlag'=>bx_badge('Vorschlag','info'),'freigegeben'=>bx_badge('freigegeben','ok'),'eingefroren'=>bx_badge('eingefroren · verbindlich','warn'),'abgelehnt'=>bx_badge('vom Kunden abgelehnt','err'),default=>bx_badge($status)} ?></div>
+    <div>Status: <?= match($status){'inaktiv'=>bx_badge('inaktiv','err'),'entwurf'=>bx_badge('Entwurf'),'vorschlag'=>bx_badge('Vorschlag','info'),'freigegeben'=>bx_badge('freigegeben','ok'),'eingefroren'=>bx_badge('eingefroren · verbindlich','warn'),'abgelehnt'=>bx_badge('vom Kunden abgelehnt','err'),default=>bx_badge($status)} ?></div>
     <div class="bx-row">
+      <?php if (has_role('admin')): // Block C: inaktiv / wieder aktivieren ?>
+        <?php if ($status === 'inaktiv'): ?><form method="post" style="display:inline"><input type="hidden" name="aktion" value="reaktivieren"><button class="btn btn-ghost btn-sm" type="submit">Wieder aktivieren</button></form>
+        <?php else: ?><form method="post" style="display:inline" onsubmit="return confirm('Rezeptur inaktiv setzen? Sie ist dann nirgends mehr auswählbar, der Bulk-/Premix-Artikel wird mit gesperrt. Nichts wird gelöscht.');"><input type="hidden" name="aktion" value="inaktiv_setzen"><button class="btn btn-ghost btn-sm" type="submit">Inaktiv setzen</button></form><?php endif; ?>
+      <?php endif; ?>
       <?php if ($status==='entwurf'): ?>
         <?php if (!empty($r['kunde_id'])): // Kundenspezifisch: der KUNDE nimmt den Vorschlag im Portal selbst an. ?>
           <form method="post" style="display:inline"><input type="hidden" name="aktion" value="status_setzen"><input type="hidden" name="ziel" value="vorschlag"><button class="btn btn-primary btn-sm" type="submit">Als Vorschlag an den Kunden senden</button></form>
@@ -375,7 +388,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
     <?php endif; ?>
     <div class="bx-field"><label>Status</label>
       <select name="status">
-        <?php foreach (['entwurf'=>'Entwurf','vorschlag'=>'Vorschlag','freigegeben'=>'freigegeben','eingefroren'=>'eingefroren'] as $key=>$lbl): ?>
+        <?php foreach (['entwurf'=>'Entwurf','vorschlag'=>'Vorschlag','freigegeben'=>'freigegeben','eingefroren'=>'eingefroren'] + (($r['status'] ?? '') === 'inaktiv' ? ['inaktiv' => 'inaktiv (über „Wieder aktivieren")'] : []) as $key=>$lbl): ?>
           <option value="<?= $key ?>" <?= ($r['status']??'')===$key?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?>
       </select>
     </div>

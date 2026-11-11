@@ -1085,6 +1085,9 @@ function init_schema(): void {
     // die Stationen; "versendet" verlangt Versandanbieter, Versandart und Sendungsnummer.
     ensure_column('bestellung', 'bestaetigt', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");
+    ensure_column('rezeptur', 'status_vor_inaktiv', "VARCHAR(20) NULL");   // Block C 11.11.2026: Status vor „inaktiv" (für Wieder aktivieren)
+    ensure_column('item', 'gesperrt_durch_rezeptur', "INT NULL");          // Block C: mit der Rezeptur gesperrter Bulk-/Premix-Artikel
+    rezeptur_testdaten_inaktiv_einmal();   // Block C Teil 2: RZ-4023, RZ-4033, RZ-4034 einmalig inaktiv (von Nico ausdrücklich erlaubt)
     preis_spalten_sechs_stellen();   // Sofortfix 11.11.2026: Lieferanten-/EK-Preise mit 6 Nachkommastellen (2,95 € / 1.000 = 0,002950)   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
     ensure_column('bestellung', 'bestaetigt_am', "DATETIME NULL");
     ensure_column('bestellung', 'bestaetigt_von', "VARCHAR(190) NULL");
@@ -7090,7 +7093,7 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
         if (!$auto && (float)$it['ek_preis'] > 0) return;
         $best = null; $seen = [];
         foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, lieferant_name, preis, gueltig_bis FROM lieferant_preis
-                      WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR')
+                      WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))
                       ORDER BY lieferant_id, lieferant_name, menge_ab ASC, preis ASC", [$item_id]))['rows'] as $r) {
             $k = (int)$r['lieferant_id'] . '|' . (string)$r['lieferant_name'];
             if (isset($seen[$k])) continue;   // erste Zeile je Lieferant = kleinste Staffel
@@ -7108,7 +7111,7 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
 // rohstoff_ek_detail(): dasselbe mit Mindestmenge des gewählten Lieferanten (kleinste Staffel; nur gesetzt, wenn die Menge darunter liegt).
 function rohstoff_ek_detail(int $item_id, float $menge): ?array {
     $rows = all("SELECT lieferant_id, lieferant_name, menge_ab, preis, gueltig_bis FROM lieferant_preis
-                 WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR')", [$item_id]);
+                 WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$item_id]);
     $gSel = lp_gueltig_auswahl($rows); $rows = $gSel['rows'];   // gültige Preise bevorzugen, abgelaufene nur markiert
     $je = []; $bisJe = [];
     foreach ($rows as $r) {
@@ -8630,6 +8633,40 @@ function beschaffungswege(): array {
     return ['kapsel' => 'Zukauf fertige Kapsel/Tablette', 'premix' => 'Premix (fertige Mischung)', 'rohstoffe' => 'Einzelrohstoffe (Eigenproduktion)'];
 }
 // Premix-Artikel einer Rezeptur: Rohstoff mit Form 'premix' an der Stammrezeptur (wie der Bulk-Artikel), Einheit kg.
+// Rezeptur inaktiv setzen bzw. wieder aktivieren (Block C, 11.11.2026). Inaktiv = nirgends mehr auswählbar (Kataloge, Auswahl am
+// Produkt, Angebot, Auftrag), Listen nur mit Schalter, per Link erreichbar, nichts gelöscht. Der eigene Bulk-Artikel (kategorie
+// 'fertig', rezeptur_id = diese Rezeptur, nicht der geteilte der Stammrezeptur) und der Premix-Artikel werden mit gesperrt und
+// beim Wieder-Aktivieren wieder frei (Merker item.gesperrt_durch_rezeptur). Rückgabe ['ok','msg','items'].
+function rezeptur_inaktiv_setzen(int $rid, bool $inaktiv, string $wer = ''): array {
+    $r = one("SELECT id, nummer, status, status_vor_inaktiv FROM rezeptur WHERE id=?", [$rid]);
+    if (!$r) return ['ok' => false, 'msg' => 'Rezeptur nicht gefunden.', 'items' => 0];
+    $n = 0;
+    if ($inaktiv) {
+        if ((string)$r['status'] === 'inaktiv') return ['ok' => true, 'msg' => 'Rezeptur ist schon inaktiv.', 'items' => 0];
+        q("UPDATE rezeptur SET status_vor_inaktiv=?, status='inaktiv' WHERE id=?", [(string)$r['status'], $rid]);
+        foreach (all("SELECT id FROM item WHERE rezeptur_id=? AND (kategorie='fertig' OR (kategorie='rohstoff' AND form='premix')) AND COALESCE(gesperrt,0)=0", [$rid]) as $it) {
+            q("UPDATE item SET gesperrt=1, gesperrt_durch_rezeptur=? WHERE id=?", [$rid, (int)$it['id']]); $n++;
+        }
+    } else {
+        if ((string)$r['status'] !== 'inaktiv') return ['ok' => true, 'msg' => 'Rezeptur ist nicht inaktiv.', 'items' => 0];
+        $zurueck = in_array((string)$r['status_vor_inaktiv'], ['entwurf', 'vorschlag', 'freigegeben', 'eingefroren', 'abgelehnt'], true) ? (string)$r['status_vor_inaktiv'] : 'entwurf';
+        q("UPDATE rezeptur SET status=?, status_vor_inaktiv=NULL WHERE id=?", [$zurueck, $rid]);
+        foreach (all("SELECT id FROM item WHERE gesperrt_durch_rezeptur=?", [$rid]) as $it) { q("UPDATE item SET gesperrt=0, gesperrt_durch_rezeptur=NULL WHERE id=?", [(int)$it['id']]); $n++; }
+    }
+    if (function_exists('aenderung_protokollieren')) aenderung_protokollieren('rezeptur', $rid, ['status' => $r['status']], ['status' => $inaktiv ? 'inaktiv' : ($zurueck ?? '')], 'rezeptur_inaktiv');
+    log_aktivitaet('rezeptur', $rid, 'team', 'Rezeptur ' . $r['nummer'] . ($inaktiv ? ' inaktiv gesetzt' : ' wieder aktiviert') . ($wer !== '' ? ' von ' . $wer : '') . ($n ? ' (' . $n . ' Bulk-/Premix-Artikel ' . ($inaktiv ? 'mit gesperrt' : 'wieder frei') . ')' : '') . '.', 'notiz');
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    return ['ok' => true, 'msg' => 'Rezeptur ' . $r['nummer'] . ($inaktiv ? ' ist jetzt inaktiv.' : ' ist wieder aktiv.') . ($n ? ' ' . $n . ' Bulk-/Premix-Artikel ' . ($inaktiv ? 'mit gesperrt.' : 'wieder frei.') : ''), 'items' => $n];
+}
+// Einmalig (Block C Teil 2, Nico 11.11.2026 ausdrücklich erlaubt): die drei Test-Rezepturen RZ-4023, RZ-4033, RZ-4034 auf inaktiv.
+// Läuft in der Migration genau einmal (app_meta rz_test_inaktiv_1111), nur wenn es die Nummern gibt. Nichts wird gelöscht.
+function rezeptur_testdaten_inaktiv_einmal(): void {
+    try {
+        if (meta_get('rz_test_inaktiv_1111', '') === '1' || !column_exists('rezeptur', 'status_vor_inaktiv') || !column_exists('item', 'gesperrt_durch_rezeptur')) return;
+        foreach (all("SELECT id FROM rezeptur WHERE nummer IN ('RZ-4023','RZ-4033','RZ-4034') AND status<>'inaktiv'") as $r) rezeptur_inaktiv_setzen((int)$r['id'], true, 'Abendpaket 11.11. (Testdaten)');
+        meta_set('rz_test_inaktiv_1111', '1');
+    } catch (\Throwable $e) {}
+}
 function rezeptur_premixitem(int $rezeptur_id, bool $anlegen = true): int {
     $rid = rezeptur_stamm_id($rezeptur_id);
     if ($rid <= 0) return 0;
@@ -10642,7 +10679,7 @@ function item_lieferant_preise(int $item_id, float $menge = 0, ?array &$abgelauf
     if ($item_id <= 0 || !table_exists('lieferant_preis')) return [];
     $out = [];
     if (!is_array($abgelaufen)) $abgelaufen = [];
-    foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL ORDER BY menge_ab ASC", [$item_id]), $abgelaufen) as $r) {
+    foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1)) ORDER BY menge_ab ASC", [$item_id]), $abgelaufen) as $r) {
         $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
         if ($menge <= 0 || $ma <= $menge + 1e-9) $out[$lid] = $pr;   // größter passender Staffelwert gewinnt (ORDER BY ASC)
         elseif (!isset($out[$lid])) $out[$lid] = $pr;                // alle Staffeln > Menge -> kleinste als Fallback
@@ -10656,7 +10693,7 @@ function produkt_lieferant_preise(int $produkt_id, float $stueck = 0): array {
     $out = [];
     $ep = null;
     foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, einheit, gueltig_bis FROM produkt_lieferant_preis
-                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')
+                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))
                   ORDER BY menge_ab ASC", [$produkt_id]))['rows'] as $r) {
         $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
         // Preis je PACKUNG (St-24) -> je Einheit umrechnen (Preis / Einheiten je Packung, Staffel × Einheiten je Packung).
@@ -10677,7 +10714,7 @@ function produkt_lieferant_preise_pkg(int $produkt_id, float $packungen = 0): ar
     $ep = max(1, (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [$produkt_id]));
     $rows = [];
     foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, einheit, gueltig_bis FROM produkt_lieferant_preis
-                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$produkt_id]))['rows'] as $r) {
+                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$produkt_id]))['rows'] as $r) {
         $jePkg = in_array(strtolower(trim((string)$r['einheit'])), ['packung', 'pkg', 'pkg.', 'packungen'], true);
         $rows[] = ['lid'=>(int)$r['lieferant_id'], 'ab'=>$jePkg ? (float)$r['menge_ab'] : (float)$r['menge_ab'] / $ep,
                    'preis'=>$jePkg ? (float)$r['preis'] : (float)$r['preis'] * $ep];
@@ -10707,7 +10744,7 @@ function rezeptur_fremd_lieferant_preise(int $rezeptur_id, float $stueck = 0, ?a
     // Stück-Rezeptur (Kapsel/Tablette): Zeilen in kg/g/L sind Premix-Preise (je kg Mischung) - nie als Stückpreis lesen.
     $stueckForm = form_groessen_einheit((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id])) === '';
     foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, menge, preis, gueltig_bis FROM rezeptur_lief_angebot
-                  WHERE rezeptur_id = ? AND lieferant_id IS NOT NULL AND preis IS NOT NULL AND preis > 0"
+                  WHERE rezeptur_id = ? AND lieferant_id IS NOT NULL AND preis IS NOT NULL AND preis > 0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))"
                   . ($stueckForm ? " AND LOWER(TRIM(COALESCE(einheit,''))) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm')" : "") . "
                   ORDER BY menge ASC", [$rezeptur_id]), $abgelaufen) as $r) {
         $lid = (int)$r['lieferant_id']; $m = (float)$r['menge']; $p = (float)$r['preis'];

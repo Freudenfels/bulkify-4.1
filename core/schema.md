@@ -649,3 +649,8 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 - Bereits falsch gespeicherte Werte (z. B. GS Capsules 0,0030 statt 0,00295) werden **nicht** automatisch korrigiert – neu eintragen.
 
 `auftrag_beschaffung_bestellen()` legt bei Rest 0 nichts an (11.11.2026).
+
+## Gesperrt/inaktiv (Abendpaket Block C, 11.11.2026)
+- **Preise gesperrter Lieferanten** zählen nicht mehr bei „günstigster Lieferant“, Kalkulation und Auto-EK. Betroffen sind `item_lieferant_preise`, `produkt_lieferant_preise`, `rezeptur_fremd_lieferant_preise`, `item_ek_aus_lieferantenpreis` und `rohstoff_ek_detail`. Bedingung: Lieferant nicht `gesperrt=1`; Preise ohne Lieferanten-ID bleiben.
+- **`rezeptur_inaktiv_setzen($rid, $inaktiv, $wer)`:** setzt den Status „inaktiv“ und merkt sich den alten Status in `rezeptur.status_vor_inaktiv`. Der eigene Bulk-Artikel und der Premix-Artikel werden mit gesperrt (`item.gesperrt_durch_rezeptur`). Beim Wieder-Aktivieren kommt alles zurück.
+- **`rezeptur_testdaten_inaktiv_einmal()`:** setzt einmalig RZ-4023, RZ-4033 und RZ-4034 auf inaktiv (app_meta `rz_test_inaktiv_1111`, von Nico ausdrücklich erlaubt).

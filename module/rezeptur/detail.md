@@ -113,3 +113,7 @@ Neben „Fertigprodukt anfragen“ steht bei Stück-Formen der Knopf **„Premix
 - Die Zutatensuche findet auch Synonyme (`ZSYN`): Alte Namen zusammengeführter Artikel führen zum Hauptartikel (Teil 5).
 
 - **Unterlagen der Rohstoffe** (10.11.2026): Bei Entwurf/Vorschlag steht vor „Rohstoffpreise“ der Kasten aus `core/rohstoff_unterlagen.php` mit den Rohstoffen ohne Spezifikation/CoA und einer Sammelanfrage.
+
+**Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+**Rezeptur inaktiv (Block C, 11.11.2026):** Knöpfe „Inaktiv setzen“ / „Wieder aktivieren“ (nur Admin) im Status-Block. Eine inaktive Rezeptur ist nirgends mehr auswählbar (Produkt, Angebot, Auftrag, Kataloge), steht in der Rezepturliste nur mit Schalter und ist per Link erreichbar. Der Bulk- und Premix-Artikel wird mit gesperrt. Das Formular ändert den Status „inaktiv“ nicht, das geht nur über die Knöpfe.
