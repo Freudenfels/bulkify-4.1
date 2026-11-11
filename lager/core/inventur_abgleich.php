@@ -83,7 +83,11 @@ function inv_zaehlung_beenden(array $inv): array {
     if ($offen) return ['ok' => false, 'msg' => 'Noch nicht fertig gezählt: ' . implode(', ', array_column($offen, 'name')) . '.'];
     $keys = array_flip(array_column(inv_bereiche((int)$inv['id']), 'schluessel'));
     $gez = [];
-    foreach (all("SELECT obj, gebinde_id, charge_id FROM lg_inventur_zaehlung WHERE inventur_id=? AND ersetzt=0 AND obj<>'k'", [(int)$inv['id']]) as $z) $gez[$z['obj'] . ':' . (int)$z['gebinde_id'] . ':' . (int)$z['charge_id']] = 1;
+    foreach (all("SELECT obj, gebinde_id, charge_id FROM lg_inventur_zaehlung WHERE inventur_id=? AND ersetzt=0 AND charge_id>0", [(int)$inv['id']]) as $z) {
+        // Klärfall schon als Charge gebucht (obj k mit charge_id/gebinde_id): gilt als gezählt, sonst würde die neue Charge „nicht gefunden".
+        $o = (string)$z['obj'] === 'k' ? ((int)$z['gebinde_id'] ? 'g' : 'c') : (string)$z['obj'];
+        $gez[$o . ':' . (int)$z['gebinde_id'] . ':' . (int)$z['charge_id']] = 1;
+    }
     $n = 0;
     foreach (erp_inv_objekte($inv) as $o) {
         if (isset($gez[$o['obj'] . ':' . (int)$o['gebinde_id'] . ':' . (int)$o['charge_id']])) continue;
@@ -97,6 +101,10 @@ function inv_zaehlung_beenden(array $inv): array {
             'soll_ort' => $ort['key'] ?: null, 'ist_ort' => null, 'status' => 'offen', 'erster_zaehler' => null, 'notiz' => null]);
         $n++;
     }
+    // Frühere „nicht gefunden"-Zeilen, deren Gebinde inzwischen gezählt bzw. gebucht ist (Weiterzählen, Klärfall), sind erledigt.
+    foreach (all("SELECT id, obj, gebinde_id, charge_id FROM lg_inventur_diff WHERE inventur_id=? AND art='nicht_gefunden' AND status='offen'", [(int)$inv['id']]) as $d)
+        if (isset($gez[$d['obj'] . ':' . (int)$d['gebinde_id'] . ':' . (int)$d['charge_id']]) || isset($gez['c:0:' . (int)$d['charge_id']]))
+            q("UPDATE lg_inventur_diff SET status='passt', notiz='später gezählt' WHERE id=?", [(int)$d['id']]);
     q("UPDATE lg_inventur SET status='auswerten', zaehlung_ende=? WHERE id=?", [jetzt_utc(), (int)$inv['id']]);
     $nie = 0;
     if ((int)$inv['ganz']) $nie = (int) scalar("SELECT COUNT(*) FROM lg_platz p WHERE p.aktiv=1 AND p.lager=? AND NOT EXISTS (SELECT 1 FROM lg_inventur_bereich b WHERE b.inventur_id=? AND b.schluessel=CONCAT('p:',p.id))",

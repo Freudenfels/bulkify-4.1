@@ -62,3 +62,5 @@ Kachel **Für Auftrag** (Auftrag + Kunde, darunter Reservierungen), Soll-Kette 3
 
 ## Dokumente aus der Bestellung (08.11.2026)
 Unter „Dokumente“ stehen zuerst CoA und Spezifikation aus der Bestellposition der Charge (`erp_charge_bestell_dokumente`, Zusatz „aus der Bestellung“), danach die des Artikels/Produkts.
+
+**Bewegungen (11.11.2026):** Neuer Block „Bewegungen“ mit den letzten 30 Bewegungen dieser Charge aus `lg_bewegung`, darunter die Inventur-Korrekturen mit Grund. Platz-Änderungen stehen unter „Änderungen“ (Feld `platz`).

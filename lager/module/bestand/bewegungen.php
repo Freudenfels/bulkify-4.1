@@ -1,11 +1,12 @@
 <?php
 // Bewegungen (Warenlager-Manager): die Historie – was kam rein, was ging raus.
-$filter = (string)($_GET['typ'] ?? '');   // '' | 'ein' | 'aus'
+$filter = (string)($_GET['typ'] ?? '');   // '' | 'ein' | 'aus' | 'inventur'
 $alle   = lg_bewegungen(300);
-if ($filter === 'ein' || $filter === 'aus') $alle = array_values(array_filter($alle, fn($b) => $b['typ'] === $filter));
+if ($filter === 'ein' || $filter === 'inventur') $alle = array_values(array_filter($alle, fn($b) => $b['typ'] === $filter));
+elseif ($filter === 'aus') $alle = array_values(array_filter($alle, fn($b) => !in_array($b['typ'], ['ein', 'inventur'], true)));
 
-$ein = 0; $aus = 0;
-foreach (lg_bewegungen(300) as $b) { if ($b['typ'] === 'ein') $ein++; else $aus++; }
+$ein = 0; $aus = 0; $invN = 0;
+foreach (lg_bewegungen(300) as $b) { if ($b['typ'] === 'ein') $ein++; elseif ($b['typ'] === 'inventur') $invN++; else $aus++; }
 
 kopf('Bewegungen', 'bewegungen');
 seitenkopf('Bewegungen', 'Was kam rein, was ging raus.',
@@ -13,9 +14,10 @@ seitenkopf('Bewegungen', 'Was kam rein, was ging raus.',
 flash_zeigen();
 ?>
 <div class="lg-reiter">
-  <a href="?p=bewegungen" class="<?= $filter === '' ? 'an' : '' ?>">Alle <span class="lg-reiter-z"><?= $ein + $aus ?></span></a>
+  <a href="?p=bewegungen" class="<?= $filter === '' ? 'an' : '' ?>">Alle <span class="lg-reiter-z"><?= $ein + $aus + $invN ?></span></a>
   <a href="?p=bewegungen&typ=ein" class="<?= $filter === 'ein' ? 'an' : '' ?>">Eingang <span class="lg-reiter-z"><?= $ein ?></span></a>
   <a href="?p=bewegungen&typ=aus" class="<?= $filter === 'aus' ? 'an' : '' ?>">Ausgang <span class="lg-reiter-z"><?= $aus ?></span></a>
+  <?php if ($invN): ?><a href="?p=bewegungen&typ=inventur" class="<?= $filter === 'inventur' ? 'an' : '' ?>">Inventur <span class="lg-reiter-z"><?= $invN ?></span></a><?php endif; ?>
 </div>
 
 <?php if (!$alle): ?>
@@ -28,7 +30,7 @@ flash_zeigen();
     <?php foreach ($alle as $b): ?>
       <tr>
         <td class="muted"><?= h(fmt_zeit((string)$b['angelegt'], 'd.m.Y H:i')) ?></td>
-        <td><?= $b['typ'] === 'ein' ? '<span class="badge badge-ok">Eingang</span>' : '<span class="badge badge-warn">Ausgang</span>' ?></td>
+        <td><?= lg_bewegung_badge($b) ?></td>
         <td><?php if (!empty($b['charge_id'])): ?><a class="lg-namelink" href="?p=charge&id=<?= (int)$b['charge_id'] ?>"><?= h((string)$b['item_name']) ?></a><?php else: ?><?= h((string)$b['item_name']) ?><?php endif; ?></td>
         <td><?= h(menge_txt($b['menge'])) ?> <?= h((string)$b['einheit']) ?></td>
         <td class="muted"><?= h((string)$b['grund']) ?></td>

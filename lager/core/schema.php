@@ -666,6 +666,15 @@ function lg_bewegung_log(?int $charge_id, string $typ, float $menge, ?string $ei
       [$charge_id ?: null, $item_name ?: null, $typ, $menge, $einheit ?: null, $grund ?: null,
        (function_exists('lg_uid') ? (lg_uid() ?: null) : null), jetzt_utc()]);
 }
+// Badge je Bewegungstyp (Inventur 11.11.2026: eigener Typ 'inventur', Menge mit Vorzeichen).
+function lg_bewegung_badge(array $b): string {
+    return match ((string)$b['typ']) {
+        'ein' => '<span class="badge badge-ok">Eingang</span>',
+        'inventur' => '<span class="badge" title="' . h((string)($b['ursache'] ?? '')) . '">Inventur</span>',
+        'korrektur' => '<span class="badge">Korrektur</span>',
+        default => '<span class="badge badge-warn">Ausgang</span>',
+    };
+}
 function lg_bewegungen(int $limit = 40): array {
     return all("SELECT * FROM lg_bewegung ORDER BY id DESC LIMIT " . max(1, (int)$limit));
 }

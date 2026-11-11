@@ -125,7 +125,7 @@ flash_zeigen();
       <?php foreach ($bew as $b): ?>
         <tr>
           <td class="muted"><?= h(fmt_zeit((string)$b['angelegt'], 'd.m. H:i')) ?></td>
-          <td><?= $b['typ'] === 'ein' ? '<span class="badge badge-ok">Eingang</span>' : '<span class="badge badge-warn">Ausgang</span>' ?></td>
+          <td><?= lg_bewegung_badge($b) ?></td>
           <td><?php if (!empty($b['charge_id'])): ?><a class="lg-namelink" href="?p=charge&id=<?= (int)$b['charge_id'] ?>"><?= h((string)$b['item_name']) ?></a><?php else: ?><?= h((string)$b['item_name']) ?><?php endif; ?></td>
           <td class="bx-num"><?= h(menge_txt($b['menge'])) ?> <?= h((string)$b['einheit']) ?></td>
         </tr>

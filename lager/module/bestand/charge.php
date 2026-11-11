@@ -622,6 +622,17 @@ if ($rollen): ?>
 </div>
 <?php endif; ?>
 
+<?php $bewRows = all("SELECT * FROM lg_bewegung WHERE charge_id=? ORDER BY id DESC LIMIT 30", [$id]);   // Bewegungen inkl. Inventur-Korrekturen (11.11.2026)
+if ($bewRows): ?>
+<div class="bx-panel" style="margin-bottom:var(--sp-5)">
+  <h2>Bewegungen</h2>
+  <div class="lg-karten"><table class="bx-table">
+    <thead><tr><th>Zeit</th><th>Art</th><th>Menge</th><th>Grund</th></tr></thead><tbody>
+    <?php foreach ($bewRows as $b): ?><tr><td data-label="Zeit" class="muted"><?= h(fmt_zeit((string)$b['angelegt'])) ?></td><td data-label="Art"><?= lg_bewegung_badge($b) ?></td>
+      <td data-label="Menge"><?= h(((string)$b['typ'] === 'inventur' && (float)$b['menge'] > 0 ? '+' : '') . menge_txt($b['menge']) . ' ' . (string)$b['einheit']) ?></td><td data-label="Grund" class="muted"><?= h((string)$b['grund']) ?></td></tr><?php endforeach; ?>
+  </tbody></table></div>
+</div>
+<?php endif; ?>
 <?php $logrows = function_exists('lg_charge_log_liste') ? lg_charge_log_liste($id) : []; ?>
 <div class="bx-panel" style="margin-bottom:var(--sp-5)">
   <h2>Änderungen</h2>

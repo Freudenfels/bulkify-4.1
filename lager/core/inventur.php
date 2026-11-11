@@ -47,7 +47,7 @@ function inv_schema(): void {
         tol_stk           DECIMAL(6,2) NOT NULL DEFAULT 0,       -- Toleranz Stück-Ware in %
         klein_eur         DECIMAL(10,2) NOT NULL DEFAULT 20,     -- Sammel-Knopf: kleine Differenzen unter x €
         klein_prozent     DECIMAL(6,2) NOT NULL DEFAULT 2,       -- … und unter y %
-        status            VARCHAR(12) NOT NULL DEFAULT 'zaehlen', -- zaehlen | auswerten | abgeschlossen
+        status            VARCHAR(16) NOT NULL DEFAULT 'zaehlen', -- zaehlen | auswerten | abgeschlossen
         notiz             TEXT NULL,
         angelegt          DATETIME NOT NULL,
         angelegt_von      INT NULL,
@@ -58,6 +58,8 @@ function inv_schema(): void {
         protokoll_csv     VARCHAR(190) NULL,
         KEY st (status)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    // „abgeschlossen" hat 13 Zeichen – erste Fassung (Teil 1) hatte VARCHAR(12).
+    try { q("ALTER TABLE lg_inventur MODIFY status VARCHAR(16) NOT NULL DEFAULT 'zaehlen'"); } catch (\Throwable $e) {}
     // Zählbereiche (Platz oder Kiste). sperre = Schlüssel, solange die Inventur offen ist -> ein Bereich nie in zwei offenen Inventuren.
     q("CREATE TABLE IF NOT EXISTS lg_inventur_bereich (
         id          INT AUTO_INCREMENT PRIMARY KEY,
