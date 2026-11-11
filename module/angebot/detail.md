@@ -205,3 +205,9 @@ Gibt das Team die Preise eines gesendeten Angebots wieder frei (nach Bearbeitung
 Andere Behälter behalten das Häkchen „bedruckt / kundenspezifisch (ohne Etikett)“.
 
 **Nachrichten mit dem Kunden (Report 5):** Kasten am Ende (Bearbeiten- und Lese-Ansicht), Antwort = Aktion `kunde_nachricht` -> Mail an den Kunden + im Portal.
+
+## Mindestmengen (MOQ) je Rohstoff (11.11.2026)
+Über „Rohstoffkosten je Lieferant“ steht ein Panel, sobald ein Rohstoff im Angebot eine MOQ hat (`angebot_moq_pruefung()`):
+- **Rohstoff-Positionen:** die angebotene Menge.
+- **Rezeptur-Positionen:** die benötigte Rohstoffmenge für die Auftragsmenge, von der kleinsten bis zur größten Option.
+Steht dort „unter MOQ“, ist das nur ein Hinweis und keine Sperre.

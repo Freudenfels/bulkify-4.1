@@ -4,6 +4,7 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/nachbestellung.php';
+require_once BX_ROOT . '/core/rohstoff_moq.php';   // Mindestmenge je Rohstoff: im Portal anzeigen + sperren
 
 $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 agb_seed_wenn_leer();   // AGB-Entwurf anlegen, solange keine Fassung existiert
@@ -880,6 +881,37 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     if ($k['portal_rohstoffe']) {
         $namen = $_POST['roh_name'] ?? []; $mengen = $_POST['roh_menge'] ?? []; $einh = $_POST['roh_einheit'] ?? [];
         $ziele = $_POST['roh_zielpreis'] ?? []; $notizen = $_POST['roh_notiz'] ?? [];
+        // Einzelformular auf der Rohstoff-Detailseite (betreff/rohstoff_id/wunsch_menge) - kam bisher nicht an
+        // (Handler las nur die roh_*-Felder). Jetzt in dieselbe Form bringen (11.11.2026).
+        if (!$namen && trim((string)($_POST['betreff'] ?? '')) !== '') {
+            $nmE = (int)($_POST['rohstoff_id'] ?? 0) ? (string) scalar("SELECT name FROM item WHERE id=? AND kategorie='rohstoff'", [(int)$_POST['rohstoff_id']]) : '';
+            $namen = [$nmE !== '' ? $nmE : trim((string)$_POST['betreff'])]; $mengen = [(string)($_POST['wunsch_menge'] ?? '')];
+            $einh = [(string)($_POST['wunsch_einheit'] ?? '')]; $ziele = ['']; $notizen = [(string)($_POST['notiz'] ?? '')];
+        }
+        // Mindestmenge (Nico 11.11.2026): Im Portal darf der Kunde nicht unter unserer MOQ anfragen. Liegt eine Zeile
+        // darunter (oder fehlt die Menge), wird NICHTS gespeichert: zurück zum Formular, Fehlermeldung mit der MOQ,
+        // die Zeile ist auf die MOQ vorbelegt. Ohne MOQ keine Sperre.
+        $moqFehler = []; $rueck = [];
+        foreach ($namen as $i => $nm) {
+            $nm = trim((string)$nm); if ($nm === '') continue;
+            $wm = (float) str_replace(',', '.', (string)($mengen[$i] ?? '0'));
+            $we = (string)($einh[$i] ?? '');
+            $z  = ['name' => $nm, 'menge' => (string)($mengen[$i] ?? ''), 'einheit' => $we, 'zielpreis' => (string)($ziele[$i] ?? ''), 'notiz' => (string)($notizen[$i] ?? ''), 'fehler' => ''];
+            $rid0 = (int) scalar("SELECT id FROM item WHERE kategorie='rohstoff' AND name=? LIMIT 1", [$nm]);
+            if ($rid0 && ($mq = rohstoff_moq($rid0))) {
+                $mIn = $wm > 0 ? moq_umrechnen($wm, $we ?: $mq['einheit'], $mq['einheit']) : null;
+                if ($mIn === null || $mIn + 1e-9 < $mq['menge']) {
+                    $moqFehler[] = $nm . ': Mindestmenge ' . moq_wert($mq);
+                    $z['menge'] = rtrim(rtrim(number_format($mq['menge'], 3, '.', ''), '0'), '.'); $z['einheit'] = $mq['einheit'];
+                    $z['fehler'] = 'Mindestmenge ' . moq_wert($mq) . '. Die Menge wurde auf die Mindestmenge gesetzt.';
+                }
+            }
+            $rueck[] = $z;
+        }
+        if ($moqFehler) {
+            $_SESSION['roh_rueck'] = ['zeilen' => $rueck, 'fehler' => $moqFehler];
+            header('Location: ?p=portal&token=' . $token . '&v=rohanfrage&moq=1'); exit;
+        }
         $n = 0; $erstePaf = 0;
         foreach ($namen as $i => $nm) {
             $nm = trim((string)$nm); if ($nm === '') continue;
@@ -3787,6 +3819,9 @@ portal_head('Kundenportal · ' . $k['firma']);
       </div>
     </div>
     <p class="bx-sub"><?php if (!empty($rohDetail['artikelnummer'])): ?>Art.-Nr. <?= h($rohDetail['artikelnummer']) ?> · <?php endif; ?><?= h($FORMLBL_P[$rohDetail['form']] ?? $rohDetail['form']) ?><?= $rohDetail['name_lat'] ? ' · '.h($rohDetail['name_lat']) : '' ?><?= $rohDetail['cas'] ? ' · CAS '.h($rohDetail['cas']) : '' ?></p>
+    <?php if ($moqD = rohstoff_moq((int)$rohDetail['id'])): ?>
+    <div class="bx-panel" style="padding:12px 16px">Mindestmenge: <strong><?= h(moq_wert($moqD)) ?></strong> <span class="muted" style="font-size:13px">- kleinere Mengen können wir für diesen Rohstoff nicht anbieten.</span></div>
+    <?php endif; ?>
 
     <?php // Novel-Food-Status (automatische Einschätzung aus dem EU-Katalog) – nur zeigen, wenn geprüft.
     if (!empty($rohDetail['novelfood_status'])):
@@ -3890,12 +3925,25 @@ portal_head('Kundenportal · ' . $k['firma']);
         <input type="hidden" name="betreff" value="<?= h($rohDetail['name']) ?>">
         <input type="hidden" name="rohstoff_id" value="<?= (int)$rohDetail['id'] ?>">
         <div class="bx-grid">
-          <div class="bx-field"><label>Gewünschte Menge</label><input type="number" name="wunsch_menge" min="0" step="0.001" placeholder="z. B. 25"></div>
-          <div class="bx-field"><label>Einheit</label><select name="wunsch_einheit"><?php foreach (['kg','g','t','Stk','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
+          <?php $moqF = rohstoff_moq((int)$rohDetail['id']); $moqFm = $moqF ? rtrim(rtrim(number_format($moqF['menge'], 3, '.', ''), '0'), '.') : ''; ?>
+          <div class="bx-field"><label>Gewünschte Menge<?= $moqF ? ' <span class="muted">(mindestens ' . h(moq_wert($moqF)) . ')</span>' : '' ?></label><input type="number" name="wunsch_menge" min="0" step="0.001" placeholder="z. B. 25" value="<?= h($moqFm) ?>"<?= $moqF ? ' data-moq="' . h($moqFm) . '" data-moqe="' . h($moqF['einheit']) . '"' : '' ?>></div>
+          <div class="bx-field"><label>Einheit</label><select name="wunsch_einheit"><?php foreach (['kg','g','t','Stk','L'] as $e): ?><option value="<?= $e ?>"<?= ($moqF['einheit'] ?? '') === $e ? ' selected' : '' ?>><?= $e ?></option><?php endforeach; ?></select></div>
         </div>
+        <div class="rohmoqfehler" style="color:#8f231b;font-size:13px;margin:-4px 0 8px"></div>
         <div class="bx-field"><label>Details (optional)</label><textarea name="notiz" placeholder="z. B. vegan, Zieltermin, Spezifikation"></textarea></div>
         <button class="btn btn-primary" type="submit">Anfrage senden</button>
       </form>
+      <script>
+      (function(){ var mi = document.querySelector('input[name="wunsch_menge"][data-moq]'); if (!mi) return;
+        mi.form.addEventListener('submit', function(e){
+          var es = mi.form.querySelector('select[name="wunsch_einheit"]'), moq = parseFloat(mi.dataset.moq), me = mi.dataset.moqe;
+          var g = {g:1, kg:1000, t:1000000}, m = parseFloat(String(mi.value).replace(',', '.')) || 0;
+          var mm = m > 0 ? (es.value === me ? m : ((g[es.value] && g[me]) ? m * g[es.value] / g[me] : null)) : null;
+          if (mm === null || mm + 1e-9 < moq) { e.preventDefault(); mi.value = mi.dataset.moq; es.value = me;
+            mi.form.querySelector('.rohmoqfehler').textContent = 'Mindestmenge ' + String(moq).replace('.', ',') + ' ' + me + '. Die Menge wurde auf die Mindestmenge gesetzt.'; mi.focus(); }
+        });
+      })();
+      </script>
     </div>
   <?php endif; ?>
 
@@ -3910,27 +3958,44 @@ portal_head('Kundenportal · ' . $k['firma']);
         'lat' => ($r['name_lat'] ?? '') ?: '', 'syn' => ($r['synonym'] ?? '') ?: '',
         'quelle' => ($r['bot_quelle'] ?? '') ?: '', 'land' => ($r['herkunftsland'] ?? '') ?: '',
         'id' => (int)$r['id'],
-    ]; ?>
+    ];
+    // Mindestmengen (MOQ) je Katalog-Rohstoff - eine Abfrage für alle.
+    moq_schema();
+    $moqByName = [];
+    foreach (all("SELECT name, moq_menge, moq_einheit FROM item WHERE kategorie='rohstoff' AND gesperrt=0 AND moq_menge>0") as $mr)
+        $moqByName[$mr['name']] = ['m' => (float)$mr['moq_menge'], 'e' => (string)($mr['moq_einheit'] ?: 'kg')];
+    foreach ($rohInfoMap as $nmI => $infoI) if (isset($moqByName[$nmI])) { $rohInfoMap[$nmI]['moq'] = $moqByName[$nmI]['m']; $rohInfoMap[$nmI]['moqE'] = $moqByName[$nmI]['e']; }
+    // Zurück nach einer Sperre: eingegebene Zeilen wieder anzeigen (Menge auf die MOQ gesetzt).
+    $rohRueck = (isset($_GET['moq']) && !empty($_SESSION['roh_rueck'])) ? $_SESSION['roh_rueck'] : null;
+    unset($_SESSION['roh_rueck']);
+    $rohZeilen = $rohRueck ? $rohRueck['zeilen'] : [['name' => $vorRohName, 'menge' => '', 'einheit' => '', 'zielpreis' => '', 'notiz' => '', 'fehler' => '']];
+    if (!$rohRueck && $vorRohName !== '' && isset($moqByName[$vorRohName])) { $rohZeilen[0]['menge'] = rtrim(rtrim(number_format($moqByName[$vorRohName]['m'], 3, '.', ''), '0'), '.'); $rohZeilen[0]['einheit'] = $moqByName[$vorRohName]['e']; } ?>
   <h1 style="margin-bottom:4px">Rohstoff anfragen</h1>
   <div class="bx-panel">
     <p class="muted" style="margin-top:0">Wählen Sie einen Rohstoff aus dem Katalog oder tippen Sie ihn ein. Sie können mehrere Rohstoffe auf einmal anfragen – Sie erhalten <strong>je Rohstoff ein eigenes Angebot</strong>, das Sie einzeln annehmen können.</p>
-    <form method="post">
+    <?php if ($rohRueck): ?>
+    <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Die Anfrage wurde nicht gesendet. Bitte die Mindestmenge beachten:
+      <?php foreach ($rohRueck['fehler'] as $fz): ?><div><?= h($fz) ?></div><?php endforeach; ?>
+      <div style="margin-top:4px">Die Menge ist jetzt auf die Mindestmenge gesetzt. Bitte prüfen und erneut senden.</div></div>
+    <?php endif; ?>
+    <form method="post" id="rohForm">
       <input type="hidden" name="aktion" value="rohstoff_anfrage">
       <datalist id="rohliste"><?php foreach ($rohkatalog as $r): ?><option value="<?= h($r['name']) ?>"></option><?php endforeach; ?></datalist>
       <div id="rohRows">
-        <?php for ($i=0;$i<1;$i++): ?>
+        <?php foreach ($rohZeilen as $rz): ?>
         <div class="rohrow bx-panel" style="background:var(--panel-2);padding:12px 14px;margin-bottom:10px">
-          <div class="bx-field"><label>Rohstoff</label><input type="text" name="roh_name[]" list="rohliste" value="<?= $i === 0 ? h($vorRohName) : '' ?>" placeholder="Rohstoff wählen oder eintippen">
+          <div class="bx-field"><label>Rohstoff</label><input type="text" name="roh_name[]" list="rohliste" value="<?= h($rz['name']) ?>" placeholder="Rohstoff wählen oder eintippen">
             <div class="rohinfo muted" style="font-size:12px;margin-top:6px"></div></div>
           <div class="bx-grid">
-            <div class="bx-field"><label>Menge</label><input type="number" name="roh_menge[]" min="0" step="0.001" placeholder="z. B. 25"></div>
-            <div class="bx-field"><label>Einheit</label><select name="roh_einheit[]"><?php foreach (['kg','g','t','Stk','L'] as $e): ?><option value="<?= $e ?>"><?= $e ?></option><?php endforeach; ?></select></div>
-            <div class="bx-field"><label>Wunschpreis <span class="muted">(optional)</span> <?= bx_hint('Falls Sie schon eine Preisvorstellung haben – € pro Einheit (z. B. je kg). Kein Muss; hilft uns nur bei der Einordnung.') ?></label><input type="number" name="roh_zielpreis[]" min="0" step="0.01" placeholder="z. B. 12,50 € / kg"></div>
+            <div class="bx-field"><label>Menge</label><input type="number" name="roh_menge[]" min="0" step="0.001" placeholder="z. B. 25" value="<?= h((string)$rz['menge']) ?>"></div>
+            <div class="bx-field"><label>Einheit</label><select name="roh_einheit[]"><?php foreach (['kg','g','t','Stk','L'] as $e): ?><option value="<?= $e ?>"<?= $rz['einheit'] === $e ? ' selected' : '' ?>><?= $e ?></option><?php endforeach; ?></select></div>
+            <div class="bx-field"><label>Wunschpreis <span class="muted">(optional)</span> <?= bx_hint('Falls Sie schon eine Preisvorstellung haben – € pro Einheit (z. B. je kg). Kein Muss; hilft uns nur bei der Einordnung.') ?></label><input type="number" name="roh_zielpreis[]" min="0" step="0.01" placeholder="z. B. 12,50 € / kg" value="<?= h((string)$rz['zielpreis']) ?>"></div>
           </div>
-          <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="roh_notiz[]" placeholder="Spezifikation, Qualität, Termin …"></div>
+          <div class="rohmoqfehler" style="color:#8f231b;font-size:13px;margin:-4px 0 8px"><?= h((string)$rz['fehler']) ?></div>
+          <div class="bx-field"><label>Notiz (optional)</label><input type="text" name="roh_notiz[]" placeholder="Spezifikation, Qualität, Termin …" value="<?= h((string)$rz['notiz']) ?>"></div>
           <div style="text-align:right"><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.rohrow').remove()">entfernen</button></div>
         </div>
-        <?php endfor; ?>
+        <?php endforeach; ?>
       </div>
       <button type="button" class="btn btn-ghost btn-sm" id="rohAdd">+ weiterer Rohstoff</button>
       <div style="margin-top:14px"><button class="btn btn-primary" type="submit">Anfrage senden</button></div>
@@ -3949,6 +4014,26 @@ portal_head('Kundenportal · ' . $k['firma']);
   window.rohInfo = <?= json_encode($rohInfoMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var rohToken = '<?= h($token) ?>';
   function rohEsc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+  function rohZahl(x){ return String(Math.round(x*1000)/1000).replace('.', ','); }
+  // Mindestmenge: Menge in die MOQ-Einheit umrechnen (nur g/kg/t untereinander, sonst gleiche Einheit). null = nicht vergleichbar.
+  function rohUm(m, von, nach){ if (von === nach) return m; var g = {g:1, kg:1000, t:1000000}; return (g[von] && g[nach]) ? m * g[von] / g[nach] : null; }
+  function rohMoqPruefen(){
+    var ok = true, erste = null;
+    document.querySelectorAll('#rohRows .rohrow').forEach(function(row){
+      var nm = row.querySelector('input[name="roh_name[]"]').value.trim(), d = window.rohInfo[nm];
+      var fb = row.querySelector('.rohmoqfehler'); if (fb) fb.textContent = '';
+      if (!nm || !d || !d.moq) return;
+      var mi = row.querySelector('input[name="roh_menge[]"]'), es = row.querySelector('select[name="roh_einheit[]"]');
+      var m = parseFloat(String(mi.value).replace(',', '.')) || 0, mm = m > 0 ? rohUm(m, es.value, d.moqE) : null;
+      if (mm === null || mm + 1e-9 < d.moq) {
+        ok = false; mi.value = d.moq; es.value = d.moqE;
+        if (fb) fb.textContent = 'Mindestmenge ' + rohZahl(d.moq) + ' ' + d.moqE + '. Die Menge wurde auf die Mindestmenge gesetzt.';
+        if (!erste) erste = mi;
+      }
+    });
+    if (erste) erste.focus();
+    return ok;
+  }
   function rohInfoZeige(inp){
     var box = inp.closest('.rohrow').querySelector('.rohinfo');
     var name = inp.value.trim(); var d = window.rohInfo[name];
@@ -3956,6 +4041,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       var t = []; if (d.form) t.push(d.form); if (d.cas) t.push('CAS ' + d.cas);
       box.innerHTML = '';
       box.appendChild(document.createTextNode((t.join(' · ') || 'Im Katalog verfügbar') + ' · '));
+      if (d.moq) { var mb = document.createElement('strong'); mb.style.color = 'var(--text)'; mb.textContent = 'Mindestmenge ' + rohZahl(d.moq) + ' ' + d.moqE; box.appendChild(mb); box.appendChild(document.createTextNode(' · ')); }
       var a = document.createElement('a'); a.href = '#'; a.textContent = 'Details ansehen';
       a.addEventListener('click', function(ev){ ev.preventDefault(); rohDetailsShow(name); });
       box.appendChild(a);
@@ -3998,7 +4084,16 @@ portal_head('Kundenportal · ' . $k['firma']);
   document.getElementById('rohAdd').addEventListener('click', function(){
     var rows = document.getElementById('rohRows'); var first = rows.querySelector('.rohrow');
     var c = first.cloneNode(true); c.querySelectorAll('input').forEach(function(x){ x.value=''; });
-    var inf = c.querySelector('.rohinfo'); if (inf) inf.textContent = ''; rows.appendChild(c);
+    var inf = c.querySelector('.rohinfo'); if (inf) inf.textContent = '';
+    var fb = c.querySelector('.rohmoqfehler'); if (fb) fb.textContent = ''; rows.appendChild(c);
+  });
+  // Absenden nur mit Menge ab der Mindestmenge (Server prüft zusätzlich).
+  document.getElementById('rohForm').addEventListener('submit', function(e){ if (!rohMoqPruefen()) e.preventDefault(); });
+  // Rohstoff gewählt, Menge noch leer -> Mindestmenge vorbelegen.
+  document.getElementById('rohRows').addEventListener('change', function(e){
+    if (!e.target.matches('input[name="roh_name[]"]')) return;
+    var d = window.rohInfo[e.target.value.trim()], row = e.target.closest('.rohrow');
+    if (d && d.moq) { var mi = row.querySelector('input[name="roh_menge[]"]'); if (!mi.value) { mi.value = d.moq; row.querySelector('select[name="roh_einheit[]"]').value = d.moqE; } }
   });
   // Vorbefüllte erste Zeile gleich mit Info versehen
   document.querySelectorAll('#rohRows input[name="roh_name[]"]').forEach(function(x){ if (x.value.trim()) rohInfoZeige(x); });

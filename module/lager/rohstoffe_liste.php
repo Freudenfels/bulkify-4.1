@@ -2,6 +2,8 @@
 // Rohstoffe / Items – Liste
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/rohstoff_moq.php';
+moq_schema();
 
 seed_item_if_empty();
 
@@ -159,6 +161,9 @@ $cols = [
     // „20:1"), damit die Live-Suche denselben Namen findet, den der Kunde sieht (sucht über den Zeilentext).
     'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> '<span style="white-space:normal">' . h(rohstoff_anzeige_name($r)) . '</span>'],
     'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
+    'moq_menge'     => ['label' => 'MOQ', 'sort' => true, 'num' => true, 'render' => fn($r) => (float)($r['moq_menge'] ?? 0) > 0
+                        ? '<span' . (trim((string)($r['moq_notiz'] ?? '')) !== '' ? ' title="' . h((string)$r['moq_notiz']) . '"' : '') . '>' . h(moq_zahl((float)$r['moq_menge']) . ' ' . ($r['moq_einheit'] ?: 'kg')) . '</span>'
+                        : '<span class="muted">–</span>'],
     'bedarf'        => ['label' => 'Bedarf', 'num' => true, 'render' => function($r) use ($bedarfMap, $mgMenge) {
         $n = $bedarfMap[(int)$r['id']] ?? 0;
         return $n > 0 ? '<strong>' . $mgMenge($n) . '</strong> ' . h((string)($r['einheit'] ?? '')) : '<span class="muted">–</span>'; }],

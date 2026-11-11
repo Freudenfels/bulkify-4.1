@@ -4,6 +4,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badges
+require_once BX_ROOT . '/core/rohstoff_moq.php';  // eigene MOQ je Rohstoff: Hinweis „unter MOQ"
 require_once BX_ROOT . '/core/ki.php';           // KI-Angebots-PDF-Erfassung
 require_once BX_ROOT . '/core/dienstleistung.php'; // DL-Katalog-Positionen (dl_position_add) + Kundenwunsch bei DL-Angeboten
 
@@ -1055,6 +1056,29 @@ if (!$neu):
       <?php foreach ($optE['extra'] as $x): ?>
         <tr><td colspan="4"><?= h($x['bezeichnung']) ?><span class="muted" style="font-size:12px"> · wird zusätzlich berechnet</span></td>
             <td class="bx-num"><?= $eur(angpos_netto_cent($x)) ?></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
+
+  <?php // MOQ je Rohstoff (Nico 11.11.2026): liegt die angebotene bzw. für die Auftragsmenge benötigte Menge unter
+        // unserer Mindestmenge? Nur Hinweis - Nico entscheidet.
+        $moqRows = angebot_moq_pruefung((int)$id); if ($moqRows): ?>
+  <div class="bx-panel" style="margin-top:16px<?= array_filter($moqRows, fn($r) => $r['unter']) ? ';border-left:3px solid var(--warn)' : '' ?>">
+    <div style="margin-bottom:4px">Mindestmengen (MOQ) je Rohstoff</div>
+    <div class="muted" style="font-size:12px;margin-bottom:10px">Unsere Mindestmenge am Rohstoff gegen die Menge im Angebot. Bei Rezepturen: benötigte Menge für die Auftragsmenge (kleinste bis größte Option). Nur Hinweis, keine Sperre.</div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Rohstoff</th><th>Woher</th><th class="bx-num">Menge im Angebot</th><th class="bx-num">MOQ</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($moqRows as $mr): $me = $mr['moq']['einheit']; ?>
+        <tr>
+          <td><a href="?p=rohstoff&id=<?= (int)$mr['item_id'] ?>"><?= h($mr['name']) ?></a></td>
+          <td><?= h($mr['quelle'] === 'Rezeptur' ? 'Rezeptur (benötigt)' : 'Rohstoff-Position') ?></td>
+          <td class="bx-num"><?= h(moq_zahl(round($mr['min'], 3))) ?><?= abs($mr['max'] - $mr['min']) > 0.0005 ? ' bis ' . h(moq_zahl(round($mr['max'], 3))) : '' ?> <?= h($me) ?></td>
+          <td class="bx-num"<?= $mr['moq']['notiz'] !== '' ? ' title="' . h($mr['moq']['notiz']) . '"' : '' ?>><?= h(moq_wert($mr['moq'])) ?></td>
+          <td><?= $mr['unter'] ? bx_badge('unter MOQ', 'warn') : bx_badge('ok', 'ok') ?></td>
+        </tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>

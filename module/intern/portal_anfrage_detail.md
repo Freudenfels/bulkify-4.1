@@ -117,3 +117,8 @@ ersten `portal_anfrage_pos.produkt_id`. So lässt sich die Laboranalyse eindeuti
 
 ## KI-Steckbrief (11.11.2026)
 Bei einer Rohstoffanfrage mit zugeordnetem Rohstoff steht unter „Rohstoff-Preis berechnen“ der Block „Steckbrief“ (nur intern), siehe `core/rohstoff_steckbrief.md`.
+
+## MOQ (11.11.2026)
+- Bei einer Rohstoffanfrage stehen hinter „Gewünschte Menge“ die Badges „MOQ 25 kg“ und gegebenenfalls „unter MOQ“.
+- In „Rohstoff-Preis berechnen“ steht ein Hinweis mit MOQ, Notiz und angefragter Menge.
+- Das ist nur ein Hinweis, das Angebot bleibt möglich.

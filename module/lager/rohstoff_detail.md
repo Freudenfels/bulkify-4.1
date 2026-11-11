@@ -195,3 +195,10 @@ Unter der KI-Info steht der Block „Steckbrief“ aus `core/rohstoff_steckbrief
 - Mit dem Stift lässt er sich ergänzen.
 - „neu erstellen“ überschreibt erst nach einer Rückfrage.
 - Er erscheint nie im Portal, anders als die KI-Info.
+
+## Eigene MOQ (11.11.2026)
+In den Stammdaten stehen bei Rohstoffen hinter der CAS-Nummer die Felder „MOQ (unsere Mindestmenge)“ (Menge und Einheit) und „MOQ-Notiz“.
+- Gespeichert wird beim normalen Speichern, nur wenn die Felder im Formular waren.
+- Eine leere Menge bedeutet keine MOQ.
+- Die Kachel „MOQ (unsere)“ zeigt den Wert, die Notiz steht im Tooltip.
+Siehe `core/rohstoff_moq.md`.

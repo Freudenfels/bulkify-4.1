@@ -28,3 +28,6 @@ Spalte „KI-Info" je Rohstoff mit Button „erzeugen"/„erneuern" (POST aktion
 
 ## Spalten Bedarf / Auf Lager
 In der Rohstoff-/Nicht-Kapsel-Ansicht zwei Spalten: **Bedarf** (Summe `need` aus `bedarf_aggregiert()`, nur Nicht-Etikett, je item_id) und **Auf Lager** (gebündelte Charge-Summe: `SUM(menge_verfuegbar)` WHERE status=frei AND fremd_kunde_id IS NULL, je item_id). Beides einmal vorberechnet (eine Abfrage), nicht pro Zeile. Menge mit der item-`einheit`.
+
+## Spalte MOQ (11.11.2026)
+Neben „Preis ab“ steht unsere Mindestmenge (`item.moq_menge` + Einheit), die Notiz als Tooltip. Die Spalte ist sortierbar. Siehe `core/rohstoff_moq.md`.

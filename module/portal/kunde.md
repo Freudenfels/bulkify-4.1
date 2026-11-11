@@ -455,3 +455,12 @@ In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. D
   - die Alternativen mit Begründung, Richtpreis (sonst „auf Anfrage“) und Link zum Rohstoff-Infoblatt.
 - Knöpfe: **„Diese Alternative anfragen“** (`rohstoff_alt_waehlen`, die Anfrage läuft mit dem neuen Rohstoff weiter) oder **„Nein danke, beim ursprünglichen Rohstoff bleiben“** (`rohstoff_alt_ablehnen`).
 - Solche Anfragen zählen bei „Zu bestätigen“ und im Menü-Zähler mit, nicht bei „In Prüfung“. In „Meine Rohstoffanfragen“ steht „Alternative vorgeschlagen – bitte entscheiden“ mit Link.
+
+## Mindestmenge bei Rohstoffanfragen (11.11.2026)
+- **Anzeige:** Die Rohstoff-Detailseite zeigt „Mindestmenge 25 kg“. Das Mengenfeld ist auf die MOQ vorbelegt, das Label lautet „mindestens 25 kg“. Im Formular „Rohstoff anfragen“ steht die Mindestmenge in der Info zum gewählten Rohstoff, die Menge wird vorbelegt.
+- **Sperre:** Liegt eine Zeile unter der MOQ oder fehlt die Menge, wird nichts gesendet.
+  - Im Browser blockt das Formular, setzt die Menge auf die MOQ und zeigt die Meldung.
+  - Auf dem Server speichert der Handler `rohstoff_anfrage` keine Zeile. Er leitet zurück auf `v=rohanfrage&moq=1`. Die Zeilen kommen aus der Session (`roh_rueck`) wieder, auf die MOQ gesetzt und mit Fehlerpanel.
+- **Ohne MOQ:** keine Sperre.
+- **Fehler behoben:** Das Einzelformular auf der Rohstoff-Detailseite (Felder `betreff`, `rohstoff_id`, `wunsch_menge`) kam bisher nicht an, weil der Handler nur `roh_*` las. Es wird jetzt in dieselbe Form gebracht.
+- **Steckbrief:** Der interne KI-Steckbrief wird im Portal nie ausgegeben.

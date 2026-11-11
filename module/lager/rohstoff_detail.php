@@ -4,6 +4,7 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badge
+require_once BX_ROOT . '/core/rohstoff_moq.php';  // eigene MOQ (unsere Mindestmenge)
 
 // Labels aus der zentralen Quelle (Block K): fertig = Bulkware, verkaufsfertig = Fertigprodukt. Keys unverändert
 // (nur die für einen Warenlager-Artikel gültigen Kategorien; leerkapsel ist ein Rohstoff mit Form kapselhuelle).
@@ -408,6 +409,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             if (abs((float)$vals[array_search('ek_preis', $felder)] - $ekAlt) > 1e-9) { try { q("UPDATE item SET ek_auto=0 WHERE id=?", [(int)$id]); } catch (Throwable $e) {} }
         }
         item_ek_aus_lieferantenpreis((int)$id);
+        // Eigene MOQ (Nico 11.11.2026) - nur wenn das Feld im Formular war (Rohstoffe).
+        if (isset($_POST['moq_einheit'])) {
+            moq_schema();
+            $moqM = zahl_lesen((string)($_POST['moq_menge'] ?? ''), true);
+            $moqE = in_array($_POST['moq_einheit'], moq_einheiten(), true) ? (string)$_POST['moq_einheit'] : 'kg';
+            q("UPDATE item SET moq_menge=?, moq_einheit=?, moq_notiz=? WHERE id=?",
+              [$moqM > 0 ? $moqM : null, $moqM > 0 ? $moqE : null, $moqM > 0 ? (mb_substr(trim((string)($_POST['moq_notiz'] ?? '')), 0, 190) ?: null) : null, (int)$id]);
+        }
         // Fremdprodukt markiert: den vorhandenen eigenen Bestand dem Besitzer-Kunden zuschreiben (Lager 2).
         if ($fpOn && $vals[array_search('fremd_besitzer_id', $felder)]) {
             $n = fremdprodukt_bestand_zuordnen((int)$id, (int)$vals[array_search('fremd_besitzer_id', $felder)]);
@@ -662,6 +671,11 @@ if (!$neu) {
     if (!empty($it['fremdprodukt']) && (int)($it['fremd_besitzer_id'] ?? 0) > 0)
         echo '<div class="bx-card"><div class="k">Besitzer (Fremdprodukt)</div><div class="v">' . h((string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$it['fremd_besitzer_id']])) . '</div></div>';
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h((string)($it['preis_bezug'] ?: ($it['einheit'] ?: 'Stk'))) . '</div></div>';
+    if (($it['kategorie'] ?? '') === 'rohstoff') {
+        $moqK = rohstoff_moq((int)$id);
+        echo '<div class="bx-card"' . ($moqK && $moqK['notiz'] !== '' ? ' title="' . h($moqK['notiz']) . '"' : '') . '><div class="k">MOQ (unsere)</div><div class="v">'
+           . ($moqK ? h(moq_wert($moqK)) : '<span class="muted">keine</span>') . '</div></div>';
+    }
     echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . $bestandWert($bestand_frei_je) . '</div></div>';
     if ($einheiten_gemischt && $bestand_qua_je) echo '<div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="color:var(--warn)">' . $bestandWert($bestand_qua_je) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Reserviert</div><div class="v"' . ($reserviert_gesamt > $bestand_frei + 1e-9 ? ' style="color:var(--warn)"' : '') . '>' . ($reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
@@ -822,6 +836,14 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
       <div class="bx-field"><label>Name (englisch)</label><input type="text" name="name_en" value="<?= $v('name_en') ?>"></div>
       <div class="bx-field"><label>Lateinischer Name <?= bx_hint('botanischer/pharmazeutischer Name, z. B. Withania somnifera') ?></label><input type="text" name="name_lat" value="<?= $v('name_lat') ?>"></div>
       <div class="bx-field"><label>CAS-Nummer <?= bx_hint('eindeutige Stoff-Nummer, z. B. Ascorbinsäure 50-81-7') ?></label><input type="text" name="cas" value="<?= $v('cas') ?>" placeholder="z. B. 50-81-7"></div>
+      <?php if ($neu || ($it['kategorie'] ?? '') === 'rohstoff'): $moqIt = $neu ? null : rohstoff_moq((int)$id); ?>
+      <div class="bx-field"><label>MOQ (unsere Mindestmenge) <?= bx_hint('Kleinste Menge, die wir von diesem Rohstoff an Kunden verkaufen, z. B. 25 kg wegen Gebinde. Unabhängig von der Mindestmenge des Lieferanten. Im Kundenportal kann der Kunde darunter nicht anfragen; im Dashboard ist es nur ein Hinweis. Leer = keine MOQ.') ?></label>
+        <div class="bx-row" style="gap:6px;flex-wrap:nowrap;margin:0">
+          <input type="text" name="moq_menge" inputmode="decimal" value="<?= $moqIt ? h(moq_zahl($moqIt['menge'])) : '' ?>" placeholder="z. B. 25" style="width:110px">
+          <select name="moq_einheit" style="width:auto"><?php foreach (moq_einheiten() as $me): ?><option value="<?= $me ?>"<?= ($moqIt['einheit'] ?? 'kg') === $me ? ' selected' : '' ?>><?= $me ?></option><?php endforeach; ?></select>
+        </div></div>
+      <div class="bx-field"><label>MOQ-Notiz <span class="muted">(optional)</span></label><input type="text" name="moq_notiz" maxlength="190" value="<?= h((string)($moqIt['notiz'] ?? '')) ?>" placeholder="z. B. wegen Gebinde 25 kg"></div>
+      <?php endif; ?>
       <div class="bx-field"><label>Kategorie</label>
         <select name="kategorie">
           <?php foreach ($KAT as $key=>$lbl): ?>

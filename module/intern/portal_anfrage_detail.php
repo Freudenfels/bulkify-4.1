@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Rohstoffpreise + Preisanfrage-Popup
+require_once BX_ROOT . '/core/rohstoff_moq.php';  // eigene MOQ: Hinweis „unter MOQ" (keine Sperre)
 require_once BX_ROOT . '/core/rohstoff_unterlagen.php';   // Pop-up „Preis & Unterlagen“ (Preis ab Menge, CoA/Spec mit KI)
 
 $id = (int)($_GET['id'] ?? 0);
@@ -324,7 +325,7 @@ if (isset($_GET['zzfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <tr><td style="width:220px">Produkt</td><td><?php if ($dlProdId): ?><a href="?p=produkt&id=<?= $dlProdId ?>"><?= h($dlProdName) ?></a><?php else: ?><?= h($dlProdName) ?><?php endif; ?></td></tr>
       <?php endif; ?>
       <tr><td style="width:220px">Betreff</td><td><?= h($pa['betreff'] ?: '–') ?></td></tr>
-      <?php if ($pa['wunsch_menge']): ?><tr><td>Gewünschte Menge</td><td><?= $mg($pa['wunsch_menge']) . ' ' . h($pa['wunsch_einheit'] ?: '') ?></td></tr><?php endif; ?>
+      <?php if ($pa['wunsch_menge']): ?><tr><td>Gewünschte Menge</td><td><?= $mg($pa['wunsch_menge']) . ' ' . h($pa['wunsch_einheit'] ?: '') ?><?= (int)($pa['rohstoff_id'] ?? 0) ? ' ' . moq_hinweis_html((int)$pa['rohstoff_id'], (float)$pa['wunsch_menge'], (string)($pa['wunsch_einheit'] ?? '')) : '' ?></td></tr><?php endif; ?>
       <?php if ($pa['typ'] === 'dienstleistung' && ($pa['zielpreis'] ?? null) !== null && (float)$pa['zielpreis'] > 0): ?><tr><td>Zielpreis (Kunde)</td><td><?= $mg($pa['zielpreis']) ?> €</td></tr><?php endif; ?>
     <?php endif; ?>
     <?php if ($pa['notiz']): ?><tr><td>Notiz</td><td><?= h($pa['notiz']) ?></td></tr><?php endif; ?>
@@ -373,6 +374,12 @@ if ($darfAbsage && $pa['typ'] === 'rohstoff'): ?>
     </div>
     <noscript><button class="btn btn-ghost btn-sm" type="submit">Zuordnen</button></noscript>
   </form>
+  <?php if ($rid && ($moqP = moq_pruefen($rid, $menge > 0 ? $menge : null, (string)($pa['wunsch_einheit'] ?? '')))): ?>
+    <div class="bx-panel" style="padding:10px 14px;margin:8px 0;border-left:3px solid <?= $moqP['unter'] ? 'var(--warn)' : 'var(--gruen)' ?>">
+      <strong>MOQ <?= h(moq_wert($moqP['moq'])) ?></strong><?= $moqP['moq']['notiz'] !== '' ? ' <span class="muted">(' . h($moqP['moq']['notiz']) . ')</span>' : '' ?>
+      <?php if ($moqP['unter']): ?> · <?= bx_badge('unter MOQ', 'warn') ?> Angefragt sind <?= h(moq_zahl((float)$moqP['menge_moq'])) ?> <?= h($moqP['moq']['einheit']) ?>. Nur ein Hinweis, du kannst abweichen.<?php endif; ?>
+    </div>
+  <?php endif; ?>
   <?php if ($rid):
       $auf   = rohstoff_aufschlag_prozent($rid);
       $refM  = $menge > 0 ? $menge : 1;

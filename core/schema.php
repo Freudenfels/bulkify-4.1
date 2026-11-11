@@ -1952,6 +1952,10 @@ function init_schema(): void {
     ensure_column('item', 'steckbrief_von', "VARCHAR(120) NULL");
     ensure_column('item', 'steckbrief_bearb_am', "DATETIME NULL");
     ensure_column('item', 'steckbrief_bearb_von', "VARCHAR(120) NULL");
+    // Eigene MOQ je Rohstoff (Nico 11.11.2026, core/rohstoff_moq.php): unsere Mindestmenge, unabhängig von der Lieferanten-MOQ.
+    ensure_column('item', 'moq_menge', "DECIMAL(12,3) NULL");
+    ensure_column('item', 'moq_einheit', "VARCHAR(10) NULL");
+    ensure_column('item', 'moq_notiz', "VARCHAR(190) NULL");
     // Lieferanten-Kürzel: je Lieferant ein kurzes Suffix aus dem Namen (Buxtrade→BX, Wellgreen→WG …).
     // Damit lässt sich derselbe Rohstoff je Lieferant eindeutig kennzeichnen: Kennung = R-Nummer + Kürzel.
     ensure_column('lieferanten', 'kuerzel', "VARCHAR(10) NULL");

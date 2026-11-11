@@ -586,3 +586,6 @@ Jeder Schritt hat ein 7. Feld mit dem Namen der Person, die ihn abgeschlossen ha
 
 ## item: Steckbrief-Spalten (11.11.2026)
 `steckbrief` (TEXT), `steckbrief_am`, `steckbrief_von`, `steckbrief_bearb_am`, `steckbrief_bearb_von`. Gehören zum internen KI-Steckbrief, siehe `core/rohstoff_steckbrief.md`. Nie im Portal ausgeben.
+
+## item: MOQ-Spalten (11.11.2026)
+`moq_menge` (DECIMAL 12,3), `moq_einheit`, `moq_notiz`: unsere Mindestmenge je Rohstoff, siehe `core/rohstoff_moq.md`.

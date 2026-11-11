@@ -286,6 +286,7 @@ Stand nach dem Umbau "Produktseite aufräumen" (09.11.2026). Kopf: Name (Stift),
 
 - **KI-Info (kurz, für den Kunden):** wird dem Kunden im Portal gezeigt, nur auf Knopfdruck.
 - **KI-Steckbrief (ausführlich, nur intern):** Knopf „KI-Steckbrief erstellen“ an Rohstoffseite, Kunden-Rohstoffanfrage und Lieferanten-Anfrage. Inhalt: was ist das, Einsatz in NEM, übliche Dosis und Darreichung, Besonderheiten, Regulatorik (Novel Food, Health Claims nur wenn zugelassen, Höchstmengen, Warnhinweise). Gespeichert am Rohstoff mit Datum und Name, per Stift ergänzbar, „neu erstellen“ nur nach Rückfrage. Hinweis „KI-generiert, intern, nicht geprüft“. Nie im Kunden- oder Lieferantenportal.
+- **MOQ (unsere Mindestmenge):** Menge + Einheit (meist kg) + optionale Notiz in den Stammdaten. Unabhängig von der Lieferanten-MOQ. Anzeige: Kachel, Spalte in der Rohstoff-Liste, Kundenanfrage und Angebot („MOQ 25 kg", „unter MOQ"; bei Rezepturen die benötigte Menge für die Auftragsmenge). **Intern nur Hinweis, Nico kann abweichen. Im Kundenportal angezeigt und gesperrt**: kleinere Menge lässt sich nicht absenden, Fehlermeldung mit MOQ, Feld auf die MOQ vorbelegt. Ohne MOQ keine Sperre.
 
 ---
 
@@ -453,3 +454,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 11.11.2026 | Lieferanten-Portal: Einheiten (Kapsel, Tablette, Stick ...) und freigeschaltete Formen werden in der Sprache des Lieferanten angezeigt (Fertigprodukt-Preise, Preisliste, Anfragen, Katalog, Bestellung); Form-Spalte der Fertigprodukt-Preise ohne falsches "Rohstoff" | Nico / Claude Code |
 | 11.11.2026 | Lieferanten-Portal, Fertigprodukt-Preise: alle eingetragenen Preise werden mit einem Klick gespeichert (vorher nur die geklickte Zeile, Rest ging verloren); "Alle Preise speichern", Warnung bei ungespeicherten Eingaben, Meldung bei nicht lesbarem Preis; Zahlen aus chinesischer Eingabe (Vollbreite, €/¥) werden gelesen; Team bekommt Benachrichtigung | Nico / Claude Code |
 | 11.11.2026 | Rohstoff: KI-Steckbrief (nur intern) an Rohstoffseite, Kunden- und Lieferanten-Rohstoffanfrage; gespeichert am Rohstoff, Stift, neu erstellen mit Rückfrage; neuer Abschnitt 5b Rohstoff-Stammdaten | Nico / Claude Code |
+| 11.11.2026 | Rohstoff: eigene MOQ je Rohstoff (Stammdaten, Kachel, Liste, Kundenanfrage, Angebot inkl. Rezeptur-Bedarf); intern nur Hinweis, Kundenportal zeigt und sperrt (Browser + Server); Einzelformular auf der Portal-Rohstoffseite kommt wieder an | Nico / Claude Code |
