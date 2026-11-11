@@ -17,35 +17,61 @@ $formEinheit = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapsel' : (
 $fertigFormen = array_values(array_filter(array_map('trim', explode(',', (string) scalar("SELECT fertig_formen FROM lieferanten WHERE id=?", [$lid])))));
 $formLabel = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Pulver','fluessig'=>'Flüssig','gummi'=>'Fruchtgummi','gel'=>'Gel'];
 
+// Einen Preis speichern. Rückgabe 'ok' (gilt sofort), 'vorschlag' (wartet auf Freigabe) oder '' (nichts getan).
+$preisSpeichern = function (int $aid, float $preis) use ($lid): string {
+    $cur = one("SELECT preis FROM rezeptur_lief_angebot WHERE id=? AND lieferant_id=?", [$aid, $lid]);
+    if (!$cur) return '';
+    $alt = ($cur['preis'] !== null && (float)$cur['preis'] > 0) ? (float)$cur['preis'] : null;
+    if ($alt === null) {
+        // Noch kein festgesetzter Preis -> gilt sofort (Erstangebot).
+        q("UPDATE rezeptur_lief_angebot SET preis=?, stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$preis > 0 ? $preis : null, $aid, $lid]);
+        rezeptur_produkt_matrizen_auffrischen((int) scalar("SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE id=?", [$aid]));
+        return 'ok';
+    }
+    if ($preis > 0 && abs($preis - $alt) < 0.00005) {
+        // Gleicher Preis -> als aktuell bestätigt behandeln (4-Wochen-Regel), Vorschlag weg.
+        q("UPDATE rezeptur_lief_angebot SET stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$aid, $lid]);
+        return 'ok';
+    }
+    // Änderung eines festgesetzten Preises -> nur VORSCHLAG; der alte Preis bleibt gültig, bis bulkify freigibt.
+    q("UPDATE rezeptur_lief_angebot SET preis_vorschlag=?, vorschlag_am=NOW() WHERE id=? AND lieferant_id=?", [$preis > 0 ? $preis : null, $aid, $lid]);
+    return 'vorschlag';
+};
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     if ($aktion === 'preis_save') {
-        $aid   = (int)($_POST['id'] ?? 0);
-        $preis = zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr);
-        $cur   = one("SELECT preis FROM rezeptur_lief_angebot WHERE id=? AND lieferant_id=?", [$aid, $lid]);
-        if ($cur) {
-            $alt = ($cur['preis'] !== null && (float)$cur['preis'] > 0) ? (float)$cur['preis'] : null;
-            if ($alt === null) {
-                // Noch kein festgesetzter Preis -> gilt sofort (Erstangebot).
-                q("UPDATE rezeptur_lief_angebot SET preis=?, stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$preis > 0 ? $preis : null, $aid, $lid]);
-                rezeptur_produkt_matrizen_auffrischen((int) scalar("SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE id=?", [$aid]));
-                header('Location: ' . $ziel . '&ok=1'); exit;
-            }
-            if ($preis > 0 && abs($preis - $alt) < 0.00005) {
-                // Gleicher Preis -> als aktuell bestätigt behandeln (4-Wochen-Regel), Vorschlag weg.
-                q("UPDATE rezeptur_lief_angebot SET stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$aid, $lid]);
-                header('Location: ' . $ziel . '&ok=1'); exit;
-            }
-            // Änderung eines festgesetzten Preises -> nur VORSCHLAG; der alte Preis bleibt gültig, bis bulkify freigibt.
-            q("UPDATE rezeptur_lief_angebot SET preis_vorschlag=?, vorschlag_am=NOW() WHERE id=? AND lieferant_id=?", [$preis > 0 ? $preis : null, $aid, $lid]);
-            if (function_exists('benachrichtigung_add')) {
-                $lfirma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]);
-                benachrichtigung_add('Preis-Vorschlag (Fremdfertigung): ' . ($lfirma ?: ('Lieferant #' . $lid)),
-                    'Ein Lieferant möchte einen festgesetzten Fremdfertigungspreis ändern – wartet auf Freigabe.', '?p=einkauf_preise&tab=fremd');
-            }
-            header('Location: ' . $ziel . '&vorschlag=1'); exit;
+        $r = $preisSpeichern((int)($_POST['id'] ?? 0), zahl_lesen((string)($_POST['preis'] ?? ''), false, $spr));
+        if ($r === 'vorschlag' && function_exists('benachrichtigung_add')) {
+            $lfirma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]);
+            benachrichtigung_add('Preis-Vorschlag (Fremdfertigung): ' . ($lfirma ?: ('Lieferant #' . $lid)),
+                'Ein Lieferant möchte einen festgesetzten Fremdfertigungspreis ändern – wartet auf Freigabe.', '?p=einkauf_preise&tab=fremd');
         }
-        header('Location: ' . $ziel); exit;
+        header('Location: ' . $ziel . ($r === 'vorschlag' ? '&vorschlag=1' : ($r === 'ok' ? '&ok=1' : ''))); exit;
+    }
+    // Alle Zeilen auf einmal (Nico 11.11.2026: Lieferantin trug alle Preise ein und klickte einmal – nur eine Zeile kam an).
+    // Jede Zeile schickt ihren Preis mit; gespeichert werden nur Zeilen, deren Eingabe sich geändert hat.
+    if ($aktion === 'preis_save_alle') {
+        $n = 0; $nv = 0; $falsch = 0;
+        foreach ((array)($_POST['preis'] ?? []) as $aid => $roh) {
+            $roh = trim((string)$roh); $vorher = trim((string)($_POST['vorher'][$aid] ?? ''));
+            if ($roh === $vorher) continue;
+            $preis = zahl_lesen($roh, false, $spr);
+            if ($roh !== '' && $preis <= 0) { $falsch++; continue; }   // nicht lesbar -> nichts überschreiben
+            $r = $preisSpeichern((int)$aid, $preis);
+            if ($r === 'ok') $n++; elseif ($r === 'vorschlag') $nv++;
+        }
+        if ($nv > 0 && function_exists('benachrichtigung_add')) {
+            $lfirma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]);
+            benachrichtigung_add('Preis-Vorschlag (Fremdfertigung): ' . ($lfirma ?: ('Lieferant #' . $lid)),
+                'Ein Lieferant möchte festgesetzte Fremdfertigungspreise ändern (' . $nv . ') – wartet auf Freigabe.', '?p=einkauf_preise&tab=fremd');
+        }
+        if ($n > 0 && function_exists('benachrichtigung_add')) {
+            $lfirma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]);
+            benachrichtigung_add('Neue Fremdfertigungspreise: ' . ($lfirma ?: ('Lieferant #' . $lid)),
+                $n . ' Preis(e) eingetragen.', '?p=lieferant&id=' . $lid);
+        }
+        header('Location: ' . $ziel . '&gesp=' . $n . '&vors=' . $nv . '&falsch=' . $falsch); exit;
     }
     if ($aktion === 'preis_add') {
         $rid   = (int)($_POST['rezeptur_id'] ?? 0);
@@ -94,6 +120,12 @@ lp_head('bulkify – ' . lp_t('rez_preise_menu'));
 lp_shell_start('lieferant_rezepturpreise');
 if (isset($_GET['ok']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . '</div>';
 if (isset($_GET['best'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('preise_bestaetigt')) . '</div>';
+if (isset($_GET['gesp'])) {
+    $gN = (int)$_GET['gesp']; $gV = (int)($_GET['vors'] ?? 0); $gF = (int)($_GET['falsch'] ?? 0);
+    if ($gN > 0 || ($gV === 0 && $gF === 0)) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h(lp_t('gespeichert')) . ($gN > 0 ? ' (' . $gN . ')' : '') . '</div>';
+    if ($gV > 0) echo '<div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen);background:var(--panel-2)">' . h(lp_t('preis_vorschlag_info')) . ' (' . $gV . ')</div>';
+    if ($gF > 0) echo '<div class="bx-panel" style="padding:12px 16px;border-color:#e6c4c0;color:#8f231b">' . h(lp_t('preis_ungueltig')) . ' (' . $gF . ')</div>';
+}
 if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 16px;border-color:var(--gruen);background:var(--panel-2)">' . h(lp_t('preis_vorschlag_info')) . '</div>';
 ?>
 <h1 style="margin-bottom:4px"><?= h(lp_t('rez_preise_titel')) ?></h1>
@@ -123,6 +155,7 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
   <?php if (!$rows): ?>
     <div class="muted"><?= h(lp_t('rez_preise_leer')) ?></div>
   <?php else: ?>
+  <form method="post" id="rpForm" style="margin:0"><input type="hidden" name="aktion" value="preis_save_alle"></form>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?></th><th><?= h(lp_t('form_lbl')) ?></th><th class="bx-num" style="width:300px;white-space:nowrap"><?= h(lp_t('ihr_preis')) ?></th><th style="width:120px"><?= h(lp_t('stand')) ?></th><th style="width:50px"></th></tr></thead>
     <tbody>
@@ -131,12 +164,12 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
         <td><a href="?p=lieferant_rezeptur&id=<?= (int)$r['rezeptur_id'] ?>"><?= h($r['name']) ?></a> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></td>
         <td><?= h(anfrage_art_label('', (string)$r['form'], $spr) ?: lp_einheit($formEinheit($r['form']), 2)) ?></td>
         <td class="bx-num">
-          <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
-            <input type="hidden" name="aktion" value="preis_save"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-            <input type="text" name="preis" value="<?= h($num($r['preis'])) ?>" style="width:90px;text-align:right" inputmode="decimal">
+          <div class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
+            <input type="hidden" form="rpForm" name="vorher[<?= (int)$r['id'] ?>]" value="<?= h($num($r['preis'])) ?>">
+            <input type="text" form="rpForm" class="rp-preis" name="preis[<?= (int)$r['id'] ?>]" value="<?= h($num($r['preis'])) ?>" style="width:90px;text-align:right" inputmode="decimal">
             <span class="muted">€ / <?= h(lp_einheit($r['einheit'] ?: $formEinheit($r['form']), 1)) ?></span>
-            <button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('aktualisieren')) ?></button>
-          </form>
+            <button class="btn btn-ghost btn-sm" type="submit" form="rpForm"><?= h(lp_t('aktualisieren')) ?></button>
+          </div>
           <?php if (($r['preis_vorschlag'] ?? null) !== null && (float)$r['preis_vorschlag'] > 0): ?>
             <div class="muted" style="font-size:11px;margin-top:4px;color:var(--gruen)"><?= h(lp_t('vorschlag_offen')) ?>: <?= h($num($r['preis_vorschlag'])) ?> €</div>
           <?php endif; ?>
@@ -147,6 +180,7 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
     <?php endforeach; ?>
     </tbody>
   </table></div>
+  <div class="bx-row" style="justify-content:flex-end;margin-top:10px"><button class="btn btn-primary" type="submit" form="rpForm"><?= h(lp_t('alle_speichern')) ?></button></div>
   <?php endif; ?>
 
   <?php if ($fertigFormen && $offen): ?>
@@ -165,6 +199,12 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
 
 </div>
 <script>
+(function(){
+  var f = document.getElementById('rpForm'), offen = false;
+  document.querySelectorAll('.rp-preis').forEach(function(i){ i.addEventListener('input', function(){ offen = true; }); });
+  if (f) f.addEventListener('submit', function(){ offen = false; });
+  window.addEventListener('beforeunload', function(e){ if (offen) { e.preventDefault(); e.returnValue = ''; } });
+})();
 (function(){
   var map = {};
   <?php foreach ($offen as $o): $lbl = trim($o['name'] . ($o['nummer'] ? ' · ' . $o['nummer'] : '')); ?>map[<?= json_encode($lbl, JSON_UNESCAPED_UNICODE) ?>]=<?= (int)$o['id'] ?>;<?php endforeach; ?>

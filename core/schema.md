@@ -579,3 +579,7 @@ Jeder Schritt hat ein 7. Feld mit dem Namen der Person, die ihn abgeschlossen ha
 - **Laboranalyse:** `dokument.hochgeladen_von` des Laborberichts, wenn dort ein Name steht. Allgemeine Werte wie „team“ zählen nicht.
 - **Sonst:** War die Stufe über „Fortschritt manuell auf eine Stufe setzen“ (`phase_override`) gesetzt und deckt sie den Schritt ab, steht die Person aus dem letzten Eintrag „Fortschritt gesetzt“ in `aktivitaet` mit dem Zusatz „(Fortschritt von Hand gesetzt)“.
 
+## zahl_lesen(): chinesische Eingabe (11.11.2026)
+- Vollbreiten-Zeichen werden vorher in normale umgewandelt (`mb_convert_kana 'a'`), „。“ zählt als Punkt, „，“ und „、“ als Komma.
+- Danach zählt nur die erste Zahl im Text. Beispiele: „€0.05“ ergibt 0,05, „0.05/粒“ ergibt 0,05, „ca. 5“ ergibt 5.
+- Die Regeln für Tausender und Dezimalzeichen sind unverändert.

@@ -285,6 +285,8 @@ function lp_t(string $key, string $sprache = ''): string {
         'zuletzt_vor'     => ['de'=>'zuletzt vor',              'en'=>'last update', 'zh'=>'上次更新于'],
         'alle_aktuell'    => ['de'=>'Alle als aktuell bestätigen', 'en'=>'Confirm all as current', 'zh'=>'全部确认为最新'],
         'aktualisieren'   => ['de'=>'Aktualisieren',            'en'=>'Update', 'zh'=>'更新'],
+        'alle_speichern'  => ['de'=>'Alle Preise speichern',    'en'=>'Save all prices', 'zh'=>'保存全部价格'],
+        'preis_ungueltig' => ['de'=>'Preis nicht lesbar, bitte nur Zahlen eingeben, z. B. 0.05', 'en'=>'Price could not be read, please enter numbers only, e.g. 0.05', 'zh'=>'无法识别价格，请只输入数字，例如 0.05'],
         'rohstoff'        => ['de'=>'Rohstoff',                 'en'=>'Raw material', 'zh'=>'原料'],
         'bio_lbl'         => ['de'=>'Bio',                      'en'=>'Organic', 'zh'=>'有机'],
         'bio_ja'          => ['de'=>'Bio / organisch',          'en'=>'Organic', 'zh'=>'有机'],

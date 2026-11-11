@@ -50,3 +50,6 @@ Gibt einen theme-tauglichen `<dialog id="lpRohDlg">` + JS aus, das an `a.lp-roh[
 Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur Leerkapseln verkaufen. Sie steht neben Rohstoff, Verpackung, Verbrauch, Maschine, Labor und Fertige Produkte und wird wie diese in `lieferanten.kategorien` gespeichert.
 - Übersetzung `kat_leerkapsel`: Leerkapseln / Empty capsules / 空心胶囊.
 - Ein Leerkapsel-Lieferant zählt wie ein Rohstoff-Lieferant als Materiallieferant und sieht deshalb die Material-Preisliste.
+
+## Neue Texte (11.11.2026)
+`alle_speichern` („Alle Preise speichern“) und `preis_ungueltig` („Preis nicht lesbar …“), jeweils auf DE, EN und ZH.

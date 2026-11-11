@@ -7047,7 +7047,13 @@ function anfrage_art_fuer_item(?int $item_id): string {
 // 250000 – ein Punkt vor genau drei Ziffern trennt dort Tausender, keine Nachkommastellen.
 // Bei Preisen bleibt „0.045" bewusst 0,045.
 function zahl_lesen(string $roh, bool $mengenfeld = false, string $sprache = 'de'): float {
-    $s = trim(str_replace(["\xc2\xa0", ' ', "'", '_'], '', $roh));
+    // Chinesische/japanische Eingabe liefert oft Vollbreiten-Zeichen („０．０５“) oder „。“ als Punkt (Nico 11.11.2026:
+    // Lieferantenpreise kamen als 0 an). Vorher in normale Ziffern umwandeln, dann Währungszeichen/Einheiten
+    // wie „€“, „¥“, „/粒“ entfernen – übrig bleiben nur Ziffern, Punkt, Komma und Minus.
+    if (function_exists('mb_convert_kana')) $roh = mb_convert_kana($roh, 'a', 'UTF-8');
+    $roh = str_replace(['。', '、', '，', '．', '－'], ['.', ',', ',', '.', '-'], $roh);
+    $roh = str_replace(["\xc2\xa0", ' ', "'", '_'], '', $roh);
+    $s = preg_match('/-?(?:\d[\d.,]*|(?<!\p{L})[.,]\d+)/u', $roh, $zm) ? $zm[0] : '';
     if ($s === '') return 0.0;
     $punkt = strpos($s, '.') !== false;
     $komma = strpos($s, ',') !== false;

@@ -24,3 +24,12 @@ Nico hat gemeldet, dass „Kapsel“ und „Tablette“ im chinesischen Portal d
 - „Für Sie freigeschaltete Formen“ wird über `anfrage_art_label('', form)` übersetzt, z. B. „胶囊, 片剂“.
 - Die Spalte Form zeigt nur die Form, z. B. „胶囊“. Vorher stand dort fälschlich „Rohstoff · Kapseln“ („原料 · 胶囊“), obwohl es um Fremdfertigung geht.
 - In der Datenbank bleibt die Einheit deutsch. Übersetzt wird nur bei der Anzeige.
+
+## Alle Preise auf einmal speichern (11.11.2026)
+Eine Lieferantin (Mingyan) hat alle Preise eingetragen, danach waren sie weg. Bisher hatte jede Zeile ein eigenes Formular. Ein Klick auf „Aktualisieren“ schickte nur diese eine Zeile, die anderen Eingaben gingen beim Neuladen verloren.
+- **Ein Formular für alle Zeilen:** Es heißt `rpForm` und hängt über das `form`-Attribut an den Eingabefeldern, so gibt es kein Formular im Formular. Jeder „Aktualisieren“-Knopf und der neue Knopf „Alle Preise speichern“ schicken alle Zeilen (`aktion=preis_save_alle`).
+- **Nur Geändertes zählt:** Jede Zeile schickt ihren alten Wert in `vorher[id]` mit. Gespeichert werden nur Zeilen, deren Eingabe sich geändert hat. Die Regeln je Zeile sind unverändert (`$preisSpeichern`): Ein Erstpreis gilt sofort, ein gleicher Preis bestätigt den Stand, ein geänderter festgesetzter Preis wird ein Vorschlag zur Freigabe.
+- **Nicht lesbare Eingabe:** Sie überschreibt nichts. Es erscheint die Meldung `preis_ungueltig` mit der Anzahl der betroffenen Zeilen.
+- **Rückmeldung:** „Gespeichert (n)“ bzw. „Vorschlag (n)“. Das Team bekommt eine Benachrichtigung „Neue Fremdfertigungspreise“ mit Link zur Lieferantenseite.
+- **Warnung beim Verlassen:** Wer die Seite mit ungespeicherten Eingaben verlässt, wird vom Browser gewarnt.
+- **Zahlen-Eingabe:** `zahl_lesen()` versteht jetzt auch Vollbreiten-Ziffern aus chinesischer Eingabe („０．０５“, „。“) sowie Zusätze wie „€“, „¥“ oder „/粒“.
