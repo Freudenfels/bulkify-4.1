@@ -170,6 +170,7 @@ function led_cloud_aufruf(string $methode, string $pfad, array $param): array {
 
 // Schlanker HTTP-Aufruf. Rueckgabe: [status, body, fehlertext]
 function led_http(string $methode, string $url, array $kopf, ?string $body, int $timeout): array {
+    if (function_exists('bx_testumgebung') && bx_testumgebung()) return [0, '', bx_test_gesperrt('Die Blinker-Steuerung')];   // Testumgebung: keine echten LEDs in Barßel
     $c = curl_init($url);
     curl_setopt_array($c, [
         CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => $timeout, CURLOPT_TIMEOUT => $timeout,

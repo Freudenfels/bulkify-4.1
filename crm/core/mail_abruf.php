@@ -41,7 +41,7 @@ function mail_imap_speichern(array $p): void {
 function mail_abruf_via_ext(): bool    { return function_exists('imap_open'); }
 function mail_abruf_via_socket(): bool { return function_exists('stream_socket_client') && extension_loaded('openssl') && function_exists('mb_decode_mimeheader'); }
 function mail_abruf_moeglich(): bool   { return mail_abruf_via_ext() || mail_abruf_via_socket(); }
-function mail_abruf_bereit(): bool     { return mail_abruf_moeglich() && mail_imap_konfig()['vollstaendig']; }
+function mail_abruf_bereit(): bool     { if (function_exists('bx_testumgebung') && bx_testumgebung()) return false; return mail_abruf_moeglich() && mail_imap_konfig()['vollstaendig']; }   // Testumgebung: kein IMAP-Abruf (würde Mails im echten Postfach als gelesen markieren)
 function mail_abruf_letzter(): string  { return crm_meta_lesen('imap_last_fetch', ''); }
 
 // --- Abruf -------------------------------------------------------------------------------------
@@ -49,6 +49,7 @@ function mail_abruf_letzter(): string  { return crm_meta_lesen('imap_last_fetch'
 // Waehlt den Weg: PHP-IMAP-Erweiterung, wenn vorhanden, sonst der eigene Socket-Abruf.
 // Wirft nie. Rueckgabe: ['ok'=>bool, 'anzahl'=>int, 'fehler'=>string]
 function mail_abholen(int $max = 30): array {
+    if (function_exists('bx_testumgebung') && bx_testumgebung()) return ['ok' => false, 'anzahl' => 0, 'fehler' => bx_test_gesperrt('Der Mail-Abruf')];
     $c = mail_imap_konfig();
     if (!$c['vollstaendig']) return ['ok' => false, 'anzahl' => 0, 'fehler' => 'IMAP-Zugang ist noch nicht vollständig eingetragen (Mehr → E-Mail-Eingang).'];
     if (mail_abruf_via_ext())    $r = mail_abholen_imap($c, $max);

@@ -46,6 +46,11 @@ function nach_antwort(callable $fn): void {
 function mail_senden(string $to, string $betreff, string $text, ?string $signatur_html = null, array $anhaenge = []): string {
     $to = trim($to);
     if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) return 'Keine gültige Empfängeradresse.';
+    // Testumgebung: nie an Kunden/Lieferanten/Mitarbeiter – nur ans Test-Postfach (leer = nur Protokoll).
+    if (function_exists('bx_testumgebung') && bx_testumgebung()) {
+        [$to, $betreff] = bx_test_mail_umleiten($to, $betreff);
+        if ($to === '') { mail_log('(Testumgebung, nicht gesendet)', $betreff, $text); return ''; }
+    }
     // Automatik: Signatur des aktuell eingeloggten Teamkontos (nicht im Kundenportal -> dort null, keine Signatur).
     if ($signatur_html === null) {
         $signatur_html = '';

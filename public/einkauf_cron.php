@@ -13,6 +13,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 function ec_out(int $code, array $a): void { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
 
+if (function_exists('bx_testumgebung') && bx_testumgebung()) ec_out(200, ['ok' => true, 'testumgebung' => true, 'meldung' => 'Testumgebung: Cron aus, keine Erinnerungen.']);
 init_schema();
 
 $given = (string)($_GET['token'] ?? ($_SERVER['HTTP_X_CRON_TOKEN'] ?? ''));

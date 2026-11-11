@@ -105,3 +105,6 @@ Bei Lieferung (`auftrag_rechnung_bei_lieferung`) geht keine eigene Rechnungsmail
 
 ## Vorlage `rohstoff_alternative` (10.11.2026)
 `mail_kunde_rohstoff_alternative($anfrage_id)` schreibt dem Kunden, dass es zu seiner Rohstoff-Anfrage eine Alternative gibt. Der Text enthält Lieferstatus mit Hinweis, die Liste der Alternativen mit Begründung und den Portal-Link. Die Vorlage ist in den Einstellungen änderbar wie alle anderen. Die Funktion gibt `''` zurück, wenn die Mail verschickt wurde, sonst den Grund.
+
+## Testumgebung (Paket 12.11.2026)
+Im Testmodus (`core/testumgebung.php`) gehen alle Mails nur an `BX_TEST_MAIL_AN` mit Betreff „[TEST an …]“; leer = nur Protokoll.

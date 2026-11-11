@@ -170,6 +170,7 @@ function route_rollen_map(): array {
         'suche'              => [],
         'protokoll'          => [],
         'datenpruefung'      => [],   // Datenprüfung: nur Admin (Beheben ändert Daten)
+        'test_abzug'         => [],   // nur Admin, nur Testumgebung: Abzug live -> test
         'durchlaufzeiten'    => [],
         'angebot_import'     => [],
         'db_import'          => [],

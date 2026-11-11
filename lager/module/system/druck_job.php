@@ -34,6 +34,11 @@ q("INSERT INTO lg_druckjob (ids, format, typ, status, benutzer_id, angelegt) VAL
   [$refs, $format, $typ, $uid ?: null, jetzt_utc()]);
 $jobId = (int) insert_id();
 
+if (function_exists('bx_testumgebung') && bx_testumgebung()) {   // Testumgebung: nicht drucken, PDF-Vorschau zeigen
+    echo json_encode(['ok' => true, 'id' => $jobId, 'vorschau' => '?p=druck_vorschau&id=' . $jobId,
+        'meldung' => 'Testumgebung: nicht gedruckt. Vorschau unter Druckvorschau (Band oben) bzw. ' . '?p=druck_vorschau&id=' . $jobId]);
+    exit;
+}
 $wach = lg_meta_lesen('bruecke_zuletzt', '');
 $laeuft = $wach !== '' && (time() - strtotime($wach . ' UTC')) < 15;
 echo json_encode([

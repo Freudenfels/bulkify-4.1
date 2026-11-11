@@ -52,6 +52,10 @@ function mitarbeiter_mail_speichern(int $benutzer_id, array $p): void {
 function crm_mail_senden(int $benutzer_id, string $to, string $betreff, string $text): string {
     $to = trim($to);
     if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) return 'Keine gültige Empfängeradresse.';
+    if (function_exists('bx_testumgebung') && bx_testumgebung()) {   // Testumgebung: nur ans Test-Postfach
+        [$to, $betreff] = bx_test_mail_umleiten($to, $betreff);
+        if ($to === '') return '';
+    }
     $c = mitarbeiter_mail_konfig($benutzer_id);
     if (!$c['bereit']) return 'Kein eigenes Mailkonto hinterlegt (Einstellungen → Mein Mailkonto).';
     if (trim($c['signatur']) !== '') $text = rtrim($text) . "\n\n" . $c['signatur'];

@@ -34,6 +34,8 @@ foreach ($__kandidaten as $__pfad) {
     break;
 }
 unset($__kandidaten, $__ausUmgebung, $__pfad);
+// Testumgebung test.bulkify.pro (Paket 12.11.2026): gemeinsame Datei des Dashboards (eigenständig, ohne Schema)
+if (is_file(__DIR__ . '/../../core/testumgebung.php')) { require_once __DIR__ . '/../../core/testumgebung.php'; bx_test_start(); }
 
 // Aus Variablen Konstanten machen - falls die secrets.php die aeltere Schreibweise nutzt.
 foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS', 'DB_PORT',

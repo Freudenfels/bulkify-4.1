@@ -17,3 +17,6 @@ Druckjob-Typ **karton** (Soll-Kette 6) → `lg_produktion_karton_pdf()` auf `dru
 Druckjob-Typ **palette** (Soll-Kette 7b) → `lg_paletten_etikett_pdf()` auf den Etikettendrucker.
 
 **Inventur (11.11.2026):** Druckjobs vom Typ `platz` (Platz-Etiketten) und `inventur` (Klärfall-Etikett) werden über `lager/core/inventur_etikett.php` erzeugt.
+
+## Testumgebung (Paket 12.11.2026)
+In der Testumgebung antwortet die Brücke immer mit 403 „Brücke aus“ – aus test.bulkify.pro wird nie in Barßel gedruckt. Das PDF je Auftrag kommt aus `lager/core/druckjob.php`.

@@ -18,3 +18,6 @@ Typ passiert in `public/lager/bruecke.php`.
 - `typ=inventur` mit `id=<zaehlung-id>`: Etikett für ein Gebinde ohne Etikett (Klärfall, `inv_klaerfall_etikett_pdf`). Es geht auf den Gebinde-Drucker.
 
 **Produktion (11.11.2026):** Der Typ `pakarton` (über `api_druck`) druckt einen Karton aus `pa_karton` (`lg_pa_karton_pdf`) mit Karton-Nummer, Menge, Unter-Charge und MHD, ohne „von n“. Barcode `<Charge>-K001`.
+
+## Testumgebung (Paket 12.11.2026)
+In der Testumgebung wird nicht gedruckt: die Antwort enthält `vorschau` (Link auf `?p=druck_vorschau&id=N`).

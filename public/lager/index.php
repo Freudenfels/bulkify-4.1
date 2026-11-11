@@ -66,7 +66,8 @@ $routen = [
     'einstellungen'  => 'system/einstellungen.php',
     'sender'         => 'system/sender.php',
     'bruecke_skript' => 'system/bruecke_skript.php',
-    'druck_job'      => 'system/druck_job.php',   // Etikett-Druckauftrag in die Warteschlange (kein Admin)
+    'druck_job'      => 'system/druck_job.php',
+    'druck_vorschau' => 'system/druck_vorschau.php',   // nur Testumgebung: Druckaufträge als PDF ansehen (Paket 12.11.2026)   // Etikett-Druckauftrag in die Warteschlange (kein Admin)
     // Inventur (11.11.2026): eigener Modus, getrennt vom Tagesgeschäft. Nur Admin und Lager (lg_darf_inventur()).
     'inventur'           => 'inventur/liste.php',
     'inventur_neu'       => 'inventur/neu.php',          // nur Admin

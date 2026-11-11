@@ -35,6 +35,7 @@ function versand_absender_struktur(): array {
 // Minimaler HTTP-Helfer. Rueckgabe: ['status'=>int,'body'=>string,'err'=>string,'ct'=>string].
 function versand_http(string $method, string $url, array $headers, ?string $body = null): array {
     if (!function_exists('curl_init')) return ['status' => 0, 'body' => '', 'err' => 'PHP-curl fehlt', 'ct' => ''];
+    if (function_exists('bx_testumgebung') && bx_testumgebung()) return ['status' => 0, 'body' => '', 'err' => bx_test_gesperrt('Der Versanddienstleister (Label/Abholung)'), 'ct' => ''];   // Testumgebung: keine echten Labels
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_CUSTOMREQUEST => $method, CURLOPT_RETURNTRANSFER => true, CURLOPT_HTTPHEADER => $headers,

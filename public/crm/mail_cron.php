@@ -12,6 +12,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 function mc_out(int $code, array $a): void { http_response_code($code); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
 
+if (function_exists('bx_testumgebung') && bx_testumgebung()) mc_out(200, ['ok' => true, 'testumgebung' => true, 'abgeholt' => 0, 'fehler' => 'Testumgebung: Cron aus.']);
 crm_schema();
 
 $given = (string)($_GET['token'] ?? ($_SERVER['HTTP_X_CRON_TOKEN'] ?? ''));

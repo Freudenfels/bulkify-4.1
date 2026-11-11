@@ -10,6 +10,10 @@ if (!defined('BX41')) define('BX41', true);
 $__secrets = dirname(__DIR__) . '/secrets.php';
 if (is_file($__secrets)) require $__secrets;
 
+// --- Testumgebung test.bulkify.pro (Paket 12.11.2026): Band, noindex, Mails/Crons/Druck/Carrier aus ---
+require_once __DIR__ . '/testumgebung.php';
+bx_test_start();
+
 // --- Datenbank-Defaults (greifen nur, wenn secrets.php nichts gesetzt hat = lokale Entwicklung) ---
 if (!defined('DB_HOST')) define('DB_HOST', '127.0.0.1');
 if (!defined('DB_PORT')) define('DB_PORT', '3306');

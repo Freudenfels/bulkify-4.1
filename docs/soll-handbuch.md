@@ -475,6 +475,15 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 
 ---
 
+## 13a. Testumgebung test.bulkify.pro (Paket 12.11.2026)
+
+- **Wozu:** echte Abläufe mit dem echten Datenstand durchspielen (zuerst den neuen Produktionsablauf), ohne live etwas zu verändern. beta.bulkify.pro bleibt die alte V3 (Notfall-Backup).
+- **Code = main.** Ein eigener Workflow lädt nach jedem Live-Deploy in den Test-Ordner hoch; er kann den Live-Deploy nicht aufhalten oder rot machen.
+- **Daten:** eigene Datenbank. Abzug live -> test jederzeit über das rote Band „Datenstand von live holen“ (Admin) oder `php tools/test_abzug.php`. Nie umgekehrt: live wird nur gelesen.
+- **Keine Wirkung nach außen:** Mails nur an Nico („[TEST an …]“), keine Crons, kein IMAP-Abruf, keine Blinker, keine Versand-Labels beim Carrier, keine Druckbrücke (Druckaufträge als PDF unter „Druckvorschau“). KI ist erlaubt. Die Sperre sitzt im Code (`core/testumgebung.php`), die Daten bleiben echt.
+- **Erkennbar:** rotes Band „TESTUMGEBUNG - keine echten Daten“ auf jeder Seite, noindex + robots.txt.
+- **Einrichtung:** `docs/testumgebung-einrichten.md`.
+
 ## 14. Pflege und Änderungsprotokoll
 
 - Neue Entscheidungen werden **hier** eingetragen (im passenden Abschnitt) und unten protokolliert. Erledigte Punkte aus Abschnitt 10/12 werden dort gestrichen bzw. in den Ablauf übernommen.
@@ -536,3 +545,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 11.11.2026 | Dropdowns: jedes Auswahlfeld mit mehr als 10 Einträgen ist automatisch ein Suchfeld mit Texteingabe (auch in neu hinzugefügten Zeilen, z. B. "Für Auftrag" an der Bestellung), lange Einträge laufen beim Darüberfahren durch; leere Auswahl ("Lager / allgemein") bleibt wählbar | Nico / Claude Code |
 | 11.11.2026 | Lager-App Inventur: eigener Modus, Lauf mit Umfang/Zählern, Lagerplätze mit Barcode (auch Lager 1), blind zählen am Handy (Stk/voll/wiegen mit Tara/Bulk-Kapseln/leer, ohne Etikett = Klärfall mit Foto + Etikett), Soll zum Scan-Zeitpunkt, Abweichungsarten inkl. Einheitenfehler, Nachzählen durch zweite Person, Korrektur nur durch Admin mit Ursache als Bewegung „Inventur“, Abschluss mit Protokoll PDF/CSV, Anleitung, Datenprüfung Einheit verdächtig (Abschnitt 7) | Nico / Claude Code |
 | 11.11.2026 | Produktion: ein geführter Ablauf (4.5a) - eine Liste Plan/Läuft/Fertig + PA-Seite, alte Seiten leiten weiter; Plan per Ziehen mit Linie; Werk-App Tagesplan; Charge/MHD vom System (neuer Buchstabe nur bei anderem Bulk/Eimer); Start/Wiederanlauf mit Fotos Linie+Stempel; Material-Scan mit Sperre; Teilmengen buchen sofort (eine Fertigcharge je Unter-Charge); Kartons als Datensätze; Nachtragen statt Easy Production; Chargenprotokoll je Unter-Charge; Eimerplanung vom System; Kapselzahl aus Gewicht mit Gegenprobe | Nico / Claude Code |
+| 12.11.2026 | Testumgebung test.bulkify.pro (13a): Testmodus im Code, Band, Mails nur an Nico, Crons/IMAP/Blinker/Carrier/Druckbrücke aus, Druckvorschau, Abzug live -> test, eigener Deploy-Workflow | Nico / Claude Code |

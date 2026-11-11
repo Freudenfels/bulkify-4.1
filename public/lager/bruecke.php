@@ -20,8 +20,12 @@ require_once __DIR__ . '/../../lager/core/erp.php';          // erp_charge_voll 
 require_once __DIR__ . '/../../lager/core/etikett_pdf.php';  // lg_etikett_pdf fuer Druckjobs
 require_once __DIR__ . '/../../lager/core/lieferschein_pdf.php';  // lg_lieferschein_pdf fuer Druckjobs
 require_once __DIR__ . '/../../lager/core/inventur_etikett.php';  // Inventur: Platz- und Klärfall-Etiketten (11.11.2026)
+require_once __DIR__ . '/../../lager/core/druckjob.php';         // lg_druckjob_pdf: PDF je Druckauftrag (auch Druckvorschau Testumgebung)
 
 lg_schema();
+
+// Testumgebung (Paket 12.11.2026): die Brücke druckt nie aus test.bulkify.pro – Druckaufträge gibt es dort nur als Vorschau.
+if (function_exists('bx_testumgebung') && bx_testumgebung()) json_antwort(['ok' => false, 'meldung' => 'Testumgebung: Brücke aus, Druckaufträge nur als PDF-Vorschau.'], 403);
 
 $token = (string)($_GET['token'] ?? '');
 if ($token === '' || !hash_equals(lg_bruecke_token(), $token)) json_antwort(['ok' => false, 'meldung' => 'Schlüssel falsch.'], 403);
@@ -74,59 +78,9 @@ foreach (all("SELECT b.id, b.code, s.ip FROM lg_befehl b JOIN lg_sender s ON s.i
 q("UPDATE lg_druckjob SET status='verfallen', erledigt=? WHERE status='offen' AND angelegt < ?",
   [jetzt_utc(), gmdate('Y-m-d H:i:s', time() - 600)]);   // nach 10 min nicht mehr drucken
 $druck = [];
-$druckerEtikett     = lg_meta_lesen('drucker_name', '');          // leer = Standarddrucker
-$druckerLieferschein = lg_meta_lesen('drucker_lieferschein', '');
-$druckerLabel       = lg_meta_lesen('drucker_versandlabel', '');
-$druckerProbe       = lg_meta_lesen('drucker_probe', '');
-$druckerGebinde     = lg_meta_lesen('drucker_gebinde', '');
-$druckerKarton      = lg_meta_lesen('drucker_karton', '');            // Soll-Kette 6: Produktionsdrucker (WLAN) für Kartonetiketten
 foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' ORDER BY id LIMIT 10") as $j) {
     if (q("UPDATE lg_druckjob SET status='abgeholt' WHERE id=? AND status='offen'", [(int)$j['id']])->rowCount() === 0) continue;
-    $typ = (string)($j['typ'] ?? 'etikett');
-    $pdf = null; $drucker = $druckerEtikett; $fehlt = 'nicht gefunden';
-    if ($typ === 'lieferschein') {
-        $drucker = $druckerLieferschein ?: $druckerEtikett;
-        $pdf = function_exists('lg_lieferschein_pdf') ? lg_lieferschein_pdf((int)$j['ids']) : null;
-        $fehlt = 'Sendung nicht gefunden';
-    } elseif ($typ === 'label') {
-        $drucker = $druckerLabel ?: $druckerEtikett;
-        $lab = function_exists('lg_versand_label') ? lg_versand_label((int)$j['ids']) : null;
-        $pdf = $lab && (string)($lab['pdf'] ?? '') !== '' ? (string)$lab['pdf'] : null;
-        $fehlt = 'Kein Versand-Label';
-    } elseif ($typ === 'zoll') {
-        $drucker = $druckerLieferschein ?: $druckerEtikett;   // A4-Zollpapier auf den A4-/Lieferschein-Drucker
-        $lab = function_exists('lg_versand_label') ? lg_versand_label((int)$j['ids']) : null;
-        $pdf = $lab && (string)($lab['zoll_pdf'] ?? '') !== '' ? (string)$lab['zoll_pdf'] : null;
-        $fehlt = 'Kein Zollpapier';
-    } elseif ($typ === 'probe') {
-        $drucker = $druckerProbe ?: $druckerEtikett;          // Proben-Etikett auf den (festgelegten) Proben-Drucker
-        $pdf = function_exists('lg_probe_etikett_pdf') ? lg_probe_etikett_pdf((int)$j['ids']) : null;
-        $fehlt = 'Probe nicht gefunden';
-    } elseif ($typ === 'gebinde') {
-        $drucker = $druckerGebinde ?: $druckerEtikett;        // Eimer-/Gebinde-Etikett auf den (festgelegten) Gebinde-Drucker
-        $pdf = function_exists('lg_mischgebinde_etikett_pdf') ? lg_mischgebinde_etikett_pdf((int)$j['ids']) : null;
-        $fehlt = 'Gebinde nicht gefunden';
-    } elseif ($typ === 'palette') {
-        $pdf = function_exists('lg_paletten_etikett_pdf') ? lg_paletten_etikett_pdf((int)$j['ids']) : null;   // 100 x 150 auf den Etikettendrucker
-        $fehlt = 'Keine Paletten in der Sendung';
-    } elseif ($typ === 'platz') {
-        $pdf = function_exists('inv_platz_etikett_pdf') ? inv_platz_etikett_pdf(explode(',', (string)$j['ids'])) : null;   // Platz-Etiketten 100 x 70
-        $fehlt = 'Platz nicht gefunden';
-    } elseif ($typ === 'inventur') {
-        $drucker = $druckerGebinde ?: $druckerEtikett;
-        $pdf = function_exists('inv_klaerfall_etikett_pdf') ? inv_klaerfall_etikett_pdf((int)$j['ids']) : null;   // Gebinde ohne Etikett (Klärfall)
-        $fehlt = 'Klärfall nicht gefunden';
-    } elseif ($typ === 'pakarton') {   // ein Karton aus der Produktion (pa_karton): Nummer, Unter-Charge, Menge – kein „von n"
-        $drucker = $druckerKarton ?: $druckerEtikett;
-        $pdf = function_exists('lg_pa_karton_pdf') ? lg_pa_karton_pdf((int)$j['ids']) : null;
-        $fehlt = 'Karton nicht gefunden';
-    } elseif ($typ === 'karton') {
-        $drucker = $druckerKarton ?: $druckerEtikett;         // Kartonetiketten der Produktion (100 x 150) auf den Produktionsdrucker
-        $pdf = function_exists('lg_produktion_karton_pdf') ? lg_produktion_karton_pdf((int)$j['ids']) : null;
-        $fehlt = 'Kartondaten nicht gefunden';
-    } else {
-        $pdf = lg_etikett_pdf(explode(',', (string)$j['ids']), (string)$j['format']);
-    }
+    ['pdf' => $pdf, 'drucker' => $drucker, 'fehlt' => $fehlt] = lg_druckjob_pdf($j);   // lager/core/druckjob.php
     if ($pdf === null || $pdf === '') { q("UPDATE lg_druckjob SET status='fehler', antwort=?, erledigt=? WHERE id=?", [$fehlt, jetzt_utc(), (int)$j['id']]); continue; }
     $druck[] = ['id' => (int)$j['id'], 'pdf_b64' => base64_encode($pdf), 'drucker' => $drucker];
 }
