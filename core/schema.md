@@ -609,3 +609,14 @@ Siehe `core/preis_gueltig.md`.
 ## Bestellliste und Gültigkeit (11.11.2026)
 - `lp_je_lieferant_gueltig($rows, &$abgelaufen)` wählt je Lieferant die gültigen Zeilen.
 - `item_lieferant_preise()`, `rezeptur_fremd_lieferant_preise()` und `produkt_fremd_lieferant_preise()` haben den optionalen Parameter `&$abgelaufen`.
+
+## Fortschritt: echte Mengen schlagen manuelles Abhaken (11.11.2026)
+- **`auftrag_mengenfortschritt()`:** Neben den Chargen der Produktionsaufträge zählen auch Fertigware-Chargen, die nur am Auftrag hängen (`charge.auftrag_id`, Artikel `verkaufsfertig`, z. B. Zukauf fertig). Jede Charge zählt einmal. Ohne Produktionsauftrag ist das Ziel die Auftragsmenge.
+- **`auftrag_fortschritt()`:** Bei 0 < gebucht < Ziel stehen „Produziert“ und „Etikettiert“ immer auf „teilweise, x von y Stk“, auch wenn sie von Hand (`phase_override`/Status) erledigt sind. „Abgeschlossen“ bleibt offen, „Versenden“ ist nicht aktiv.
+  - Ziel ist die Auftragsmenge bzw. `auftrag.fortschritt_ziel`, wenn der Rest storniert ist.
+  - Bei `auftrag.rest_erwartet` steht „Rest erwartet am …“ beim Produziert-Schritt, auch für den Kunden.
+  - Ohne gebuchte Menge gilt der bisherige Stand (Altaufträge).
+  - Rückgabe `menge.offen`.
+- **`auftrag_menge_offen($a)`:** `['ziel','geb','rest']` oder null.
+- **Neue Spalten am Auftrag:** `fortschritt_ziel`, `rest_status` (kommt/storniert/teillieferung), `rest_erwartet`, `fortschritt_geprueft`.
+

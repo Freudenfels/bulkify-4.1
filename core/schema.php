@@ -1961,6 +1961,11 @@ function init_schema(): void {
         if (table_exists($pgT)) ensure_column($pgT, 'gueltig_bis', "DATE NULL");
     ensure_column('item', 'preis_schwankt', "TINYINT(1) NOT NULL DEFAULT 0");   // Rohstoff mit schwankendem Preis (z. B. Whey)
     ensure_column('item', 'preis_gueltig_tage', "INT NULL");                     // Standard-Gültigkeit in Tagen
+    // Fortschritt: echte Mengen schlagen manuelles Abhaken (Nico 11.11.2026). Rest kommt noch / storniert / Teillieferung.
+    ensure_column('auftrag', 'fortschritt_ziel', "INT NULL");          // Rest storniert: Ziel für den Fortschritt = gelieferte Menge
+    ensure_column('auftrag', 'rest_status', "VARCHAR(20) NULL");       // kommt | storniert | teillieferung
+    ensure_column('auftrag', 'rest_erwartet', "DATE NULL");            // Rest erwartet am (sieht der Kunde)
+    ensure_column('auftrag', 'fortschritt_geprueft', "TINYINT(1) NOT NULL DEFAULT 0");   // Datenprüfung: „so lassen"
     // Lieferanten-Kürzel: je Lieferant ein kurzes Suffix aus dem Namen (Buxtrade→BX, Wellgreen→WG …).
     // Damit lässt sich derselbe Rohstoff je Lieferant eindeutig kennzeichnen: Kennung = R-Nummer + Kürzel.
     ensure_column('lieferanten', 'kuerzel', "VARCHAR(10) NULL");
@@ -3596,9 +3601,15 @@ function produktion_rest(int $pa_id): float {
 // Rueckgabe: ['hat'=>bool,'ziel'=>int,'gebucht'=>int,'rest'=>int,'prozent'=>int]. Einheit = Packungen.
 function auftrag_mengenfortschritt(int $auftrag_id): array {
     $pas = $auftrag_id > 0 ? all("SELECT id, menge FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'", [$auftrag_id]) : [];
-    if (!$pas) return ['hat' => false, 'ziel' => 0, 'gebucht' => 0, 'rest' => 0, 'prozent' => 0];
-    $ziel = 0; $gebucht = 0.0;
+    // Zukauf fertig (Nico 11.11.2026): eingegangene Fertigware-Chargen des Auftrags zählen als produziert - auch wenn sie nur
+    // am Auftrag hängen (auftrag_id) und nicht an einem Produktionsauftrag. Jede Charge zählt einmal.
+    $fwMenge = $auftrag_id > 0 ? (float) scalar("SELECT COALESCE(SUM(c.menge),0) FROM charge c JOIN item i ON i.id=c.item_id
+                   WHERE c.auftrag_id=? AND i.kategorie='verkaufsfertig' AND c.fremd_kunde_id IS NULL
+                     AND (c.pa_id IS NULL OR c.pa_id NOT IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'))", [$auftrag_id, $auftrag_id]) : 0.0;
+    if (!$pas && $fwMenge <= 0) return ['hat' => false, 'ziel' => 0, 'gebucht' => 0, 'rest' => 0, 'prozent' => 0];
+    $ziel = 0; $gebucht = $fwMenge;
     foreach ($pas as $pa) { $ziel += (int)$pa['menge']; $gebucht += produktion_gebucht((int)$pa['id']); }
+    if (!$pas) $ziel = (int) scalar("SELECT menge FROM auftrag WHERE id=?", [$auftrag_id]);
     $geb = (int) round($gebucht);
     return ['hat' => true, 'ziel' => $ziel, 'gebucht' => $geb, 'rest' => max(0, $ziel - $geb),
             'prozent' => $ziel > 0 ? min(100, (int) round($geb * 100 / $ziel)) : 0];
@@ -6464,14 +6475,24 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
     // Teilmengen (Teilproduktion/Teilversand): Mengen gibt es nur für fertig gebuchte Ware (produktion_gebucht je PA)
     // und Versendetes (auftrag.versendet_menge). Ist davon erst ein Teil da, wird der Schritt „teilweise" (halber Punkt)
     // mit „X von Y Stk" – statt ganz offen oder ganz erledigt.
+    // Echte Mengen schlagen manuelles Abhaken (Nico 11.11.2026, AB-3237): Ist erst ein Teil da, bleibt „Produziert"/„Etikettiert"
+    // teilweise und „Abgeschlossen" offen - auch wenn von Hand (phase_override/Status) weiter gesetzt. Ziel = Auftragsmenge,
+    // bei „Rest storniert" die gelieferte Menge (fortschritt_ziel). Ohne gebuchte Menge (geb = 0) gilt der Stand wie bisher.
     $mf = auftrag_mengenfortschritt($aid);
-    $ziel = max((int)($a['menge'] ?? 0), (int)$mf['ziel']); $geb = (int)$mf['gebucht']; $vers = min((int)($a['versendet_menge'] ?? 0), max($geb, 0));
+    $zielVoll = max((int)($a['menge'] ?? 0), (int)$mf['ziel']);
+    $fz = (int)($a['fortschritt_ziel'] ?? 0);
+    $ziel = $fz > 0 ? min($zielVoll, $fz) : $zielVoll;
+    $geb = (int)$mf['gebucht']; $vers = min((int)($a['versendet_menge'] ?? 0), max($geb, 0));
     $vonBis = fn(int $x) => number_format($x, 0, ',', '.') . ' von ' . number_format($ziel, 0, ',', '.') . ' Stk';
-    if ($ziel > 0 && $geb > 0 && $geb < $ziel) {
+    $mengeOffen = $ziel > 0 && $geb > 0 && $geb < $ziel;
+    if ($mengeOffen) {
+        $restTxt = !empty($a['rest_erwartet']) ? ' · Rest erwartet am ' . date('d.m.Y', strtotime((string)$a['rest_erwartet'])) : '';
         foreach ($steps as &$s) {
-            if ($s[2] === 'done' || $s[2] === 'err') continue;
-            if ($s[1] === 'Produziert')  { $s = ['Teilweise produziert', 'Produziert', 'teil', null, $vonBis($geb)]; }
+            if ($s[2] === 'err') continue;
+            if ($s[1] === 'Produziert')  { $s = ['Teilweise produziert', 'Produziert', 'teil', null, $vonBis($geb) . $restTxt]; }
             if ($s[1] === 'Etikettiert') { $s = ['Teilweise etikettiert', 'Etikettiert', 'teil', null, $vonBis($geb)]; }
+            if ($s[1] === 'Abgeschlossen') { $s = ['Abgeschlossen', 'Abgeschlossen', '', null, null]; }
+            if (($s[1] === 'Versendet' || $s[1] === 'Eingelagert') && $s[2] === 'current') $s[2] = '';
         }
         unset($s);
     }
@@ -6535,7 +6556,16 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
         }
         unset($s);
     }
-    return ['steps' => $steps, 'energ' => $energ, 'menge' => ['ziel' => $ziel, 'geb' => $geb, 'vers' => $vers]];
+    return ['steps' => $steps, 'energ' => $energ, 'menge' => ['ziel' => $ziel, 'geb' => $geb, 'vers' => $vers, 'offen' => $mengeOffen]];
+}
+// Fehlt bei einem Auftrag noch Menge (0 < gebucht < Ziel)? Rückgabe ['ziel','geb','rest'] oder null. Für das Rest-Pop-up und die Datenprüfung.
+function auftrag_menge_offen(array $a): ?array {
+    $mf = auftrag_mengenfortschritt((int)$a['id']);
+    $zielVoll = max((int)($a['menge'] ?? 0), (int)$mf['ziel']);
+    $fz = (int)($a['fortschritt_ziel'] ?? 0);
+    $ziel = $fz > 0 ? min($zielVoll, $fz) : $zielVoll;
+    $geb = (int)$mf['gebucht'];
+    return ($ziel > 0 && $geb > 0 && $geb < $ziel) ? ['ziel' => $ziel, 'geb' => $geb, 'rest' => $ziel - $geb] : null;
 }
 
 // Kundensicht der neuen Kette (für das Portal, noch nicht eingebaut): interne Einkaufs-Stände der Etiketten (nicht bestellt / bestellt / auf Lager) sieht der Kunde
@@ -6546,7 +6576,7 @@ function auftrag_fortschritt_kunde(array $steps): array {
         if ($s[2] === 'err' && $s[0] === 'Laboranalyse') { $s[2] = 'current'; $s[4] = null; continue; }
         if ($s[2] === 'err') { $s[4] = 'upload'; continue; }
         if ($s[1] === 'Etikettiert' && !in_array($s[2], ['done', 'teil'], true)) { $s[0] = 'Etikettierung'; $s[4] = null; }
-        if (is_string($s[4]) && preg_match('/abgefüllt|erwartet|Kunde hat/u', $s[4])) $s[4] = null;
+        if (is_string($s[4]) && $s[1] !== 'Produziert' && preg_match('/abgefüllt|erwartet|Kunde hat/u', $s[4])) $s[4] = null;
     }
     unset($s);
     return $steps;
