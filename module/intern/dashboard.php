@@ -14,7 +14,10 @@ if (function_exists('benachrichtigungen_auto_pruefen')) benachrichtigungen_auto_
 $anfragen_neu   = (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE status='neu'");
 $angebote_offen = (int) scalar("SELECT COUNT(*) FROM angebot WHERE status IN ('offen','gesendet')");
 $prod_offen     = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag pa WHERE pa.status IN ('offen','laufend') AND " . pa_aktiv_sql());
-$versandbereit  = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE status='erledigt'");
+// Versandbereit nur, wenn der Fortschritt wirklich fertig ist (11.11.2026): Labor da, alle Mengen da - sonst nicht mitzählen.
+$versandAlle    = all("SELECT a.*, k.firma, p.name AS produkt FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.status='erledigt' ORDER BY a.angelegt DESC");
+$versandAlle    = array_values(array_filter($versandAlle, fn($a) => ($a['kategorie'] ?? '') === 'dienstleistung' || auftrag_fortschritt_fertig($a)));
+$versandbereit  = count($versandAlle);
 $offene_posten  = (float) scalar("SELECT COALESCE(SUM(brutto),0) FROM beleg WHERE typ='rechnung' AND status='offen'");
 $rohstoff_leer  = (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0
                                 AND (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='frei') <= 0");
@@ -22,7 +25,7 @@ $rohstoff_leer  = (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='r
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
 $neue_anfragen = all("SELECT a.*, k.firma FROM rezeptur_anfrage a LEFT JOIN kunden k ON k.id=a.kunde_id WHERE a.status='neu' ORDER BY a.angelegt DESC LIMIT 6");
-$versand_liste = all("SELECT a.*, k.firma, p.name AS produkt FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.status='erledigt' ORDER BY a.angelegt DESC LIMIT 6");
+$versand_liste = array_slice($versandAlle, 0, 6);
 $offene_rechn  = all("SELECT b.*, k.firma FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id WHERE b.typ='rechnung' AND b.status='offen' ORDER BY b.datum DESC LIMIT 6");
 
 render_header('dashboard', 'Dashboard');

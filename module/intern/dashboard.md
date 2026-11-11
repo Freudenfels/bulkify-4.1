@@ -12,3 +12,7 @@ Stornierte Produktionsaufträge und Produktionsaufträge eines stornierten Auftr
 
 ## Preis-Gültigkeit (11.11.2026)
 Beim Aufruf läuft einmal am Tag `pg_bald_pruefen()`. Bald ablaufende Preise in offenen Angeboten erzeugen eine Benachrichtigung.
+
+## Versandbereit nur bei fertigem Fortschritt (11.11.2026)
+Kachel und Liste „Versandbereit“ zählen Aufträge mit Status `erledigt` nur, wenn `auftrag_fortschritt_fertig()` gilt, also Labor da und alle Mengen da. Dienstleistungen zählen wie bisher. Teillieferungen bleiben unter „Versand“ möglich.
+
