@@ -3,7 +3,8 @@ name: Deploy to Server (SFTP)
 # Auto-Deploy fuer bulkify-4.1.
 # - Push auf main: alle Dateien, die sich seit dem ZULETZT DEPLOYTEN Stand geaendert haben, werden per SFTP
 #   hochgeladen (inkrementell). Der deployte Stand steht auf dem Server in .deploy_sha (ausserhalb von public/).
-# - Vollupload-Fallback: keine/ungueltige .deploy_sha, manueller Start.
+# - Vollupload-Fallback: keine/ungueltige .deploy_sha, manueller Start, oder paramiko nicht installierbar.
+# - Upload-Werkzeug seit 11.11.2026: Python/paramiko (.github/scripts/sftp_deploy.py) statt apt/lftp.
 # WARUM .deploy_sha (2026-11-03): GitHub haelt je Concurrency-Gruppe nur EINEN wartenden Lauf; bei schnell
 # aufeinanderfolgenden Pushes werden Zwischenlaeufe verworfen. Frueher lud jeder Lauf nur die Dateien SEINES
 # Commits (event.before..sha) hoch -> Dateien aus verworfenen Laeufen kamen nie auf den Server. Jetzt rechnet
@@ -37,17 +38,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: lftp installieren
-        run: |
-          # Fremd-Paketquellen auf dem Runner (z. B. google-chrome) koennen "apt-get update"
-          # mit "Hash Sum mismatch" (exit 100) sprengen. Wir brauchen nur lftp aus den Ubuntu-
-          # Basisquellen (ubuntu.sources), daher die *.list-Fremdquellen vorher entfernen.
-          sudo rm -f /etc/apt/sources.list.d/*.list || true
-          sudo apt-get update -qq || sudo apt-get update -qq --allow-releaseinfo-change || true
-          sudo apt-get install -y -qq lftp
+      # Seit 11.11.2026: KEIN apt/lftp mehr. Der Runner konnte security.ubuntu.com nicht aufloesen,
+      # "apt-get install lftp" hing ~10 min und brach mit exit 100 ab -> jeder Deploy fiel aus.
+      # Jetzt: Python aus dem Runner-Toolcache + paramiko von PyPI, harte Zeitgrenze statt Haengen.
+      - name: Python + paramiko bereitstellen (ohne apt)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Sicherheitsnetz: klappt auch PyPI nicht, laeuft der Vollupload (Node-Action, ohne apt/pip).
+      - name: paramiko installieren
+        id: pyp
+        continue-on-error: true
+        timeout-minutes: 4
+        run: python -m pip install --disable-pip-version-check --retries 5 --timeout 20 paramiko
 
       - name: Aenderungsumfang bestimmen (ab deploytem Stand oder Vollupload)
         id: prep
+        if: steps.pyp.outcome == 'success'
+        timeout-minutes: 3
         env:
           EVENT_NAME: ${{ github.event_name }}
           AFTER_SHA: ${{ github.sha }}
@@ -56,81 +65,23 @@ jobs:
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
           SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
           SFTP_PATH: ${{ secrets.SERVER_PATH }}
-        run: |
-          set -euo pipefail
-          REMOTE="${SFTP_PATH%/}"
-          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-          # Zuletzt deployten Stand vom Server lesen (fehlt die Datei: leer -> Vollupload).
-          BASE_SHA=$( {
-            printf 'set sftp:auto-confirm yes\nset net:timeout 20\nset net:max-retries 2\n'
-            printf 'open sftp://%s:%s\n' "$SFTP_HOST" "$SFTP_PORT"
-            printf 'user "%s" "%s"\n' "$(esc "$SFTP_USER")" "$(esc "$SFTP_PASS")"
-            printf 'cat "%s/.deploy_sha"\nbye\n' "$(esc "$REMOTE")"
-          } | lftp 2>/dev/null | tr -cd '0-9a-f' | head -c 40 || true )
-          echo "Deployter Stand auf dem Server: ${BASE_SHA:-<keiner>}"
-          MODE=incremental
-          if [ "$EVENT_NAME" != "push" ]; then MODE=full; fi
-          if [ "${#BASE_SHA}" -ne 40 ]; then MODE=full; fi
-          if [ "$MODE" = "incremental" ] && ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then MODE=full; fi
-          if [ "$MODE" = "incremental" ] && ! git merge-base --is-ancestor "$BASE_SHA" "$AFTER_SHA"; then MODE=full; fi
-          if [ "$MODE" = "incremental" ]; then
-            if ! git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$AFTER_SHA" > changed_all.txt; then
-              MODE=full
-            fi
-          fi
-          if [ "$MODE" = "incremental" ]; then
-            grep -vE '^secrets\.php$|^\.git(hub)?/|^data/|\.sql$|\.bak$|\.log$' changed_all.txt > changed_filtered.txt || true
-            COUNT=$(grep -c . changed_filtered.txt || true)
-            echo "Modus: inkrementell ab ${BASE_SHA}. Zu uebertragende Dateien: ${COUNT:-0}"
-            echo "----- Dateiliste -----"; cat changed_filtered.txt || true; echo "----------------------"
-          else
-            echo "Modus: Vollupload (Fallback)."
-          fi
-          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+        run: python .github/scripts/sftp_deploy.py prep
 
-      - name: Inkrementeller Upload (nur geaenderte Dateien, lftp/SFTP)
+      - name: Inkrementeller Upload (nur geaenderte Dateien, SFTP/paramiko)
         if: steps.prep.outputs.mode == 'incremental'
+        timeout-minutes: 20
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          AFTER_SHA: ${{ github.sha }}
           SFTP_HOST: ${{ secrets.SERVER_HOST }}
           SFTP_PORT: ${{ secrets.SERVER_PORT }}
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
           SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
           SFTP_PATH: ${{ secrets.SERVER_PATH }}
-        run: |
-          set -euo pipefail
-          if [ ! -s changed_filtered.txt ]; then
-            echo "Keine relevanten Aenderungen - nichts hochzuladen."
-            exit 0
-          fi
-          REMOTE="${SFTP_PATH%/}"
-          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-          : > lftp_puts.txt
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            if [ ! -f "$f" ]; then echo "uebersprungen (lokal nicht vorhanden): $f"; continue; fi
-            d=$(dirname "$f")
-            if [ "$d" = "." ]; then TARGET="$REMOTE"; else TARGET="$REMOTE/$d"; fi
-            printf 'mkdir -pf "%s"\n' "$(esc "$TARGET")" >> lftp_puts.txt
-            printf 'put -O "%s" "%s"\n' "$(esc "$TARGET")" "$(esc "$f")" >> lftp_puts.txt
-          done < changed_filtered.txt
-          if [ ! -s lftp_puts.txt ]; then
-            echo "Keine tatsaechlich vorhandenen Dateien zu uebertragen."
-            exit 0
-          fi
-          {
-            printf 'set sftp:auto-confirm yes\n'
-            printf 'set net:timeout 20\n'
-            printf 'set net:max-retries 2\n'
-            printf 'set cmd:fail-exit yes\n'
-            printf 'open sftp://%s:%s\n' "$SFTP_HOST" "$SFTP_PORT"
-            printf 'user "%s" "%s"\n' "$(esc "$SFTP_USER")" "$(esc "$SFTP_PASS")"
-            cat lftp_puts.txt
-            printf 'bye\n'
-          } | lftp
-          echo "Inkrementeller Upload abgeschlossen."
+        run: python .github/scripts/sftp_deploy.py upload
 
       - name: Vollupload (Fallback, nichts loeschen)
-        if: steps.prep.outputs.mode == 'full'
+        if: steps.prep.outputs.mode == 'full' || steps.pyp.outcome != 'success'
         uses: sand4rt/ftp-deployer@v1.10
         with:
           sftp: true
@@ -145,22 +96,14 @@ jobs:
           exclude: '["secrets.php",".git/**",".github/**","data/**","**/*.sql","**/*.bak","**/*.log"]'
 
       - name: Deployten Stand merken (.deploy_sha)
+        if: steps.pyp.outcome == 'success'
+        timeout-minutes: 3
         env:
+          EVENT_NAME: ${{ github.event_name }}
           AFTER_SHA: ${{ github.sha }}
           SFTP_HOST: ${{ secrets.SERVER_HOST }}
           SFTP_PORT: ${{ secrets.SERVER_PORT }}
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
           SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
           SFTP_PATH: ${{ secrets.SERVER_PATH }}
-        run: |
-          set -euo pipefail
-          REMOTE="${SFTP_PATH%/}"
-          esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-          printf '%s\n' "$AFTER_SHA" > .deploy_sha
-          {
-            printf 'set sftp:auto-confirm yes\nset net:timeout 20\nset net:max-retries 2\nset cmd:fail-exit yes\n'
-            printf 'open sftp://%s:%s\n' "$SFTP_HOST" "$SFTP_PORT"
-            printf 'user "%s" "%s"\n' "$(esc "$SFTP_USER")" "$(esc "$SFTP_PASS")"
-            printf 'put -O "%s" .deploy_sha\nbye\n' "$(esc "$REMOTE")"
-          } | lftp
-          echo "Deployter Stand: $AFTER_SHA"
+        run: python .github/scripts/sftp_deploy.py mark
