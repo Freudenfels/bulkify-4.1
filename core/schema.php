@@ -1088,6 +1088,7 @@ function init_schema(): void {
     ensure_column('rezeptur', 'status_vor_inaktiv', "VARCHAR(20) NULL");   // Block C 11.11.2026: Status vor „inaktiv" (für Wieder aktivieren)
     ensure_column('item', 'gesperrt_durch_rezeptur', "INT NULL");          // Block C: mit der Rezeptur gesperrter Bulk-/Premix-Artikel
     ensure_column('item', 'ek_abgelaufen_seit', "DATE NULL");              // Block D: Auto-EK stammt aus einem inzwischen abgelaufenen Preis
+    require_once __DIR__ . '/datenpflege_1211.php'; dpf_1211_einmal();   // Paket 12.11. Teil 1: einmalige Datenpflege live (Freigabe Nico 11.11.2026)
     rezeptur_testdaten_inaktiv_einmal();   // Block C Teil 2: RZ-4023, RZ-4033, RZ-4034 einmalig inaktiv (von Nico ausdrücklich erlaubt)
     preis_spalten_sechs_stellen();   // Sofortfix 11.11.2026: Lieferanten-/EK-Preise mit 6 Nachkommastellen (2,95 € / 1.000 = 0,002950)
     ensure_column('bestellung', 'bestaetigt_am', "DATETIME NULL");
