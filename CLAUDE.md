@@ -56,5 +56,8 @@ Nach **jeder** Änderung an den Memory-/MD-Dateien im Memory-Ordner **alle** `.m
 ## Pläne vor dem Bauen (Regel Nico 11.11.2026)
 Muss bei einer größeren Anweisung vor dem Bauen ein Vorschlag/Plan an Nico (welche Seiten, welche Tabellen, Entscheidungen), dann den Plan **immer als `plan-<thema>.md`** in den Drive-Ordner `G:\Meine Ablage\bulkify v4 md` legen und im Chat in einem Satz darauf hinweisen. Nach Freigabe Nicos Ergänzungen in dieselbe Datei einarbeiten.
 
+## Checkliste am Ende jeder Anweisung (Regel Nico 11.11.2026)
+Jede Arbeitsanweisung endet mit einer nummerierten Checkliste. Die Rückmeldung beantwortet jeden Punkt mit 'erledigt (Commit)' oder 'nicht erledigt (Grund)' und nennt den grünen Deploy-Lauf.
+
 ## Wer
 Ansprechpartner: **Nico** (thomalla@freudenfels.de). Stil: direkt, knapp, umsetzungsorientiert.
