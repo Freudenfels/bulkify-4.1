@@ -70,3 +70,5 @@ Die alten Seiten leiten weiter (`public/index.php`), nichts ist gelöscht. Ihre 
 | `kalender` | Reiter Plan |
 | `produktion_run` | PA-Seite bzw. Reiter Läuft |
 | `easy_production` | PA-Seite „Teilmenge nachtragen“ bzw. Reiter Läuft |
+
+**Plan (Teil 2, 11.11.2026):** Der Reiter Plan zeigt `_plan.php`: Drag-Liste mit Datum, Linie und Mitarbeiter, dazu „machbar je Schritt“ mit Grund (`core/produktion_plan.php`).

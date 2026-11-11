@@ -4,6 +4,13 @@
 // Ein Klick öffnet immer die PA-Seite (?p=produktionsauftrag). Alte Reiter (bereit/wartet/bestellt) zeigen auf Plan.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/produktion_plan.php';   // Teil 2: Plan (Reihenfolge, Linie, machbar je Schritt)
+produktion_plan_schema();
+// Plan speichern (Reihenfolge per Ziehen, Datum/Linie/Mitarbeiter je Zeile) – AJAX, Antwort JSON.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'plan_speichern') {
+    $n = produktion_plan_speichern((array)($_POST['reihenfolge'] ?? []), (array)($_POST['felder'] ?? []));
+    header('Content-Type: application/json; charset=utf-8'); echo json_encode(['ok' => true, 'n' => $n]); exit;
+}
 nach_antwort(fn() => material_komplett_pruefen());   // „Material komplett"-Meldung, höchstens alle 5 Min. (auch für Lager-App-Buchungen)
 
 $q    = trim($_GET['q'] ?? '');
@@ -371,6 +378,7 @@ if ($zeigeNeu):
 </form>
 <?php
 
+if ($tab === 'plan') { require __DIR__ . '/_plan.php'; unset($GLOBALS['bx_stock_cache']); render_footer(); return; }
 bx_table($cols, array_values($rows), [
     'baseUrl' => '?p=produktion&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : ''),
     'sort'    => $sort,
