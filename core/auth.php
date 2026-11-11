@@ -100,6 +100,7 @@ function route_rollen_map(): array {
         'rohstoffe'          => ['production', 'einkauf', 'labor'],
         'rohstoff_website'   => ['production', 'einkauf', 'labor'],   // Massen-Freigabe für die öffentliche Rohstoff-DB
         'rohstoff'           => ['production', 'einkauf', 'labor'],
+        'rohstoff_steckbrief'=> ['production', 'einkauf', 'labor', 'sales', 'finance'],   // KI-Steckbrief (nur intern), auch aus Kunden-/Lieferantenanfrage
         'artikel_zusammenfuehren' => ['production', 'einkauf', 'labor'],   // Seite nur Admin (prüft selbst); „Meintest du …?“-Suche für alle, die Artikel anlegen
         'rohstoff_split'     => ['production', 'einkauf', 'labor'],
         'dok_massenimport'   => ['production', 'einkauf', 'labor'],   // Specs/CoAs als PDF massenweise hochladen + zuordnen

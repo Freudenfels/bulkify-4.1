@@ -35,3 +35,6 @@ angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Re
 - `weg_festlegen` → `module/auftrag/weg_festlegen.php` (Pop-up „Weg festlegen“, 10.11.2026).
 
 - `artikel_zusammenfuehren` → `module/lager/artikel_zusammenfuehren.php` (Dubletten zusammenführen, 10.11.2026).
+
+## rohstoff_steckbrief (11.11.2026)
+`?p=rohstoff_steckbrief` -> `module/lager/rohstoff_steckbrief.php`: KI-Steckbrief erstellen oder bearbeiten (POST, nur intern).

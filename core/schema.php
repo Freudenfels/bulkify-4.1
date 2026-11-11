@@ -1946,6 +1946,12 @@ function init_schema(): void {
     // KI-Kurzinfo je Rohstoff: nur auf Knopfdruck erzeugt (item_ki_info_erzeugen). Wird Team + Kunde als „KI-Info" gezeigt.
     ensure_column('item', 'ki_info', "TEXT NULL");
     ensure_column('item', 'ki_info_am', "DATETIME NULL");   // wann zuletzt erzeugt (UTC)
+    // KI-Steckbrief (Nico 11.11.2026): ausführlich, NUR intern (core/rohstoff_steckbrief.php). Nie im Portal.
+    ensure_column('item', 'steckbrief', "TEXT NULL");
+    ensure_column('item', 'steckbrief_am', "DATETIME NULL");
+    ensure_column('item', 'steckbrief_von', "VARCHAR(120) NULL");
+    ensure_column('item', 'steckbrief_bearb_am', "DATETIME NULL");
+    ensure_column('item', 'steckbrief_bearb_von', "VARCHAR(120) NULL");
     // Lieferanten-Kürzel: je Lieferant ein kurzes Suffix aus dem Namen (Buxtrade→BX, Wellgreen→WG …).
     // Damit lässt sich derselbe Rohstoff je Lieferant eindeutig kennzeichnen: Kennung = R-Nummer + Kürzel.
     ensure_column('lieferanten', 'kuerzel', "VARCHAR(10) NULL");

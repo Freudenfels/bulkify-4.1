@@ -583,3 +583,6 @@ Jeder Schritt hat ein 7. Feld mit dem Namen der Person, die ihn abgeschlossen ha
 - Vollbreiten-Zeichen werden vorher in normale umgewandelt (`mb_convert_kana 'a'`), „。“ zählt als Punkt, „，“ und „、“ als Komma.
 - Danach zählt nur die erste Zahl im Text. Beispiele: „€0.05“ ergibt 0,05, „0.05/粒“ ergibt 0,05, „ca. 5“ ergibt 5.
 - Die Regeln für Tausender und Dezimalzeichen sind unverändert.
+
+## item: Steckbrief-Spalten (11.11.2026)
+`steckbrief` (TEXT), `steckbrief_am`, `steckbrief_von`, `steckbrief_bearb_am`, `steckbrief_bearb_von`. Gehören zum internen KI-Steckbrief, siehe `core/rohstoff_steckbrief.md`. Nie im Portal ausgeben.

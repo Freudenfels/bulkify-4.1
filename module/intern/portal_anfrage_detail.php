@@ -420,6 +420,8 @@ if ($darfAbsage && $pa['typ'] === 'rohstoff'): ?>
   <?php endif; ?>
   <?php if ($rid): ?><div style="margin-top:10px"><?= rohstoff_erfassen_knopf($rid, (string)$pa['rohstoff_name'], 'Preis ab Menge / CoA / Spec erfassen') ?></div><?php endif; ?>
 </div>
+<?php // KI-Steckbrief zum angefragten Rohstoff (nur intern, Nico 11.11.2026).
+if ($rid) { require_once BX_ROOT . '/core/rohstoff_steckbrief.php'; rohstoff_steckbrief_block($rid, '?p=portal_anfrage&id=' . (int)$pa['id']); } ?>
 
 <?php // Alternative anbieten (Nico 10.11.2026): angefragter Rohstoff nicht lieferbar -> Alternativen vorschlagen, Kunde entscheidet im Portal.
     $alts   = rohstoff_alternativen((int)$pa['id']);

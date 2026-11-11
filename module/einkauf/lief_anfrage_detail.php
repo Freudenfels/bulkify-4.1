@@ -78,6 +78,11 @@ if (!empty($_GET['fehler'])):    ?><div class="bx-panel" style="border-color:#e6
   <?php if (trim((string)($a['notiz'] ?? '')) !== ''): ?><div style="margin-top:12px"><div class="k muted">Notiz</div><div style="white-space:pre-line"><?= h((string)$a['notiz']) ?></div></div><?php endif; ?>
 </div>
 
+<?php // KI-Steckbrief zum angefragten Rohstoff (nur intern, Nico 11.11.2026).
+if ((int)($a['item_id'] ?? 0) > 0 && scalar("SELECT kategorie FROM item WHERE id=?", [(int)$a['item_id']]) === 'rohstoff') {
+    require_once BX_ROOT . '/core/rohstoff_steckbrief.php';
+    rohstoff_steckbrief_block((int)$a['item_id'], '?p=lief_anfrage_detail&id=' . (int)$a['id']);
+} ?>
 <?php
 // CoA / Spezifikation: Status (angefragt?) + die vom Lieferanten hochgeladenen Unterlagen. Diese landen beim
 // Hochladen am ROHSTOFF (objekt_typ='item') bzw. am Lieferanten (objekt_typ='lieferant'); hier gebündelt sichtbar.

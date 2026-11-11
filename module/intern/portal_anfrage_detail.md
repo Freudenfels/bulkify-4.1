@@ -114,3 +114,6 @@ ersten `portal_anfrage_pos.produkt_id`. So lässt sich die Laboranalyse eindeuti
   - „Bisher zu diesem Rohstoff angeboten“ als Merkhilfe.
   - **„Dem Kunden zeigen“** schaltet die Vorschläge im Portal frei und schickt die Mail `rohstoff_alternative`. Ist kein Mailversand möglich, wird der Grund angezeigt.
 - Aktionen: `alt_lieferstatus`, `alt_add`, `alt_del` (nur offene Vorschläge), `alt_senden`. Logik in `core/rohstoff_alternative.php`.
+
+## KI-Steckbrief (11.11.2026)
+Bei einer Rohstoffanfrage mit zugeordnetem Rohstoff steht unter „Rohstoff-Preis berechnen“ der Block „Steckbrief“ (nur intern), siehe `core/rohstoff_steckbrief.md`.

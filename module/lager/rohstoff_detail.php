@@ -731,6 +731,11 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff'):
   <?php endif; ?>
 </div>
 <?php endif; ?>
+<?php // KI-Steckbrief (Nico 11.11.2026): ausführlich, nur intern - nie im Portal.
+if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
+    require_once BX_ROOT . '/core/rohstoff_steckbrief.php';
+    rohstoff_steckbrief_block((int)$id, '?p=rohstoff&id=' . (int)$id);
+} ?>
 <?php // Beim Anlegen sofort sichtbar – und ausserhalb des Formulars, weil es ein eigenes hat. ?>
   <?php // Beim Anlegen: aus einer Spezifikation heraus starten. Spart das Abtippen und ist der
         // Weg, über den jeder Rohstoff von Anfang an Papiere hat.

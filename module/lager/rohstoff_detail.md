@@ -188,3 +188,10 @@ Beim Anlegen (`id=neu`) zeigt das Namensfeld während des Tippens „Meintest du
 
 ## Preisanfrage bei Leerkapseln (10.11.2026)
 Hat der Artikel die Form `kapselhuelle`, holt der Anfrage-Dialog die Lieferanten über `lieferanten_fuer_anfrage('leerkapsel')`. Angezeigt werden dann Leerkapsel- und Rohstoff-Lieferanten. Bei allen anderen Rohstoffen erscheinen nur Rohstoff-Lieferanten, reine Leerkapsel-Lieferanten nicht.
+
+## KI-Steckbrief (11.11.2026)
+Unter der KI-Info steht der Block „Steckbrief“ aus `core/rohstoff_steckbrief.php`. Er ist ausführlich und nur intern: Was ist das, Einsatz, Dosis und Darreichung, Besonderheiten, Regulatorik.
+- Der Knopf „KI-Steckbrief erstellen“ erzeugt den Text und speichert ihn am Rohstoff.
+- Mit dem Stift lässt er sich ergänzen.
+- „neu erstellen“ überschreibt erst nach einer Rückfrage.
+- Er erscheint nie im Portal, anders als die KI-Info.

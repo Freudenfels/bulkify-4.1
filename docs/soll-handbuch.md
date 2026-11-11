@@ -282,6 +282,11 @@ Stand nach dem Umbau "Produktseite aufräumen" (09.11.2026). Kopf: Name (Stift),
 - Rechnung: `produkt_kalkulation()` (core/produkt_kalkulation.php), gleiche Bausteine wie der Beschaffungsweg am Auftrag. Herstellung (Lohn) hat noch keinen Satz und wird nicht gerechnet.
 - Widersprüche am Produkt zeigt die Datenprüfung (Entwurf trotz Verwendung → Beheben auf "aktiv"; Glas ohne Deckel, Kundenpreis mit anderer Packungsgröße, starke Abweichung Kundenpreis/Rechnung nur Anzeige).
 
+## 5b. Rohstoff-Stammdaten
+
+- **KI-Info (kurz, für den Kunden):** wird dem Kunden im Portal gezeigt, nur auf Knopfdruck.
+- **KI-Steckbrief (ausführlich, nur intern):** Knopf „KI-Steckbrief erstellen“ an Rohstoffseite, Kunden-Rohstoffanfrage und Lieferanten-Anfrage. Inhalt: was ist das, Einsatz in NEM, übliche Dosis und Darreichung, Besonderheiten, Regulatorik (Novel Food, Health Claims nur wenn zugelassen, Höchstmengen, Warnhinweise). Gespeichert am Rohstoff mit Datum und Name, per Stift ergänzbar, „neu erstellen“ nur nach Rückfrage. Hinweis „KI-generiert, intern, nicht geprüft“. Nie im Kunden- oder Lieferantenportal.
+
 ---
 
 ## 6. "Zu erledigen" - die eine Aufgabenliste
@@ -447,3 +452,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 10.11.2026 | Lieferanten: neue Liefer-Kategorie "Leerkapseln" (leerkapsel) für Lieferanten, die nur Leerkapseln verkaufen (Stammdaten, Partner, Bewerbung DE/EN/ZH, Liste mit Klartext); Preisanfrage an einer Leerkapsel zeigt Leerkapsel- und Rohstoff-Lieferanten, Rohstoff-Anfragen keine reinen Leerkapsel-Lieferanten | Nico / Claude Code |
 | 11.11.2026 | Lieferanten-Portal: Einheiten (Kapsel, Tablette, Stick ...) und freigeschaltete Formen werden in der Sprache des Lieferanten angezeigt (Fertigprodukt-Preise, Preisliste, Anfragen, Katalog, Bestellung); Form-Spalte der Fertigprodukt-Preise ohne falsches "Rohstoff" | Nico / Claude Code |
 | 11.11.2026 | Lieferanten-Portal, Fertigprodukt-Preise: alle eingetragenen Preise werden mit einem Klick gespeichert (vorher nur die geklickte Zeile, Rest ging verloren); "Alle Preise speichern", Warnung bei ungespeicherten Eingaben, Meldung bei nicht lesbarem Preis; Zahlen aus chinesischer Eingabe (Vollbreite, €/¥) werden gelesen; Team bekommt Benachrichtigung | Nico / Claude Code |
+| 11.11.2026 | Rohstoff: KI-Steckbrief (nur intern) an Rohstoffseite, Kunden- und Lieferanten-Rohstoffanfrage; gespeichert am Rohstoff, Stift, neu erstellen mit Rückfrage; neuer Abschnitt 5b Rohstoff-Stammdaten | Nico / Claude Code |
