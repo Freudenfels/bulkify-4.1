@@ -1316,11 +1316,66 @@ document.addEventListener('click', function (e) {
     if (msg) { msg.textContent = j.msg || ''; msg.style.color = j.ok ? 'var(--gruen)' : '#8f231b'; }
     if (j.ok && tr) {
       var pd = b.closest('[data-dp-pos]');
-      if (b.dataset.dpabgl === 'verknuepfen' && j.offen > 0 && pd) {   // weitere Positionen offen: nur diese Position ausblenden
-        pd.innerHTML = '<div style="font-size:12px;color:var(--gruen)">' + (j.msg || 'verknüpft') + '</div>';
-      } else tr.remove();
+      if (b.dataset.dpabgl === 'loesen') { b.closest('div').innerHTML = '<span style="font-size:12px;color:var(--gruen)">' + (j.msg || 'gelöst') + ' Seite neu laden für neue Vorschläge.</span>'; return; }
+      if ((b.dataset.dpabgl === 'verknuepfen' || b.dataset.dpabgl === 'korr_verknuepfen') && pd) {
+        // Block B Teil 3/4 (11.11.2026): verknüpfte Zeile bleibt sichtbar mit „Verknüpfung lösen"; weitere Vorschläge der Position
+        // bleiben aktiv, solange sie offen ist – ist sie voll, werden sie grau mit „Position schon gedeckt".
+        var zeile = b.closest('.bx-row');
+        if (zeile) zeile.innerHTML = '<span style="font-size:12px;color:var(--gruen)">' + (j.msg || 'verknüpft') + '</span>'
+          + '<button type="button" class="btn btn-ghost btn-sm" data-dpabgl="loesen" data-bestellung="' + (b.dataset.bestellung || 0) + '" data-charge="' + (b.dataset.charge || 0) + '" data-frage="Verknüpfung lösen? Die Charge ist danach frei, die Bestellung rechnet neu.">Verknüpfung lösen</button>';
+        if (j.pos_voll) pd.querySelectorAll('[data-dpabgl="verknuepfen"],[data-dpkorr]').forEach(function (x) {
+          var r = x.closest('.bx-row'); if (!r || r === zeile) return;
+          r.style.opacity = '.5'; r.querySelectorAll('button').forEach(function (bb) { bb.disabled = true; });
+          if (!r.querySelector('.dp-gedeckt')) r.insertAdjacentHTML('beforeend', '<span class="dp-gedeckt muted">Position schon gedeckt</span>');
+        });
+        // Charge ist jetzt vergeben: in anderen Zeilen nicht mehr anbieten
+        document.querySelectorAll('[data-dpabgl="verknuepfen"][data-charge="' + b.dataset.charge + '"]').forEach(function (x) { if (x !== b) { x.disabled = true; x.title = 'Charge schon verknüpft'; } });
+        return;
+      }
+      tr.remove();
     } else { b.disabled = false; if (!msg) alert(j.msg || 'Fehler'); }
   }).catch(function () { b.disabled = false; alert('Fehler beim Speichern - bitte Seite neu laden.'); });
+});
+// Block B Teil 2 (11.11.2026): „Menge korrigieren und verknüpfen" - Pop-up wie auf der Chargenseite, vorbelegt mit der offenen Bestellmenge.
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-dpkorr]'); if (!b) return;
+  e.preventDefault();
+  var d = document.getElementById('dpKorrDlg');
+  if (!d) {
+    document.body.insertAdjacentHTML('beforeend', '<dialog id="dpKorrDlg" class="bx-dialog" style="max-width:520px"><h2 style="margin-top:0">Menge korrigieren und verknüpfen</h2><p class="muted" id="dpKorrInfo" style="margin-top:0"></p>'
+      + '<form id="dpKorrForm" style="margin:0"><div class="bx-field"><label>Was ist falsch?</label><select name="korr_was" data-norscombo><option value="ursprung">Ursprungsmenge (falsch eingebucht) - verfügbar verschiebt sich mit</option><option value="verfuegbar">nur verfügbare Menge (Schwund, Bruch)</option></select></div>'
+      + '<div class="bx-field"><label id="dpKorrMengeLbl">Neue Menge</label><input type="text" inputmode="decimal" name="korr_menge" required></div>'
+      + '<div class="bx-field"><label>Grund (Pflicht)</label><select name="korr_grund" required data-norscombo><option value="">- wählen -</option><option value="einbuchfehler">Einbuchfehler</option><option value="lieferschein">Lieferschein abweichend</option><option value="schwund">Schwund</option><option value="bruch">Bruch</option><option value="sonstiges">Sonstiges</option></select></div>'
+      + '<div class="bx-field"><label>Notiz</label><input type="text" name="korr_notiz" maxlength="500"></div>'
+      + '<div class="bx-field"><label>Beleg (optional, Foto oder PDF)</label><input type="file" name="korr_beleg" accept=".pdf,image/*"></div>'
+      + '<div class="bx-row" style="justify-content:flex-end;gap:8px;margin-top:12px"><button type="button" class="btn btn-ghost" onclick="this.closest(\'dialog\').close()">Abbrechen</button><button class="btn btn-primary" type="submit">Korrigieren und verknüpfen</button></div></form></dialog>');
+    d = document.getElementById('dpKorrDlg');
+    d.querySelector('form').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var src = d._src, fd = new FormData(this);
+      fd.append('aktion', 'dp_abgl'); fd.append('was', 'korr_verknuepfen'); fd.append('bestellung', src.dataset.bestellung); fd.append('bp', src.dataset.bp); fd.append('charge', src.dataset.charge);
+      fetch('?p=datenpruefung', {method: 'POST', body: fd, credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.ok) { alert(j.msg || 'Fehler'); return; }
+        d.close();
+        var v = src.parentNode.querySelector('[data-dpabgl="verknuepfen"]');
+        if (v) { v.dataset.dpabgl = 'korr_verknuepfen'; v.dataset.frage = ''; }
+        // Ergebnis wie beim normalen Verknüpfen darstellen
+        var pd = src.closest('[data-dp-pos]'), zeile = src.closest('.bx-row');
+        if (zeile) zeile.innerHTML = '<span style="font-size:12px;color:var(--gruen)">' + (j.msg || 'verknüpft') + '</span>'
+          + '<button type="button" class="btn btn-ghost btn-sm" data-dpabgl="loesen" data-bestellung="' + src.dataset.bestellung + '" data-charge="' + src.dataset.charge + '" data-frage="Verknüpfung lösen? Die Charge ist danach frei, die Bestellung rechnet neu.">Verknüpfung lösen</button>';
+        if (j.pos_voll && pd) pd.querySelectorAll('[data-dpabgl="verknuepfen"],[data-dpkorr]').forEach(function (x) {
+          var r = x.closest('.bx-row'); if (!r || r === zeile) return;
+          r.style.opacity = '.5'; r.querySelectorAll('button').forEach(function (bb) { bb.disabled = true; });
+          if (!r.querySelector('.dp-gedeckt')) r.insertAdjacentHTML('beforeend', '<span class="dp-gedeckt muted">Position schon gedeckt</span>');
+        });
+      }).catch(function () { alert('Fehler beim Speichern - bitte Seite neu laden.'); });
+    });
+  }
+  d._src = b;
+  d.querySelector('#dpKorrInfo').textContent = 'Charge ' + b.dataset.chargenr + ': ' + b.dataset.menge + ' ' + b.dataset.einheit + ' - offen in der Bestellung: ' + b.dataset.offen + ' ' + b.dataset.einheit;
+  d.querySelector('#dpKorrMengeLbl').textContent = 'Neue Menge (' + b.dataset.einheit + ', Einheit fest aus dem Artikel)';
+  d.querySelector('[name=korr_menge]').value = b.dataset.offen;
+  d.showModal();
 });
 </script>
 <?php render_footer();

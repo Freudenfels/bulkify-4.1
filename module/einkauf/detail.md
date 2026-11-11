@@ -77,3 +77,7 @@ Block „Wareneingang zuordnen“ (`#abgleich`, aus `core/bestellung_abgleich.ph
 - Menge und EK sind Textfelder mit deutscher Eingabe (`zahl_lesen`): „7.000“ = 7000, „0,12“ = 0,12. Die Zeilensumme rechnet genauso.
 
 **Interne Notiz / Hinweis an den Lieferanten (11.11.2026):** Zwei Felder oben an der Bestellung. „Interne Notiz“ sieht der Lieferant nie. „Hinweis an den Lieferanten“ (`hinweis_lieferant`) steht im Lieferantenportal; leer = kein Hinweis.
+
+**Block B (11.11.2026)**
+- **Block „Verknüpfte Chargen“** unter den Positionen: jede Charge einzeln mit Link, „Menge korrigieren“ (Chargenseite) und „Verknüpfung lösen“ (nur Admin, mit Rückfrage).
+- **„Wareneingang zuordnen“:** zeigt Mengen-Abweichungen und hat zusätzlich „Menge korrigieren und verknüpfen“ (Aktionen `abgl_korr_verknuepfen`, `abgl_loesen`).

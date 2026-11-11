@@ -35,6 +35,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header('Location: ?p=bestellung&id=' . $id . ($okA ? '&ok=1' : '&fehler=' . urlencode('Charge oder Position nicht (mehr) passend – nichts geändert.')) . '#abgleich'); exit;
     }
+    // Block B (11.11.2026): Menge der Charge korrigieren und dann verknüpfen / Verknüpfung lösen (gleiche Funktion wie die Datenprüfung).
+    if (in_array($aktion, ['abgl_korr_verknuepfen', 'abgl_loesen'], true) && !$neu) {
+        require_once BX_ROOT . '/core/bestellung_abgleich.php';
+        $rK = bestellung_abgleich_aktion($aktion === 'abgl_loesen' ? 'loesen' : 'korr_verknuepfen', (int)$id, (int)($_POST['bp_id'] ?? 0), (int)($_POST['charge_id'] ?? 0));
+        if ($rK['ok'] && function_exists('bedarf_bump')) bedarf_bump();
+        header('Location: ?p=bestellung&id=' . $id . ($rK['ok'] ? '&okmsg=' : '&fehler=') . rawurlencode((string)$rK['msg']) . '#' . ($aktion === 'abgl_loesen' ? 'chargenbezug' : 'abgleich')); exit;
+    }
     if ($aktion === 'abgl_geliefert' && !$neu) {
         webe_als_geliefert_schliessen((int)$id, (string)(current_user()['name'] ?? ''));
         log_aktivitaet('bestellung', (int)$id, 'team', 'Als geliefert geschlossen ohne eingebuchte Charge (Altlasten-Abgleich).', 'status');
@@ -274,6 +281,7 @@ bx_head($neu ? 'Neue Bestellung' : $v('nummer'), $neu ? 'Beim Lieferanten bestel
         ($neu ? '' : '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Bestellung als PDF – das schickst du dem Lieferanten" href="?p=bestellung_pdf&id=' . (int)$id . '">&#8681; PDF</a>')
         . bx_btn('Zurück zur Liste', '?p=einkauf', 'ghost'));
 if (isset($_GET['ok']))        echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (isset($_GET['okmsg']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['okmsg']) . '</div>';   // Block B: Korrektur/Lösen
 if (isset($_GET['geliefert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Als geliefert verbucht – Chargen im Wareneingang (Quarantäne) angelegt.</div>';
 if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 if (isset($_GET['aufg']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['aufg']) . '</div>';
@@ -394,6 +402,19 @@ if (!$neu) {
                . '<td class="bx-num">' . $gelHtml . '</td><td class="bx-num">' . $restHtml . '</td></tr>';
         }
         echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. gelieferte Menge je Position (geliefert = Summe der verknüpften Chargen). Ist alles da, schließt sich die Bestellung selbst. Bei einer Teillieferung bleibt sie offen, der Rest zählt weiter als unterwegs – „Rest storniert“ schließt sie. Bearbeiten unten im Formular.</p></div>';
+        // Block B Teil 3 (11.11.2026): verknüpfte Chargen einzeln, mit „Verknüpfung lösen" (falsch verknüpft) und Link zum Korrigieren.
+        $vkCh = all("SELECT c.id, c.charge_nr, c.menge, c.menge_verfuegbar, c.einheit, c.wareneingang, COALESCE(NULLIF(bp.bezeichnung,''), i.name) AS pname
+                     FROM charge c JOIN bestellung_position bp ON bp.id=c.bestellung_position_id LEFT JOIN item i ON i.id=bp.item_id
+                     WHERE bp.bestellung_id=? ORDER BY c.id", [(int)$id]);
+        if ($vkCh) {
+            echo '<div class="bx-panel" id="chargenbezug"><h2 style="margin-top:0">Verknüpfte Chargen</h2><div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Charge</th><th>Position</th><th class="bx-num">Menge</th><th>Eingang</th><th></th></tr></thead><tbody>';
+            foreach ($vkCh as $vc)
+                echo '<tr><td><a href="?p=chargen&id=' . (int)$vc['id'] . '">' . h((string)($vc['charge_nr'] ?: '#' . $vc['id'])) . '</a></td><td>' . h((string)$vc['pname']) . '</td>'
+                   . '<td class="bx-num">' . $mz($vc['menge']) . ' ' . h((string)$vc['einheit']) . '</td><td>' . ($vc['wareneingang'] ? h(date('d.m.Y', strtotime((string)$vc['wareneingang']))) : '–') . '</td>'
+                   . '<td style="text-align:right;white-space:nowrap">' . (has_role('admin') ? '<a class="btn btn-ghost btn-sm" href="?p=chargen&id=' . (int)$vc['id'] . '" title="Menge auf der Chargenseite korrigieren">Menge korrigieren</a> '
+                   . '<form method="post" style="display:inline" onsubmit="return confirm(\'Verknüpfung lösen? Die Charge ist danach frei, die Bestellung rechnet neu und geht ggf. wieder auf.\');"><input type="hidden" name="aktion" value="abgl_loesen"><input type="hidden" name="charge_id" value="' . (int)$vc['id'] . '"><button class="btn btn-ghost btn-sm" type="submit">Verknüpfung lösen</button></form>' : '') . '</td></tr>';
+            echo '</tbody></table></div></div>';
+        }
     }
 
     // Teil 4: Wareneingang zuordnen (Altlasten) – Vorschläge vorhandener Chargen je offener Position, nur auf Klick.

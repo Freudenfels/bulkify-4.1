@@ -145,3 +145,8 @@ Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführ
 **fortschritt_hand_weiter (11.11.2026):** schließt versendete Aufträge nicht mehr aus (AB-3244/3245: versendet bei laufendem Labor). Spalte „Schritt“ zeigt dann „Status versendet“. „Zurücksetzen“ lässt den Status versendet stehen und entfernt nur die Hand-Stufe.
 
 **etikett_mass_abweichung (Sofortfix 11.11.2026):** meldet erst ab **mehr als 5 mm** Abweichung zum Behälter (2 bis 5 mm = Sicherheitsmaß, normal). „Beheben“ setzt das Maß aus der TrimBox (sonst ArtBox/MediaBox) des hinterlegten Etikett-Designs über `etikett_mass_aus_pdf_setzen()` – nie mehr das Glasmaß. Ohne Design-PDF kein Knopf.
+
+**Einkauf-Altlasten, Block B (11.11.2026)**
+- **Je Vorschlag:** die Abweichung („Charge 300.000, offen 240.000“) und der Knopf „Menge korrigieren und verknüpfen“ (Pop-up mit Art, Menge, Grund, Notiz, Beleg; per AJAX).
+- **Nach dem Verknüpfen:** Die Zeile bleibt mit „Verknüpfung lösen“ stehen. Weitere Vorschläge der Position bleiben aktiv, solange sie offen ist; ist sie voll, werden sie grau mit „Position schon gedeckt“.
+- **Positionen mit Teilmengen-Charge** bleiben in der Liste.

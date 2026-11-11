@@ -2,6 +2,7 @@
 // Altlasten Einkauf (Einkauf gerade ziehen, Teil 4, 10.11.2026): Bestellungen ohne Wareneingang mit vorhandenen Chargen
 // abgleichen. Nur auf Klick: „verknüpfen", „als geliefert schließen", „stornieren". Dashboard-Datei (braucht core/schema.php).
 require_once __DIR__ . '/artikel_dubletten.php';
+require_once __DIR__ . '/charge_korrektur.php';   // Block B: „Menge korrigieren und verknüpfen"
 
 // Artikel, auf die die Ware einer Position gebucht sein kann: der Artikel selbst + ähnliche (Dubletten, zusammengeführte);
 // bei Freitext-Positionen der Bulk-/Fertigartikel des Auftrags bzw. Namenstreffer. Rückgabe [item_id => 'gleich'|'ähnlich'].
@@ -53,6 +54,11 @@ function bestellung_abgleich_vorschlaege(int $bp_id, int $limit = 5): array {
         if (!empty($c['auftrag_id']) && (int)$c['auftrag_id'] === (int)$bp['auftrag_id']) { $p += 2; $gr[] = 'gleicher Auftrag'; }
         if ($p < 3) continue;
         $c['punkte'] = $p; $c['gruende'] = $gr; $c['menge_bp'] = $m;
+        // Block B Teil 2 (11.11.2026): offene Bestellmenge in der Einheit der Charge + sichtbare Abweichung („Charge 300.000, offen 240.000").
+        $fk = webe_einheit_faktor((string)$c['einheit'], (string)$bp['einheit']);
+        $c['offen_charge'] = $fk > 0 ? round($soll / $fk, 3) : $soll;
+        $c['abweichung'] = ($soll > 0 && abs($m - $soll) > $soll * 0.02)
+            ? 'Charge ' . rtrim(rtrim(number_format((float)$c['menge'], 3, ',', '.'), '0'), ',') . ', offen ' . rtrim(rtrim(number_format($c['offen_charge'], 3, ',', '.'), '0'), ',') . ' ' . (string)$c['einheit'] : '';
         $out[] = $c;
     }
     usort($out, fn($a, $b) => $b['punkte'] <=> $a['punkte']);
@@ -89,8 +95,12 @@ function bestellung_abgleich_panel(array $b): string {
         foreach ($v as $c)
             $h .= '<tr><td><a href="?p=chargen&id=' . (int)$c['id'] . '">' . h((string)($c['charge_nr'] ?: '#' . $c['id'])) . '</a></td><td>' . h((string)$c['artikel']) . '</td>'
                 . '<td class="bx-num">' . $mz($c['menge']) . ' ' . h((string)$c['einheit']) . '</td><td>' . ($c['wareneingang'] ? h(date('d.m.Y', strtotime((string)$c['wareneingang']))) : '–') . '</td>'
-                . '<td>' . h((string)($c['lieferant'] ?? '–')) . '</td><td class="muted" style="font-size:12px">' . h(implode(', ', $c['gruende'])) . '</td>'
-                . '<td style="text-align:right"><form method="post" style="display:inline"><input type="hidden" name="aktion" value="abgl_verknuepfen"><input type="hidden" name="bp_id" value="' . (int)$p['id'] . '"><input type="hidden" name="charge_id" value="' . (int)$c['id'] . '"><button class="btn btn-primary btn-sm" type="submit">verknüpfen</button></form></td></tr>';
+                . '<td>' . h((string)($c['lieferant'] ?? '–')) . '</td><td class="muted" style="font-size:12px">' . h(implode(', ', $c['gruende'])) . ($c['abweichung'] !== '' ? '<div style="color:#8a6d1f">' . h($c['abweichung']) . '</div>' : '') . '</td>'
+                . '<td style="text-align:right;white-space:nowrap"><form method="post" style="display:inline"><input type="hidden" name="aktion" value="abgl_verknuepfen"><input type="hidden" name="bp_id" value="' . (int)$p['id'] . '"><input type="hidden" name="charge_id" value="' . (int)$c['id'] . '"><button class="btn btn-primary btn-sm" type="submit">verknüpfen</button></form>'
+                . (function_exists('has_role') && has_role('admin') ? ' <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'dlgKV' . (int)$p['id'] . '_' . (int)$c['id'] . '\').showModal()">Menge korrigieren und verknüpfen</button>'
+                    . charge_korr_dialog($c, 'dlgKV' . (int)$p['id'] . '_' . (int)$c['id'], '<input type="hidden" name="aktion" value="abgl_korr_verknuepfen"><input type="hidden" name="bp_id" value="' . (int)$p['id'] . '"><input type="hidden" name="charge_id" value="' . (int)$c['id'] . '">',
+                                         (float)$c['offen_charge'], 'ursprung', 'Menge korrigieren und verknüpfen', 'Korrigieren und verknüpfen') : '')
+                . '</td></tr>';
         $h .= '</tbody></table></div></div>';
     }
     $h .= '<div class="bx-row" style="gap:8px;flex-wrap:wrap">'
@@ -103,7 +113,9 @@ function bestellung_abgleich_panel(array $b): string {
 // ---- Datenprüfung: alles in der Zeile (Nico 11.11.2026) ------------------------------------------------------------
 // Offene Position (Alias bp): Menge > 0, nicht Rest-storniert, noch nicht (fast) voll geliefert, keine Charge verknüpft.
 // Je Position, nicht je Bestellung: eine Bündel-Bestellung bleibt in der Datenprüfung, bis jede Position erledigt ist (BE-2888, 11.11.2026).
-if (!defined('BA_POS_OFFEN')) define('BA_POS_OFFEN', "bp.menge>0 AND bp.rest_storniert_am IS NULL AND COALESCE(bp.geliefert_menge,0) < bp.menge*0.98 AND NOT EXISTS (SELECT 1 FROM charge cx WHERE cx.bestellung_position_id=bp.id)");
+// Block B Teil 4 (11.11.2026): Eine Position bleibt offen, solange weniger als 98 % geliefert sind – auch wenn schon eine
+// Teilmengen-Charge dranhängt (vorher fiel sie nach der ersten Charge ganz raus, Fable 18.4.1).
+if (!defined('BA_POS_OFFEN')) define('BA_POS_OFFEN', "bp.menge>0 AND bp.rest_storniert_am IS NULL AND COALESCE(bp.geliefert_menge,0) < bp.menge*0.98");
 function bestellung_abgleich_offen_anzahl(int $bestellung_id): int {
     return (int) scalar("SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=? AND " . BA_POS_OFFEN, [$bestellung_id]);
 }
@@ -151,8 +163,11 @@ function bestellung_abgleich_zelle(array $r, array $konflikte): string {
                 . '<span>' . $mz($c['menge']) . ' ' . h((string)$c['einheit']) . '</span>'
                 . '<span class="muted">' . ($c['wareneingang'] ? 'Eingang ' . h(date('d.m.Y', strtotime((string)$c['wareneingang']))) : '') . '</span>'
                 . '<span class="muted">' . h(implode(', ', $c['gruende'])) . '</span>'
+                . ($c['abweichung'] !== '' ? '<span style="color:#8a6d1f">' . h($c['abweichung']) . '</span>' : '')
                 . ($konf ? '<span style="color:#8f231b">Charge auch bei ' . h(implode(', ', $konf)) . ' vorgeschlagen</span>' : '')
-                . '<button type="button" class="btn btn-primary btn-sm" data-dpabgl="verknuepfen" data-bestellung="' . $bid . '" data-bp="' . (int)$p['id'] . '" data-charge="' . (int)$c['id'] . '">verknüpfen</button></div>';
+                . '<button type="button" class="btn btn-primary btn-sm" data-dpabgl="verknuepfen" data-bestellung="' . $bid . '" data-bp="' . (int)$p['id'] . '" data-charge="' . (int)$c['id'] . '">verknüpfen</button>'
+                . '<button type="button" class="btn btn-ghost btn-sm" data-dpkorr="1" data-bestellung="' . $bid . '" data-bp="' . (int)$p['id'] . '" data-charge="' . (int)$c['id'] . '" data-chargenr="' . h((string)($c['charge_nr'] ?: '#' . $c['id'])) . '"'
+                . ' data-menge="' . h(rtrim(rtrim(number_format((float)$c['menge'], 3, ',', '.'), '0'), ',')) . '" data-offen="' . h(rtrim(rtrim(number_format((float)$c['offen_charge'], 3, ',', '.'), '0'), ',')) . '" data-einheit="' . h((string)$c['einheit']) . '">Menge korrigieren und verknüpfen</button></div>';
         }
         $h .= count($v) > 1 ? '<details' . ($gleicheMenge ? '' : ' open') . '><summary style="cursor:pointer;font-size:12px">' . count($v) . ' Vorschläge</summary>' . $zeilen . '</details>' : $zeilen;
         $h .= '</div>';
@@ -185,7 +200,31 @@ function bestellung_abgleich_aktion(string $aktion, int $bestellung_id, int $bp_
         $cnr = (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#', id)) FROM charge WHERE id=?", [$charge_id]);
         log_aktivitaet('bestellung', $bestellung_id, 'team', 'Charge ' . $cnr . ' mit der Bestellung verknüpft (Datenprüfung).', 'status');
         $offen = bestellung_abgleich_offen_anzahl($bestellung_id);
-        return ['ok' => true, 'offen' => $offen, 'msg' => $nr . ': Charge ' . $cnr . ' verknüpft.' . ($offen ? ' Noch ' . $offen . ' Position(en) offen.' : '')];
+        $pr = one("SELECT menge, COALESCE(geliefert_menge,0) AS g, einheit FROM bestellung_position WHERE id=?", [$bp_id]);
+        $posRest = $pr ? max(0.0, (float)$pr['menge'] - (float)$pr['g']) : 0.0;
+        $posVoll = !$pr || (float)$pr['g'] >= (float)$pr['menge'] * 0.98;
+        return ['ok' => true, 'offen' => $offen, 'pos_voll' => $posVoll, 'charge' => $charge_id,
+                'msg' => $nr . ': Charge ' . $cnr . ' verknüpft.' . (!$posVoll ? ' Position noch offen: ' . rtrim(rtrim(number_format($posRest, 3, ',', '.'), '0'), ',') . ' ' . $pr['einheit'] . '.' : '') . ($offen ? ' Noch ' . $offen . ' Position(en) offen.' : '')];
+    }
+    // Block B (11.11.2026): erst Menge der Charge korrigieren (Pop-up wie auf der Chargenseite), dann verknüpfen.
+    if ($aktion === 'korr_verknuepfen') {
+        if (!(function_exists('has_role') && has_role('admin'))) return ['ok' => false, 'msg' => 'Menge korrigieren darf nur ein Admin.'];
+        $ok = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE id=? AND bestellung_id=?", [$bp_id, $bestellung_id]) === 1
+           && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND bestellung_position_id IS NULL", [$charge_id]) === 1;
+        if (!$ok) return ['ok' => false, 'msg' => 'Charge oder Position nicht (mehr) passend - nichts geändert.'];
+        $k = charge_menge_korrigieren($charge_id, (string)($_POST['korr_was'] ?? 'ursprung'), zahl_lesen((string)($_POST['korr_menge'] ?? ''), true),
+                                      (string)($_POST['korr_grund'] ?? ''), (string)($_POST['korr_notiz'] ?? ''), $wer, charge_korr_beleg_speichern($_FILES['korr_beleg'] ?? [], $charge_id));
+        if (!$k['ok'] && !str_starts_with((string)$k['meldung'], 'Keine Änderung')) return ['ok' => false, 'msg' => $k['meldung']];
+        $r = bestellung_abgleich_aktion('verknuepfen', $bestellung_id, $bp_id, $charge_id);
+        if ($r['ok']) $r['msg'] = ($k['ok'] ? $k['meldung'] . ' ' : '') . $r['msg'];
+        return $r;
+    }
+    if ($aktion === 'loesen') {
+        if (!(function_exists('has_role') && has_role('admin'))) return ['ok' => false, 'msg' => 'Verknüpfung lösen darf nur ein Admin.'];
+        if ((int) scalar("SELECT COUNT(*) FROM charge c JOIN bestellung_position bp ON bp.id=c.bestellung_position_id WHERE c.id=? AND bp.bestellung_id=?", [$charge_id, $bestellung_id]) !== 1)
+            return ['ok' => false, 'msg' => 'Diese Charge hängt nicht (mehr) an der Bestellung.'];
+        $r = webe_charge_loesen($charge_id, $wer);
+        return ['ok' => $r['ok'], 'msg' => $nr . ': ' . $r['msg'], 'offen' => bestellung_abgleich_offen_anzahl($bestellung_id)];
     }
     if ($aktion === 'geliefert') {
         webe_als_geliefert_schliessen($bestellung_id, $wer);
