@@ -10478,10 +10478,24 @@ function lieferant_partner_verknuepfen(int $lieferant_id): int {
 }
 // Preis je Lieferant für EIN Item (gültiger Staffelpreis zur Menge). Rückgabe: [lieferant_id => preis(float)].
 // Für die Lieferanten-Auswahl im Einkauf (Lieferant mit Preis anzeigen, günstigste zuerst).
-function item_lieferant_preise(int $item_id, float $menge = 0): array {
+// Je Lieferant nur seine gültigen Zeilen; hat er nur abgelaufene, gelten diese, und $abgelaufen[lieferant_id] = Ablaufdatum
+// (Preis-Gültigkeit 11.11.2026: in der Bestellliste markiert, nie still). $feld = Spalte für die Gültigkeit.
+function lp_je_lieferant_gueltig(array $rows, ?array &$abgelaufen = null): array {
+    $je = [];
+    foreach ($rows as $r) $je[(int)$r['lieferant_id']][] = $r;
+    $out = [];
+    foreach ($je as $lid => $zeilen) {
+        $sel = lp_gueltig_auswahl($zeilen);
+        if ($sel['abgelaufen'] && is_array($abgelaufen)) $abgelaufen[$lid] = $sel['abgelaufen'];
+        foreach ($sel['rows'] as $z) $out[] = $z;
+    }
+    return $out;
+}
+function item_lieferant_preise(int $item_id, float $menge = 0, ?array &$abgelaufen = null): array {
     if ($item_id <= 0 || !table_exists('lieferant_preis')) return [];
     $out = [];
-    foreach (all("SELECT lieferant_id, menge_ab, preis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL ORDER BY menge_ab ASC", [$item_id]) as $r) {
+    if (!is_array($abgelaufen)) $abgelaufen = [];
+    foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL ORDER BY menge_ab ASC", [$item_id]), $abgelaufen) as $r) {
         $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
         if ($menge <= 0 || $ma <= $menge + 1e-9) $out[$lid] = $pr;   // größter passender Staffelwert gewinnt (ORDER BY ASC)
         elseif (!isset($out[$lid])) $out[$lid] = $pr;                // alle Staffeln > Menge -> kleinste als Fallback
@@ -10539,15 +10553,16 @@ function auftrag_zukauf_fertig(int $auftrag_id): bool {
 // Fremdfertigungs-Preise je Lieferant für eine Rezeptur (rezeptur_lief_angebot), passend zur Stückzahl.
 // Rückgabe [lieferant_id => preis_je_stück]. So tauchen die Fremdfertiger (z. B. Wellgreen, Rainwood) auch
 // im Bestellvorgang (Bulk/Fertigprodukt) auf – ihre Preise hängen an der Rezeptur, nicht am Produkt.
-function rezeptur_fremd_lieferant_preise(int $rezeptur_id, float $stueck = 0): array {
+function rezeptur_fremd_lieferant_preise(int $rezeptur_id, float $stueck = 0, ?array &$abgelaufen = null): array {
     if ($rezeptur_id <= 0 || !table_exists('rezeptur_lief_angebot')) return [];
     $out = [];
+    if (!is_array($abgelaufen)) $abgelaufen = [];
     // Stück-Rezeptur (Kapsel/Tablette): Zeilen in kg/g/L sind Premix-Preise (je kg Mischung) - nie als Stückpreis lesen.
     $stueckForm = form_groessen_einheit((string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id])) === '';
-    foreach (all("SELECT lieferant_id, menge, preis FROM rezeptur_lief_angebot
+    foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, menge, preis, gueltig_bis FROM rezeptur_lief_angebot
                   WHERE rezeptur_id = ? AND lieferant_id IS NOT NULL AND preis IS NOT NULL AND preis > 0"
                   . ($stueckForm ? " AND LOWER(TRIM(COALESCE(einheit,''))) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm')" : "") . "
-                  ORDER BY menge ASC", [$rezeptur_id]) as $r) {
+                  ORDER BY menge ASC", [$rezeptur_id]), $abgelaufen) as $r) {
         $lid = (int)$r['lieferant_id']; $m = (float)$r['menge']; $p = (float)$r['preis'];
         if ($stueck <= 0 || $m <= $stueck + 1e-9) $out[$lid] = $p;   // größte passende Staffel gewinnt
         elseif (!isset($out[$lid])) $out[$lid] = $p;                 // alle Staffeln > Menge -> kleinste als Fallback
@@ -10555,9 +10570,9 @@ function rezeptur_fremd_lieferant_preise(int $rezeptur_id, float $stueck = 0): a
     return $out;
 }
 // Fremdfertigungs-Preise je Lieferant für ein Produkt (über dessen Rezeptur).
-function produkt_fremd_lieferant_preise(int $produkt_id, float $stueck = 0): array {
+function produkt_fremd_lieferant_preise(int $produkt_id, float $stueck = 0, ?array &$abgelaufen = null): array {
     $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id = ?", [$produkt_id]);
-    return $rid ? rezeptur_fremd_lieferant_preise($rid, $stueck) : [];
+    return $rid ? rezeptur_fremd_lieferant_preise($rid, $stueck, $abgelaufen) : [];
 }
 // Zukauf-Preis je Einheit für EINEN Lieferanten + Fertigprodukt bei gegebener Stückzahl, oder null.
 // Erst der Zukaufpreis (produkt_lieferant_preis), sonst der Fremdfertigungspreis (rezeptur_lief_angebot).

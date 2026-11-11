@@ -87,3 +87,6 @@ Stand 11.11.2026, Auftrag von Nico. Anlass: Manche Rohstoffpreise halten nur kur
   - Dieser Knopf erzeugt eine Benachrichtigung ans Team und einen Eintrag im Kundenverlauf.
   - Der Server sperrt die Annahme zusätzlich für `angebot_annehmen`, `bestaetigen` und `zelle_annehmen`.
 - **Nach der Annahme (Auftrag)** gilt der Preis des Auftrags. Ablaufende EK-Preise ändern nur die Hinweise in der Beschaffung.
+
+## Bestellliste (11.11.2026)
+Die Auswahl läuft je Lieferant (`lp_je_lieferant_gueltig()`). Gültige Zeilen haben Vorrang, abgelaufene sind im Lieferanten-Auswahlfeld markiert. Siehe module/einkauf/einkaufsliste.md.

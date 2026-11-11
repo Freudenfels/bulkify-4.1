@@ -254,14 +254,15 @@ $preis4 = function($p, $cur = 'EUR') {
 };
 $sum2   = fn($p, $cur = 'EUR') => number_format((float)$p, 2, ',', '.') . ' ' . h((string)($cur ?: 'EUR'));   // Gesamtsumme: 2 Nachkommastellen
 $eurShort = $preis4;   // Rückwärtskompatibel: alte Aufrufe ohne Währung -> EUR
-$liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit = false, array $extraSelAttr = []) use ($lieferanten, $preis4, $zugangIds, $liefWaehr): string {
+// $abg = [lieferant_id => Ablaufdatum]: dieser Lieferant hat nur abgelaufene Preise -> im Label „abgelaufen", ans Ende sortiert.
+$liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit = false, array $extraSelAttr = [], array $abg = []) use ($lieferanten, $preis4, $zugangIds, $liefWaehr): string {
     // Lieferanten mit Preis zuerst (günstigste oben), dann der Rest alphabetisch; Preis (4 Nachkommastellen) + Währung im Label.
     // Marker: „· Portal" = portalfähig (Account UND Preis) -> Portal-Weg möglich; „· direkt" = nur „Direkt bestellt (Telefon/Mail)".
     // $nurMit=true: nur Lieferanten anzeigen, die für diese Position wirklich einen Preis abgegeben haben.
     // Jede Option trägt data-preis/data-cur, damit JS die Summe live auf den gewählten Lieferanten umrechnen kann.
     $mit = []; $ohne = [];
     foreach ($lieferanten as $l) { if (isset($preise[(int)$l['id']])) $mit[] = $l; else $ohne[] = $l; }
-    usort($mit, fn($a, $b) => $preise[(int)$a['id']] <=> $preise[(int)$b['id']]);
+    usort($mit, fn($a, $b) => [isset($abg[(int)$a['id']]), $preise[(int)$a['id']]] <=> [isset($abg[(int)$b['id']]), $preise[(int)$b['id']]]);
     if ($nurMit && !$mit) return '<span class="muted" title="Kein Lieferant hat für dieses Produkt einen Zukaufpreis abgegeben">– kein Zukaufpreis –</span>';
     $attr = '';
     foreach ($extraSelAttr as $k => $v) $attr .= ' ' . $k . '="' . h((string)$v) . '"';
@@ -271,7 +272,7 @@ $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit =
         $cur = $liefWaehr[$lid] ?? 'EUR';
         $data = isset($preise[$lid]) ? ' data-preis="' . h((string)(float)$preise[$lid]) . '" data-cur="' . h((string)$cur) . '"' : '';
         $portalfaehig = isset($zugangIds[$lid]) && isset($preise[$lid]);   // Account UND Preis -> Portal-Weg möglich
-        $lbl = h($l['firma']) . (isset($preise[$lid]) ? ' · ' . $preis4($preise[$lid], $cur) : '') . ($portalfaehig ? ' · Portal' : ' · direkt');
+        $lbl = h($l['firma']) . (isset($preise[$lid]) ? ' · ' . $preis4($preise[$lid], $cur) : '') . (isset($abg[$lid]) ? ' · abgelaufen seit ' . date('d.m.Y', strtotime((string)$abg[$lid])) : '') . ($portalfaehig ? ' · Portal' : ' · direkt');
         $s .= '<option value="' . $lid . '"' . ($sel === $lid ? ' selected' : '') . $data . '>' . $lbl . '</option>';
     }
     return $s . '</select>';
@@ -383,7 +384,7 @@ if ($ohneFestlegung): ?>
           </td>
           <td><?= $rolleBadge($a['rolle']) ?></td>
           <td class="bx-num"><?php if ($gesperrt): ?><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php else: ?><?= $mengeInput($key, (float)$a['zu_bestellen'], (string)$a['einheit']) ?><?php endif; ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($a['need']) ?> · Lager <?= $mfmt($a['stock']) ?><?= (float)($a['quarantaene'] ?? 0) > 1e-6 ? ' · Quarantäne ' . $mfmt($a['quarantaene']) : '' ?><?= $a['bestellt'] > 1e-6 ? ' · unterwegs ' . $mfmt($a['bestellt']) : '' ?> · zu bestellen <?= $mfmt($a['zu_bestellen']) ?><?= $istEtikett ? ' · kundenspezifisch' : '' ?></div></td>
-          <td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0) ?: ($istEtikett ? (int)$etLief['id'] : 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'])) ?></td>
+          <?php $aAbg = []; ?><td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0) ?: ($istEtikett ? (int)$etLief['id'] : 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'], $aAbg), false, [], $aAbg ?? []) ?><?php if (!empty($aAbg) && isset($aAbg[(int)($a['haupt_lieferant'] ?? 0)])): ?><div style="font-size:11px;color:#8f231b">Preis des Hauptlieferanten abgelaufen - <a href="?p=rohstoff&id=<?= (int)$a['item_id'] ?>&tab=ek" target="_blank" rel="noopener">neu anfragen</a></div><?php endif; $aAbg = null; ?></td>
           <?php // Kunde·Produkt je Auftrag nur bei bedruckten Tüten/Beuteln (kundenspezifisch) – bei Gläsern & Co. nicht nötig.
                 $zeigKdPr = (($a['verpackungsart'] ?? '') === 'beutel'); ?>
           <td style="font-size:12px"><?php if ($zeigKdPr): // Beutel: je Auftrag eine Kunde·Produkt-Unterzeile -> gestapelt lassen ?>
@@ -404,13 +405,16 @@ if ($ohneFestlegung): ?>
           // z. B. Wellgreen/Rainwood) zusammenführen – Zukauf gewinnt bei gleichem Lieferanten, Fremd füllt auf.
           // Fertigware (Handelsware / Zukauf „fertig"): Preis je PACKUNG aus den Zukaufpreisen (S-15/St-24).
           $bFertig = ($b['art'] ?? 'bulk') === 'fertig';
+          $bAbg = [];
           $bPreise = $bFertig ? produkt_lieferant_preise_pkg((int)$b['produkt_id'], (float)$b['zu_bestellen'])
                    : produkt_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen'])
-                     + produkt_fremd_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen']);
+                     + produkt_fremd_lieferant_preise((int)$b['produkt_id'], (float)$b['zu_bestellen'], $bAbg);
           // Günstigster Zukaufpreis je Stück + dessen Währung (Lieferanten-Stamm) – als Vorgabe („ab"), solange
           // kein Lieferant gewählt ist. Danach rechnet JS die Summe auf den GEWÄHLTEN Lieferanten/Preis um.
           $bAb = null; $bAbLid = null;
-          foreach ($bPreise as $__lid => $__p) { if ($bAb === null || $__p < $bAb) { $bAb = $__p; $bAbLid = (int)$__lid; } }
+          // Vorgabe „ab": günstigster GÜLTIGER Preis; nur wenn es keinen gibt, ein abgelaufener (dann markiert).
+          $bGueltig = array_diff_key($bPreise, $bAbg) ?: $bPreise;
+          foreach ($bGueltig as $__lid => $__p) { if ($bAb === null || $__p < $bAb) { $bAb = $__p; $bAbLid = (int)$__lid; } }
           $bAbCur = $bAbLid !== null ? ($liefWaehr[$bAbLid] ?? 'EUR') : 'EUR';
           $bSumme = $bAb !== null ? $bAb * (float)$b['zu_bestellen'] : null;
       ?>
@@ -421,7 +425,7 @@ if ($ohneFestlegung): ?>
           <?php $bEinh = (string)($b['einheit'] ?? 'Stk'); $bGew = !empty($b['gewicht']);
                 $bLes = fn($v) => $bGew ? gewicht_lesbar((float)$v, $bEinh) : $mfmt($v) . ($bFertig ? ' Pkg' : ' Stk'); ?>
           <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], $bEinh) ?><div class="muted" style="font-size:11px">Bedarf <?= $bLes($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $bLes($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $bLes($b['bestellt']) : '' ?></div></td>
-          <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur, 'data-einheit'=>$bEinh]) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/<?= h($bEinh) ?> · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php endif; ?></td>
+          <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur, 'data-einheit'=>$bEinh], $bAbg) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/<?= h($bEinh) ?> · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php if ($bAbLid !== null && isset($bAbg[$bAbLid])): ?><div style="font-size:11px;color:#8f231b">nur abgelaufene Preise - Summe unsicher, neu anfragen</div><?php endif; ?><?php endif; ?></td>
           <td style="font-size:12px"><?php $bHw = false; foreach ($b['orders'] as $o): $bHw = $bHw || !empty($o['handelsware']);
               // Handelsware hat keinen Produktionsauftrag -> Link auf den Auftrag.
               $oHref = (int)$o['pa_id'] > 0 ? '?p=produktionsauftrag&id=' . (int)$o['pa_id'] : '?p=auftrag&id=' . (int)$o['auftrag_id']; ?>
@@ -434,7 +438,7 @@ if ($ohneFestlegung): ?>
           <td><a href="?p=rohstoff&id=<?= (int)$nb['item_id'] ?>" target="_blank" style="text-decoration:none"><?= h($nb['name']) ?></a></td>
           <td><?= bx_badge('Nachbestellung','warn') ?></td>
           <td class="bx-num"><?= $mengeInput($key, (float)$nb['zu_bestellen'], (string)$nb['einheit']) ?><div class="muted" style="font-size:11px">Meldebestand <?= $mfmt($nb['mindest']) ?> · Lager <?= $mfmt($nb['stock']) ?><?= $nb['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($nb['bestellt']) : '' ?></div></td>
-          <td><?= $liefSelect($key, (int)($nb['haupt_lieferant'] ?? 0), item_lieferant_preise((int)$nb['item_id'], (float)$nb['zu_bestellen'])) ?></td>
+          <td><?php $nbAbg = []; $nbPr = item_lieferant_preise((int)$nb['item_id'], (float)$nb['zu_bestellen'], $nbAbg); ?><?= $liefSelect($key, (int)($nb['haupt_lieferant'] ?? 0), $nbPr, false, [], $nbAbg) ?></td>
           <td style="font-size:12px"><span class="muted">unter Meldebestand</span></td>
         </tr>
       <?php endforeach; ?>

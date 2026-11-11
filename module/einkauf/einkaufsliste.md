@@ -96,3 +96,9 @@ Gesperrte Zeilen (Kundenetikett bzw. bedruckter Beutel ohne Kunden-Freigabe des 
 Der Block „warten auf die Festlegung des Wegs“ zeigt je Auftrag Links zu Auftrag, Angebot und Rezeptur (neuer Tab) und den Knopf **„Weg festlegen“**. Er öffnet das Pop-up aus `core/weg_festlegen.php`: Kopf, Rezeptur mit kg je Rohstoff, vier Karten mit Kosten. Die Knöpfe „Eigenproduktion / Fremdproduktion (zukaufen)“ und die Aktion `festlegen` entfallen, sie kannten weder Premix noch Lager. Danach erscheint die Meldung `bwok`.
 
 - Kopftext (10.11.2026): **drei** Bestellwege (Portal, Direkt bestellt, Online). Freier Bedarf: Menge mit deutscher Eingabe.
+
+## Preis-Gültigkeit in der Bestellliste (11.11.2026)
+- **Je Lieferant gelten seine gültigen Preise.** Hat ein Lieferant nur abgelaufene, steht im Auswahlfeld „abgelaufen seit …“, und er rückt ans Ende der Liste.
+- **Hauptlieferant mit abgelaufenem Preis:** Darunter steht „Preis des Hauptlieferanten abgelaufen - neu anfragen“ (Link zum Reiter Einkauf).
+- **Bulk/Fertigware:** Die Vorgabe „ab“ nimmt den günstigsten gültigen Preis. Gibt es nur abgelaufene, steht dort „nur abgelaufene Preise - Summe unsicher, neu anfragen“.
+- **Technik:** `item_lieferant_preise()`, `rezeptur_fremd_lieferant_preise()` und `produkt_fremd_lieferant_preise()` haben einen optionalen Referenz-Parameter `$abgelaufen`. Die Auswahl je Lieferant macht `lp_je_lieferant_gueltig()` in core/schema.php.

@@ -605,3 +605,7 @@ Siehe `core/preis_gueltig.md`.
 
 ## Angebotsgültigkeit (11.11.2026)
 `angebot_gueltig_bis_default(?int $angebot_id)`, `angebot_ek_gueltig_bis()` und `angebot_abgelaufen()`, siehe `core/preis_gueltig.md` Teil 4.
+
+## Bestellliste und Gültigkeit (11.11.2026)
+- `lp_je_lieferant_gueltig($rows, &$abgelaufen)` wählt je Lieferant die gültigen Zeilen.
+- `item_lieferant_preise()`, `rezeptur_fremd_lieferant_preise()` und `produkt_fremd_lieferant_preise()` haben den optionalen Parameter `&$abgelaufen`.
