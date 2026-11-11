@@ -211,6 +211,15 @@ function erp_dashboard_versand(string $aktion, int $auftrag_id, int $menge = 0):
     return is_array($j) ? $j : ['ok' => false, 'msg' => 'Dashboard nicht erreichbar' . ($err !== '' ? ': ' . $err : '.')];
 }
 // Soll-Kette 6: Daten für die Kartonetiketten eines Produktionsauftrags (Werte des letzten Drucks am PA).
+// Ein Karton aus der Produktion (pa_karton, 11.11.2026): Nummer, Menge, Unter-Charge, MHD, Produkt, Kunde, Auftrag.
+function erp_pa_karton_daten(int $karton_id): ?array {
+    if (!tabelle_da('pa_karton')) return null;
+    return one("SELECT k.nummer, k.menge, u.charge_nr, u.mhd, pa.nummer AS pa_nr, a.nummer AS auftrag_nr, kd.firma AS kunde,
+                       COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt
+                FROM pa_karton k JOIN pa_unter_charge u ON u.id=k.unter_charge_id JOIN produktionsauftrag pa ON pa.id=k.pa_id
+                LEFT JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN kunden kd ON kd.id=COALESCE(a.kunde_id, pa.kunde_id)
+                LEFT JOIN produkt p ON p.id=pa.produkt_id WHERE k.id=?", [$karton_id]);
+}
 function erp_karton_etikett_daten(int $pa_id): ?array {
     if (!tabelle_da('produktionsauftrag') || !erp_spalte_da('produktionsauftrag', 'karton_stueck')) return null;
     $d = one("SELECT pa.nummer, pa.karton_stueck, pa.karton_menge, pa.karton_charge, pa.karton_mhd, a.nummer AS auftrag_nr, k.firma AS kunde,

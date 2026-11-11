@@ -16,3 +16,5 @@ Typ passiert in `public/lager/bruecke.php`.
 **Inventur (11.11.2026):**
 - `typ=platz` mit `ids=<platz-ids>`: Platz-Etiketten 100 × 70 (`inv_platz_etikett_pdf`).
 - `typ=inventur` mit `id=<zaehlung-id>`: Etikett für ein Gebinde ohne Etikett (Klärfall, `inv_klaerfall_etikett_pdf`). Es geht auf den Gebinde-Drucker.
+
+**Produktion (11.11.2026):** Der Typ `pakarton` (über `api_druck`) druckt einen Karton aus `pa_karton` (`lg_pa_karton_pdf`) mit Karton-Nummer, Menge, Unter-Charge und MHD, ohne „von n“. Barcode `<Charge>-K001`.

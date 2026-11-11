@@ -68,3 +68,10 @@ Soll-Kette 4b (04.11.2026): oben in der Liste **Anweisungen vom Büro** (Menge, 
 Soll-Kette 6 (04.11.2026): Im Schritt **Verpacken** (bzw. **Umkarton**, wenn vorhanden) Block **Kartonetiketten**: Pkg je Karton + Packungen (Charge/MHD vorbelegt), Anzeige „= 5 Kartons (4 × 24, 1 × 4)“, Knopf druckt alle Etiketten auf einmal (Aktion `werk_karton`).
 
 Rückgabe nach dem Mischen (04.11.2026): Hat eine Charge in die Produktion gescannte Kartons/Säcke, erscheint je Gebinde ein Feld „Karton X / N“ (`rest_g[<gebinde_id>]`, blind ohne Sollwert) statt des Feldes je Charge, dazu der Pflicht-Haken „gewogen und ordentlich verschlossen“ (`verschlossen`). Ohne Haken wird nicht gespeichert.
+
+## Ein Weg (11.11.2026, plan-produktion-gefuehrt.md)
+- **Kachel-Liste = Tagesplan** in der Reihenfolge aus dem Reiter Plan (`erp_wa_tagesplan`).
+  - Je Kachel: Linie, Mitarbeiter, Datum, Soll, produziert.
+  - Nicht machbare stehen grau mit Grund. Ist der oberste blockiert, rückt der nächste machbare nach vorne.
+- **Schritt-Ansicht:** Ab Abfüllen/Verpacken/Etikettieren läuft der geführte Ablauf (`werk_ablauf.php` + `werk_ablauf_post.php`). Die alten „Erledigt“-Knöpfe und die Teilmenge-Box sind dort ausgeblendet; abhaken ohne Menge geht nur noch für Admin im Dashboard.
+- Mischen und Verkapseln (Eigenproduktion) bleiben eigene Schritte.

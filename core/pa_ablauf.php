@@ -247,6 +247,15 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     if ($umfang === 'vor_etikett') $stationen = array_values(array_filter($stationen, fn($s) => $s !== 'Etikettieren'));
     $basis = $umfang === 'vor_etikett' ? max($gebucht, (float)($pa['menge_vor_etikett'] ?? 0)) : $gebucht;
     $bis = $basis + $menge;
+    // Regel: eine Unter-Charge stammt aus GENAU EINER Bulk-Charge. Reicht deren Rest nicht, wird nichts gebucht (Chargenwechsel nötig).
+    if ((int)$uc['bulk_charge_id'] > 0 && empty($o['ohne_material'])) {
+        $je = (float) scalar("SELECT COALESCE(NULLIF(p.einheiten_pro_packung,0), NULLIF(a.stueck,0), 0) FROM produktionsauftrag pa LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN auftrag a ON a.id=pa.auftrag_id WHERE pa.id=?", [$pa_id]);
+        $bv = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [(int)$uc['bulk_charge_id']]);
+        if ($je > 0 && $menge * $je > $bv * 1.005 + 0.5) {
+            $max = (int) floor($bv / $je);
+            return ['ok' => false, 'fehler' => 'bulk', 'msg' => 'Die Bulk-Charge dieser Unter-Charge reicht nur noch für ' . pa_mz($max) . ' Stk (' . pa_mz($bv) . ' übrig). Bitte höchstens ' . pa_mz($max) . ' Stk buchen und für den Rest „Chargenwechsel“ (neuer Bulk = neuer Buchstabe).'];
+        }
+    }
     // 1) Material prüfen (alles oder nichts) …
     $GLOBALS['pa_bevorzugt'] = pa_gescannte_chargen($pa_id, $uc_id);
     $fehlt = [];
@@ -295,10 +304,11 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     pa_fn('reservierung_abgleichen', 'erp_reservierung_abgleichen', $pa_id);
     pa_fn('teilmenge_anweisung_verrechnen', 'erp_teilmenge_anweisung_verrechnen', $pa_id, $menge, 'komplett');
     $fertig = ((float)$pa['menge'] - $gebucht - $menge) <= 0.0001;
-    if ($neu || $fertig) pa_fn('fertigware_qm_freigabe_nach', 'erp_fertigware_dokumente_melden', $cid, ...(function_exists('fertigware_qm_freigabe_nach') ? ['', $fertig, 'Produktionsabschluss'] : [$fertig]));
     if (!empty($pa['kunde_id']))
         pa_fn('log_aktivitaet', 'erp_log_aktivitaet', 'kunde', (int)$pa['kunde_id'], 'team', 'Teilmenge ' . pa_mz($menge) . ' Stk produziert (Charge ' . $uc['charge_nr'] . ', Produktion ' . $pa['nummer'] . ').', 'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
     pa_ereignis($pa_id, $uc_id, 'teilmenge', pa_mz($menge) . ' Stk gebucht' . ($rueck ? ', ' . $rueck . ' Rückstellmuster' : '') . (($o['art'] ?? '') === 'nachtrag' ? ' (nachgetragen, Produktionsdatum ' . date('d.m.Y', strtotime($datum)) . ')' : '') . '.', (string)$menge, (string)($o['foto'] ?? ''), '', $von);
+    // CoA je neuer Fertigcharge bzw. Bericht bei voller Menge – zuletzt (in der Werk-App ein Aufruf ans Dashboard, darf die Buchung nicht aufhalten).
+    if ($neu || $fertig) pa_fn('fertigware_qm_freigabe_nach', 'erp_fertigware_dokumente_melden', $cid, ...(function_exists('fertigware_qm_freigabe_nach') ? ['', $fertig, 'Produktionsabschluss'] : [$fertig]));
     return ['ok' => true, 'msg' => pa_mz($menge) . ' Stk gebucht – Charge ' . $uc['charge_nr'] . ' (MHD ' . date('d.m.Y', strtotime((string)$uc['mhd'])) . ').', 'teilmenge_id' => $tm, 'charge_id' => $cid, 'fertig' => $fertig, 'umfang' => 'komplett'];
 }
 

@@ -19,7 +19,7 @@ if (!$tokenOk && !$loopback) {
 }
 
 $typ = preg_replace('/[^a-z]/', '', (string)($_REQUEST['typ'] ?? 'probe'));
-if (!in_array($typ, ['probe', 'gebinde', 'karton'], true)) {   // nur definierte interne Drucktypen (karton = Soll-Kette 6)
+if (!in_array($typ, ['probe', 'gebinde', 'karton', 'pakarton'], true)) {   // pakarton = ein Karton (pa_karton, Produktion ein Weg 11.11.2026)   // nur definierte interne Drucktypen (karton = Soll-Kette 6)
     echo json_encode(['ok' => false, 'meldung' => 'Unbekannter Drucktyp.'], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -27,7 +27,7 @@ $refId = (int)($_REQUEST['id'] ?? 0);
 if ($refId <= 0) { echo json_encode(['ok' => false, 'meldung' => 'Keine ID angegeben.'], JSON_UNESCAPED_UNICODE); exit; }
 
 q("INSERT INTO lg_druckjob (ids, format, typ, status, benutzer_id, angelegt) VALUES (?, ?, ?, 'offen', NULL, ?)",
-  [(string)$refId, $typ === 'karton' ? 'gross' : 'klein', $typ, jetzt_utc()]);
+  [(string)$refId, in_array($typ, ['karton', 'pakarton'], true) ? 'gross' : 'klein', $typ, jetzt_utc()]);
 $jobId = (int) insert_id();
 
 // Läuft die Brücke gerade? (Lebenszeichen < 15s) – nur als Info für die aufrufende Seite.

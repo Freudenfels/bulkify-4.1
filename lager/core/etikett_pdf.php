@@ -333,6 +333,35 @@ function lg_probe_etikett_pdf(int $probe_id): ?string {
 // === Kartonetiketten der Produktion (Soll-Kette 6) ===========================================
 // 100 x 150 mm hoch, je Karton eine Seite: Produkt, Charge, MHD, Stückzahl im Karton, „Karton 5 von 40“, Auftrag/Kunde, Barcode.
 // Barcode (Code 128) = Charge-Kartonnummer, z. B. „2701.A-K05“. Der letzte Karton trägt den Rest.
+// Ein Karton aus der Produktion (pa_karton): Karton-Nummer (fortlaufend je PA, ohne „von n"), Menge in diesem Karton,
+// Unter-Charge, MHD, Produkt, Kunde/Auftrag, Barcode <Charge>-K001 (Grundlage fürs Palettieren per Scan). 100 x 150 mm.
+function lg_pa_karton_pdf(int $karton_id): ?string {
+    $d = function_exists('erp_pa_karton_daten') ? erp_pa_karton_daten($karton_id) : null;
+    if (!$d) return null;
+    $mm = fn(float $v): float => $v / 25.4 * 72;
+    $pdf = new MiniPDF(); $pdf->w = $mm(100); $pdf->h = $mm(150);
+    $W = $pdf->w; $dark = [20, 20, 20]; $muted = [120, 120, 120]; $line = [205, 205, 205];
+    $lx = $mm(6); $tw = $W - $mm(12);
+    $pdf->rectStroke($mm(2), $mm(2), $W - $mm(4), $pdf->h - $mm(4), 0.6, $line);
+    $pdf->text($lx, $mm(10), 'KARTON', 10, true, $muted);
+    $pdf->text($lx, $mm(24), 'Karton ' . (int)$d['nummer'], 26, true, $dark);
+    $yy = $mm(36);
+    foreach (array_slice($pdf->wrap((string)($d['produkt'] ?: '–'), $tw, 15, true), 0, 3) as $ln) { $pdf->text($lx, $yy, $ln, 15, true, $dark); $yy += $mm(6.6); }
+    $yy += $mm(3);
+    $feld = function (string $l, string $v, float $size = 15) use ($pdf, $lx, &$yy, $muted, $dark, $mm, $tw): void {
+        $pdf->text($lx, $yy, $l, 8, false, $muted); $off = $size * 0.85 + 2;
+        $pdf->text($lx, $yy + $off, $pdf->fit($v !== '' ? $v : '–', $tw, $size, true), $size, true, $dark); $yy += $off + $mm(6.5);
+    };
+    $feld('Menge in diesem Karton', number_format((float)$d['menge'], 0, ',', '.') . ' Pkg', 20);
+    $feld('Charge', (string)$d['charge_nr']);
+    $feld('MHD', !empty($d['mhd']) ? date('d.m.Y', strtotime((string)$d['mhd'])) : '–');
+    $feld('Auftrag', trim((string)($d['auftrag_nr'] ?? '') . ' · ' . (string)$d['pa_nr'], ' ·'));
+    $feld('Kunde', (string)($d['kunde'] ?? ''), 12);
+    $code = (string)$d['charge_nr'] . '-K' . str_pad((string)(int)$d['nummer'], 3, '0', STR_PAD_LEFT);
+    lg_barcode128($pdf, $lx - $mm(1), $pdf->h - $mm(30), $tw + $mm(2), $mm(16), $code, $dark);
+    $pdf->text($lx, $pdf->h - $mm(9), $code, 11, true, $dark);
+    return $pdf->output();
+}
 function lg_produktion_karton_pdf(int $pa_id): ?string {
     if (!function_exists('erp_karton_etikett_daten')) return null;
     $d = erp_karton_etikett_daten($pa_id);

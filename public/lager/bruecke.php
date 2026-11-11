@@ -116,6 +116,10 @@ foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' 
         $drucker = $druckerGebinde ?: $druckerEtikett;
         $pdf = function_exists('inv_klaerfall_etikett_pdf') ? inv_klaerfall_etikett_pdf((int)$j['ids']) : null;   // Gebinde ohne Etikett (Klärfall)
         $fehlt = 'Klärfall nicht gefunden';
+    } elseif ($typ === 'pakarton') {   // ein Karton aus der Produktion (pa_karton): Nummer, Unter-Charge, Menge – kein „von n"
+        $drucker = $druckerKarton ?: $druckerEtikett;
+        $pdf = function_exists('lg_pa_karton_pdf') ? lg_pa_karton_pdf((int)$j['ids']) : null;
+        $fehlt = 'Karton nicht gefunden';
     } elseif ($typ === 'karton') {
         $drucker = $druckerKarton ?: $druckerEtikett;         // Kartonetiketten der Produktion (100 x 150) auf den Produktionsdrucker
         $pdf = function_exists('lg_produktion_karton_pdf') ? lg_produktion_karton_pdf((int)$j['ids']) : null;

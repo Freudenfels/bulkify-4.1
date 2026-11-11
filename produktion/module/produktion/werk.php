@@ -16,6 +16,8 @@ $T    = werk_texte($lang);
 $werkUid  = (int)($_SESSION['werk_uid'] ?? 0);
 $werkName = '';
 if ($werkUid) { $wu = erp_benutzer($werkUid); if ($wu) { $werkName = (string)$wu['name']; } else { $werkUid = 0; unset($_SESSION['werk_uid']); } }
+$istAdminW = $werkUid && !empty($wu) && in_array('admin', array_map('trim', explode(',', (string)($wu['rollen'] ?? ''))), true);
+require_once BX_ROOT . '/core/erp_ablauf.php';   // Ein Weg (11.11.2026): Tagesplan + geführter Ablauf
 
 // ---- POST (Login / Logout / Schritt erledigen) ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -45,6 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_flash_ok'] = !empty($r['ok']);
         weiter('?p=werk&id=' . $paId);
     }
+    // Ein Weg (11.11.2026): geführter Ablauf Abfüllen/Verpacken (Start, Scan, Kartons, Teilmenge, Chargenwechsel, Abschluss).
+    if ($werkUid && str_starts_with($aktion, 'wa_')) require __DIR__ . '/werk_ablauf_post.php';
     if ($werkUid && $aktion === 'werk_erledigt') {
         $sid = (int)($_POST['schritt_id'] ?? 0);
         $paId = (int)($_POST['pa_id'] ?? 0);
@@ -309,23 +313,10 @@ header('Content-Type: text/html; charset=utf-8');
 
 <?php elseif ($id <= 0): // ===================== KACHEL-LISTE ===================== ?>
   <?php
-    $jobs = [];
+    // Ein Weg (11.11.2026): genau die Reihenfolge aus dem Reiter Plan (Dashboard). Laufende zuerst, nicht machbare grau mit Grund –
+    // ist der oberste blockiert, rückt der nächste machbare nach vorne (erp_wa_tagesplan).
     $anwL = erp_teilmenge_anweisungen();   // Soll-Kette 4b: Anweisungen vom Büro
-    $anwPa = []; foreach ($anwL as $aw) $anwPa[(int)$aw['pa_id']] = true;
-    foreach (erp_produktionsauftraege('') as $pa) {
-        $f = (int)$pa['schritte_fertig'];
-        $ber = erp_pa_bereitschaft((int)$pa['id'], (string)$pa['status'], $f);
-        // Soll-Kette 4: jeder Auftrag, sobald IRGENDEIN Schritt machbar ist (auch ohne Etiketten / mit Teilmenge) – mit Hinweis.
-        $mbL = in_array((string)$pa['status'], ['offen', 'laufend'], true) ? erp_stufen_machbar((int)$pa['id']) : null;
-        $pa['_hinweis'] = $mbL ? erp_machbar_hinweis($mbL, $T) : '';
-        $machbar = $mbL && ($mbL['herstellung'] > 0 || $mbL['vor_etikett'] > 0 || $mbL['komplett'] > 0 || $mbL['vorproduziert'] > 0);
-        if ((string)$pa['status'] === 'laufend' || ($ber['status'] ?? '') === 'bereit' || $machbar || isset($anwPa[(int)$pa['id']])) { $pa['_lauf'] = (string)$pa['status'] === 'laufend'; $pa['_teil'] = ($ber['status'] ?? '') !== 'bereit' && !$pa['_lauf']; $jobs[] = $pa; }
-    }
-    usort($jobs, function ($a, $b) {   // laufend zuerst, dann nach geplantem Termin
-        if (($a['_lauf'] ?? false) !== ($b['_lauf'] ?? false)) return ($a['_lauf'] ?? false) ? -1 : 1;
-        $ga = (string)($a['geplant_am'] ?? '') ?: '9999'; $gb = (string)($b['geplant_am'] ?? '') ?: '9999';
-        return strcmp($ga, $gb);
-    });
+    $jobs = erp_wa_tagesplan();
   ?>
   <div class="topbar">
     <div class="brand"><img src="/assets/bulkify-logo-white.png" alt="Produktion" style="height:30px;vertical-align:middle;display:inline-block"></div>
@@ -347,20 +338,21 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
-  <h1 style="font-size:24px;margin:0 0 14px"><?= h($T['what_produce']) ?></h1>
+  <h1 style="font-size:24px;margin:0 0 14px"><?= h($T['what_produce']) ?> – Tagesplan</h1>
   <?php if (!$jobs): ?>
     <div class="panel muted"><?= h($T['no_jobs']) ?></div>
   <?php else: ?>
   <div class="cards">
-    <?php foreach ($jobs as $pa): $g = (int)$pa['schritte_gesamt']; $f = (int)$pa['schritte_fertig']; $proz = $g > 0 ? round($f * 100 / $g) : 0; ?>
-    <a class="card" href="?p=werk&id=<?= (int)$pa['id'] ?>">
-      <div class="nr"><?= h((string)$pa['nummer']) ?></div>
-      <div class="prod"><?= h((string)($pa['produkt_name'] ?: '–')) ?></div>
-      <div class="meta"><?= menge_txt($pa['menge']) ?> <?= h($T['packages']) ?><?= !empty($pa['kunde']) ? ' · ' . h((string)$pa['kunde']) : '' ?></div>
-      <span class="badge <?= !empty($pa['_lauf']) ? 'b-lauf' : 'b-bereit' ?>"><?= !empty($pa['_lauf']) ? h($T['in_production']) : (!empty($pa['_teil']) ? h($T['partly_producible'] ?? 'teilweise machbar') : h($T['producible'])) ?></span>
-      <?php if (($pa['_hinweis'] ?? '') !== ''): ?><div class="meta" style="margin-top:6px;color:#e0b54c"><?= h((string)$pa['_hinweis']) ?></div><?php endif; ?>
+    <?php foreach ($jobs as $pa): $m = $pa['_m']; $grau = !$m['machbar']; $proz = (float)$pa['menge'] > 0 ? min(100, round((float)$pa['produziert'] * 100 / (float)$pa['menge'])) : 0; ?>
+    <a class="card" href="<?= $grau ? '#' : '?p=werk&id=' . (int)$pa['id'] ?>"<?= $grau ? ' style="opacity:.45;pointer-events:none"' : '' ?>>
+      <div class="nr"><?= h((string)$pa['nummer']) ?><?= $pa['_heute'] ? ' <span class="badge b-bereit" style="margin:0 0 0 6px">heute</span>' : '' ?></div>
+      <div class="prod"><?= h((string)($pa['produkt'] ?: '–')) ?></div>
+      <div class="meta">Soll <?= menge_txt($pa['menge']) ?> Stk<?= !empty($pa['kunde']) ? ' · ' . h((string)$pa['kunde']) : '' ?></div>
+      <div class="meta"><?= $pa['geplant_am'] ? h(date('d.m.', strtotime((string)$pa['geplant_am']))) . ' · ' : '' ?><?= h((string)($pa['linie'] ?: 'Linie offen')) ?><?= $pa['mitarbeiter'] ? ' · ' . h((string)$pa['mitarbeiter']) : '' ?></div>
+      <span class="badge <?= $pa['_lauf'] ? 'b-lauf' : 'b-bereit' ?>"><?= $pa['_lauf'] ? h($T['in_production']) : ($grau ? 'nicht machbar' : ($m['stufe'] === 'bis_etikett' ? 'bis vor Etikettieren' : h($T['producible']))) ?></span>
+      <?php if ($m['grund'] !== ''): ?><div class="meta" style="margin-top:6px;color:#e0b54c"><?= h($m['grund']) ?></div><?php endif; ?>
       <div class="prog"><div style="width:<?= (int)$proz ?>%"></div></div>
-      <div class="meta" style="margin-top:6px"><?= $g > 0 ? h($T['step']) . ' ' . $f . ' / ' . $g : h($T['ready']) ?></div>
+      <div class="meta" style="margin-top:6px">produziert <?= menge_txt($pa['produziert']) ?> von <?= menge_txt($pa['menge']) ?></div>
     </a>
     <?php endforeach; ?>
   </div>
@@ -413,6 +405,8 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endif; ?>
   </div>
 
+  <?php $waAktiv = !$alleFertig && in_array((string)$pa['status'], ['offen', 'laufend'], true) && erp_wa_aktiv($id);
+  if ($waAktiv): require __DIR__ . '/werk_ablauf.php'; else:   // Ein Weg (11.11.2026): Abfüllen bis Verpacken im geführten Ablauf ?>
   <?php // Soll-Kette 4: Teilmenge am Tablet – was jetzt je Stufe machbar ist, Rest bleibt offen im Auftrag.
     $mbW = (!$alleFertig && in_array((string)$pa['status'], ['offen', 'laufend'], true)) ? erp_stufen_machbar($id) : null;
     if ($mbW && $mbW['rest'] > 0): $nW = fn($x) => menge_txt($x); $anwW = erp_teilmenge_anweisungen($id); $aw1 = $anwW[0] ?? null; ?>
@@ -728,6 +722,7 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
+  <?php endif; // $waAktiv ?>
 
 <?php endif; ?>
 
