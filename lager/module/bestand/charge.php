@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($aktion === 'umbuchen') {
         $ziel  = (int)($_POST['kunde_id'] ?? 0);
-        $menge = ($_POST['menge'] ?? '') !== '' ? (float) str_replace(',', '.', (string)$_POST['menge']) : null;
+        $menge = ($_POST['menge'] ?? '') !== '' ? erp_menge_parse((string)$_POST['menge']) : null;   // Tausenderpunkt (Block D)
         $r = erp_charge_umbuchen($id, $ziel > 0 ? $ziel : null, $menge);
         flash($r['meldung'], $r['ok'] ? 'ok' : 'warn');
         weiter('?p=charge&id=' . $id);
@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             lg_charge_log_add($id, 'Standort', (string)($r['alt'] ?? ''), erp_standort_label($ziel));
             // Beim Wiedereinlagern (zurück nach Lager 1): optional das tatsächliche Ist-Gewicht erfassen (Spec 7.13).
             if ($ziel === 'lager1' && trim((string)($_POST['ist_menge'] ?? '')) !== '') {
-                $neu = (float) str_replace(',', '.', (string)$_POST['ist_menge']);
+                $neu = erp_menge_parse((string)$_POST['ist_menge']);   // Tausenderpunkt (Block D)
                 $mr = erp_charge_menge_setzen($id, $neu, 'Ist-Gewicht bei Rückgabe aus Produktion');
                 if ($mr['ok']) {
                     $delta = (float)$mr['delta'];

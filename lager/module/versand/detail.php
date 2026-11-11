@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'zoll_speichern') {
         foreach ((array)($_POST['z_hs'] ?? []) as $pid => $hs) {
             $pid = (int)$pid;
-            $wert = ($_POST['z_wert'][$pid] ?? '') !== '' ? (float) str_replace(',', '.', (string)$_POST['z_wert'][$pid]) : null;
+            $wert = ($_POST['z_wert'][$pid] ?? '') !== '' ? erp_menge_parse((string)$_POST['z_wert'][$pid]) : null;
             $gew  = ($_POST['z_gewicht'][$pid] ?? '') !== '' ? (int)$_POST['z_gewicht'][$pid] : null;
             lg_versand_pos_zoll_set($pid, (string)$hs, (string)($_POST['z_ursprung'][$pid] ?? ''), $wert, $gew);
         }
@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($ok) foreach (array_map('intval', (array)($_POST['ps_ids'] ?? [])) as $pid) q("UPDATE lg_packstueck SET parent_id=? WHERE id=? AND versand_id=? AND art<>'palette'", [$ziel ?: null, $pid, $id]);
         }
         if ($aktion === 'ps_del') { $pid = (int)($_POST['ps_id'] ?? 0); q("UPDATE lg_packstueck SET parent_id=NULL WHERE parent_id=? AND versand_id=?", [$pid, $id]); q("DELETE FROM lg_packstueck WHERE id=? AND versand_id=?", [$pid, $id]); }
-        if ($aktion === 'ps_gewicht') foreach ((array)($_POST['gew'] ?? []) as $pid => $g) q("UPDATE lg_packstueck SET gewicht_kg=? WHERE id=? AND versand_id=?", [trim((string)$g) !== '' ? (float)str_replace(',', '.', (string)$g) : null, (int)$pid, $id]);
+        if ($aktion === 'ps_gewicht') foreach ((array)($_POST['gew'] ?? []) as $pid => $g) q("UPDATE lg_packstueck SET gewicht_kg=? WHERE id=? AND versand_id=?", [trim((string)$g) !== '' ? erp_menge_parse((string)$g) : null, (int)$pid, $id]);
         // Pakete/Paletten zählen für Label und Lieferschein mit.
         $nPs = (int) scalar("SELECT COUNT(*) FROM lg_packstueck WHERE versand_id=? AND (art='palette' OR (art<>'palette' AND parent_id IS NULL))", [$id]);
         if ($nPs > 0) q("UPDATE lg_versand SET pakete=? WHERE id=?", [$nPs, $id]);

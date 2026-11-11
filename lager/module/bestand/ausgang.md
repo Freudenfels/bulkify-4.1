@@ -7,3 +7,5 @@
 **Naht:** Das Abbuchen (Dashboard-`charge`) steckt in `erp_charge_entnehmen()` in `core/erp.php`; `erp_bedarf_bump()` hält den Bedarfs-Cache aktuell.
 
 Unten: „Zuletzt bewegt". Vollständige Historie unter `?p=bewegungen`.
+
+**Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.

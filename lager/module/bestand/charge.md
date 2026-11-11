@@ -66,3 +66,5 @@ Unter „Dokumente“ stehen zuerst CoA und Spezifikation aus der Bestellpositio
 **Bewegungen (11.11.2026):** Neuer Block „Bewegungen“ mit den letzten 30 Bewegungen dieser Charge aus `lg_bewegung`, darunter die Inventur-Korrekturen mit Grund. Platz-Änderungen stehen unter „Änderungen“ (Feld `platz`).
 
 **Menge korrigieren (Block B, 11.11.2026):** nur Admin (Stift nur für Admin). Formular mit Art (verfügbar / Ursprung), neuer Menge, Pflicht-Grund, Notiz und Beleg. Bucht über dieselbe Funktion wie das Dashboard (`core/charge_korrektur.php`): Korrekturbewegung, Verlauf, Gebinde, die Bestellung rechnet neu.
+
+**Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.

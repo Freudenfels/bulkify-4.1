@@ -75,3 +75,5 @@ Rückgabe nach dem Mischen (04.11.2026): Hat eine Charge in die Produktion gesca
   - Nicht machbare stehen grau mit Grund. Ist der oberste blockiert, rückt der nächste machbare nach vorne.
 - **Schritt-Ansicht:** Ab Abfüllen/Verpacken/Etikettieren läuft der geführte Ablauf (`werk_ablauf.php` + `werk_ablauf_post.php`). Die alten „Erledigt“-Knöpfe und die Teilmenge-Box sind dort ausgeblendet; abhaken ohne Menge geht nur noch für Admin im Dashboard.
 - Mischen und Verkapseln (Eigenproduktion) bleiben eigene Schritte.
+
+**Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.

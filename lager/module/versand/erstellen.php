@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erste
         ];
     }
     if (!$positionen) { flash('Bitte mindestens eine Position erfassen.', 'warn'); weiter('?p=lieferschein_neu'); }
-    $vicCent = trim((string)($_POST['versicherung'] ?? '')) !== '' ? (int)round((float)str_replace(',', '.', (string)$_POST['versicherung']) * 100) : '';
+    $vicCent = trim((string)($_POST['versicherung'] ?? '')) !== '' ? (int)round(erp_menge_parse((string)$_POST['versicherung']) * 100) : '';
     $vid = lg_lieferschein_erstellen([
         'kunde_id' => (int)($_POST['kunde_id'] ?? 0) ?: null,
         'empf_firma' => trim($_POST['empf_firma'] ?? ''), 'empf_name' => trim($_POST['empf_name'] ?? ''),

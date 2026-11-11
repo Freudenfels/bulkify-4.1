@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter', $werkUid);
         // Mischen: je Mischbehälter eine Gebinde-Untercharge anlegen (ein Etikett je Behälter, FEFO beim Abfüllen).
         if (!empty($r['ok']) && ($r['station'] ?? '') === 'Mischen') {
-            $cap = (float) str_replace(',', '.', (string)($_POST['cap'] ?? ''));
+            $cap = pr_menge_parse((string)($_POST['cap'] ?? ''));
             if ($cap > 0 && function_exists('erp_mischer_unterchargen_anlegen')) {
                 $wn = $werkName ?: 'Mitarbeiter';
                 if (function_exists('pr_daten_setzen')) pr_daten_setzen($paId, 'kg_pro_gebinde', rtrim(rtrim(number_format($cap, 3, '.', ''), '0'), '.'), $wn);
@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Einen Mischbehälter (Eimer) abschließen: Gebinde anlegen + Etikett drucken. Letzter Eimer schließt Mischen ab.
         $paId = (int)($_POST['pa_id'] ?? 0);
         $nr   = (int)($_POST['nr'] ?? 0);
-        $cap  = (float) str_replace(',', '.', (string)($_POST['cap'] ?? ''));
+        $cap  = pr_menge_parse((string)($_POST['cap'] ?? ''));
         $r = erp_mischer_eimer_abschliessen($paId, $cap, $nr, $werkName ?: 'Mitarbeiter');
         if (!empty($r['ok'])) {
             $msg = sprintf($T['fl_eimer_done'], (int)$r['nr'], (int)$r['anzahl']);
@@ -172,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($werkUid && $aktion === 'werk_restmischung') {
         // Teil 4 (Schritt 5): übrige gemischte Bulkware (kg) als Bulkware zur Rezeptur in Lager 1 einbuchen.
         $paId = (int)($_POST['pa_id'] ?? 0);
-        $kg   = (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0'));
+        $kg   = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // Tausenderpunkt (Block D)
         $r = (function_exists('erp_restmischung_einbuchen') && $paId > 0)
            ? erp_restmischung_einbuchen($paId, $kg, $werkName ?: 'Mitarbeiter')
            : ['ok' => false, 'msg' => $T['fl_rest_fail']];
@@ -568,7 +568,7 @@ header('Content-Type: text/html; charset=utf-8');
         }
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
     $istMischen = (string)$cur['station'] === 'Mischen';
-    $cap  = $istMischen ? (float) str_replace(',', '.', (string)($_GET['cap'] ?? '')) : 0.0;
+    $cap  = $istMischen ? pr_menge_parse((string)($_GET['cap'] ?? '')) : 0.0;
     $plan = $istMischen ? erp_mischer_plan($id, $cap) : null;
     $nz   = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
     // Scan-Pflicht: jede Pflicht-Zeile mit bekannter Charge muss vor dem Abschließen gescannt werden.

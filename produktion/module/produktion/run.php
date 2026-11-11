@@ -104,7 +104,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'von'=>$akteur, 'an_wen'=>(string)($_POST['an_wen'] ?? ''), 'grund'=>(string)($_POST['grund'] ?? '')]);
         flash(($art === 'schichtende' ? 'Schichtwechsel' : 'Pause') . ' erfasst – an einem sauberen Punkt zwischen den Schritten.');
     } elseif ($aktion === 'restmischung') {   // Teil 4 (Schritt 5): Restmischung ins Lager 1 einbuchen
-        $kg = (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0'));
+        $kg = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // Tausenderpunkt (Block D)
         $r = function_exists('erp_restmischung_einbuchen') ? erp_restmischung_einbuchen($id, $kg, $akteur) : ['ok'=>false, 'msg'=>'Fehler.'];
         if (!empty($r['ok'])) {
             $kgTxt = rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',');
@@ -197,7 +197,7 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
     $anl = station_anleitung_text((string)$cur['station']);
     $mat = erp_schritt_material($id, (string)$cur['station']);
     $istMischen = (string)$cur['station'] === 'Mischen';
-    $cap = $istMischen ? (float) str_replace(',', '.', (string)($_GET['cap'] ?? ($daten['kg_pro_gebinde']['wert'] ?? ''))) : 0.0;
+    $cap = $istMischen ? pr_menge_parse((string)($_GET['cap'] ?? ($daten['kg_pro_gebinde']['wert'] ?? ''))) : 0.0;
     $capTxt = $cap > 0 ? rtrim(rtrim(number_format($cap, 3, '.', ''), '0'), '.') : '';
     $mischplan = $istMischen ? erp_mischer_plan($id, $cap) : null;
     // Fehlt PFLICHT-Material für diesen Schritt? Dann ist er (noch) nicht erledigbar.

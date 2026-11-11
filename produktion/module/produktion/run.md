@@ -30,3 +30,5 @@ Die Box steht jetzt **für alle** im Produktionsmodus, wie am Tablet. Vorher gab
 - Hinweis, wenn das Etikett gesperrt ist.
 
 Eingabe Packungen (vorbelegt mit dem Machbaren) und Umfang. „komplett“ läuft über `erp_teilmenge_produzieren`, bucht anteilig ab und legt die Fertigware-Charge an. „bis vor dem Etikettieren“ läuft über `erp_teilmenge_vor_etikett`. Der Rest bleibt offen. Der Mengen-Fortschrittsbalken bleibt nur für den Produktionsleiter.
+
+**Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.

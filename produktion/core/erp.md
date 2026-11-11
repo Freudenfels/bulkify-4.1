@@ -118,3 +118,5 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `erp_rollen_abbuchen()` bucht alle G
 - 08.11.2026 (Handbuch 4.9): Meldetexte von `erp_etikett_sperre()` wie im Dashboard: „Etikett nicht freigegeben – Produktion nur bis vor dem Etikettieren". Sperre unverändert nur beim Schritt Etikettieren.
 
 **Eimerplanung (11.11.2026):** `erp_mischer_plan($pa, 0)` liefert den Plan des Systems aus `core/pa_eimer.php` (Buchstabe, Charge je Rohstoff, Grund), festgeschrieben ab dem 1. Eimer. `erp_mischer_eimer_abschliessen()` braucht keine Behältergröße mehr. Die FEFO-Funktionen bevorzugen `$GLOBALS['pa_bevorzugt']` (gescannte Chargen) und schreiben `teilmenge_id`.
+
+**Zahlen (Block D, 11.11.2026):** `pr_menge_parse()` – deutsche Zahlen-Eingabe (wie `erp_menge_parse` der Lager-App), für alle Mengenfelder der Produktions-App.

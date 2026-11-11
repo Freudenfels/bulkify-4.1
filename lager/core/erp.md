@@ -142,3 +142,5 @@ Umlagern Lager 1 -> Lager 2 (04.11.2026): `erp_umlagern_kandidaten()` (freie Fer
 **Versandbereit (Sofortfix 11.11.2026):** `erp_versandbereite_auftraege()` filtert die Aufträge mit Status „erledigt“ zusätzlich über das Dashboard (Loopback `?p=api_versand`, `aktion=fertig`, `ids=`): nur die, deren „Abgeschlossen“ wirklich erledigt ist (dieselbe Regel wie Dashboard und Kundenportal). Ist das Dashboard nicht erreichbar, bleibt die Liste ungefiltert und `$GLOBALS['erp_versand_ungeprueft']` zeigt einen Hinweis. `erp_dashboard_versand()` nimmt dafür ein viertes Argument `$extra` (zusätzliche POST-Felder).
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Lieferanten- und Kunden-Auswahl (`erp_lieferanten`, `erp_kunden_liste`, `erp_fulfillment_kunden`) ohne gesperrte.
+
+**Zahlen (Block D, 11.11.2026):** `erp_menge_parse()`: Eine Tausendergruppe beginnt nie mit 0 – „0.045“ bleibt 0,045 (vorher 45).

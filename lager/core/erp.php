@@ -2135,7 +2135,7 @@ function erp_menge_parse(string $s): float {
     $hatP = strpos($s, '.') !== false;
     if ($hatK && $hatP)      { $s = str_replace('.', '', $s); $s = str_replace(',', '.', $s); }
     elseif ($hatK)           { $s = str_replace(',', '.', $s); }
-    elseif ($hatP && preg_match('/^\d{1,3}(\.\d{3})+$/', $s)) { $s = str_replace('.', '', $s); }
+    elseif ($hatP && preg_match('/^-?[1-9]\d{0,2}(\.\d{3})+$/', $s)) { $s = str_replace('.', '', $s); }
     return (float)$s;
 }
 

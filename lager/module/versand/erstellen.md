@@ -16,3 +16,5 @@ springt ins **Versand-Detail** (`?p=versand_detail`). Dort: **Lieferschein öffn
 **Versand-Label** über **DHL**/**Cargoboard** (vorhandene Infrastruktur, `versand_dhl.php`/`versand_cargoboard.php`).
 
 Erreichbar über den eigenen Menüpunkt **„Lieferschein erstellen“** (Lager 1, seit 08.11.2026) und über Warenausgang → „+ Lieferschein erstellen".
+
+**Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.

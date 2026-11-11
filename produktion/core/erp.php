@@ -1886,6 +1886,17 @@ function erp_mischer_cap(int $pa_id): float {
     return (float) str_replace(',', '.', (string)($d['mischer_cap']['wert'] ?? '0'));
 }
 // Wie viele Eimer sind schon fertig? = Anzahl bereits angelegter Gebinde-Unterchargen.
+// Deutsche Zahlen-Eingabe robust lesen (Block D, 11.11.2026, gleiche Regel wie lager/core/erp.php erp_menge_parse und zahl_lesen
+// im Dashboard): "25.000" = 25000 (Tausenderpunkt), "25,5" = 25.5, "1.234,5" = 1234.5, "12.5" = 12.5.
+function pr_menge_parse(string $s): float {
+    $s = preg_replace('/[^0-9.,\-]/', '', trim($s));
+    if ($s === '' || $s === null) return 0.0;
+    $hatK = strpos($s, ',') !== false; $hatP = strpos($s, '.') !== false;
+    if ($hatK && $hatP)      { $s = str_replace('.', '', $s); $s = str_replace(',', '.', $s); }
+    elseif ($hatK)           { $s = str_replace(',', '.', $s); }
+    elseif ($hatP && preg_match('/^-?[1-9]\d{0,2}(\.\d{3})+$/', $s)) { $s = str_replace('.', '', $s); }
+    return (float)$s;
+}
 function erp_mischer_fertig_anzahl(int $pa_id): int { return count(erp_gebinde_unterchargen($pa_id)); }
 
 // Einen Eimer (Mischbehälter) abschließen: legt GENAU EINE Gebinde-Untercharge an (der Reihe nach).

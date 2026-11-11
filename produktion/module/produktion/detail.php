@@ -33,7 +33,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') ==
 
 // Teilmenge produzieren (anteilig Rohstoffe verbrauchen + als Charge einbuchen).
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') === 'teilmenge') {
-    $m = (float) str_replace(',', '.', (string)($_POST['menge'] ?? '0'));
+    $m = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // Tausenderpunkt (Block D)
     $r = erp_teilmenge_produzieren($id, $m, (string)(pr_benutzer()['name'] ?? ''));
     if (!$r['ok'] && !empty($r['fehlt'])) {
         $t = [];

@@ -10,3 +10,5 @@ Seit 11.11.2026. `werk.php` bindet die Datei für alle Aktionen `wa_*` ein. Gebu
 | `wa_teilmenge` | Pflichtfoto, `pa_teilmenge_buchen` mit den offenen Kartons |
 | `wa_kapselprobe`, `wa_sack` | Kapselgewicht und Sackgewicht (Teil 9) |
 | `wa_abschluss` | `pa_abschliessen` |
+
+**Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.

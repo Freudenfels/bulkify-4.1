@@ -3,7 +3,7 @@
 // Blinker automatisch gelöst (und aus der Kiste genommen). Schreibt ueber erp_charge_entnehmen().
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'entnehmen') {
     $cid   = (int)($_POST['charge_id'] ?? 0);
-    $menge = (float) str_replace(',', '.', trim((string)($_POST['menge'] ?? '0')));
+    $menge = erp_menge_parse((string)($_POST['menge'] ?? '0'));   // Tausenderpunkt: 135.000 = 135000 (Block D, 11.11.2026)
     $grund = trim((string)($_POST['grund'] ?? '')) ?: 'Warenausgang';
     $r = erp_charge_entnehmen($cid, $menge);
     if (!$r['ok']) { flash($r['meldung'], 'warn'); weiter('?p=ausgang' . ($_POST['q'] ?? '' ? '&q=' . urlencode((string)$_POST['q']) : '')); }
