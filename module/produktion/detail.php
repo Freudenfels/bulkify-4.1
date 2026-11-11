@@ -6,7 +6,50 @@ require_once BX_ROOT . '/core/schema.php';
 $id = (int)($_GET['id'] ?? 0);
 
 // Nächste offene Station als erledigt markieren (zentrale Logik in core/schema.php)
+// Ein Weg (11.11.2026): Teilmenge nachtragen (ersetzt Easy Production) – gleiche Buchung wie in der Werk-App (core/pa_ablauf.php).
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachtragen') {
+    $wer = (string)(current_user()['name'] ?? 'Team');
+    $bulk = (int)($_POST['bulk_charge_id'] ?? 0);
+    $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);
+    $charge = trim((string)($_POST['charge_nr'] ?? ''));
+    $akt = pa_aktuelle_unter_charge($id);
+    $uc = 0;
+    if ($akt && (int)$akt['bulk_charge_id'] === $bulk) {
+        // Gleicher Bulk = gleiche Unter-Charge (Regel Nico): eine andere Charge-Nr. geht nur mit anderem Bulk.
+        if ($charge !== '' && $charge !== (string)$akt['charge_nr']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode('Gleicher Bulk = gleiche Charge ' . $akt['charge_nr'] . '. Eine andere Charge gibt es nur mit einem anderen Bulk.') . '&nachtragen=1#nachtragen'); exit; }
+        $uc = (int)$akt['id'];
+    }
+    if (!$uc) {
+        $r0 = pa_starten($id, ['bulk_charge_id' => $bulk, 'nachtrag' => true, 'charge_nr' => $charge, 'abweichung_grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')], $wer);
+        if (!$r0['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r0['msg']) . '&nachtragen=1#nachtragen'); exit; }
+        $uc = (int)$r0['unter_charge_id'];
+    }
+    $foto = pa_foto_speichern($_FILES['foto'] ?? [], 'nachtrag' . $id);
+    $r = pa_teilmenge_buchen($id, $uc, $menge, ['art' => 'nachtrag', 'datum' => (string)($_POST['datum'] ?? ''), 'mitarbeiter' => (string)($_POST['mitarbeiter'] ?? ''),
+        'rueckstell' => (int) zahl_lesen((string)($_POST['rueckstell'] ?? '0'), true), 'foto' => $foto, 'geliefert' => !empty($_POST['geliefert']), 'von' => $wer, 'nachtrag_komplett' => true]);
+    if ($r['ok'] && !empty($_POST['geliefert']) && !empty($r['charge_id'])) {
+        // Schon geliefert (wie Easy Production): die nachgetragene Menge gleich per Lieferschein wieder ausbuchen – kein Phantombestand.
+        q("UPDATE charge SET menge_verfuegbar=GREATEST(0, menge_verfuegbar-?), status=IF(menge_verfuegbar<=0.0001,'leer',status) WHERE id=?", [$menge, (int)$r['charge_id']]);
+        $a = !empty($pa0 = one("SELECT auftrag_id, kunde_id FROM produktionsauftrag WHERE id=?", [$id])) && $pa0['auftrag_id'] ? one("SELECT * FROM auftrag WHERE id=?", [(int)$pa0['auftrag_id']]) : null;
+        if ($a) {
+            $netto = (int)$a['menge'] > 0 ? round((float)$a['gesamt_netto'] * $menge / (int)$a['menge'], 2) : (float)$a['gesamt_netto'];
+            q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,menge,netto,ust_prozent,ust_betrag,brutto,status,datum) VALUES (?,'lieferschein',?,?,?,?,0,0,?,'offen',?)",
+              [naechste_nummer('LS'), (int)$a['id'], ((int)$a['kunde_id'] ?: null), $menge, $netto, $netto, (string)($_POST['datum'] ?? date('Y-m-d'))]);
+        }
+        pa_ereignis($id, $uc, 'teilmenge', 'Schon geliefert: ' . number_format($menge, 0, ',', '.') . ' Stk per Lieferschein wieder ausgebucht.', '', '', '', $wer);
+    }
+    header('Location: ?p=produktionsauftrag&id=' . $id . ($r['ok'] ? '&nachok=' . urlencode($r['msg']) : '&teilfehler=' . urlencode($r['msg']) . '&nachtragen=1') . '#unterchargen'); exit;
+}
+
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erledigen') {
+    // Ein Weg (11.11.2026): Schritt-Knöpfe ohne Menge nur noch für Admin, mit Rückfrage und Grund (QM-Gates bleiben normal).
+    $stE = (string) scalar("SELECT station FROM produktion_schritt WHERE id=? AND pa_id=?", [(int)($_POST['schritt'] ?? 0), $id]);
+    if (!in_array($stE, produktion_qm_stationen(), true)) {
+        if (!has_role('admin')) { header('Location: ?p=produktionsauftrag&id=' . $id . '&schrittfehler=' . urlencode('Produziert wird in der Werk-App mit Mengen. Abhaken ohne Menge nur für Admin.')); exit; }
+        $grundE = trim((string)($_POST['grund'] ?? ''));
+        if ($grundE === '') { header('Location: ?p=produktionsauftrag&id=' . $id . '&schrittfehler=' . urlencode('Bitte einen Grund angeben.')); exit; }
+        pa_ereignis($id, null, 'abweichung', 'Schritt „' . $stE . '“ ohne Menge abgehakt (Admin): ' . $grundE, '', '', '', (string)(current_user()['name'] ?? ''));
+    }
     // Einfacher Abhak-Modus: Schritt ohne Charge-Scan abschließen (es gibt noch keine Etiketten zum Scannen).
     // Material wird trotzdem nach FEFO abgebucht.
     $r = produktion_schritt_erledigen($id, (int)($_POST['schritt'] ?? 0), '', true);
@@ -530,11 +573,13 @@ ob_start(); ?>
   <div class="muted">Jetzt dran – Schritt <?= $done + 1 ?> von <?= $total ?></div>
   <h2 style="margin:4px 0 8px"><?= h($curStep['station']) ?> <?= $isGate ? bx_badge('Gate','info') : '' ?></h2>
   <?php if ($anlText !== ''): ?><p style="margin:0 0 12px;font-size:15px"><?= h($anlText) ?></p><?php endif; ?>
-  <form method="post" style="margin:0">
-    <input type="hidden" name="aktion" value="erledigen">
+  <?php $qmE = in_array($curStep['station'], produktion_qm_stationen(), true); if ($qmE || has_role('admin')): ?>
+  <form method="post" style="margin:0"<?= $qmE ? '' : ' ' . pa_admin_grund_js() ?>>
+    <input type="hidden" name="aktion" value="erledigen"><input type="hidden" name="grund" value="">
     <input type="hidden" name="schritt" value="<?= (int)$firstOpenId ?>">
-    <button class="btn btn-primary" type="submit"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
+    <button class="btn <?= $qmE ? 'btn-primary' : 'btn-ghost' ?>" type="submit"><?= $isGate ? 'Freigeben' : ($qmE ? 'Erledigt' : 'Ohne Menge abhaken (Admin)') ?></button>
   </form>
+  <?php else: ?><p class="muted" style="margin:0">Produziert wird in der Werk-App mit Mengen (Teilmengen, Kartons) – oder unten „Teilmenge nachtragen“.</p><?php endif; ?>
 </div>
 <?php endif; ?>
 <?php $panJetzt = ob_get_clean();
@@ -561,11 +606,13 @@ ob_start(); ?>
         <td class="muted"><?= $isDone && $s['erledigt_at'] ? h(fmt_zeit($s['erledigt_at'])) : '' ?><?= $isDone && !empty($s['erledigt_von']) ? ' · ' . h($s['erledigt_von']) : '' ?><?= $isDone && !empty($s['scan_charge']) ? ' · Charge ' . h($s['scan_charge']) : '' ?></td>
         <td style="width:160px;text-align:right">
           <?php if ($isNext): ?>
-            <form method="post" style="margin:0">
-              <input type="hidden" name="aktion" value="erledigen">
+            <?php $qmS = in_array($s['station'], produktion_qm_stationen(), true); if ($qmS || has_role('admin')): ?>
+            <form method="post" style="margin:0"<?= $qmS ? '' : ' ' . pa_admin_grund_js() ?>>
+              <input type="hidden" name="aktion" value="erledigen"><input type="hidden" name="grund" value="">
               <input type="hidden" name="schritt" value="<?= (int)$s['id'] ?>">
-              <button class="btn btn-primary btn-sm" type="submit"><?= $isGate ? 'Freigeben' : 'Erledigt' ?></button>
+              <button class="btn <?= $qmS ? 'btn-primary' : 'btn-ghost' ?> btn-sm" type="submit"><?= $isGate ? 'Freigeben' : ($qmS ? 'Erledigt' : 'abhaken (Admin)') ?></button>
             </form>
+            <?php else: ?><span class="muted">in der Werk-App</span><?php endif; ?>
           <?php elseif ($isDone): ?>
             <span class="badge badge-ok">erledigt</span>
           <?php else: ?>
@@ -894,11 +941,12 @@ ob_start(); ?>
 // ============ Ausgabe in klarer Reihenfolge ============
 echo $panWeg;            // Weg-Hinweis (verkürzt/voll)
 echo $panWartet;         // Wartet auf Material (Alarm)
+require __DIR__ . '/_ablauf.php';   // Ein Weg (11.11.2026): Kopf, Unter-Chargen/Teilmengen/Kartons, Protokoll, Teilmenge nachtragen
 echo $panJetzt;          // JETZT dran – die eine Aktion
 echo $panEinkauf;        // Material (Komponenten vorhanden/fehlt) – prominent sichtbar
 echo $panStationen;      // Ablauf (Checkliste)
 echo $panFertig;         // Fertigware eingebucht
-echo $panTeil;           // Teilmenge einbuchen
+// $panTeil (alte „Teilmenge einbuchen“ mit eigener Charge je Buchung) entfällt – ersetzt durch „Teilmenge nachtragen“ (_ablauf.php).
 echo $panZus;            // Zusammensetzung
 
 // Einklappbar: Materialverbrauch (entnommen/FEFO) & Bestellungen (die Material-Übersicht steht oben prominent)

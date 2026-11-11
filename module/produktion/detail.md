@@ -168,3 +168,9 @@ Im Block Material neben „Bestellung(en) anlegen“ der Knopf „Direkt bestell
 
 ## 10.11.2026 (Teil 6)
 Vor Produktionsbeginn öffnen „Verkürzter Weg“ und „voller Produktionsweg“ das Pop-up **„Weg festlegen“**. Nach Beginn (erledigte Schritte) bleiben „Auf fertige Kapseln umstellen“ bzw. „Auf vollen Produktionsweg umstellen“: Das ist ein Sonderfall mitten in der Produktion, den das Pop-up nicht abdeckt. Die Rückabwicklung bleibt.
+
+## Ein Weg (11.11.2026, plan-produktion-gefuehrt.md)
+- Oben kommt der Block aus `_ablauf.php`: Kopf, Unter-Chargen/Teilmengen/Kartons, Chargenprotokoll, „Teilmenge nachtragen“ (`aktion=nachtragen`).
+- **Schritt-Knöpfe ohne Menge** gibt es nur noch für Admin: „Ohne Menge abhaken (Admin)“ mit Rückfrage und Grund, der Grund landet im Protokoll (`pa_ereignis` abweichung). Die QM-Stationen (Qualitätsprüfung, Freigaben) bleiben normal.
+- Die alte Box „Teilmenge einbuchen“ (eigene Charge je Buchung) entfällt.
+- Der Kopf-Knopf heißt jetzt „In der Werk-App produzieren“.

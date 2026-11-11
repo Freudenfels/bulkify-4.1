@@ -178,7 +178,8 @@ function pa_vorgabe(int $pa_id, int $bulk_charge_id = 0, int $prod_charge_id = 0
 function pa_starten(int $pa_id, array $d, string $von): array {
     pa_schema();
     $bulk = (int)($d['bulk_charge_id'] ?? 0); $eimer = (int)($d['prod_charge_id'] ?? 0);
-    if (($d['foto_linie'] ?? '') === '' || ($d['foto_stempel'] ?? '') === '') return ['ok' => false, 'msg' => 'Bitte Foto „Linie leer“ und Foto vom Stempelbild machen.'];
+    $nachtrag = !empty($d['nachtrag']);   // Nachtrag im Dashboard (Produktion ist schon gelaufen): keine Fotos möglich
+    if (!$nachtrag && (($d['foto_linie'] ?? '') === '' || ($d['foto_stempel'] ?? '') === '')) return ['ok' => false, 'msg' => 'Bitte Foto „Linie leer“ und Foto vom Stempelbild machen.'];
     $v = pa_vorgabe($pa_id, $bulk, $eimer);
     $akt = pa_aktuelle_unter_charge($pa_id);
     if (!$v['neu'] && $akt) {   // gleiche Bulk-Charge: gleicher Buchstabe, Wiederanlauf (z. B. nächster Tag)
@@ -196,7 +197,7 @@ function pa_starten(int $pa_id, array $d, string $von): array {
        mb_substr((string)($d['linie'] ?? ''), 0, 40) ?: null, $grund ?: null, gmdate('Y-m-d H:i:s'), $von ?: null]);
     $uc = insert_id();
     $bulkTxt = $bulk ? 'Bulk-Charge ' . (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#',id)) FROM charge WHERE id=?", [$bulk]) : ($eimer ? 'Eimer ' . (string) scalar("SELECT CONCAT(nummer, COALESCE(sub_kennung,'')) FROM prod_charge WHERE id=?", [$eimer]) : 'ohne Bulk-Scan');
-    pa_ereignis($pa_id, $uc, $akt ? 'chargenwechsel' : 'start', ($akt ? 'Chargenwechsel: ' : 'Start: ') . 'Unter-Charge ' . $charge . ' (' . $bulkTxt . '), MHD ' . date('d.m.Y', strtotime($mhd)) . '. Linie leer bestätigt, Stempel eingestellt.', (string)($d['linie'] ?? ''), (string)$d['foto_linie'], (string)$d['foto_stempel'], $von);
+    pa_ereignis($pa_id, $uc, $akt ? 'chargenwechsel' : 'start', ($akt ? 'Chargenwechsel: ' : 'Start: ') . 'Unter-Charge ' . $charge . ' (' . $bulkTxt . '), MHD ' . date('d.m.Y', strtotime($mhd)) . ($nachtrag ? '. Nachgetragen im Dashboard (ohne Fotos).' : '. Linie leer bestätigt, Stempel eingestellt.'), (string)($d['linie'] ?? ''), (string)($d['foto_linie'] ?? ''), (string)($d['foto_stempel'] ?? ''), $von);
     if ($grund !== '') { pa_ereignis($pa_id, $uc, 'abweichung', 'Charge abweichend von der Vorgabe ' . $v['charge_nr'] . ': ' . $grund, '', '', '', $von);
         pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $charge . ' statt ' . $v['charge_nr'] . ')', 'Grund: ' . $grund . ' · ' . $von, $von); }
     if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
@@ -209,6 +210,10 @@ function pa_unter_charge_schliessen(int $uc_id, string $von = '', string $anlass
     if (function_exists('pa_gegenprobe')) pa_gegenprobe($uc_id, $von);
     pa_ereignis((int)$uc['pa_id'], $uc_id, 'abschluss', 'Unter-Charge ' . $uc['charge_nr'] . ' abgeschlossen' . ($anlass !== '' ? ' (' . $anlass . ')' : '') . ': ' . pa_mz(pa_uc_menge($uc_id)) . ' Stk.', '', '', '', $von);
     if (function_exists('pa_protokoll_ablegen')) pa_protokoll_ablegen($uc_id);
+}
+// Dashboard: Schritt ohne Menge abhaken nur Admin – Rückfrage mit Grund (füllt das versteckte Feld „grund“).
+function pa_admin_grund_js(): string {
+    return 'onsubmit="var g=prompt(\'Schritt ohne Menge abhaken (nur Admin). Grund:\');if(!g)return false;this.grund.value=g;return true;"';
 }
 function pa_mz($x): string { return rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ','); }
 function pa_uc_menge(int $uc_id): float { return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM pa_teilmenge WHERE unter_charge_id=? AND umfang='komplett'", [$uc_id]); }
