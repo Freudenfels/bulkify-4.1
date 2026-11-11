@@ -99,3 +99,115 @@ function bestellung_abgleich_panel(array $b): string {
     $h .= '</div></div>';
     return $h;
 }
+
+// ---- Datenprüfung: alles in der Zeile (Nico 11.11.2026) ------------------------------------------------------------
+// Offene Positionen einer Bestellung mit ihren Vorschlägen (für die Datenprüfungs-Zeile).
+function bestellung_abgleich_positionen(int $bestellung_id): array {
+    $out = [];
+    foreach (all("SELECT bp.id, bp.menge, bp.einheit, COALESCE(bp.geliefert_menge,0) AS geliefert, bp.bezeichnung, i.name AS artikel
+                  FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
+                  WHERE bp.bestellung_id=? AND bp.menge>0 AND bp.rest_storniert_am IS NULL ORDER BY bp.sort, bp.id", [$bestellung_id]) as $p) {
+        $p['vorschlaege'] = bestellung_abgleich_vorschlaege((int)$p['id'], 5);
+        $out[] = $p;
+    }
+    return $out;
+}
+// Charge in mehreren Bestellungen vorgeschlagen? Aus den Zeilen [ ['nummer'=>…, '_pos'=>[…]], … ] -> [charge_id => [Nummern]].
+function bestellung_abgleich_konflikte(array $zeilen): array {
+    $m = [];
+    foreach ($zeilen as $r) foreach (($r['_pos'] ?? []) as $p) foreach ($p['vorschlaege'] as $v) $m[(int)$v['id']][(string)$r['nummer']] = true;
+    $out = [];
+    foreach ($m as $cid => $nrs) if (count($nrs) > 1) $out[$cid] = array_keys($nrs);
+    return $out;
+}
+// Eindeutiger Vorschlag einer Position: genau einer, gleicher Artikel, Menge passt, kein Konflikt. Sonst null.
+function bestellung_abgleich_eindeutig(array $p, array $konflikte): ?array {
+    if (count($p['vorschlaege']) !== 1) return null;
+    $v = $p['vorschlaege'][0];
+    if (!in_array('gleicher Artikel', $v['gruende'], true) || !in_array('Menge passt', $v['gruende'], true)) return null;
+    return isset($konflikte[(int)$v['id']]) ? null : $v;
+}
+// Zelle „Vorschläge" der Datenprüfung: je Position Artikel, bestellt/geliefert und je Vorschlag Charge, Menge, Eingang, Grund + „verknüpfen".
+function bestellung_abgleich_zelle(array $r, array $konflikte): string {
+    $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $h = ''; $bid = (int)$r['_id']; $nr = (string)$r['nummer'];
+    foreach (($r['_pos'] ?? []) as $p) {
+        $v = $p['vorschlaege'];
+        $h .= '<div style="margin:0 0 6px"><div style="font-size:13px"><strong style="font-weight:600">' . h((string)($p['artikel'] ?: $p['bezeichnung'])) . '</strong> <span class="muted">· bestellt ' . $mz($p['menge']) . ' ' . h((string)$p['einheit']) . ' · geliefert ' . $mz($p['geliefert']) . '</span></div>';
+        if (!$v) { $h .= '<div class="muted" style="font-size:12px">keine passende Charge</div></div>'; continue; }
+        $gleicheMenge = count($v) > 1 && count(array_unique(array_map(fn($c) => (string)round((float)$c['menge_bp'], 3), $v))) < count($v);
+        if ($gleicheMenge) $h .= '<div style="font-size:12px;color:#8a6d1f">mehrere passende Chargen - bitte wählen</div>';
+        $zeilen = '';
+        foreach ($v as $c) {
+            $konf = array_values(array_diff($konflikte[(int)$c['id']] ?? [], [$nr]));
+            $zeilen .= '<div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;margin:3px 0">'
+                . '<a href="?p=chargen&id=' . (int)$c['id'] . '" target="_blank" rel="noopener">' . h((string)($c['charge_nr'] ?: '#' . $c['id'])) . '</a>'
+                . '<span>' . $mz($c['menge']) . ' ' . h((string)$c['einheit']) . '</span>'
+                . '<span class="muted">' . ($c['wareneingang'] ? 'Eingang ' . h(date('d.m.Y', strtotime((string)$c['wareneingang']))) : '') . '</span>'
+                . '<span class="muted">' . h(implode(', ', $c['gruende'])) . '</span>'
+                . ($konf ? '<span style="color:#8f231b">Charge auch bei ' . h(implode(', ', $konf)) . ' vorgeschlagen</span>' : '')
+                . '<button type="button" class="btn btn-primary btn-sm" data-dpabgl="verknuepfen" data-bestellung="' . $bid . '" data-bp="' . (int)$p['id'] . '" data-charge="' . (int)$c['id'] . '">verknüpfen</button></div>';
+        }
+        $h .= count($v) > 1 ? '<details' . ($gleicheMenge ? '' : ' open') . '><summary style="cursor:pointer;font-size:12px">' . count($v) . ' Vorschläge</summary>' . $zeilen . '</details>' : $zeilen;
+        $h .= '</div>';
+    }
+    return $h !== '' ? $h : '<span class="muted">–</span>';
+}
+// Knöpfe je Bestellung in der Datenprüfung.
+function bestellung_abgleich_knoepfe(array $r): string {
+    $bid = (int)$r['_id'];
+    $b = one("SELECT status, angekommen_am FROM bestellung WHERE id=?", [$bid]);
+    $eingegangen = $b && ((string)$b['status'] === 'geliefert' || !empty($b['angekommen_am']));
+    return '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">'
+        . '<button type="button" class="btn btn-ghost btn-sm" data-dpabgl="geliefert" data-bestellung="' . $bid . '" data-frage="Als geliefert schließen? Offene Positionen zählen nicht mehr als unterwegs, es wird keine Charge angelegt.">als geliefert schließen</button>'
+        . '<button type="button" class="btn btn-ghost btn-sm" data-dpabgl="rest" data-bestellung="' . $bid . '" data-frage="Rest stornieren? Die noch offene Menge zählt nicht mehr als unterwegs.">Rest storniert</button>'
+        . (!$eingegangen ? '<button type="button" class="btn btn-ghost btn-sm" style="color:#8f231b" data-dpabgl="storno" data-bestellung="' . $bid . '" data-frage="Bestellung wirklich stornieren?">stornieren</button>' : '')
+        . '</div>';
+}
+// Aktion ausführen (gleiche Funktionen wie auf der Bestellseite). Rückgabe ['ok'=>bool, 'msg'=>string].
+function bestellung_abgleich_aktion(string $aktion, int $bestellung_id, int $bp_id = 0, int $charge_id = 0): array {
+    require_once __DIR__ . '/wareneingang_bestellung.php';
+    $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? 'Team') : 'Team';
+    $nr = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$bestellung_id]);
+    if ($nr === '') return ['ok' => false, 'msg' => 'Bestellung nicht gefunden.'];
+    if ($aktion === 'verknuepfen') {
+        $ok = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE id=? AND bestellung_id=?", [$bp_id, $bestellung_id]) === 1
+           && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND bestellung_position_id IS NULL", [$charge_id]) === 1;
+        if (!$ok) return ['ok' => false, 'msg' => 'Charge oder Position nicht (mehr) passend - nichts geändert.'];
+        webe_charge_verknuepfen($charge_id, $bp_id, false);
+        aenderung_protokollieren('charge', $charge_id, ['bestellung_position_id' => null], ['bestellung_position_id' => $bp_id], 'datenpruefung');
+        $cnr = (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#', id)) FROM charge WHERE id=?", [$charge_id]);
+        log_aktivitaet('bestellung', $bestellung_id, 'team', 'Charge ' . $cnr . ' mit der Bestellung verknüpft (Datenprüfung).', 'status');
+        return ['ok' => true, 'msg' => $nr . ': Charge ' . $cnr . ' verknüpft.'];
+    }
+    if ($aktion === 'geliefert') {
+        webe_als_geliefert_schliessen($bestellung_id, $wer);
+        log_aktivitaet('bestellung', $bestellung_id, 'team', 'Als geliefert geschlossen ohne eingebuchte Charge (Datenprüfung).', 'status');
+        return ['ok' => true, 'msg' => $nr . ' als geliefert geschlossen.'];
+    }
+    if ($aktion === 'rest') {
+        webe_rest_stornieren($bestellung_id, $wer);
+        log_aktivitaet('bestellung', $bestellung_id, 'team', 'Rest storniert (Datenprüfung).', 'status');
+        return ['ok' => true, 'msg' => $nr . ': Rest storniert.'];
+    }
+    if ($aktion === 'storno') {
+        $r = bestellung_stornieren($bestellung_id, $wer, 'Datenprüfung (Altlasten)');
+        return ['ok' => !empty($r['ok']), 'msg' => $nr . ': ' . (string)($r['msg'] ?? '')];
+    }
+    return ['ok' => false, 'msg' => 'Unbekannte Aktion.'];
+}
+// Inhalt einer Bestellung für die Datenprüfung (Nico 11.11.2026: „kp was da versendet wurde"): je Position Artikel/Produkt mit Menge,
+// dazu Auftrag (verlinkt) und Kunde. Die ersten zwei sichtbar, der Rest aufklappbar („… und 7 weitere").
+function bestellung_abgleich_inhalt(int $bestellung_id): string {
+    $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $pos = all("SELECT COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, bp.menge, bp.einheit, bp.auftrag_id, a.nummer AS anr, k.firma
+                FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id LEFT JOIN auftrag a ON a.id=bp.auftrag_id LEFT JOIN kunden k ON k.id=a.kunde_id
+                WHERE bp.bestellung_id=? AND bp.menge>0 ORDER BY bp.sort, bp.id", [$bestellung_id]);
+    if (!$pos) return '<span class="muted">keine Positionen</span>';
+    $zeile = fn($p) => '<div style="font-size:13px">' . h((string)$p['name']) . ' <span class="muted">· ' . $mz($p['menge']) . ' ' . h((string)$p['einheit']) . '</span>'
+        . (!empty($p['auftrag_id']) ? ' <span class="muted" style="font-size:12px">· <a href="?p=auftrag&id=' . (int)$p['auftrag_id'] . '" target="_blank" rel="noopener">' . h((string)($p['anr'] ?: '#' . $p['auftrag_id'])) . '</a>' . ($p['firma'] ? ' ' . h((string)$p['firma']) : '') . '</span>' : '') . '</div>';
+    $h = implode('', array_map($zeile, array_slice($pos, 0, 2)));
+    if (count($pos) > 2) $h .= '<details><summary style="cursor:pointer;font-size:12px" class="muted">… und ' . (count($pos) - 2) . ' weitere</summary>' . implode('', array_map($zeile, array_slice($pos, 2))) . '</details>';
+    return $h;
+}
+

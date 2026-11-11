@@ -25,6 +25,48 @@ $bl1Frei = false;
 //          IMMER mit in der WHERE, damit eine veraltete Auswahl nichts Falsches ändert), waehlbar = Zeile behebbar?
 // leer_ok: false = keine Treffer ist das Problem (z. B. niemand hat die QM-Rolle).
 require_once BX_ROOT . '/core/bestellung_abgleich.php';
+// Einkauf-Altlasten in der Zeile (11.11.2026): Zeilen neu aufbauen (Inhalt, Vorschläge, Knöpfe) und HTML-Spalten.
+function dp_abgleich_zeilen(array $rows): array {
+    $out = [];
+    foreach ($rows as $r) {
+        $pos = bestellung_abgleich_positionen((int)$r['_id']);
+        $n = count(array_filter($pos, fn($p) => $p['vorschlaege']));
+        $neu = ['_id' => $r['_id'], '_link' => $r['_link'], '_pos' => $pos, 'nummer' => $r['nummer'], 'lieferant' => $r['lieferant'], 'inhalt' => ''];
+        foreach ($r as $k => $v) if (!isset($neu[$k]) && !in_array($k, ['positionen'], true)) $neu[$k] = $v;
+        $neu['vorschlaege'] = $n; $neu['aktionen'] = '';
+        $out[] = $neu;
+    }
+    return $out;
+}
+function dp_abgleich_html(): array {
+    return [
+        'lieferant'   => fn($r) => trim((string)$r['lieferant']) !== '' ? h((string)$r['lieferant']) : bx_badge('Lieferant fehlt', 'err'),
+        'inhalt'      => fn($r) => bestellung_abgleich_inhalt((int)$r['_id']),
+        'vorschlaege' => fn($r) => bestellung_abgleich_zelle($r, $GLOBALS['dp_konflikte'] ?? []),
+        'aktionen'    => fn($r) => bestellung_abgleich_knoepfe($r),
+    ];
+}
+// AJAX: eine Aktion aus der Zeile (verknüpfen / als geliefert schließen / Rest storniert / stornieren) - Antwort JSON.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dp_abgl') {
+    $res = bestellung_abgleich_aktion((string)($_POST['was'] ?? ''), (int)($_POST['bestellung'] ?? 0), (int)($_POST['bp'] ?? 0), (int)($_POST['charge'] ?? 0));
+    if ($res['ok'] && function_exists('bedarf_bump')) bedarf_bump();
+    header('Content-Type: application/json; charset=utf-8'); echo json_encode($res, JSON_UNESCAPED_UNICODE); exit;
+}
+// Sammel-Knopf „Alle eindeutigen verknüpfen": je Paar erneut geprüft (eindeutig, Charge noch frei), dann verknüpft.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dp_abgl_sammel') {
+    $ok = 0; $fehl = 0;
+    foreach ((array)($_POST['paar'] ?? []) as $pr) {
+        [$pb, $pp, $pc] = array_map('intval', array_pad(explode(':', (string)$pr), 3, 0));
+        $pos = array_values(array_filter(bestellung_abgleich_positionen($pb), fn($x) => (int)$x['id'] === $pp));
+        $ein = $pos ? bestellung_abgleich_eindeutig($pos[0], []) : null;
+        if (!$ein || (int)$ein['id'] !== $pc) { $fehl++; continue; }
+        $r = bestellung_abgleich_aktion('verknuepfen', $pb, $pp, $pc);
+        $r['ok'] ? $ok++ : $fehl++;
+    }
+    if ($ok && function_exists('bedarf_bump')) bedarf_bump();
+    $k = preg_replace('/[^a-z_]/', '', (string)($_POST['pruefung'] ?? ''));
+    header('Location: ?p=datenpruefung&ok=' . rawurlencode($ok . ' Verknüpfung(en) ausgeführt' . ($fehl ? ', ' . $fehl . ' übersprungen (nicht mehr eindeutig)' : '') . '.') . '#' . $k); exit;
+}
 $CHECKS = [
     // Einkauf gerade ziehen, Teil 4 (10.11.2026): Altlasten. Verknüpfen/Schließen passiert an der Bestellung (Block „Wareneingang zuordnen").
     'be_ohne_we' => [
@@ -38,8 +80,11 @@ $CHECKS = [
                       AND COALESCE(b.bestelldatum, DATE(b.angelegt)) < DATE_SUB(CURDATE(), INTERVAL 14 DAY)
                       AND NOT EXISTS (SELECT 1 FROM bestellung_position bp JOIN charge c ON c.bestellung_position_id=bp.id WHERE bp.bestellung_id=b.id)
                     ORDER BY COALESCE(b.bestelldatum, DATE(b.angelegt))",
-        'zeilen' => function (array $rows): array { foreach ($rows as &$r) $r['vorschlaege'] = bestellung_abgleich_treffer((int)$r['_id']); unset($r); return $rows; },
-        'ohne_fix' => 'Bearbeiten an der Bestellung (Öffnen) – dort je Position verknüpfen, als geliefert schließen oder stornieren.',
+        // Alles in der Zeile (Nico 11.11.2026): Inhalt, Vorschläge mit „verknüpfen", Knöpfe je Bestellung (AJAX, ohne Neuladen).
+        'zeilen' => fn(array $rows): array => dp_abgleich_zeilen($rows),
+        'html'   => dp_abgleich_html(),
+        'abgleich' => true,
+        'ohne_fix' => 'Je Vorschlag „verknüpfen“, je Bestellung „als geliefert schließen“, „Rest storniert“ oder „stornieren“ – direkt hier, die Zeile verschwindet danach. „Öffnen“ führt weiter zur Bestellung.',
     ],
     'be_eingegangen_ohne_charge' => [
         'titel' => 'Einkauf: Bestellung „eingegangen“ ohne verknüpfte Charge',
@@ -51,8 +96,11 @@ $CHECKS = [
                       AND EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0 AND bp.rest_storniert_am IS NULL)
                       AND NOT EXISTS (SELECT 1 FROM bestellung_position bp JOIN charge c ON c.bestellung_position_id=bp.id WHERE bp.bestellung_id=b.id)
                     ORDER BY b.id DESC",
-        'zeilen' => function (array $rows): array { foreach ($rows as &$r) $r['vorschlaege'] = bestellung_abgleich_treffer((int)$r['_id']); unset($r); return $rows; },
-        'ohne_fix' => 'Bearbeiten an der Bestellung (Öffnen) – Charge verknüpfen oder „als geliefert schließen“.',
+        // Alles in der Zeile (Nico 11.11.2026): Inhalt, Vorschläge mit „verknüpfen", Knöpfe je Bestellung (AJAX, ohne Neuladen).
+        'zeilen' => fn(array $rows): array => dp_abgleich_zeilen($rows),
+        'html'   => dp_abgleich_html(),
+        'abgleich' => true,
+        'ohne_fix' => 'Je Vorschlag „verknüpfen“ oder je Bestellung „als geliefert schließen“ – direkt hier. „Öffnen“ führt weiter zur Bestellung.',
     ],
     'be_nachtraeglich' => [
         'titel' => 'Einkauf: nachträglich angelegte Bestellung prüfen (Wareneingang ohne Bestellung)',
@@ -1110,6 +1158,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
 $ERG = [];
 $dpLaden = (string)($_GET['laden'] ?? '');
 foreach ($CHECKS as $k => $c) $ERG[$k] = (!empty($c['auf_klick']) && $dpLaden !== $k) ? ['rows' => [], 'fehler' => '', 'nicht_geladen' => true] : dp_laden($c);
+// Dieselbe Charge bei mehreren Bestellungen vorgeschlagen? Über beide Einkauf-Prüfungen hinweg.
+$dpAbglRows = [];
+foreach ($CHECKS as $k => $c) if (!empty($c['abgleich'])) $dpAbglRows = array_merge($dpAbglRows, $ERG[$k]['rows']);
+$GLOBALS['dp_konflikte'] = bestellung_abgleich_konflikte($dpAbglRows);
 $offen = 0;
 foreach ($CHECKS as $k => $c) {
     $n = count($ERG[$k]['rows']);
@@ -1127,7 +1179,11 @@ function dp_wert(string $spalte, $v): string {
     }
     return h((string)$v);
 }
-function dp_kopf(string $spalte): string { return h(ucfirst(str_replace('_', ' ', preg_replace('/_id$/', ' ID', $spalte)))); }
+function dp_kopf(string $spalte): string {
+    $fest = ['vorschlaege' => 'Vorschläge', 'aktionen' => '', 'inhalt' => 'Inhalt'];
+    if (array_key_exists($spalte, $fest)) return h($fest[$spalte]);
+    return h(ucfirst(str_replace('_', ' ', preg_replace('/_id$/', ' ID', $spalte))));
+}
 
 $migr = trim((string)(function_exists('meta_get') ? meta_get('migr_kundenetikett_protokoll', '') : ''));
 
@@ -1174,6 +1230,23 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   <?php elseif (!$rows): ?>
     <div class="muted"><?= $leerOk ? 'Keine Treffer.' : 'Niemand hat diese Rolle.' ?></div>
   <?php else: ?>
+  <?php if (!empty($c['abgleich'])):
+      // Eindeutige Paare (genau ein Vorschlag, gleicher Artikel, Menge passt, kein Konflikt) für den Sammel-Knopf.
+      $dpPaare = [];
+      foreach ($rows as $r) foreach ($r['_pos'] as $pp) if ($ev = bestellung_abgleich_eindeutig($pp, $GLOBALS['dp_konflikte'] ?? []))
+          $dpPaare[] = ['v' => (int)$r['_id'] . ':' . (int)$pp['id'] . ':' . (int)$ev['id'], 't' => $r['nummer'] . ': ' . ($ev['charge_nr'] ?: '#' . $ev['id']) . ' → ' . ($pp['artikel'] ?: $pp['bezeichnung'])]; ?>
+  <div class="bx-row" style="gap:10px;align-items:center;margin:0 0 10px;flex-wrap:wrap">
+    <?php if ($dpPaare): ?>
+    <form method="post" style="margin:0" onsubmit="return confirm(<?= h(json_encode(count($dpPaare) . ' Verknüpfungen - ausführen?' . "\n\n" . implode("\n", array_map(fn($x) => $x['t'], array_slice($dpPaare, 0, 40))) . (count($dpPaare) > 40 ? "\n…" : ''), JSON_UNESCAPED_UNICODE)) ?>);">
+      <input type="hidden" name="aktion" value="dp_abgl_sammel"><input type="hidden" name="pruefung" value="<?= h($k) ?>">
+      <?php foreach ($dpPaare as $x): ?><input type="hidden" name="paar[]" value="<?= h($x['v']) ?>"><?php endforeach; ?>
+      <button class="btn btn-primary btn-sm" type="submit">Alle eindeutigen verknüpfen (<?= count($dpPaare) ?>)</button>
+    </form>
+    <span class="muted" style="font-size:12px">nur Positionen mit genau einem Vorschlag, gleicher Artikel, Menge passt, ohne Konflikt</span>
+    <?php else: ?><span class="muted" style="font-size:12px">Keine eindeutigen Verknüpfungen - bitte einzeln entscheiden.</span><?php endif; ?>
+    <span id="dpMsg-<?= h($k) ?>" style="font-size:13px"></span>
+  </div>
+  <?php endif; ?>
   <form method="post" style="margin:0" onsubmit="var n=this.querySelectorAll('input[name=&quot;ids[]&quot;]:checked').length; if(!n){alert('Bitte zuerst Zeilen anhaken.');return false;} return confirm(n+' Zeile(n) beheben? Ausgeführt wird genau die unten angezeigte Korrektur, nur für die angehakten Zeilen. Jede Feld-Änderung landet im Protokoll.');">
     <input type="hidden" name="aktion" value="beheben"><input type="hidden" name="pruefung" value="<?= h($k) ?>">
     <div class="bx-tablewrap"><table class="bx-table">
@@ -1184,9 +1257,9 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
       </tr></thead>
       <tbody>
       <?php foreach ($rows as $r): ?>
-        <tr>
+        <tr data-dp-zeile="<?= h($k) ?>-<?= (int)($r['_id'] ?? 0) ?>" style="vertical-align:top">
           <?php if ($fix): ?><td><?php if (!isset($fix['waehlbar']) || ($fix['waehlbar'])($r)): ?><input type="checkbox" name="ids[]" value="<?= (int)$r['_id'] ?>"><?php endif; ?></td><?php endif; ?>
-          <?php foreach ($spalten as $s): $lz = $r['_link_' . $s] ?? null; ?><td><?= $lz && $r[$s] !== null && $r[$s] !== '' ? '<a href="' . h((string)$lz) . '">' . dp_wert($s, $r[$s]) . '</a>' : dp_wert($s, $r[$s]) ?></td><?php endforeach; ?>
+          <?php foreach ($spalten as $s): $lz = $r['_link_' . $s] ?? null; ?><td<?= isset($c['html'][$s]) ? ' style="white-space:normal;min-width:' . (['vorschlaege' => 360, 'inhalt' => 220, 'aktionen' => 170][$s] ?? 0) . 'px"' : '' ?>><?= isset($c['html'][$s]) ? ($c['html'][$s])($r) : ($lz && $r[$s] !== null && $r[$s] !== '' ? '<a href="' . h((string)$lz) . '">' . dp_wert($s, $r[$s]) . '</a>' : dp_wert($s, $r[$s])) ?></td><?php endforeach; ?>
           <?php if ($hatLink): ?><td><?= !empty($r['_link']) ? '<a href="' . h((string)$r['_link']) . '">Öffnen</a>' : '' ?></td><?php endif; ?>
         </tr>
       <?php endforeach; ?>
@@ -1216,4 +1289,22 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   <?php if ($migr === ''): ?><div class="muted">Kein Protokoll vorhanden.</div>
   <?php else: ?><pre style="margin:0;padding:10px 12px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);font-family:var(--mono);border-radius:8px;white-space:pre-wrap;font-size:12px"><?= h($migr) ?></pre><?php endif; ?>
 </div>
+<?php ?>
+<script>
+// Datenprüfung, Einkauf-Altlasten: Knöpfe in der Zeile ohne Neuladen (11.11.2026).
+document.addEventListener('click', function (e) {
+  var b = e.target.closest('[data-dpabgl]'); if (!b) return;
+  e.preventDefault();
+  if (b.dataset.frage && !confirm(b.dataset.frage)) return;
+  var tr = b.closest('tr'), fd = new FormData();
+  fd.append('aktion', 'dp_abgl'); fd.append('was', b.dataset.dpabgl); fd.append('bestellung', b.dataset.bestellung || 0);
+  fd.append('bp', b.dataset.bp || 0); fd.append('charge', b.dataset.charge || 0);
+  b.disabled = true;
+  fetch('?p=datenpruefung', {method: 'POST', body: fd, credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (j) {
+    var pan = tr ? tr.closest('.bx-panel') : null, msg = pan ? pan.querySelector('[id^="dpMsg-"]') : null;
+    if (msg) { msg.textContent = j.msg || ''; msg.style.color = j.ok ? 'var(--gruen)' : '#8f231b'; }
+    if (j.ok && tr) tr.remove(); else { b.disabled = false; if (!msg) alert(j.msg || 'Fehler'); }
+  }).catch(function () { b.disabled = false; alert('Fehler beim Speichern - bitte Seite neu laden.'); });
+});
+</script>
 <?php render_footer();

@@ -92,6 +92,14 @@ Neue Prüfpunkte ganz oben:
 
 Bearbeitet werden beide an der Bestellung im Block „Wareneingang zuordnen“.
 
+**Seit 11.11.2026 direkt in der Zeile** (Prüfungs-Schlüssel `'abgleich' => true`, Spalten über `'html'`):
+- **Inhalt**: je Position Artikel/Produkt mit Menge, dazu Auftrag (AB verlinkt) und Kunde; die ersten zwei sichtbar, Rest aufklappbar („… und N weitere“). `bestellung_abgleich_inhalt()`.
+- **Lieferant** leer → roter Hinweis „Lieferant fehlt“.
+- **Vorschläge**: je Position Charge (Link), Menge, Eingang, Gründe und Knopf **verknüpfen**. Bei mehreren Vorschlägen aufklappbar; bei gleichen Mengen „mehrere passende Chargen - bitte wählen“. Wird dieselbe Charge bei mehreren Bestellungen vorgeschlagen (über beide Prüfungen), steht rot „Charge auch bei BE-… vorgeschlagen“.
+- **Knöpfe je Bestellung**: als geliefert schließen, Rest storniert, stornieren (nur solange nicht eingegangen), jeweils mit Rückfrage. „Öffnen“ bleibt.
+- Die Knöpfe senden per AJAX (`aktion=dp_abgl`, Antwort JSON aus `bestellung_abgleich_aktion()`); bei Erfolg verschwindet die Zeile, die Meldung steht über der Tabelle. Gleiche Funktionen wie an der Bestellung (`webe_*`, `bestellung_stornieren`), Verknüpfen landet im Änderungsprotokoll (Quelle `datenpruefung`) und im Verlauf der Bestellung.
+- **„Alle eindeutigen verknüpfen (N)“** über der Tabelle: nur Positionen mit genau einem Vorschlag, gleicher Artikel, Menge passt, ohne Konflikt. Vorher Bestätigung mit der Liste der Paare. Der Server prüft jedes Paar erneut (`aktion=dp_abgl_sammel`) und überspringt, was nicht mehr eindeutig ist.
+
 Weitere Prüfpunkte:
 - **nachträglich angelegte Bestellung prüfen**: Beheben = als geprüft markieren.
 - **alte Entwürfe**: Beheben = stornieren.

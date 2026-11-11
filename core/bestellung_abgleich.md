@@ -14,3 +14,11 @@
   - **als geliefert schließen** (`webe_als_geliefert_schliessen`: offene Positionen zählen nicht mehr als unterwegs, keine Charge),
   - **stornieren** (solange nicht eingegangen).
 - `bestellung_abgleich_treffer($bid)`: Anzahl Positionen mit Vorschlag (Spalte „Vorschläge“ in der Datenprüfung).
+
+**Stand 11.11.2026 (Datenprüfung: Knöpfe in der Zeile).**
+- `bestellung_abgleich_positionen($bid)`: offene Positionen (nicht Rest-storniert) mit ihren Vorschlägen (max. 5).
+- `bestellung_abgleich_konflikte($zeilen)`: Charge-ID → Bestellnummern, wenn dieselbe Charge bei mehr als einer Bestellung vorgeschlagen wird.
+- `bestellung_abgleich_eindeutig($pos, $konflikte)`: der eine Vorschlag, wenn genau einer, gleicher Artikel, Menge passt, kein Konflikt; sonst null. Grundlage für „Alle eindeutigen verknüpfen“.
+- `bestellung_abgleich_zelle()`, `bestellung_abgleich_knoepfe()`, `bestellung_abgleich_inhalt()`: HTML der Spalten Vorschläge, Knöpfe, Inhalt.
+- `bestellung_abgleich_aktion($aktion, $bid, $bp, $charge)`: verknuepfen / geliefert / rest / storno, Rückgabe `['ok','msg']`. Verknüpfen nur, wenn die Position zur Bestellung gehört und die Charge noch frei ist.
+
