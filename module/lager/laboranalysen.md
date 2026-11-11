@@ -26,3 +26,6 @@ Knopf „Ans Labor senden“ im Kopf → `?p=labor_senden` ([labor_senden.md](la
 - 08.11.2026: Befund „auffällig" an einer Bestellung löst `labor_befund_melden()` aus (wichtige Benachrichtigung).
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Sichtbar-Schalter lehnt Hersteller-/Lieferanten-Unterlagen ab.

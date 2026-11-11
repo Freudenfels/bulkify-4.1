@@ -10,3 +10,6 @@ Zeigt Status, PDF, Verpackung/Deckel/Etikett, die Rezeptur (Zutaten + Nährwerte
 ## Abgelaufen (11.11.2026)
 - `$abgelaufen` setzt `$canAccept` auf falsch.
 - Die Karte zeigt „Dieses Angebot ist abgelaufen … - bitte neues Angebot anfordern“ und den Knopf „Aktualisierung anfragen“.
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Positionstexte über kunde_position_text.

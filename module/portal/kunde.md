@@ -477,3 +477,6 @@ In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. D
 **„versandbereit“ nur wenn fertig (Sofortfix 11.11.2026):** Die Startseite („In Produktion / in Arbeit“) hatte eine eigene lokale Badge-Closure, die aus `status='erledigt'` stumpf „versandbereit“ machte (AB-3237 mit 175 von 500). Sie ist weg; es gilt die globale `$aufBadge`. „Meine Anfragen“ und die Etiketten-Seite gehen über `auftrag_status_kunde()`.
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** „Eigene Produkte“ ohne inaktive Produkte (Katalog zeigt ohnehin nur aktive).
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Downloads (Laboranalyse, Auftrags-Dokument, Zertifikat, Druckvorlagen) über kunde_datei_ausliefern; Hersteller-Unterlagen gesperrt; Rohstoff-Dokumente, DL-Ergebnis und Alt-Rechnung ohne Original-Dateinamen; Rückfrage-Antworten, DL-Schritte und KI-Info ohne Lieferantennamen.

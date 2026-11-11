@@ -1,4 +1,5 @@
 <?php
+if (is_file(BX_ROOT . '/core/kunde_neutral.php')) require_once BX_ROOT . '/core/kunde_neutral.php';   // Paket 12.11.2026 Teil 3
 // Gemeinsamer Render-Include fuer den Produktionsbericht. Erwartet im Scope:
 //   $D        = Ergebnis von produktion_bericht_daten($pa_id)
 //   $fuerKunde = bool  (Kundenversion: OHNE Lieferanten, OHNE Mitarbeiternamen, OHNE Rohstoff-Chargen,
@@ -217,7 +218,7 @@ if (!$fuerKunde && !empty($D['abschlussfotos'])): ?>
 <?php if (trim((string)($pa['bericht_notiz'] ?? '')) !== ''): ?>
 <div class="bx-panel pb-sec">
   <h2>Bemerkung</h2>
-  <div style="white-space:pre-line"><?= h((string)$pa['bericht_notiz']) ?></div>
+  <div style="white-space:pre-line"><?= h(!empty($fuerKunde) && function_exists('kunde_text_neutral') ? kunde_text_neutral((string)$pa['bericht_notiz']) : (string)$pa['bericht_notiz']) ?></div>
 </div>
 <?php endif; ?>
 

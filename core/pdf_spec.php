@@ -1,4 +1,5 @@
 <?php
+if (is_file(__DIR__ . '/kunde_neutral.php')) require_once __DIR__ . '/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: Lieferant nie für Kunden sichtbar
 // Spezifikation und Analysenzertifikat (CoA) im bulkify-Layout – identische Optik wie die
 // per Skill erzeugten Dokumente: zentrierter Titel, Charcoal-Tabellenköpfe (#232323) mit
 // weißer Schrift, graue Label-Zellen, Zeilenschattierung, Firmen-Fußzeile und QS-Freigabe
@@ -342,7 +343,7 @@ function build_coa_pdf(int $charge_id): ?string {
         ['Charge', (string)($c['charge_nr'] ?: '–')],
         ['Mindesthaltbar bis', $fmtD($c['mhd'] ?? '')],
     ];
-    if (trim((string)($c['lieferant_nr'] ?? '')) !== '') $kopf[] = ['Lieferant', trim((string)$c['lieferant_nr'])];
+    if (trim((string)($c['lieferant_nr'] ?? '')) !== '') $kopf[] = ['Lieferant', kunde_text_neutral(trim((string)$c['lieferant_nr']))];   // nur Nummer, nie Firma
     if (!empty($c['herkunftsland'])) $kopf[] = ['Herkunft', (string)$c['herkunftsland']];
     $kopf[] = ['Spezifikation', trim((string)($c['spec_nr'] ?? '') . '  ' . (string)($c['spec_version'] ?? '')) ?: '–'];
     $y = spec_grid($p, $y, $kopf);
@@ -352,7 +353,7 @@ function build_coa_pdf(int $charge_id): ?string {
     $y = spec_h($p, $y, 'Analysenwerte');
     if ($werte) {
         $rows = array_map(fn($w) => [(string)$w['parameter'], (string)($w['spezifikation'] ?? '–'),
-            (string)($w['ergebnis'] ?? '–'), (string)($w['methode'] ?? '')], $werte);
+            (string)($w['ergebnis'] ?? '–'), kunde_text_neutral((string)($w['methode'] ?? ''))], $werte);   // Methode kann den Lieferanten nennen
         $y = spec_table($p, $y, [[$L, 'Parameter'], [230, 'Spezifikation'], [360, 'Ergebnis'], [460, 'Methode']], $rows);
     } else {
         $y += 4; $p->text($L, $y + 8, 'Für diese Charge sind noch keine Analysenwerte erfasst.', 9, false, SPEC_GRAU); $y += 20;

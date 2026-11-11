@@ -44,8 +44,10 @@ function dokument_ist_lieferant_original(string $objekt_typ, string $typ): bool 
     return $objekt_typ === 'item' && in_array($typ, ['spec', 'coa', 'analyse'], true);
 }
 function dokument_freigabe_toggle(string $objekt_typ, int $objekt_id, int $dok_id): void {
-    $typ = (string) scalar("SELECT typ FROM dokument WHERE id=? AND objekt_typ=? AND objekt_id=?", [$dok_id, $objekt_typ, $objekt_id]);
-    if (dokument_ist_lieferant_original($objekt_typ, $typ)) {
+    require_once __DIR__ . '/kunde_neutral.php';
+    $row = one("SELECT * FROM dokument WHERE id=? AND objekt_typ=? AND objekt_id=?", [$dok_id, $objekt_typ, $objekt_id]);
+    $typ = (string)($row['typ'] ?? '');
+    if (dokument_ist_lieferant_original($objekt_typ, $typ) || ($row && kunde_dok_gesperrt($row))) {   // Paket 12.11.2026 Teil 3: auch Hersteller-Unterlagen
         // Sicherheitshalber erzwingen: bleibt intern.
         q("UPDATE dokument SET kunde_sichtbar=0 WHERE id=? AND objekt_typ=? AND objekt_id=?", [$dok_id, $objekt_typ, $objekt_id]);
         return;
@@ -56,10 +58,10 @@ function dokument_freigabe_toggle(string $objekt_typ, int $objekt_id, int $dok_i
 // Für Kunden freigegebene Dokumente eines Objekts (Portal). Lieferanten-Originale (item spec/coa/analyse)
 // sind hier IMMER ausgeschlossen – egal wie kunde_sichtbar steht.
 function dokumente_fuer_kunde(string $objekt_typ, int $objekt_id): array {
-    return all("SELECT id, typ, titel, datei_orig FROM dokument
-                WHERE objekt_typ=? AND objekt_id=? AND kunde_sichtbar=1
-                  AND NOT (objekt_typ='item' AND typ IN ('spec','coa','analyse'))
-                ORDER BY typ, id DESC", [$objekt_typ, $objekt_id]);
+    require_once __DIR__ . '/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: nie Unterlagen eines Herstellers/Lieferanten
+    return all("SELECT d.id, d.typ, d.titel, d.datei_orig, d.datei, d.objekt_typ, d.objekt_id, d.charge_nr FROM dokument d
+                WHERE d.objekt_typ=? AND d.objekt_id=? AND d.kunde_sichtbar=1 AND " . kunde_dok_sql('d') . "
+                ORDER BY d.typ, d.id DESC", [$objekt_typ, $objekt_id]);
 }
 
 function dokument_delete(string $objekt_typ, int $objekt_id, int $dok_id): void {
@@ -90,7 +92,7 @@ function dokument_panel(string $objekt_typ, int $objekt_id, array $lieferanten):
             <td><a href="?p=dokument&id=<?= (int)$d['id'] ?>" target="_blank"><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></a><?php if ($d['titel'] && $d['datei_orig']): ?><div class="muted" style="font-size:12px"><?= h($d['datei_orig']) ?></div><?php endif; ?></td>
             <td><?= $d['lieferant_firma'] ? h($d['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
             <td>
-              <?php if (dokument_ist_lieferant_original($objekt_typ, (string)$d['typ'])): ?>
+              <?php require_once __DIR__ . '/kunde_neutral.php'; if (dokument_ist_lieferant_original($objekt_typ, (string)$d['typ']) || kunde_dok_gesperrt($d)): ?>
                 <?= bx_badge('intern · nie an Kunde','warn') ?>
                 <div class="muted" style="font-size:11px">Kunde bekommt das bulkify-Dokument</div>
               <?php else: ?>

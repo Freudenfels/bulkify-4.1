@@ -1,4 +1,5 @@
 <?php
+if (is_file(__DIR__ . '/kunde_neutral.php')) require_once __DIR__ . '/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: Lieferant nie für Kunden sichtbar
 // Produktinformationsblatt (PIB) fürs Kundenportal – damit der Kunde sein Etikett gestalten kann.
 // Zwei Quellen: ein vom Team je Produkt hochgeladenes PIB hat Vorrang; sonst wird automatisch eines
 // aus den vorhandenen Produktdaten erzeugt (Zutaten + Nährwert-/Wirkstoffdeklaration + Darreichung).
@@ -437,6 +438,11 @@ function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformation
         $pf = BX_UPLOADS . '/' . basename((string)$d['datei']);
         if (is_file($pf)) {
             $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
+            if ($ext === 'pdf' && function_exists('kunde_pdf_neutral')) {   // Paket 12.11.2026 Teil 3: Metadaten (Autor/Ersteller) leeren
+                $bytes = kunde_pdf_neutral((string) file_get_contents($pf));
+                header('Content-Type: application/pdf'); header('Content-Disposition: inline; filename="' . $safe . '.pdf"');
+                header('Content-Length: ' . strlen($bytes)); echo $bytes; return true;
+            }
             header('Content-Type: ' . ($ext === 'pdf' ? 'application/pdf' : 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext)));
             header('Content-Disposition: inline; filename="' . $safe . '.' . ($ext ?: 'pdf') . '"');
             header('Content-Length: ' . filesize($pf));

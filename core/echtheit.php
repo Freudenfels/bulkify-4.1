@@ -1,4 +1,5 @@
 <?php
+if (is_file(__DIR__ . '/kunde_neutral.php')) require_once __DIR__ . '/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: Lieferant nie für Kunden sichtbar
 // Echtheits-/Qualitaets-QR je Charge.
 // Idee: Auf dem bulkify-CoA/Spec steht ein QR-Code. Scannt der Kunde ihn, oeffnet sich die
 // oeffentliche Pruefseite public/echt.php und bestaetigt den Rohstoff dieser Charge mit genau den
@@ -90,6 +91,8 @@ function charge_echt_daten(string $token): ?array {
         $werte = all("SELECT parameter, spezifikation, ergebnis, methode
                       FROM charge_analyse WHERE charge_id=? ORDER BY sort, id", [(int) $c['id']]);
     } catch (\Throwable $e) { $werte = []; }
+    foreach ($werte as &$__w) $__w['methode'] = kunde_text_neutral((string)($__w['methode'] ?? ''));   // Paket 12.11.2026 Teil 3
+    unset($__w);
 
     $firma = function_exists('beleg_firma') ? beleg_firma() : ['name' => 'Maniso GmbH'];
 

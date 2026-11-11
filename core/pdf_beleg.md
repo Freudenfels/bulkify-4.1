@@ -81,3 +81,6 @@ Cent gerundet × Menge).
 - Angebots-Positionen: Füllgewicht auf 1 mg gerundet („~435mg" statt „~440mg").
 
 **Pflicht-Hinweis (06.11.2026):** Über der Fußzeile jedes Belegs (Angebot, AB, Lieferschein, Bestellung, Gutschrift, Rechnung) steht `pdf_hinweis_maschinell($b['sprache'])` – deutsch oder englisch. Reicht der Inhalt zu weit nach unten, kommt eine neue Seite.
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Positions-Bezeichnung und -Beschreibung über kunde_position_text (keine Lieferantennamen, kein „Handelsware“).

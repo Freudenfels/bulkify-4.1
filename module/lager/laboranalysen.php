@@ -91,8 +91,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Sichtbarkeit umschalten / loeschen.
     if ($aktion === 'toggle' && ($did = (int)($_POST['dok_id'] ?? 0))) {
-        q("UPDATE dokument SET kunde_sichtbar = 1 - kunde_sichtbar WHERE id=? AND typ='analyse'", [$did]);
-        $hinweis = ['ok', 'Sichtbarkeit geändert.'];
+        require_once BX_ROOT . '/core/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: Hersteller-Unterlagen nie freigeben
+        $dRow = one("SELECT * FROM dokument WHERE id=? AND typ='analyse'", [$did]);
+        if ($dRow && kunde_dok_gesperrt($dRow)) { q("UPDATE dokument SET kunde_sichtbar=0 WHERE id=?", [$did]); $hinweis = ['err', 'Unterlage eines Herstellers/Lieferanten – geht nie an den Kunden (der Kunde bekommt das bulkify-Dokument).']; }
+        else { q("UPDATE dokument SET kunde_sichtbar = 1 - kunde_sichtbar WHERE id=? AND typ='analyse'", [$did]);
+        $hinweis = ['ok', 'Sichtbarkeit geändert.']; }
     }
     if ($aktion === 'del' && ($did = (int)($_POST['dok_id'] ?? 0))) {
         $d = one("SELECT datei FROM dokument WHERE id=? AND typ='analyse'", [$did]);

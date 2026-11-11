@@ -1,4 +1,5 @@
 <?php
+if (is_file(__DIR__ . '/kunde_neutral.php')) require_once __DIR__ . '/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: Lieferant nie für Kunden sichtbar
 // Zusammenfassendes CoA einer FERTIGWARE-Charge (Nico 03.11.2026): eine Übersicht aus den Analysen der tatsächlich
 // eingesetzten Rohstoff-Chargen und den Produktdaten – NICHT am Fertigprodukt gemessen. Die Rohstoffe werden stich-
 // probenhaft geprüft; eine Fertigprodukt-Laboranalyse ist ein separater Zusatz. Pflicht (nicht wegkonfigurierbar):
@@ -102,7 +103,7 @@ function coa_uebersicht_daten(int $charge_id): ?array {
         $mikro = array_merge($mikro, $mikroZ);
         $quellen[] = ['zutat' => (string)$z['name'], 'mg' => (float)$z['menge_mg'], 'anteil' => $anteil,
                       'chargen' => implode(', ', array_map(fn($ch) => (string)$ch['charge_nr']
-                          . (trim((string)($ch['lieferant_nr'] ?? '')) !== '' ? ' (' . trim((string)$ch['lieferant_nr']) . ')' : ''), $chs)) ?: '–',
+                          . (trim((string)($ch['lieferant_nr'] ?? '')) !== '' ? ' (' . kunde_text_neutral(trim((string)$ch['lieferant_nr'])) . ')' : ''), $chs)) ?: '–',
                       'basis' => $quelleTxt ? (isset($quelleTxt['Grenzwert']) && count($quelleTxt) === 1 ? 'Spezifikation' : (isset($quelleTxt['Grenzwert']) ? 'Analyse + Spezifikation' : 'Analyse der Charge')) : 'keine Werte'];
     }
     // Bewertung je Parameter: „konform", wenn der berechnete Wert (Obergrenze) den NEM-Höchstgehalt einhält. Der Zahlenwert

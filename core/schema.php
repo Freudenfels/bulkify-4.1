@@ -5770,7 +5770,7 @@ function angebot_gruppe_positionen(array $g, ?float $mo, ?int $kid, ?string $let
         $epH = (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [$pid]);
         return [[
             'artikelnr'=>(string) scalar("SELECT nummer FROM produkt WHERE id=?", [$pid]), 'bezeichnung'=>$pname,
-            'beschreibung'=>trim(($epH > 0 ? form_groessen_label($form, (float)$epH) . ' je Packung · ' : '') . 'Handelsware'),
+            'beschreibung'=>trim($epH > 0 ? form_groessen_label($form, (float)$epH) . ' je Packung' : ''),   // Paket 12.11.2026 Teil 3: kein „Handelsware“ (verrät Zukauf)
             'menge'=>$hwMenge, 'einheit'=>'Pkg.', 'preis_cent'=>(int) round($vkP * 100),
             'ek_cent'=>(int) round($ekP * 100), 'mwst_satz'=>$ust, 'quelle'=>'herstellung', 'gruppe'=>$letter,
         ]];

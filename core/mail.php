@@ -46,6 +46,9 @@ function nach_antwort(callable $fn): void {
 function mail_senden(string $to, string $betreff, string $text, ?string $signatur_html = null, array $anhaenge = []): string {
     $to = trim($to);
     if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) return 'Keine gültige Empfängeradresse.';
+    // Paket 12.11.2026 Teil 3: an Kunden nie Lieferanten-/Herstellernamen (zentrale Schutz-Stelle core/kunde_neutral.php).
+    require_once __DIR__ . '/kunde_neutral.php';
+    if (kunde_ist_mailadresse($to)) { $betreff = kunde_position_text($betreff); $text = kunde_position_text($text); }
     // Testumgebung: nie an Kunden/Lieferanten/Mitarbeiter – nur ans Test-Postfach (leer = nur Protokoll).
     if (function_exists('bx_testumgebung') && bx_testumgebung()) {
         [$to, $betreff] = bx_test_mail_umleiten($to, $betreff);

@@ -47,3 +47,6 @@ Bei Pulver/Granulat ist die Rezeptur EINE Tagesdosis, die Packung hat g. Das PIB
 - Verzehrempfehlung „5 g pro Tag (1 Tagesdosis)“ bzw. „5 g täglich mit ausreichend Flüssigkeit“.
 
 Eine Kundenwahl „pro Tag“ (`$proTagOverride`) wird bei Pulver ignoriert (immer 1). Kapseln/Tabletten/Sticks/Flüssig unverändert.
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Hochgeladenes PIB: PDF-Metadaten werden vor der Auslieferung geleert.

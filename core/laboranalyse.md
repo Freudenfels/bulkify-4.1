@@ -78,3 +78,6 @@ Der Admin-Upload kennt jetzt zusätzlich:
 sobald ein gemessenes CoA (Laboranalyse) derselben Bestellung/Charge sichtbar ist.
 - laboranalysen_alle() liefert zusätzlich kunde_id (nur bei Produkt/Auftrag, nicht beim Lieferanten), damit die Liste das interne Kunden-Kürzel zeigen kann, 08.11.2026
 - 08.11.2026: Chargen-Abgleich über `charge_norm()`/`charge_norm_sql()` (core/charge_norm.php) – jetzt auch Punkte egal („2799.A" = „2799A").
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+laboranalysen_fuer_kunde() ohne Unterlagen eines Herstellers/Lieferanten (reine Labore erlaubt).

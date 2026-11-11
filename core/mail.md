@@ -108,3 +108,6 @@ Bei Lieferung (`auftrag_rechnung_bei_lieferung`) geht keine eigene Rechnungsmail
 
 ## Testumgebung (Paket 12.11.2026)
 Im Testmodus (`core/testumgebung.php`) gehen alle Mails nur an `BX_TEST_MAIL_AN` mit Betreff „[TEST an …]“; leer = nur Protokoll.
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Mails an Kunden (kunde_ist_mailadresse): Betreff und Text über kunde_position_text.

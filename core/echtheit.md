@@ -31,3 +31,6 @@ Ein QR bestätigt „diese Angaben hat bulkify für diese Charge veröffentlicht
 - QR im Dokument: `core/pdf_spec.php` (`spec_qr()`, `spec_qr_panel()`, `spec_echt_panel()`) in `build_coa_pdf()` (pro Charge) und `core/pdf_pib.php` (pro Produkt).
 - Öffentliche Seite: `public/echt.php` (`?t=` Charge, `?p=` Produkt).
 - Spalten: `charge.echt_token`/`charge.echt_gesperrt` und `produkt.echt_token`/`produkt.echt_gesperrt` (in `core/schema.php`, Indizes `idx_echt_token`).
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Methode der Analysewerte ohne Lieferantennamen.

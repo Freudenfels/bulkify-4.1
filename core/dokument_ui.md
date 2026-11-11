@@ -34,3 +34,6 @@ bulkify-Dokument** (`build_spec_pdf()` / `build_coa_pdf()`, Routen `spec_pdf`/`c
 
 ## Lieferanten-Auswahl als Suchfeld (09.11.2026)
 Im Upload-Formular von `dokument_panel()` wird die Lieferanten-Auswahl ab mehr als 10 Lieferanten zum Suchfeld (`rscombo`).
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+dokumente_fuer_kunde() schließt Hersteller-/Lieferanten-Unterlagen aus; Freigabe-Schalter lehnt sie ab (Badge „intern · nie an Kunde“).

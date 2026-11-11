@@ -129,6 +129,7 @@ function laboranalyse_hinweise(array $ki, int $pid_gewaehlt = 0): array {
 // Alle fuer EINEN Kunden sichtbaren Laboranalysen – Produkt-Ebene (fuer gekaufte Produkte) und Bestell-Ebene.
 // Rueckgabe je Zeile: id, datei_orig, titel, datum, produkt, produkt_id, auftrag_nr, charge_nr.
 function laboranalysen_fuer_kunde(int $kunde_id): array {
+    require_once __DIR__ . '/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: nie Unterlagen eines Herstellers/Lieferanten
     // Produkt-Ebene: gekaufte Produkte (aus auftrag) ODER dem Kunden gehoerende Produkte (produkt.kunde_id –
     // z. B. externe Fremdlager-/Fulfillment-Ware ohne eigenen Auftrag). Bestell-Ebene: Analysen einzelner Auftraege.
     return all("
@@ -136,7 +137,7 @@ function laboranalysen_fuer_kunde(int $kunde_id): array {
                COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, p.id AS produkt_id,
                NULL AS auftrag_nr, d.charge_nr AS charge_nr, COALESCE(d.hochgeladen_von,'') AS quelle
           FROM dokument d JOIN produkt p ON p.id=d.objekt_id
-         WHERE d.objekt_typ='produkt' AND d.typ='analyse' AND d.kunde_sichtbar=1
+         WHERE d.objekt_typ='produkt' AND d.typ='analyse' AND d.kunde_sichtbar=1 AND " . kunde_dok_sql('d') . "
            AND (p.kunde_id=? OR p.id IN (SELECT DISTINCT produkt_id FROM auftrag WHERE kunde_id=? AND produkt_id IS NOT NULL))
         UNION ALL
         SELECT d.id, d.datei_orig, d.titel, d.befund, COALESCE(d.dok_datum, DATE(d.angelegt)) AS datum,
@@ -147,7 +148,7 @@ function laboranalysen_fuer_kunde(int $kunde_id): array {
                           WHERE pa.auftrag_id=a.id AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id LIMIT 1)) AS charge_nr,
                COALESCE(d.hochgeladen_von,'') AS quelle
           FROM dokument d JOIN auftrag a ON a.id=d.objekt_id LEFT JOIN produkt p ON p.id=a.produkt_id
-         WHERE d.objekt_typ='auftrag' AND d.typ='analyse' AND d.kunde_sichtbar=1 AND a.kunde_id=?
+         WHERE d.objekt_typ='auftrag' AND d.typ='analyse' AND d.kunde_sichtbar=1 AND " . kunde_dok_sql('d') . " AND a.kunde_id=?
            -- Vorrang: ein gemessenes CoA (Laboranalyse) derselben Charge/Bestellung verdrängt die berechnete Übersicht
            AND NOT (COALESCE(d.hochgeladen_von,'')='coa_ueb' AND EXISTS (SELECT 1 FROM dokument d2 WHERE d2.objekt_typ='auftrag'
                     AND d2.objekt_id=d.objekt_id AND d2.typ='analyse' AND d2.kunde_sichtbar=1 AND COALESCE(d2.hochgeladen_von,'')<>'coa_ueb'

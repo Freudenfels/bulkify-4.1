@@ -33,3 +33,6 @@ Im Panel **Analysenwerte je Charge** gibt es **Werte vorschlagen**: Das hochgela
 `spec_grid()` (03.11.2026): Die Bezeichnung links wird umgebrochen statt mit „…“ gekürzt (z. B. „Nettofüllmenge je Packung (für die Verpackung)“ im PIB). Die Zeilenhöhe richtet sich nach der längeren Seite. Lange Einzelwörter teilt `wrap()`.
 
 **Pflicht-Hinweis (06.11.2026):** `spec_fuss()` schreibt immer `pdf_hinweis_maschinell()` (maschinell erstellt + beruht auf den uns bereitgestellten Daten) – damit haben Spec, CoA, PIB, Informationsdokument und Jahresvertrag ihn automatisch. `$maschHinweis=false` lässt nur „ohne Unterschrift gültig“ weg.
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+bulkify-CoA: Lieferant nur als Nummer (neutralisiert), Methode ohne Lieferantennamen.

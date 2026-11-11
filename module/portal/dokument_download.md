@@ -18,3 +18,6 @@ nicht, wenn `kunde_sichtbar=1` (Altdaten). Prüfung über `dokument_ist_lieferan
 erhält stattdessen das bulkify-Dokument (`spec_pdf`/`coa_pdf`).
 
 Gesperrter Kunde: 403 mit „Zugang gesperrt, bitte bulkify kontaktieren“ (außer Team-Vorschau).
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Hersteller-/Lieferanten-Unterlagen gesperrt (kunde_dok_gesperrt), Zugriff nur auf eigene Aufträge/Produkte (vorher reichte der Bereich), Auslieferung mit neutralem Dateinamen und leeren PDF-Metadaten (core/kunde_neutral.php).

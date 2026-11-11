@@ -1,4 +1,5 @@
 <?php
+require_once BX_ROOT . '/core/kunde_neutral.php';   // Paket 12.11.2026 Teil 3
 /**
  * Teilvorlage: eine Angebots-Karte im Kundenportal.
  * Erwartet im Scope: $a (angebot-Zeile mit Zusatzfeldern), $inf (=$angInfo[$a['id']]),
@@ -170,7 +171,7 @@ if ($a['status'] === 'bestaetigt') {
             <tbody>
             <?php foreach ($plist as $p): ?>
               <tr>
-                <td><?= h($p['bezeichnung']) ?><?= $p['beschreibung'] ? '<div class="muted" style="font-size:12px;white-space:pre-line">' . h($p['beschreibung']) . '</div>' : '' ?></td>
+                <td><?= h(kunde_position_text((string)$p['bezeichnung'])) ?><?= $p['beschreibung'] ? '<div class="muted" style="font-size:12px;white-space:pre-line">' . h(kunde_position_text((string)$p['beschreibung'])) . '</div>' : '' ?></td>
                 <td class="bx-num"><?= rtrim(rtrim(number_format($p['menge'],2,',','.'),'0'),',') ?> <?= h($p['einheit']) ?></td>
                 <td class="bx-num"><?= h($pVk($p)) ?> €</td>
                 <td class="bx-num"><?= $eur($zNetto($p)) ?></td>

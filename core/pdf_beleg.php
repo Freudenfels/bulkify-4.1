@@ -1,4 +1,5 @@
 <?php
+if (is_file(__DIR__ . '/kunde_neutral.php')) require_once __DIR__ . '/kunde_neutral.php';   // Paket 12.11.2026 Teil 3
 // Beleg-PDF (Angebot/AB/Rechnung) im bulkify-Layout – portiert aus v3 (bulkify-dashboard-v3/beleg_build.php).
 // Abhängigkeitsfrei über MiniPDF. Firmendaten aus app_meta, Logo aus assets/bulkify-logo.jpg.
 require_once __DIR__ . '/lib/minipdf.php';
@@ -198,7 +199,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $by = $y + 11;
         $p->text($cPos, $by, (string) $i, 8, false, $INK);
         $p->text($cArt, $by, $p->fit((string) ($pos['artikelnr'] ?? ''), 62, 8, false), 8, false, $INK);
-        $p->text($cBez, $by, $p->fit((string) $pos['bezeichnung'], $bezMax, 9, true), 9, true, $INK);
+        $p->text($cBez, $by, $p->fit(function_exists('kunde_position_text') ? kunde_position_text((string) $pos['bezeichnung']) : (string) $pos['bezeichnung'], $bezMax, 9, true), 9, true, $INK);   // Paket 12.11.2026 Teil 3
         $p->textRight($cMengeR, $by, beleg_num((float) $pos['menge']), 8, false, $INK);
         $p->text($cEinh, $by, $p->fit((string) ($pos['einheit'] ?? ''), $einhW, 8, false), 8, false, $INK);
         if (!$lieferschein) {
@@ -207,6 +208,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         }
         $y += 15;
         $besch = trim((string) ($pos['beschreibung'] ?? ''));
+        if (function_exists('kunde_position_text')) $besch = kunde_position_text($besch);   // Paket 12.11.2026 Teil 3: kein „Handelsware“, keine Lieferantennamen
         if ($besch !== '') {
             foreach (array_slice(preg_split('/\r?\n/', $besch), 0, 12) as $bl) {
                 $bl = trim($bl); if ($bl === '') continue;

@@ -52,3 +52,6 @@ wird **nicht** für den Kunden sichtbar abgelegt und das Team bekommt einen Verl
 
 **Lieferantennummer (06.11.2026):** In der Spalte „Rohstoff-Charge(n)“ steht hinter jeder Charge in Klammern die interne
 Lieferantennummer, z. B. „LS-VC-D1 (L-2690)“ – nie der Lieferantenname (wie auf dem Lager-Etikett). Ohne Nummer nur die Charge.
+
+## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
+Lieferantennummer neutralisiert.

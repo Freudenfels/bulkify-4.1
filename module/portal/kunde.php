@@ -1,4 +1,5 @@
 <?php
+require_once BX_ROOT . '/core/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: Lieferant nie für Kunden sichtbar (zentrale Schutz-Stelle)
 // Kundenportal – eigene, kundenfreundliche Ansicht per Magic-Link (Token). Keine internen Zahlen (EK/Marge).
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
@@ -324,16 +325,12 @@ if ($k && ($_GET['v'] ?? '') === 'analyse_datei') {
         if ($d['objekt_typ'] === 'auftrag')      $ok = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [(int)$d['objekt_id']]) === (int)$k['id'];
         elseif ($d['objekt_typ'] === 'produkt')  $ok = (int) scalar("SELECT COUNT(*) FROM auftrag WHERE kunde_id=? AND produkt_id=?", [(int)$k['id'], (int)$d['objekt_id']]) > 0;
     }
+    require_once BX_ROOT . '/core/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: nie Hersteller-/Lieferanten-Unterlagen
+    if ($d && kunde_dok_gesperrt($d)) $ok = false;
     $pf = ($ok && $d) ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
     if (!$ok || !$pf || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Laboranalyse/CoA heruntergeladen: ' . mb_substr((string)($d['datei_orig'] ?: 'Datei'), 0, 120), 'coa_download', (string)$d['objekt_typ'], (int)$d['objekt_id']);
-    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
-    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif'][$ext] ?? 'application/octet-stream';
-    header('Content-Type: ' . $mime);
-    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($d['datei_orig'] ?: 'laboranalyse')) . '"');
-    header('X-Content-Type-Options: nosniff');
-    header('Content-Length: ' . filesize($pf));
-    readfile($pf); exit;
+    kunde_datei_ausliefern($pf, kunde_dateiname($d));
 }
 // Rückfrage an einer Bestellung oder einem Angebot (Report 5, 03.11.2026): speichern, Team benachrichtigen (Dashboard + Mail),
 // Antwort des Teams kommt per Mail und steht hier im Portal. Nur eigene Bestellungen/Angebote.
@@ -360,11 +357,8 @@ if ($k && ($_GET['v'] ?? '') === 'zertifikat') {
     $pf = $zd ? BX_UPLOADS . '/' . basename((string)$zd['datei']) : '';
     if (!$zd || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Herstellerzertifikat heruntergeladen: ' . mb_substr((string)$zd['titel'], 0, 120), 'zertifikat');
-    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
-    header('Content-Type: ' . (['pdf' => 'application/pdf', 'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg'][$ext] ?? 'application/octet-stream'));
-    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($zd['datei_orig'] ?: 'Zertifikat.' . $ext)) . '"');
-    header('X-Content-Type-Options: nosniff'); header('Content-Length: ' . filesize($pf));
-    readfile($pf); exit;
+    require_once BX_ROOT . '/core/kunde_neutral.php';
+    kunde_datei_ausliefern($pf, 'Zertifikat_' . kunde_dateiname_teil(kunde_text_neutral((string)($zd['titel'] ?: 'bulkify'))) . '.' . strtolower(pathinfo($pf, PATHINFO_EXTENSION)));
 }
 // Lieferschein als PDF (Report 4, 03.11.2026): nur Lieferscheine zu EIGENEN Bestellungen. Charge auf dem Lieferschein = Fertigware (St-06).
 if ($k && ($_GET['v'] ?? '') === 'lieferschein_pdf') {
@@ -413,15 +407,11 @@ if ($k && ($_GET['v'] ?? '') === 'auftrag_dok') {
     $did = (int)($_GET['id'] ?? 0);
     $d = $did ? one("SELECT * FROM dokument WHERE id=? AND objekt_typ='auftrag' AND kunde_sichtbar=1", [$did]) : null;
     $ok = $d && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [(int)$d['objekt_id']]) === (int)$k['id'];
+    require_once BX_ROOT . '/core/kunde_neutral.php';   // Paket 12.11.2026 Teil 3
+    if ($d && kunde_dok_gesperrt($d)) $ok = false;
     $pf = ($ok && $d) ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
     if (!$ok || !$pf || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
-    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
-    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif'][$ext] ?? 'application/octet-stream';
-    header('Content-Type: ' . $mime);
-    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($d['datei_orig'] ?: 'dokument')) . '"');
-    header('X-Content-Type-Options: nosniff');
-    header('Content-Length: ' . filesize($pf));
-    readfile($pf); exit;
+    kunde_datei_ausliefern($pf, kunde_dateiname($d));
 }
 
 // Produktinformationsblatt (PIB) zum eigenen Auftrag herunterladen – Grundlage für die Etikettengestaltung.
@@ -448,11 +438,8 @@ if ($k && ($_GET['v'] ?? '') === 'druckvorlage') {
     $d  = $pid ? etikett_druckvorlage_datei($pid) : null;
     $pf = $d ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
     if (!$d || !is_file($pf)) { http_response_code(404); echo 'Keine Etikett-Druckvorlage hinterlegt.'; exit; }
-    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
-    header('Content-Type: ' . ($ext === 'pdf' ? 'application/pdf' : ($ext === 'png' ? 'image/png' : ($ext === 'jpg' || $ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream'))));
-    header('Content-Disposition: inline; filename="Etikett-Druckvorlage-' . $aid . '.' . ($ext ?: 'pdf') . '"');
-    header('Content-Length: ' . filesize($pf));
-    readfile($pf); exit;
+    require_once BX_ROOT . '/core/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: PDF-Metadaten des Vorlagen-Lieferanten leeren
+    kunde_datei_ausliefern($pf, 'Etikett-Druckvorlage-' . $aid . '.' . (strtolower(pathinfo($pf, PATHINFO_EXTENSION)) ?: 'pdf'));
 }
 // Umkarton-Druckvorlage (Faltkarton je 1 Glas) zum eigenen Auftrag herunterladen.
 if ($k && ($_GET['v'] ?? '') === 'umkarton_vorlage') {
@@ -462,11 +449,8 @@ if ($k && ($_GET['v'] ?? '') === 'umkarton_vorlage') {
     $pf = $d ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
     if (!$d || !is_file($pf)) { http_response_code(404); echo 'Keine Umkarton-Druckvorlage hinterlegt.'; exit; }
     if ($pid && $aid) log_aktivitaet('auftrag', $aid, 'kunde', 'Umkarton-Druckvorlage heruntergeladen · ' . (string)($k['firma'] ?? ('Kunde ' . (int)$k['id'])), 'notiz', 'auftrag', $aid);
-    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
-    header('Content-Type: ' . ($ext === 'pdf' ? 'application/pdf' : ($ext === 'png' ? 'image/png' : ($ext === 'jpg' || $ext === 'jpeg' ? 'image/jpeg' : 'application/octet-stream'))));
-    header('Content-Disposition: inline; filename="Umkarton-Druckvorlage-' . $aid . '.' . ($ext ?: 'pdf') . '"');
-    header('Content-Length: ' . filesize($pf));
-    readfile($pf); exit;
+    require_once BX_ROOT . '/core/kunde_neutral.php';   // Paket 12.11.2026 Teil 3: PDF-Metadaten des Vorlagen-Lieferanten leeren
+    kunde_datei_ausliefern($pf, 'Umkarton-Druckvorlage-' . $aid . '.' . (strtolower(pathinfo($pf, PATHINFO_EXTENSION)) ?: 'pdf'));
 }
 
 // Angebot ablehnen (mit Begründung) -> Status zurück, Team überarbeitet
@@ -1543,7 +1527,7 @@ if (!function_exists('portal_auftrag_track')) {
             foreach ($st as $i => $s) if (!(int)$s['erledigt'] && $firstOpen === null) $firstOpen = $i;
             $out = [];
             foreach ($st as $i => $s) {
-                $out[] = ['label'=>(string)$s['name'], 'date'=>$s['erledigt_at'] ?? null, 'sub'=>null, 'dok_id'=>null,
+                $out[] = ['label'=>kunde_text_neutral((string)$s['name']), 'date'=>$s['erledigt_at'] ?? null, 'sub'=>null, 'dok_id'=>null,
                           'done'=>((int)$s['erledigt'] === 1), 'current'=>($i === $firstOpen)];
             }
             return $out;   // leer = kein Fortschritts-Balken
@@ -1897,7 +1881,7 @@ $rfPanel = function (int $auftrag_id, int $angebot_id) use ($k, $token, $darfBes
         $team = $m['akteur'] === 'team';
         $o .= '<div style="margin:0 0 8px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);' . ($team ? 'background:var(--panel-2);margin-right:12%' : 'margin-left:12%') . '">'
             . '<div class="muted" style="font-size:12px;margin-bottom:3px">' . ($team ? 'bulkify' . ($m['benutzer'] ? ' · ' . h((string)$m['benutzer']) : '') : 'Sie') . ' · ' . h(fmt_zeit((string)$m['erstellt'], 'd.m.Y H:i')) . '</div>'
-            . nl2br(h((string)$m['text'])) . '</div>';
+            . nl2br(h($team ? kunde_text_neutral((string)$m['text']) : (string)$m['text'])) . '</div>';
     }
     if ($darfBestellen)
         $o .= '<form method="post" style="margin-top:8px"><input type="hidden" name="aktion" value="rueckfrage">'
@@ -3859,7 +3843,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     if (trim((string)($rohDetail['ki_info'] ?? '')) !== ''): ?>
     <div class="bx-panel">
       <h2 style="margin:0">KI-Info</h2>
-      <div style="margin-top:8px;white-space:pre-line;line-height:1.5"><?= h(trim((string)$rohDetail['ki_info'])) ?></div>
+      <div style="margin-top:8px;white-space:pre-line;line-height:1.5"><?= h(kunde_text_neutral(trim((string)$rohDetail['ki_info']))) ?></div>
       <p class="muted" style="margin:8px 0 0;font-size:12px">Von einer KI erstellte, allgemeine Kurzbeschreibung – keine gesundheitsbezogene Aussage und keine Verzehrempfehlung.</p>
     </div>
     <?php endif; ?>
@@ -3932,7 +3916,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('coa_pdf') ?>&cid=<?= (int)$co['id'] ?>">&#8681; CoA <?= h($co['charge_nr'] ?: ('#' . (int)$co['id'])) ?><?= $co['mhd'] ? ' <span class="muted">(MHD ' . h(date('m/Y', strtotime((string)$co['mhd']))) . ')</span>' : '' ?></a>
         <?php endforeach; ?>
         <?php foreach ($rohDoks as $d): ?>
-          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>">&#8681; <?= h(($DOKTYP[$d['typ']] ?? $d['typ']) . ': ' . ($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument'))) ?></a>
+          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>">&#8681; <?= h(($DOKTYP[$d['typ']] ?? $d['typ']) . ': ' . kunde_dok_titel($d)) ?></a>
         <?php endforeach; ?>
       </div>
       <?php if (!$rohCoas): ?><p class="muted" style="font-size:12px;margin:10px 0 0">Zu diesem Rohstoff liegt aktuell kein freigegebenes Analysenzertifikat (CoA) vor.</p><?php endif; ?>
@@ -4706,7 +4690,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <p class="muted" style="margin:0 0 10px">Das Ergebnis Ihrer Dienstleistung zum Download.</p>
     <?php foreach ($dlErgebnis as $ed): ?>
       <div style="margin-bottom:6px">
-        <a class="btn btn-primary btn-sm" href="?p=portal_dok&token=<?= h((string)$k['portal_token']) ?>&id=<?= (int)$ed['id'] ?>" target="_blank" rel="noopener"><?= h((string)($ed['datei_orig'] ?: 'Ergebnis')) ?></a>
+        <a class="btn btn-primary btn-sm" href="?p=portal_dok&token=<?= h((string)$k['portal_token']) ?>&id=<?= (int)$ed['id'] ?>" target="_blank" rel="noopener"><?= h('Ergebnis' . ($ed['angelegt'] ? ' ' . fmt_zeit((string)$ed['angelegt'], 'd.m.Y') : '')) ?></a>
         <span class="muted" style="font-size:12px"><?= $ed['angelegt'] ? h(fmt_zeit((string)$ed['angelegt'], 'd.m.Y')) : '' ?></span>
       </div>
     <?php endforeach; ?>
@@ -4929,7 +4913,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php if (!$re): ?>
       <?php if ($altRe || $manBezahlt): ?>
         <div class="bx-tablewrap"><table class="bx-table"><tbody>
-          <?php if ($altRe): ?><tr><td class="muted" style="width:150px">Rechnung</td><td><a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$altRe['id'] ?>" target="_blank" rel="noopener"><?= h($altRe['datei_orig'] ?: 'Rechnung.pdf') ?></a></td></tr><?php endif; ?>
+          <?php if ($altRe): ?><tr><td class="muted" style="width:150px">Rechnung</td><td><a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$altRe['id'] ?>" target="_blank" rel="noopener"><?= h('Rechnung (Original)') ?></a></td></tr><?php endif; ?>
           <?php if (!empty($a['bezahlt_betrag'])): ?><tr><td class="muted">Betrag</td><td class="bx-num"><strong><?= $eur($a['bezahlt_betrag']) ?></strong></td></tr><?php endif; ?>
           <tr><td class="muted">Zahlungsstatus</td><td><?= $manBezahlt ? $reBadge('bezahlt') : $reBadge('offen') ?></td></tr>
           <?php if ($manBezahlt): ?><tr><td class="muted">Bezahlt am</td><td><?= h(date('d.m.Y', strtotime((string)$a['bezahlt_am']))) ?></td></tr><?php endif; ?>
