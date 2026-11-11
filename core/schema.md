@@ -636,3 +636,6 @@ Siehe `core/preis_gueltig.md`.
 
 ## Fortschritt: Zukauf fertig vollständig (11.11.2026)
 Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingegangen, gilt „Produziert“ als erledigt. Das Datum ist der letzte Wareneingang.
+
+## auftrag_status_kunde() (Sofortfix 11.11.2026)
+`auftrag_status_kunde($a)` gibt den Status zurück, wie Kunde und Lager ihn sehen: „erledigt“ bleibt nur, wenn `auftrag_fortschritt_fertig()` sagt, dass „Abgeschlossen“ wirklich erledigt ist (alle Mengen da, Labor da). Sonst 'in_produktion'. Dienstleistungen unverändert. Fehlende Felder lädt die Funktion selbst nach. Eine Stelle für Portal-Startseite, „Meine Anfragen“, Etiketten-Seite und (per Loopback) die Lager-App.

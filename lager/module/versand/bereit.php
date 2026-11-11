@@ -47,6 +47,7 @@ $jeKunde = []; foreach ($zeilen as $z) $jeKunde[(string)($z['kunde'] ?: '–')][
 kopf('Versandbereit', 'versand_bereit');
 seitenkopf('Versandbereit', 'Aufträge mit abgeschlossener Produktion. Versandart festlegen, Aufträge eines Kunden zu einer Sendung zusammenfassen oder ins Lager 2 buchen.');
 flash_zeigen();
+if (!empty($GLOBALS['erp_versand_ungeprueft'])): ?><div class="bx-panel" style="margin-bottom:12px;border-color:#e8c37a;padding:10px 14px">Dashboard nicht erreichbar: Die Liste zeigt alle Aufträge mit Status „erledigt“, auch solche mit offener Menge oder offenem Labor. Bitte vor dem Versand am Auftrag prüfen.</div><?php endif;
 ?>
 <?php if (!$zeilen): ?>
   <div class="bx-panel muted">Kein Auftrag ist versandbereit.</div>

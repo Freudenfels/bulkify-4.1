@@ -38,3 +38,5 @@ angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Re
 
 ## rohstoff_steckbrief (11.11.2026)
 `?p=rohstoff_steckbrief` -> `module/lager/rohstoff_steckbrief.php`: KI-Steckbrief erstellen oder bearbeiten (POST, nur intern).
+
+**api_versand aktion=fertig (11.11.2026):** `ids` (Komma-Liste) -> `{ok, fertig:[ids]}`, welche Aufträge wirklich versandbereit sind (`auftrag_status_kunde`). Für die Lager-App.

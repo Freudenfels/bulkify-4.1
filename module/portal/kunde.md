@@ -473,3 +473,5 @@ In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. D
 `$aufBadge` zeigt bei Status `erledigt` nur dann „versandbereit“, wenn `auftrag_fortschritt_fertig()` gilt (Labor da, Mengen vollständig), sonst „in Produktion“. So passen Kopf („Schritt x/y: Laboranalyse“) und Status zusammen.
 
 **Gesperrter Kunde (Sofortfix 11.11.2026):** Weder der Portal-Link (Token) noch eine laufende Sitzung lassen einen Kunden mit `gesperrt=1` hinein. Die Sitzung wird beendet, Weiterleitung auf `?p=portal_login&gesperrt=1` („Zugang gesperrt, bitte bulkify kontaktieren“). Ein angemeldetes Team-Mitglied darf das Portal eines gesperrten Kunden weiter als Vorschau ansehen. Selbst registrierte Kunden bekommen erst nach der Freigabe einen Token (bei der Registrierung wird keiner angelegt).
+
+**„versandbereit“ nur wenn fertig (Sofortfix 11.11.2026):** Die Startseite („In Produktion / in Arbeit“) hatte eine eigene lokale Badge-Closure, die aus `status='erledigt'` stumpf „versandbereit“ machte (AB-3237 mit 175 von 500). Sie ist weg; es gilt die globale `$aufBadge`. „Meine Anfragen“ und die Etiketten-Seite gehen über `auftrag_status_kunde()`.

@@ -173,9 +173,10 @@ function erp_pk_wo(string $alias = 'c'): string {
 function erp_versandarten(): array { return ['paket' => 'Paket an die Kundenadresse', 'palette' => 'Palette', 'abholung' => 'Selbstabholung', 'lager2' => 'Einbuchen in Lager 2']; }
 // Versandbereite Aufträge: Produktion abgeschlossen (Status erledigt) und noch nicht alles versendet, mit freier Fertigware.
 function erp_versandbereite_auftraege(): array {
+    static $cache = null; if ($cache !== null) return $cache;
     if (!tabelle_da('auftrag')) return [];
     $va = erp_spalte_da('auftrag', 'versandart') ? 'a.versandart' : 'NULL';
-    return all("SELECT a.id, a.nummer, a.kunde_id, a.menge, COALESCE(a.versendet_menge,0) AS versendet, $va AS versandart,
+    $rows = all("SELECT a.id, a.nummer, a.kunde_id, a.menge, COALESCE(a.versendet_menge,0) AS versendet, $va AS versandart,
                        COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt, k.firma AS kunde, COALESCE(k.nutzt_fulfillment,0) AS fulfillment,
                        (SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
                          WHERE i.kategorie='verkaufsfertig' AND c.status='frei' AND c.fremd_kunde_id IS NULL AND c.menge_verfuegbar>0
@@ -183,6 +184,17 @@ function erp_versandbereite_auftraege(): array {
                 FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
                 WHERE a.status='erledigt' AND COALESCE(a.versendet_menge,0) < a.menge AND COALESCE(a.kategorie,'produkt') <> 'dienstleistung'
                 ORDER BY k.firma, a.nummer");
+    // Sofortfix 11.11.2026: „erledigt" allein heißt nicht versandbereit (z. B. 175 von 500, Labor offen). Das Dashboard rechnet
+    // per Loopback (?p=api_versand, aktion=fertig) dieselbe Regel wie Dashboard und Kundenportal. Ist es nicht erreichbar,
+    // bleibt die Liste ungefiltert und $GLOBALS['erp_versand_ungeprueft'] zeigt einen Hinweis (keine Blockade).
+    if ($rows) {
+        $r = erp_dashboard_versand('fertig', 0, 0, ['ids' => implode(',', array_column($rows, 'id'))]);
+        if (!empty($r['ok']) && isset($r['fertig']) && is_array($r['fertig'])) {
+            $f = array_flip(array_map('intval', $r['fertig']));
+            $rows = array_values(array_filter($rows, fn($a) => isset($f[(int)$a['id']])));
+        } else $GLOBALS['erp_versand_ungeprueft'] = true;
+    }
+    return $cache = $rows;
 }
 function erp_auftrag_versandart_setzen(int $auftrag_id, string $art): bool {
     if (!isset(erp_versandarten()[$art]) || !erp_spalte_da('auftrag', 'versandart')) return false;
@@ -197,13 +209,13 @@ function erp_auftrag_fertig_chargen(int $auftrag_id): array {
                 ORDER BY (c.mhd IS NULL), c.mhd, c.id", [$auftrag_id, $auftrag_id]);
 }
 // Dashboard-Buchung per Loopback (?p=api_versand, Token wie Einlagern): 'versenden' (auftrag_id, menge) bzw. 'fremdlager'.
-function erp_dashboard_versand(string $aktion, int $auftrag_id, int $menge = 0): array {
+function erp_dashboard_versand(string $aktion, int $auftrag_id, int $menge = 0, array $extra = []): array {
     if (!function_exists('curl_init')) return ['ok' => false, 'msg' => 'PHP-curl fehlt.'];
     $token = erp_einlager_token();
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $ch = curl_init($scheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro') . '/?p=api_versand');
     curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 45, CURLOPT_CONNECTTIMEOUT => 10,
-        CURLOPT_POSTFIELDS => http_build_query(['aktion' => $aktion, 'auftrag_id' => $auftrag_id, 'menge' => $menge, 'token' => $token]),
+        CURLOPT_POSTFIELDS => http_build_query(['aktion' => $aktion, 'auftrag_id' => $auftrag_id, 'menge' => $menge, 'token' => $token] + $extra),
         CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 2, CURLOPT_POSTREDIR => 7]);
     if (defined('CURLSSLOPT_NATIVE_CA')) curl_setopt($ch, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
     $res = curl_exec($ch); $err = $res === false ? curl_error($ch) : ''; curl_close($ch);

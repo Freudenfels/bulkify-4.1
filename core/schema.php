@@ -6612,6 +6612,16 @@ function auftrag_fortschritt_fertig(array $a): bool {
     foreach (auftrag_fortschritt($a, true)['steps'] as $s) if ($s[1] === 'Abgeschlossen') return $c[$id] = $s[2] === 'done';
     return $c[$id] = true;
 }
+// Status, wie ihn Kunde und Lager sehen (Sofortfix 11.11.2026): „erledigt" heißt nur dann versandbereit, wenn „Abgeschlossen"
+// wirklich erledigt ist (alle Mengen da, Labor da). Sonst 'in_produktion'. Dienstleistungen unverändert.
+// $a = Auftragszeile oder nur ['id'=>, 'status'=>] – fehlende Felder werden nachgeladen. Einzige Stelle für alle Badges.
+function auftrag_status_kunde(array $a): string {
+    $st = (string)($a['status'] ?? '');
+    if ($st !== 'erledigt' || empty($a['id'])) return $st;
+    if (!isset($a['kunde_id'], $a['kategorie'])) { $voll = one("SELECT * FROM auftrag WHERE id=?", [(int)$a['id']]); if (!$voll) return $st; $a = $voll; }
+    if (($a['kategorie'] ?? '') === 'dienstleistung') return $st;
+    return auftrag_fortschritt_fertig($a) ? 'erledigt' : 'in_produktion';
+}
 
 // Kundensicht der neuen Kette (für das Portal, noch nicht eingebaut): interne Einkaufs-Stände der Etiketten (nicht bestellt / bestellt / auf Lager) sieht der Kunde
 // nur als „Etikettierung"; „Etiketten Daten fehlen" sieht er rot mit Upload-Link. Interne Untertexte (Liefertermin, abgefüllt) entfallen.

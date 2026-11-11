@@ -2139,7 +2139,7 @@ foreach ($portalAnfragen as $p) {
         : ($p['betreff'] ?: ($typLabelP[$p['typ']] ?? 'Anfrage'));
     // Erledigt = Angebot bereits angenommen (es gibt einen Auftrag). Dann Bestell-Status zeigen + Nachbestellen.
     $erledigt = ($p['angebot_status'] ?? '') === 'bestaetigt';
-    $aufSt = (string)($p['auftrag_status'] ?? '');
+    $aufSt = !empty($p['auftrag_id']) ? auftrag_status_kunde(['id' => (int)$p['auftrag_id'], 'status' => (string)($p['auftrag_status'] ?? '')]) : (string)($p['auftrag_status'] ?? '');   // versandbereit nur, wenn wirklich fertig
     $aufStLbl = match ($aufSt) { 'in_produktion'=>'in Produktion','erledigt'=>($ffKunde?'bereit zur Einlagerung':'versandbereit'),'versendet'=>($ffKunde?'abgeschlossen':'versendet'), default=>'bestellt' };
     if ($erledigt) {
         $st = bx_badge($aufStLbl, $aufSt === 'versendet' ? 'ok' : 'info');
@@ -2595,15 +2595,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php // In Produktion / in Arbeit: aktive Aufträge des Kunden (nicht versendet/storniert) mit ihrem echten Status.
         $inProd = array_values(array_filter($auftraege, fn($a) => !in_array((string)($a['status'] ?? ''), ['versendet', 'storniert'], true)));
         $inProdShow = array_slice($inProd, 0, 10);
-        $aufBadge = function($s) {
-            switch ($s) {
-                case 'in_produktion': return bx_badge('in Produktion', 'warn');
-                case 'in_arbeit':     return bx_badge('in Arbeit', 'warn');
-                case 'erledigt':      return bx_badge('versandbereit', 'info');
-                case 'offen':         return bx_badge('bestellt', 'info');
-                default:              return bx_badge(status_text($s));
-            }
-        }; ?>
+        // Sofortfix 11.11.2026: keine eigene lokale Badge-Closure mehr (sie machte aus „erledigt" stumpf „versandbereit",
+        // z. B. AB-3237 mit 175 von 500). Es gilt die globale $aufBadge mit der ganzen Auftragszeile. ?>
   <?php if ($inProd): ?>
   <div class="bx-panel">
     <div class="bx-row" style="justify-content:space-between;align-items:center">
@@ -2618,7 +2611,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <td><?= h((string)$a['nummer']) ?></td>
           <td><?= h($titelFuer($a)) ?></td>
           <td class="bx-num"><?= (int)($a['menge'] ?? 0) ? number_format((int)$a['menge'], 0, ',', '.') . ' Pkg.' : '<span class="muted">–</span>' ?></td>
-          <td><?= $aufBadge((string)($a['status'] ?? '')) ?></td>
+          <td><?= $aufBadge($a) ?></td>
           <td class="bx-num"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$a['id'] ?>">Ansehen</a></td>
         </tr>
       <?php endforeach; ?>
@@ -5232,7 +5225,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Bestellung</th><th>Produkt</th><th>Etikett-Maße</th><th>Status</th><th></th></tr></thead>
       <tbody id="etFehltRows">
-        <?php foreach ($etFehlt as $f): $sb = $stLbl[$f['status']] ?? [$f['status'], '']; $masse = $etMasse($f); ?>
+        <?php foreach ($etFehlt as $f): $sb = $stLbl[auftrag_status_kunde($f)] ?? [$f['status'], ''];   /* versandbereit nur, wenn wirklich fertig (11.11.) */ $masse = $etMasse($f); ?>
         <tr>
           <td><strong><?= h($f['nummer']) ?></strong></td>
           <td><?= h($etName($f)) ?></td>
@@ -5262,7 +5255,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <a class="et-hint" href="<?= h($purl) ?>" target="_blank" rel="noopener" data-etikett="<?= h($purl) ?>" data-pdf="<?= $isPdf ? '1' : '0' ?>">Vorschau <?= $isPdf ? '(PDF)' : '' ?></a>
         <div class="et-orders">
           <div class="muted" style="font-size:12px">Genutzt in <?= count($g['orders']) ?> Auftrag/Aufträgen:</div>
-          <?php foreach ($g['orders'] as $o): $sb = $stLbl[$o['status']] ?? [$o['status'], '']; ?>
+          <?php foreach ($g['orders'] as $o): $sb = $stLbl[!empty($o['auftrag_id']) ? auftrag_status_kunde(['id' => (int)$o['auftrag_id'], 'status' => (string)$o['status']]) : (string)$o['status']] ?? [$o['status'], '']; ?>
             <a href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$o['auftrag_id'] ?>"><strong><?= h($o['auftrag_nr']) ?></strong> <?= bx_badge($sb[0], $sb[1]) ?></a>
           <?php endforeach; ?>
         </div>

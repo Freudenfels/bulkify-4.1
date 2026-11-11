@@ -64,6 +64,14 @@ if (($_GET['p'] ?? '') === 'api_versand') {
     if ($soll === '' || !hash_equals($soll, $token)) { http_response_code(401); echo json_encode(['ok'=>false, 'msg'=>'Token ungültig.']); exit; }
     $aid = (int)($_POST['auftrag_id'] ?? 0);
     $akt = (string)($_POST['aktion'] ?? '');
+    // Sofortfix 11.11.2026: welche dieser Aufträge sind WIRKLICH versandbereit (alle Mengen + Labor da)? Eine Rechnung für
+    // Dashboard, Kundenportal und Lager-App (auftrag_status_kunde -> auftrag_fortschritt_fertig).
+    if ($akt === 'fertig') {
+        $ids = array_values(array_filter(array_map('intval', explode(',', (string)($_POST['ids'] ?? ''))), fn($x) => $x > 0));
+        $fertig = [];
+        foreach (array_slice($ids, 0, 500) as $i) { $row = one("SELECT * FROM auftrag WHERE id=?", [$i]); if ($row && auftrag_status_kunde($row) === 'erledigt') $fertig[] = $i; }
+        echo json_encode(['ok' => true, 'fertig' => $fertig]); exit;
+    }
     if ($aid <= 0) { echo json_encode(['ok'=>false, 'msg'=>'auftrag_id fehlt.']); exit; }
     if ($akt === 'versenden') {
         $m = (int)($_POST['menge'] ?? 0);

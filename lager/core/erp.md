@@ -138,3 +138,5 @@ Umlagern Lager 1 -> Lager 2 (04.11.2026): `erp_umlagern_kandidaten()` (freie Fer
 - `erp_lieferung_positionen()` liefert je Position `bp_id`, `bp_nummer`, `bp_rest`, `kapsel`. Erledigte bzw. „Rest storniert“-Positionen fehlen. `erp_lieferung_per_tracking()` gibt dieselben Positionen.
 - `erp_offene_bp_fuer_item($item, $lieferant)`: offene Bestellposition zu einem Artikel (Lieferschein-Scan, Rezeptur-Aufkleber, Etiketten).
 - `erp_items_eingang()` gibt je Artikel Kapselgröße/Füllgewicht (`kapsel`) und Synonyme (`syn`) für die Auswahl mit.
+
+**Versandbereit (Sofortfix 11.11.2026):** `erp_versandbereite_auftraege()` filtert die Aufträge mit Status „erledigt“ zusätzlich über das Dashboard (Loopback `?p=api_versand`, `aktion=fertig`, `ids=`): nur die, deren „Abgeschlossen“ wirklich erledigt ist (dieselbe Regel wie Dashboard und Kundenportal). Ist das Dashboard nicht erreichbar, bleibt die Liste ungefiltert und `$GLOBALS['erp_versand_ungeprueft']` zeigt einen Hinweis. `erp_dashboard_versand()` nimmt dafür ein viertes Argument `$extra` (zusätzliche POST-Felder).
