@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
                 q("UPDATE bestellung SET bestellart='online', status='bestellt', online_haendler=?, online_zahlart=?, online_preis=?, online_waehrung=?, notiz=? WHERE id=?",
                   [$onHaendler, $onZahlart ?: null, $onPreis > 0 ? $onPreis : null, $onWaehr, $notiz, $bid]);
             } else {
-                q("UPDATE bestellung SET bestellart='lieferant', status='gesendet', notiz='Vorsorglich · an den Lieferanten-Account gesendet – wartet auf Bestätigung' WHERE id=?", [$bid]);
+                q("UPDATE bestellung SET bestellart='lieferant', status='gesendet', notiz=CONCAT_WS(' · ', NULLIF(TRIM(notiz),''), 'Vorsorglich') WHERE id=?", [$bid]);   // Stand zeigt die Statuskette, nicht die Notiz
                 if (mail_bereit()) mail_lieferant_bestellung($bid);
             }
             header('Location: ?p=einkauf&vorsorglich=1'); exit;
@@ -156,7 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     // Lieferanten-Weg: an den Account gesendet (wartet auf Bestätigung) + Mail. Direkt-Weg: bestellt + bestätigt, KEINE Mail.
     $finalLief = function(int $bid) use ($direkt, $datum) {
         if ($direkt) { bestellung_direkt_abschliessen($bid, (string)$datum, (string)($_POST['di_eta'] ?? ''), trim((string)($_POST['di_notiz'] ?? ''))); return; }
-        q("UPDATE bestellung SET bestellart='lieferant', status='gesendet', notiz='An den Lieferanten-Account gesendet – wartet auf Bestätigung' WHERE id=?", [$bid]);
+        q("UPDATE bestellung SET bestellart='lieferant', status='gesendet' WHERE id=?", [$bid]);   // Notiz bleibt; „wartet auf Bestätigung" zeigt die Statuskette
         if (mail_bereit()) mail_lieferant_bestellung($bid);
     };
     $n = 0;

@@ -1084,6 +1084,7 @@ function init_schema(): void {
     // Bestellung: Ablauf beim Lieferanten. Er bestaetigt mit geplantem Termin und pflegt danach
     // die Stationen; "versendet" verlangt Versandanbieter, Versandart und Sendungsnummer.
     ensure_column('bestellung', 'bestaetigt', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
     ensure_column('bestellung', 'bestaetigt_am', "DATETIME NULL");
     ensure_column('bestellung', 'bestaetigt_von', "VARCHAR(190) NULL");
     ensure_column('bestellung', 'eta_geplant', "DATE NULL");            // vom Lieferanten zugesagter Termin
@@ -7697,8 +7698,8 @@ function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = nul
     // „Erwartet am" nur, wenn es NACH dem Bestelltag liegt – eine Lieferung am Bestelltag oder davor ist ein Eingabefehler
     // (BE-2924: bestellt 28.10., „erwartet" 28.10.). Ohne Termin bleibt das Feld leer und lässt sich an der Bestellung setzen.
     $eta = $d($eta); if ($eta !== null && $eta <= $bestellt) $eta = null;
-    q("UPDATE bestellung SET bestellart='direkt', status='bestellt', bestaetigt=1, bestaetigt_am=?, bestaetigt_von=?, bestelldatum=?, eta_geplant=COALESCE(?, eta_geplant), notiz=? WHERE id=?",
-      [gmdate('Y-m-d H:i:s'), $wer ?: 'Einkauf', $bestellt, $eta, trim('Direkt bestellt (Telefon/Mail)' . ($notiz !== '' ? ' · ' . $notiz : '')), $bestellung_id]);
+    q("UPDATE bestellung SET bestellart='direkt', status='bestellt', bestaetigt=1, bestaetigt_am=?, bestaetigt_von=?, bestelldatum=?, eta_geplant=COALESCE(?, eta_geplant), notiz=CONCAT_WS(' · ', NULLIF(TRIM(notiz),''), ?) WHERE id=?",
+      [gmdate('Y-m-d H:i:s'), $wer ?: 'Einkauf', $bestellt, $eta, trim('Direkt bestellt (Telefon/Mail)' . ($notiz !== '' ? ' · ' . $notiz : '')), $bestellung_id]);   // ergänzt die Notiz, statt sie zu überschreiben
     log_aktivitaet('bestellung', $bestellung_id, 'team', 'Direkt beim Lieferanten bestellt (Telefon/Mail) – ohne Mail, gilt als bestätigt' . ($notiz !== '' ? ': ' . $notiz : '') . '.', 'status');
     if (function_exists('bedarf_bump')) bedarf_bump();
 }

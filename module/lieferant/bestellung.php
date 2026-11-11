@@ -154,7 +154,8 @@ if (!$b):
       </tbody>
     </table></div>
     <?php endif; ?>
-    <?php if (!empty($b['notiz'])): ?><div class="muted" style="margin-top:10px;white-space:pre-line"><?= h($b['notiz']) ?></div><?php endif; ?>
+    <?php // Interne Notiz (bestellung.notiz) erscheint NIE im Portal – nur der bewusst gefüllte Hinweis an den Lieferanten (Sofortfix 11.11.2026). ?>
+    <?php if (trim((string)($b['hinweis_lieferant'] ?? '')) !== ''): ?><div style="margin-top:10px;white-space:pre-line"><span class="muted"><?= h(lp_t('hinweis_bulkify')) ?>:</span> <?= h($b['hinweis_lieferant']) ?></div><?php endif; ?>
   </div>
 
   <?php // Versand / Pakete: wie viele Kartons schickt der Lieferant und welche Tracking-Nummern.

@@ -183,11 +183,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=bestellung&id=' . ($neu ? 'neu' : (int)$id) . '&fehler=' . urlencode('Bitte mindestens eine Position (Artikel + Menge) hinzufügen, bevor die Bestellung gespeichert wird.')); exit;
     }
     if ($neu) {
-        q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz) VALUES (?,?,?,?)",
-          [naechste_nummer('BE'), $lief, 'offen', trim($_POST['notiz'] ?? '')]);
+        q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,hinweis_lieferant) VALUES (?,?,?,?,?)",
+          [naechste_nummer('BE'), $lief, 'offen', trim($_POST['notiz'] ?? ''), trim((string)($_POST['hinweis_lieferant'] ?? '')) ?: null]);
         $id = insert_id();
     } else {
-        q("UPDATE bestellung SET lieferant_id=?,notiz=? WHERE id=?", [$lief, trim($_POST['notiz'] ?? ''), (int)$id]);
+        q("UPDATE bestellung SET lieferant_id=?,notiz=?,hinweis_lieferant=? WHERE id=?", [$lief, trim($_POST['notiz'] ?? ''), trim((string)($_POST['hinweis_lieferant'] ?? '')) ?: null, (int)$id]);
     }
     // Positionen synchronisieren – NUR Lagerartikel-Positionen; Bulk-Freitext (item_id NULL) bleibt erhalten
     q("DELETE FROM bestellung_position WHERE bestellung_id=? AND item_id IS NOT NULL", [(int)$id]);
@@ -534,7 +534,8 @@ if (!$neu) {
         <?php foreach ($lieferanten as $l): ?><option value="<?= $l['id'] ?>" <?= (int)($b['lieferant_id']??0)===(int)$l['id']?'selected':'' ?>><?= h($l['firma']) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="bx-field"><label>Notiz</label><input type="text" name="notiz" value="<?= $v('notiz') ?>"></div>
+    <div class="bx-field"><label>Interne Notiz</label><input type="text" name="notiz" value="<?= $v('notiz') ?>" title="Nur intern – der Lieferant sieht sie nie."></div>
+    <div class="bx-field"><label>Hinweis an den Lieferanten</label><input type="text" name="hinweis_lieferant" value="<?= $v('hinweis_lieferant') ?>" placeholder="leer = kein Hinweis" title="Steht im Lieferantenportal an der Bestellung. Nur bewusst füllen."></div>
   </div></div>
 
   <div class="bx-panel">

@@ -57,3 +57,5 @@ Neue Liefer-Kategorie `leerkapsel` („Leerkapseln“) für Lieferanten, die nur
 ## Fertigprodukt-Preise (11.11.2026)
 - Der Menüpunkt erscheint auch, wenn offene Fremdfertigungs-Anfragen da sind.
 - `rez_preise_leer` verweist auf „Bitte bepreisen“.
+
+Text `hinweis_bulkify` (DE/EN/ZH): Beschriftung für den Hinweis an den Lieferanten an der Bestellung.

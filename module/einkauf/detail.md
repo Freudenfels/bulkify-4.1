@@ -75,3 +75,5 @@ Block „Wareneingang zuordnen“ (`#abgleich`, aus `core/bestellung_abgleich.ph
 ## Artikelsuche und deutsche Zahlen (10.11.2026, Teil 8)
 - Artikel je Position: Suchfeld (`rscombo`) statt Auswahlliste mit allen Artikeln. Gesucht wird über Name und Synonyme (`item.synonym`, `item.synonyme`), die Kapselgröße bzw. das Füllgewicht steht im Text. Bulk-Artikel (`fertig`) sind auswählbar, vorher fehlten sie und gingen beim Speichern verloren.
 - Menge und EK sind Textfelder mit deutscher Eingabe (`zahl_lesen`): „7.000“ = 7000, „0,12“ = 0,12. Die Zeilensumme rechnet genauso.
+
+**Interne Notiz / Hinweis an den Lieferanten (11.11.2026):** Zwei Felder oben an der Bestellung. „Interne Notiz“ sieht der Lieferant nie. „Hinweis an den Lieferanten“ (`hinweis_lieferant`) steht im Lieferantenportal; leer = kein Hinweis.

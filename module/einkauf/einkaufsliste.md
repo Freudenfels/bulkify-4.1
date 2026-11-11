@@ -102,3 +102,5 @@ Der Block „warten auf die Festlegung des Wegs“ zeigt je Auftrag Links zu Auf
 - **Hauptlieferant mit abgelaufenem Preis:** Darunter steht „Preis des Hauptlieferanten abgelaufen - neu anfragen“ (Link zum Reiter Einkauf).
 - **Bulk/Fertigware:** Die Vorgabe „ab“ nimmt den günstigsten gültigen Preis. Gibt es nur abgelaufene, steht dort „nur abgelaufene Preise - Summe unsicher, neu anfragen“.
 - **Technik:** `item_lieferant_preise()`, `rezeptur_fremd_lieferant_preise()` und `produkt_fremd_lieferant_preise()` haben einen optionalen Referenz-Parameter `$abgelaufen`. Die Auswahl je Lieferant macht `lp_je_lieferant_gueltig()` in core/schema.php.
+
+**Notiz (11.11.2026):** „wartet auf Bestätigung“ wird nicht mehr in die Notiz geschrieben, den Stand zeigt die Statuskette. „Vorsorglich“ und „Direkt bestellt“ **ergänzen** eine vorhandene Notiz, statt sie zu überschreiben.

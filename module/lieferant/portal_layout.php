@@ -34,6 +34,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'einheit'         => ['de'=>'Einheit',                'en'=>'Unit', 'zh'=>'单位'],
         'preis'           => ['de'=>'Preis',                  'en'=>'Price', 'zh'=>'价格'],
         'summe'           => ['de'=>'Summe',                  'en'=>'Total', 'zh'=>'合计'],
+        'hinweis_bulkify' => ['de'=>'Hinweis von bulkify',    'en'=>'Note from bulkify', 'zh'=>'bulkify 备注'],
         'artikel'         => ['de'=>'Artikel',                'en'=>'Item', 'zh'=>'物料'],
         'pdf'             => ['de'=>'Bestellung als PDF',     'en'=>'Order as PDF', 'zh'=>'订单 PDF'],
         'keine_best'      => ['de'=>'Zurzeit liegen keine Bestellungen vor.', 'en'=>'There are no orders at the moment.', 'zh'=>'目前没有订单。'],
