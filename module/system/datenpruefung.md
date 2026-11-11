@@ -150,3 +150,5 @@ Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführ
 - **Je Vorschlag:** die Abweichung („Charge 300.000, offen 240.000“) und der Knopf „Menge korrigieren und verknüpfen“ (Pop-up mit Art, Menge, Grund, Notiz, Beleg; per AJAX).
 - **Nach dem Verknüpfen:** Die Zeile bleibt mit „Verknüpfung lösen“ stehen. Weitere Vorschläge der Position bleiben aktiv, solange sie offen ist; ist sie voll, werden sie grau mit „Position schon gedeckt“.
 - **Positionen mit Teilmengen-Charge** bleiben in der Liste.
+
+**testdaten_live (Block C Teil 3, 11.11.2026, nur auf Klick):** aktive Lieferanten, Kunden, Produkte, Artikel und Rezepturen mit test/zztest/durchlauf/dummy/E2E im Namen oder in der Nummer sowie E-Mails @example.com/.org. Knopf je Zeile „inaktiv setzen“ (gesperrt bzw. Status inaktiv, Rezeptur über `rezeptur_inaktiv_setzen`). Dazu nur zur Info: Bestellungen mit TEST/E2E in der Nummer oder ohne vorhandenen Lieferanten, Lieferantenpreise und Anfragen (LA-…) gelöschter Lieferanten. `_id` = Typ × 10.000.000 + id.

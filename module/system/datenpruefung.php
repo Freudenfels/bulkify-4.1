@@ -68,6 +68,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dp_ab
     header('Location: ?p=datenpruefung&ok=' . rawurlencode($ok . ' Verknüpfung(en) ausgeführt' . ($fehl ? ', ' . $fehl . ' übersprungen (nicht mehr eindeutig)' : '') . '.') . '#' . $k); exit;
 }
 $CHECKS = [
+    // Block C Teil 3 (Abendpaket 11.11.2026): Testdaten auf live. Nur auf Klick. Aktive Einträge mit „test", „zztest", „durchlauf",
+    // „dummy" (auch E2E) im Namen oder in der Nummer und E-Mails @example.com/.org. Dazu Reste gelöschter Lieferanten (z. B. id 6,
+    // Shandong Health Ingredients: Preise, Anfragen LA-…, Bestellungen BE-TEST ohne Lieferant) – die nur zeigen, nichts löschen.
+    // _id = Typ * 10.000.000 + id (eindeutig über die Tabellen). Knopf je Zeile „inaktiv setzen" (gesperrt bzw. Status inaktiv).
+    'testdaten_live' => [
+        'titel' => 'Testdaten auf live (aktive Einträge mit test/zztest/durchlauf/dummy, @example.com, Reste gelöschter Lieferanten)',
+        'info'  => 'Findet aktive Lieferanten, Kunden, Produkte, Artikel und Rezepturen mit „test", „zztest", „durchlauf", „dummy" oder „E2E" im Namen bzw. in der Nummer (LF-TEST, BE-TEST …) sowie E-Mails @example.com/.org. '
+                 . 'Achtung, „test" trifft auch echte Namen (z. B. Testosteron) – je Zeile entscheiden. „inaktiv setzen" sperrt Lieferant/Kunde/Artikel bzw. setzt Produkt/Rezeptur auf inaktiv (Rezeptur mit Bulk/Premix). Nichts wird gelöscht. '
+                 . 'Unten: Reste gelöschter Lieferanten (Preise, Anfragen, Bestellungen ohne vorhandenen Lieferanten) und Bestellungen mit TEST in der Nummer – nur zur Info, kein Knopf.',
+        'auf_klick' => true,
+        'sql'   => "SELECT 10000000 + l.id AS _id, CONCAT('?p=lieferant&id=', l.id) AS _link, 'Lieferant' AS art, l.lieferantennummer AS nummer, l.firma AS name, COALESCE(l.email,'') AS email
+                    FROM lieferanten l WHERE COALESCE(l.gesperrt,0)=0 AND (LOWER(CONCAT_WS(' ', l.firma, l.lieferantennummer)) REGEXP '(^|[^a-z])(zztest|test|durchlauf|dummy)|e2e' OR LOWER(COALESCE(l.email,'')) REGEXP '@example[.](com|org)')
+                    UNION ALL
+                    SELECT 20000000 + k.id, CONCAT('?p=kunde&id=', k.id), 'Kunde', k.kundennummer, k.firma, COALESCE(k.email,'')
+                    FROM kunden k WHERE COALESCE(k.gesperrt,0)=0 AND (LOWER(CONCAT_WS(' ', k.firma, k.kundennummer)) REGEXP '(^|[^a-z])(zztest|test|durchlauf|dummy)|e2e' OR LOWER(COALESCE(k.email,'')) REGEXP '@example[.](com|org)')
+                    UNION ALL
+                    SELECT 30000000 + p.id, CONCAT('?p=produkt&id=', p.id), 'Produkt', p.nummer, p.name, ''
+                    FROM produkt p WHERE COALESCE(p.status,'') <> 'inaktiv' AND LOWER(CONCAT_WS(' ', p.name, p.nummer)) REGEXP '(^|[^a-z])(zztest|test|durchlauf|dummy)|e2e'
+                    UNION ALL
+                    SELECT 40000000 + i.id, CONCAT('?p=', IF(i.kategorie='verpackung','verpackung','rohstoff'), '&id=', i.id), CONCAT('Artikel (', i.kategorie, ')'), i.artikelnummer, i.name, ''
+                    FROM item i WHERE COALESCE(i.gesperrt,0)=0 AND LOWER(CONCAT_WS(' ', i.name, i.artikelnummer)) REGEXP '(^|[^a-z])(zztest|test|durchlauf|dummy)|e2e'
+                    UNION ALL
+                    SELECT 50000000 + r.id, CONCAT('?p=rezeptur_detail&id=', r.id), 'Rezeptur', r.nummer, r.name, ''
+                    FROM rezeptur r WHERE COALESCE(r.status,'') <> 'inaktiv' AND LOWER(CONCAT_WS(' ', r.name, r.nummer)) REGEXP '(^|[^a-z])(zztest|test|durchlauf|dummy)|e2e'
+                    UNION ALL
+                    SELECT 60000000 + b.id, CONCAT('?p=bestellung&id=', b.id), 'Bestellung (nur Info)', b.nummer, CONCAT('Status ', b.status, IF(b.lieferant_id IS NOT NULL AND l2.id IS NULL, CONCAT(' · Lieferant gelöscht (id ', b.lieferant_id, ')'), '')), ''
+                    FROM bestellung b LEFT JOIN lieferanten l2 ON l2.id=b.lieferant_id
+                    WHERE b.status <> 'storniert' AND (UPPER(b.nummer) LIKE '%TEST%' OR UPPER(b.nummer) LIKE '%E2E%' OR (b.lieferant_id IS NOT NULL AND l2.id IS NULL))
+                    UNION ALL
+                    SELECT 70000000 + lp.id, CONCAT('?p=rohstoff&id=', lp.item_id), 'Preis ohne Lieferant (nur Info)', CONCAT('Lieferant id ', lp.lieferant_id), CONCAT(COALESCE(i2.name, '?'), ' · ', REPLACE(FORMAT(lp.preis, 4), '.', ','), ' ', COALESCE(lp.waehrung,'EUR')), ''
+                    FROM lieferant_preis lp LEFT JOIN lieferanten l3 ON l3.id=lp.lieferant_id LEFT JOIN item i2 ON i2.id=lp.item_id
+                    WHERE lp.lieferant_id IS NOT NULL AND l3.id IS NULL
+                    UNION ALL
+                    SELECT 80000000 + la.id, CONCAT('?p=lief_anfrage_detail&id=', la.id), 'Anfrage ohne Lieferant (nur Info)', la.nummer, CONCAT(COALESCE(la.betreff, ''), ' · Lieferant id ', la.lieferant_id), ''
+                    FROM lieferant_anfrage la LEFT JOIN lieferanten l4 ON l4.id=la.lieferant_id
+                    WHERE la.lieferant_id IS NOT NULL AND l4.id IS NULL
+                    ORDER BY 3, 4",
+        'korrektur' => "inaktiv setzen: Lieferant/Kunde/Artikel -> UPDATE <tabelle> SET gesperrt=1 WHERE id=<ID>; Produkt -> status='inaktiv'; Rezeptur -> rezeptur_inaktiv_setzen() (sperrt Bulk/Premix mit). Bestellungen, Preise und Anfragen ohne Lieferant: nur anzeigen.",
+        'fix'   => ['waehlbar' => fn(array $r) => (int)$r['_id'] < 60000000,
+                    'aktion' => function (array $r): int {
+                        $typ = intdiv((int)$r['_id'], 10000000); $id = (int)$r['_id'] % 10000000;
+                        if ($typ === 5) return rezeptur_inaktiv_setzen($id, true, 'Datenprüfung Testdaten')['ok'] ? 1 : 0;
+                        [$tab, $feld, $wert] = [1 => ['lieferanten', 'gesperrt', 1], 2 => ['kunden', 'gesperrt', 1], 3 => ['produkt', 'status', 'inaktiv'], 4 => ['item', 'gesperrt', 1]][$typ] ?? [null, null, null];
+                        if (!$tab) return 0;
+                        $vor = one("SELECT `$feld` FROM `$tab` WHERE id=?", [$id]);
+                        if (!$vor) return 0;
+                        q("UPDATE `$tab` SET `$feld`=? WHERE id=?", [$wert, $id]);
+                        aenderung_protokollieren($tab === 'lieferanten' ? 'lieferant' : ($tab === 'kunden' ? 'kunde' : $tab), $id, $vor, [$feld => $wert], 'datenpruefung_testdaten');
+                        return 1;
+                    }],
+    ],
     // Einkauf gerade ziehen, Teil 4 (10.11.2026): Altlasten. Verknüpfen/Schließen passiert an der Bestellung (Block „Wareneingang zuordnen").
     'be_ohne_we' => [
         'titel' => 'Einkauf: offene Bestellung, Position ohne Wareneingang (mit Vorschlägen)',
