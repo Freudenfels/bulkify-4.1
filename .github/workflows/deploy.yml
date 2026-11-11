@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-24.04   # fest (11.11.2026): ubuntu-latest = Ubuntu 26, dort scheiterte apt (DNS security.ubuntu.com) -> lftp fehlte
+    runs-on: ubuntu-latest
     # 40 min: der Vollupload (erster Lauf ohne .deploy_sha / manueller Start) braucht deutlich mehr als 10 min.
     # Haengt ein SFTP-Schritt doch, bricht der Lauf danach ab und die Queue laeuft weiter.
     timeout-minutes: 40
