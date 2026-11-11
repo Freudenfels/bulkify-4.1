@@ -377,3 +377,5 @@ Alle drei Wege stehen im Verlauf.
 **Doppelbestellung (11.11.2026):** Vor dem Anlegen prüft `core/bestellung_doppelt.php` offene Bestellungen desselben Artikels bzw. Auftrags. Treffer: Pop-up mit Link, weiter nur mit „Trotzdem bestellen“ (steht im Verlauf).
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+**Preise & Rechnung (Block D, 11.11.2026, Fable 13.11):** Der EK je Bedarf nimmt gültige Preise zuerst und keine gesperrten Lieferanten. Gibt es nur abgelaufene, steht oben „Preis abgelaufen - Summe unsicher“.

@@ -57,3 +57,5 @@ Ein Zukaufpreis von Hand hat das Feld „Preis gültig bis“ (`produkt_lieferan
 Ein Weg mit abgelaufenem Rohstoffpreis zeigt „unsicher: Preis abgelaufen“ statt „unvollständig“. Die Zeile nennt das Ablaufdatum und verlinkt auf den Reiter Einkauf des Rohstoffs.
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+**Abgelaufene Preise (Block D, 11.11.2026):** Im Reiter Beschaffung tragen abgelaufene Zukauf-/Premix-Staffeln den Badge „abgelaufen“. Rohstoffpreise zeigen „abgelaufen seit …“ statt „günstigster“.

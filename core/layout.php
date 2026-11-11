@@ -456,6 +456,10 @@ function bx_menue_script(): string {
 }
 
 function render_footer(): void {
+    // Block D (11.11.2026): wurde auf dieser Seite mit einem abgelaufenen Preis gerechnet, steht oben „Preis abgelaufen - Summe unsicher".
+    if (!empty($GLOBALS['pg_abgelaufen']) && function_exists('pg_abgelaufen_hinweis')) {
+        echo pg_abgelaufen_hinweis() . '<script>(function(){var h=document.getElementById("pgAbgelaufen"),m=document.querySelector(".bx-main .bx-head");if(h&&m)m.insertAdjacentElement("afterend",h);})();</script>';
+    }
     echo "</main></div>";
     echo bx_theme_script();
     echo bx_side_scroll_script();

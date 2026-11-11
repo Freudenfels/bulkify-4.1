@@ -83,3 +83,5 @@ Unter der Gruppe **Anfragen** steht neu `rohstoff_unterlagen` („Rohstoff-Unter
 
 
 Nach `<main>`: einmaliges Pop-up „Es gibt schon eine offene Bestellung“ (`core/bestellung_doppelt.php`), wenn die Sitzung `bx_doppelt` trägt (Sofortfix 11.11.2026).
+
+`render_footer()` gibt oben auf der Seite den Hinweis „Preis abgelaufen - Summe unsicher“ aus, wenn auf der Seite mit einem abgelaufenen Preis gerechnet wurde (Block D, 11.11.2026).

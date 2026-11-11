@@ -1084,11 +1084,12 @@ function init_schema(): void {
     // Bestellung: Ablauf beim Lieferanten. Er bestaetigt mit geplantem Termin und pflegt danach
     // die Stationen; "versendet" verlangt Versandanbieter, Versandart und Sendungsnummer.
     ensure_column('bestellung', 'bestaetigt', "TINYINT(1) NOT NULL DEFAULT 0");
-    ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");
+    ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
     ensure_column('rezeptur', 'status_vor_inaktiv', "VARCHAR(20) NULL");   // Block C 11.11.2026: Status vor „inaktiv" (für Wieder aktivieren)
     ensure_column('item', 'gesperrt_durch_rezeptur', "INT NULL");          // Block C: mit der Rezeptur gesperrter Bulk-/Premix-Artikel
+    ensure_column('item', 'ek_abgelaufen_seit', "DATE NULL");              // Block D: Auto-EK stammt aus einem inzwischen abgelaufenen Preis
     rezeptur_testdaten_inaktiv_einmal();   // Block C Teil 2: RZ-4023, RZ-4033, RZ-4034 einmalig inaktiv (von Nico ausdrücklich erlaubt)
-    preis_spalten_sechs_stellen();   // Sofortfix 11.11.2026: Lieferanten-/EK-Preise mit 6 Nachkommastellen (2,95 € / 1.000 = 0,002950)   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
+    preis_spalten_sechs_stellen();   // Sofortfix 11.11.2026: Lieferanten-/EK-Preise mit 6 Nachkommastellen (2,95 € / 1.000 = 0,002950)
     ensure_column('bestellung', 'bestaetigt_am', "DATETIME NULL");
     ensure_column('bestellung', 'bestaetigt_von', "VARCHAR(190) NULL");
     ensure_column('bestellung', 'eta_geplant', "DATE NULL");            // vom Lieferanten zugesagter Termin
@@ -4944,7 +4945,10 @@ function pack_ek_bei_menge(int $verp_id, int $menge): float {
 // Leerkapsel-EK je Stück für ein Produkt (0 wenn nicht bestimmbar / kein Kapselprodukt).
 function produkt_kapsel_ek(int $produkt_id): float {
     $kid = produkt_leerkapsel_id($produkt_id);
-    return $kid ? (float) scalar("SELECT ek_preis FROM item WHERE id=?", [$kid]) : 0.0;
+    if (!$kid) return 0.0;
+    $r = one("SELECT ek_preis, ek_abgelaufen_seit FROM item WHERE id=?", [$kid]);
+    if (!empty($r['ek_abgelaufen_seit'])) { require_once __DIR__ . '/preis_gueltig.php'; pg_abgelaufen_merken('item', (int)$kid, (string)$r['ek_abgelaufen_seit']); }   // Block D: nie still
+    return (float)($r['ek_preis'] ?? 0);
 }
 // ---- Tablette: Presshilfsstoffe ----
 // Eine Tablette besteht nicht nur aus den Wirkstoffen der Rezeptur: Füllstoff, Trennmittel und Überzug
@@ -6968,9 +6972,9 @@ function vk_fuer_kunde(float $vk, ?int $kunde_id): float {
 // Rückgabe: ['lieferant_id'=>…, 'firma'=>…, 'preis'=>…] oder null, wenn kein Lieferantenpreis existiert.
 // Preis-Gültigkeit (Nico 11.11.2026, core/preis_gueltig.php): gültige Preise bevorzugen, abgelaufene nur als letzte
 // Möglichkeit (dann markiert). Zeilen brauchen das Feld gueltig_bis.
-function lp_gueltig_auswahl(array $rows): array {
+function lp_gueltig_auswahl(array $rows, array $kontext = []): array {
     require_once __DIR__ . '/preis_gueltig.php';
-    return pg_auswahl($rows);
+    return pg_auswahl($rows, 'gueltig_bis', $kontext);   // $kontext: [typ, id] für den Hinweis „abgelaufen" (Block D)
 }
 // Alte Lieferantenpreise vor dem Ersetzen in den Preisverlauf schreiben (Historie am Rohstoff, z. B. Whey-Entwicklung).
 function lp_verlauf_sichern(int $item_id, ?int $lieferant_id = null, ?int $preis_id = null): void {
@@ -7085,9 +7089,16 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
         $auto = (int)($it['ek_auto'] ?? 0) === 1;
         if (!$auto && (float)$it['ek_preis'] > 0) return;
         $best = null; $seen = [];
-        foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, lieferant_name, preis, gueltig_bis FROM lieferant_preis
+        // Block D (11.11.2026): Gibt es nur abgelaufene Preise, wird der Auto-EK NICHT daraus gesetzt – der alte EK bleibt und
+        // bekommt das Kennzeichen „aus abgelaufenem Preis" (item.ek_abgelaufen_seit). Gültige Preise setzen den EK und löschen es.
+        $selEk = lp_gueltig_auswahl(all("SELECT lieferant_id, lieferant_name, preis, gueltig_bis FROM lieferant_preis
                       WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))
-                      ORDER BY lieferant_id, lieferant_name, menge_ab ASC, preis ASC", [$item_id]))['rows'] as $r) {
+                      ORDER BY lieferant_id, lieferant_name, menge_ab ASC, preis ASC", [$item_id]));
+        if (!empty($selEk['abgelaufen'])) {
+            if ($auto) q("UPDATE item SET ek_abgelaufen_seit=? WHERE id=?", [$selEk['abgelaufen'], $item_id]);
+            return;
+        }
+        foreach ($selEk['rows'] as $r) {
             $k = (int)$r['lieferant_id'] . '|' . (string)$r['lieferant_name'];
             if (isset($seen[$k])) continue;   // erste Zeile je Lieferant = kleinste Staffel
             $seen[$k] = true;
@@ -7095,7 +7106,7 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
         }
         if ($best === null) { if ($auto) q("UPDATE item SET ek_preis=0, ek_auto=0 WHERE id=?", [$item_id]); return; }
         $lid = $best['lid'] > 0 && scalar("SELECT id FROM lieferanten WHERE id=?", [$best['lid']]) ? $best['lid'] : null;
-        q("UPDATE item SET ek_preis=?, ek_auto=1, haupt_lieferant_id=COALESCE(haupt_lieferant_id, ?) WHERE id=?", [$best['preis'], $lid, $item_id]);
+        q("UPDATE item SET ek_preis=?, ek_auto=1, ek_abgelaufen_seit=NULL, haupt_lieferant_id=COALESCE(haupt_lieferant_id, ?) WHERE id=?", [$best['preis'], $lid, $item_id]);
     } catch (Throwable $e) { /* best-effort: Spalte ek_auto evtl. noch nicht da */ }
 }
 // Je Lieferant die größte passende Staffel; liegt die Menge UNTER seiner kleinsten Staffel (z. B. 240 kg bei „ab 250 kg"),
@@ -7105,7 +7116,7 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
 function rohstoff_ek_detail(int $item_id, float $menge): ?array {
     $rows = all("SELECT lieferant_id, lieferant_name, menge_ab, preis, gueltig_bis FROM lieferant_preis
                  WHERE item_id=? AND preis>0 AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$item_id]);
-    $gSel = lp_gueltig_auswahl($rows); $rows = $gSel['rows'];   // gültige Preise bevorzugen, abgelaufene nur markiert
+    $gSel = lp_gueltig_auswahl($rows, ['item', $item_id]); $rows = $gSel['rows'];   // gültige Preise bevorzugen, abgelaufene nur markiert (+ Hinweis)
     $je = []; $bisJe = [];
     foreach ($rows as $r) {
         $k = (int)$r['lieferant_id'] . '|' . (string)$r['lieferant_name'];
@@ -7126,7 +7137,9 @@ function rohstoff_ek_detail(int $item_id, float $menge): ?array {
 function rohstoff_ek_bei_menge(int $item_id, float $menge): ?float {
     $d = rohstoff_ek_detail($item_id, $menge);
     if ($d !== null) return $d['preis'];
-    $flat = scalar("SELECT ek_preis FROM item WHERE id=?", [$item_id]);
+    $flatRow = one("SELECT ek_preis, ek_abgelaufen_seit FROM item WHERE id=?", [$item_id]);
+    $flat = $flatRow['ek_preis'] ?? null;
+    if ($flat !== null && (float)$flat > 0 && !empty($flatRow['ek_abgelaufen_seit'])) { require_once __DIR__ . '/preis_gueltig.php'; pg_abgelaufen_merken('item', $item_id, (string)$flatRow['ek_abgelaufen_seit']); }
     return ($flat !== null && (float) $flat > 0) ? (float) $flat : null;
 }
 // Materialkosten + Gesamt-Einwaage einer Rezeptur JE EINHEIT (Kapsel/Stick/Portion), aus den
@@ -8757,7 +8770,7 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         return $l;
     };
     $angRows = lp_gueltig_auswahl(all("SELECT lieferant_id, menge, preis, LOWER(COALESCE(einheit,'')) AS einheit, gueltig_bis FROM rezeptur_lief_angebot
-                    WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis > 0", [$rid, rezeptur_stamm_id($rid)]))['rows'];
+                    WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis > 0", [$rid, rezeptur_stamm_id($rid)]), ['rezeptur', $rid])['rows'];
     // (a) fertige Kapseln/Tabletten: Fremdfertigungs-Angebote je Stück + Zukaufpreise je Einheit am Produkt.
     $mengeA = $schuett ? $einh / 1000 : $einh;     // Schüttgut: fertige Mischung in kg
     $za = [];
@@ -8771,7 +8784,7 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         $pm = rezeptur_premixitem($rid, false);
         $zb = [];
         foreach ($angRows as $r) if ($r['einheit'] === 'kg') $zb[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
-        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]))['rows'] as $r)
+        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]), ['item', $pm])['rows'] as $r)
             $zb[] = [(int)$r['lieferant_id'], (float)$r['menge_ab'], (float)$r['preis']];
         $out['wege']['premix'] = ['menge' => $kg, 'menge_voll' => $kgVoll, 'einheit' => 'kg', 'angebote' => $angebote(staffel_je_lieferant($zb, $kg), $kg), 'zusatz' => $kapZeile, 'item_id' => $pm, 'label' => 'Premix (fertige Mischung)'];
     }
@@ -10662,12 +10675,12 @@ function lieferant_partner_verknuepfen(int $lieferant_id): int {
 // Für die Lieferanten-Auswahl im Einkauf (Lieferant mit Preis anzeigen, günstigste zuerst).
 // Je Lieferant nur seine gültigen Zeilen; hat er nur abgelaufene, gelten diese, und $abgelaufen[lieferant_id] = Ablaufdatum
 // (Preis-Gültigkeit 11.11.2026: in der Bestellliste markiert, nie still). $feld = Spalte für die Gültigkeit.
-function lp_je_lieferant_gueltig(array $rows, ?array &$abgelaufen = null): array {
+function lp_je_lieferant_gueltig(array $rows, ?array &$abgelaufen = null, array $kontext = []): array {
     $je = [];
     foreach ($rows as $r) $je[(int)$r['lieferant_id']][] = $r;
     $out = [];
     foreach ($je as $lid => $zeilen) {
-        $sel = lp_gueltig_auswahl($zeilen);
+        $sel = lp_gueltig_auswahl($zeilen, $kontext);
         if ($sel['abgelaufen'] && is_array($abgelaufen)) $abgelaufen[$lid] = $sel['abgelaufen'];
         foreach ($sel['rows'] as $z) $out[] = $z;
     }
@@ -10677,7 +10690,7 @@ function item_lieferant_preise(int $item_id, float $menge = 0, ?array &$abgelauf
     if ($item_id <= 0 || !table_exists('lieferant_preis')) return [];
     $out = [];
     if (!is_array($abgelaufen)) $abgelaufen = [];
-    foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1)) ORDER BY menge_ab ASC", [$item_id]), $abgelaufen) as $r) {
+    foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1)) ORDER BY menge_ab ASC", [$item_id]), $abgelaufen, ['item', $item_id]) as $r) {
         $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
         if ($menge <= 0 || $ma <= $menge + 1e-9) $out[$lid] = $pr;   // größter passender Staffelwert gewinnt (ORDER BY ASC)
         elseif (!isset($out[$lid])) $out[$lid] = $pr;                // alle Staffeln > Menge -> kleinste als Fallback
@@ -10692,7 +10705,7 @@ function produkt_lieferant_preise(int $produkt_id, float $stueck = 0): array {
     $ep = null;
     foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, einheit, gueltig_bis FROM produkt_lieferant_preis
                   WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))
-                  ORDER BY menge_ab ASC", [$produkt_id]))['rows'] as $r) {
+                  ORDER BY menge_ab ASC", [$produkt_id]), ['produkt', $produkt_id])['rows'] as $r) {
         $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
         // Preis je PACKUNG (St-24) -> je Einheit umrechnen (Preis / Einheiten je Packung, Staffel × Einheiten je Packung).
         if (in_array(strtolower(trim((string)$r['einheit'])), ['packung', 'pkg', 'pkg.', 'packungen'], true)) {
@@ -10712,7 +10725,7 @@ function produkt_lieferant_preise_pkg(int $produkt_id, float $packungen = 0): ar
     $ep = max(1, (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [$produkt_id]));
     $rows = [];
     foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, einheit, gueltig_bis FROM produkt_lieferant_preis
-                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$produkt_id]))['rows'] as $r) {
+                  WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$produkt_id]), ['produkt', $produkt_id])['rows'] as $r) {
         $jePkg = in_array(strtolower(trim((string)$r['einheit'])), ['packung', 'pkg', 'pkg.', 'packungen'], true);
         $rows[] = ['lid'=>(int)$r['lieferant_id'], 'ab'=>$jePkg ? (float)$r['menge_ab'] : (float)$r['menge_ab'] / $ep,
                    'preis'=>$jePkg ? (float)$r['preis'] : (float)$r['preis'] * $ep];
@@ -10744,7 +10757,7 @@ function rezeptur_fremd_lieferant_preise(int $rezeptur_id, float $stueck = 0, ?a
     foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, menge, preis, gueltig_bis FROM rezeptur_lief_angebot
                   WHERE rezeptur_id = ? AND lieferant_id IS NOT NULL AND preis IS NOT NULL AND preis > 0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))"
                   . ($stueckForm ? " AND LOWER(TRIM(COALESCE(einheit,''))) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm')" : "") . "
-                  ORDER BY menge ASC", [$rezeptur_id]), $abgelaufen) as $r) {
+                  ORDER BY menge ASC", [$rezeptur_id]), $abgelaufen, ['rezeptur', $rezeptur_id]) as $r) {
         $lid = (int)$r['lieferant_id']; $m = (float)$r['menge']; $p = (float)$r['preis'];
         if ($stueck <= 0 || $m <= $stueck + 1e-9) $out[$lid] = $p;   // größte passende Staffel gewinnt
         elseif (!isset($out[$lid])) $out[$lid] = $p;                 // alle Staffeln > Menge -> kleinste als Fallback
@@ -12116,7 +12129,8 @@ function auftrag_express_bestellung(int $auftrag_id, int $lieferant_id): ?int {
         if ($menge <= 0.0001) continue;   // genug auf Lager (oder wartet in Quarantäne auf Freigabe)
         // Passenden Staffelpreis dieses Lieferanten holen (größte Staffel <= Menge, sonst kleinste).
         $preis = null;
-        foreach (all("SELECT preis, menge_ab FROM lieferant_preis WHERE item_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$b['item_id'], $lieferant_id]) as $s) {
+        // Block D (11.11.2026): gültige Preise zuerst; nur abgelaufene -> gerechnet, aber auf der Seite als „abgelaufen" gemeldet.
+        foreach (lp_gueltig_auswahl(all("SELECT preis, menge_ab, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$b['item_id'], $lieferant_id]), ['item', (int)$b['item_id']])['rows'] as $s) {
             if ($preis === null) $preis = (float)$s['preis'];              // kleinste als Rückfall (unter MOQ)
             if ((float)$s['menge_ab'] <= $menge) $preis = (float)$s['preis'];
         }

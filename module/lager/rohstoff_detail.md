@@ -225,3 +225,5 @@ Siehe `core/preis_gueltig.md`.
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Lieferanten-/Kunden-Auswahl ohne gesperrte (der gewählte bleibt). In den Lieferantenpreisen ist ein gesperrter Lieferant grau markiert („Lieferant gesperrt“) und nie „günstigster“.
 
 **Zusammenführen (Block D, 11.11.2026):** läuft über `artikel_zusammenfuehren_voll()` (gleiche Sperren wie die Seite „Artikel zusammenführen“). Fehler- und Kollisionshinweise erscheinen als Text.
+
+**EK aus abgelaufenem Preis (Block D, 11.11.2026):** Unter dem EK steht rot „aus abgelaufenem Preis (seit …)“, wenn es keinen gültigen Lieferantenpreis mehr gibt (`item.ek_abgelaufen_seit`).

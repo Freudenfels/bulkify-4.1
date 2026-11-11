@@ -107,7 +107,9 @@ function pg_eingabe(string $name, ?string $wert, array $opt = []): string {
 // - Gibt es gültige Zeilen (unbegrenzt oder bis >= heute), werden NUR diese genommen. 'abgelaufen_ignoriert' = es gab
 //   zusätzlich abgelaufene (Hinweis, z. B. „billigerer Preis abgelaufen").
 // - Gibt es nur abgelaufene, werden die des letzten Ablaufdatums genommen und 'abgelaufen' = dieses Datum gesetzt.
-function pg_auswahl(array $rows, string $feld = 'gueltig_bis'): array {
+// $kontext (Block D, 11.11.2026): ['item'|'produkt'|'rezeptur', id] – wird nur abgelaufen gerechnet, merkt pg_abgelaufen_merken()
+// das für den Hinweis „Preis abgelaufen seit …, Summe unsicher" auf der Seite (nie still verwendet, Handbuch 4.2).
+function pg_auswahl(array $rows, string $feld = 'gueltig_bis', array $kontext = []): array {
     $heute = pg_heute(); $gueltig = []; $abg = [];
     foreach ($rows as $r) {
         $b = trim((string)($r[$feld] ?? ''));
@@ -116,7 +118,34 @@ function pg_auswahl(array $rows, string $feld = 'gueltig_bis'): array {
     if ($gueltig) return ['rows' => $gueltig, 'abgelaufen' => null, 'abgelaufen_ignoriert' => (bool)$abg];
     if (!$abg) return ['rows' => [], 'abgelaufen' => null, 'abgelaufen_ignoriert' => false];
     $max = max(array_map(fn($r) => (string)$r[$feld], $abg));
+    pg_abgelaufen_merken((string)($kontext[0] ?? ''), (int)($kontext[1] ?? 0), $max);
     return ['rows' => array_values(array_filter($abg, fn($r) => (string)$r[$feld] === $max)), 'abgelaufen' => $max, 'abgelaufen_ignoriert' => false];
+}
+// Merkliste der in diesem Seitenaufruf benutzten abgelaufenen Preise (Block D, 11.11.2026). $typ item|produkt|rezeptur.
+function pg_abgelaufen_merken(string $typ, int $id, string $datum): void {
+    $k = $typ . ':' . $id;
+    if (!isset($GLOBALS['pg_abgelaufen'][$k]) || $GLOBALS['pg_abgelaufen'][$k]['datum'] > $datum)
+        $GLOBALS['pg_abgelaufen'][$k] = ['typ' => $typ, 'id' => $id, 'datum' => $datum];
+}
+// Hinweis für die Seite: „Preis abgelaufen seit …, Summe unsicher" mit den betroffenen Artikeln/Produkten/Rezepturen (verlinkt).
+// Leer, wenn auf dieser Seite kein abgelaufener Preis gerechnet wurde. Ausgabe in core/layout.php (render_footer) oben auf der Seite.
+function pg_abgelaufen_hinweis(): string {
+    $l = $GLOBALS['pg_abgelaufen'] ?? [];
+    if (!$l) return '';
+    $teile = [];
+    foreach ($l as $e) {
+        [$sql, $url, $lbl] = match ($e['typ']) {
+            'item'     => ["SELECT name FROM item WHERE id=?", '?p=rohstoff&id=', 'Artikel'],
+            'produkt'  => ["SELECT name FROM produkt WHERE id=?", '?p=produkt&id=', 'Produkt'],
+            'rezeptur' => ["SELECT name FROM rezeptur WHERE id=?", '?p=rezeptur_detail&id=', 'Rezeptur'],
+            default    => ['', '', 'Preis'],
+        };
+        $name = ($sql !== '' && $e['id'] > 0) ? (string) scalar($sql, [$e['id']]) : '';
+        $teile[] = ($name !== '' ? '<a href="' . $url . (int)$e['id'] . '">' . htmlspecialchars($name) . '</a>' : htmlspecialchars($lbl))
+                 . ' (abgelaufen seit ' . date('d.m.Y', strtotime($e['datum'])) . ')';
+    }
+    return '<div class="bx-panel" id="pgAbgelaufen" style="padding:10px 14px;border-color:#e8c37a">Preis abgelaufen - Summe unsicher. Gerechnet wurde mit dem letzten, abgelaufenen Lieferantenpreis: '
+         . implode(', ', $teile) . '. Bitte neu anfragen oder ein neues „gültig bis" eintragen.</div>';
 }
 // Frühestes „gültig bis" (heute oder später) einer Liste – für die Angebotsgültigkeit.
 function pg_fruehestes(array $daten): ?string {

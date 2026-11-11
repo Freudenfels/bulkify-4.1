@@ -33,3 +33,5 @@ In der Rohstoff-/Nicht-Kapsel-Ansicht zwei Spalten: **Bedarf** (Summe `need` aus
 Neben „Preis ab“ steht unsere Mindestmenge (`item.moq_menge` + Einheit), die Notiz als Tooltip. Die Spalte ist sortierbar. Siehe `core/rohstoff_moq.md`.
 
 **Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).
+
+**Günstigster EK (Block D, 11.11.2026):** nur aus gültigen Preisen ohne gesperrte Lieferanten. Gibt es nur abgelaufene, wird der letzte mit dem Badge „abgelaufen seit …“ gezeigt (auch beim Auto-EK aus abgelaufenem Preis).

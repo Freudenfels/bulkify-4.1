@@ -793,9 +793,10 @@ if ($istAdmin && $pa) {
         // Staffel nach MENGE (Nico 08.11.2026, wie Beschaffungsweg/Einkaufsliste): je Lieferant die größte Staffel, deren
         // Mindestmenge der Bedarf erreicht – liegt der Bedarf unter seiner kleinsten Staffel, gilt diese (Mindestmenge).
         // Vorher: alle Zeilen nur nach Preis sortiert -> „ab 300 kg" wurde bei 225 kg Bedarf als günstigste gerechnet.
-        $rows = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, COALESCE(l.firma, lp.lieferant_name, '') AS firma
+        // Block D (11.11.2026, Fable 13.11): gültige Preise bevorzugen, gesperrte Lieferanten raus; nur abgelaufene -> Hinweis auf der Seite.
+        $rows = lp_gueltig_auswahl(all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, lp.gueltig_bis, COALESCE(l.firma, lp.lieferant_name, '') AS firma
                      FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
-                     WHERE lp.item_id=? AND lp.preis>0 ORDER BY lp.menge_ab ASC", [(int)$bd['item_id']]);
+                     WHERE lp.item_id=? AND lp.preis>0 AND COALESCE(l.gesperrt,0)=0 ORDER BY lp.menge_ab ASC", [(int)$bd['item_id']]), ['item', (int)$bd['item_id']])['rows'];
         $jeLief = [];
         foreach ($rows as $ao) {
             $lk = (int)$ao['lieferant_id'] . '|' . $ao['firma'] . '|' . strtoupper((string)($ao['waehrung'] ?: 'EUR'));

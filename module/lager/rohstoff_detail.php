@@ -1078,7 +1078,8 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
   <section data-panel="ek" hidden>
     <div class="bx-panel"><div class="bx-grid">
       <div class="bx-field"><label>EK-Preis <?= bx_hint('Einkaufspreis je Bezugseinheit. Leer oder 0: wird automatisch aus dem günstigsten Lieferantenpreis (kleinste Staffel) übernommen. Von Hand geändert: bleibt so, bis du wieder 0 einträgst.') ?></label><div class="bx-row" style="gap:6px;flex-wrap:nowrap"><input type="text" inputmode="decimal" name="ek_preis" value="<?= h(rtrim(rtrim(number_format((float)($it['ek_preis'] ?? 0), 6, ',', ''), '0'), ',')) ?>" style="width:110px"><select name="ek_basis" style="width:auto"><option value="1">je Bezugseinheit</option><option value="1000">je 1.000</option></select></div>
-        <?php if (!$neu && (int)($it['ek_auto'] ?? 0) === 1): ?><div class="muted" style="font-size:12px;margin-top:4px">aus Lieferantenpreis übernommen</div><?php endif; ?></div>
+        <?php if (!$neu && (int)($it['ek_auto'] ?? 0) === 1): ?><div class="muted" style="font-size:12px;margin-top:4px">aus Lieferantenpreis übernommen</div><?php endif; ?>
+        <?php if (!$neu && !empty($it['ek_abgelaufen_seit'])): ?><div style="font-size:12px;margin-top:4px;color:#8f231b">aus abgelaufenem Preis (seit <?= h(date('d.m.Y', strtotime((string)$it['ek_abgelaufen_seit']))) ?>) - es gibt keinen gültigen Lieferantenpreis, bitte neu anfragen</div><?php endif; ?></div>
       <?php if (darf_verkauf()): ?><div class="bx-field"><label>VK-Aufschlag (%) <?= bx_hint('Nur für Rohstoff-Weiterverkauf an Kunden. Leer = globaler Aufschlag aus den Einstellungen.') ?></label><input type="number" step="0.1" name="vk_aufschlag_prozent" value="<?= $v('vk_aufschlag_prozent') ?>" placeholder="<?= h((string)(float)meta_get('aufschlag_rohstoff','30')) ?> (Standard)"></div><?php endif; ?>
       <div class="bx-field"><label>Preis je</label>
         <select name="preis_bezug">

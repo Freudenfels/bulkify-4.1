@@ -79,7 +79,7 @@ $katBadge = fn($r) => bx_badge($KAT[$r['kategorie']] ?? $r['kategorie']);
 // Für die Rohstoffliste: je Item ermitteln, ob Spec/CoA-Unterlagen vorliegen, ob es einen
 // (id-verknüpften) Lieferanten gibt und den günstigsten bekannten EK ("ab …"). Alles über
 // wenige Sammelabfragen auf die angezeigten Item-IDs – nicht pro Zeile.
-$specSet = $coaSet = $liefSet = $liefMin = [];
+$specSet = $coaSet = $liefSet = $liefMin = $liefAbg = [];
 if ($ids && !$istKapsel) {
     $in = implode(',', array_fill(0, count($ids), '?'));
     // Spec vorhanden: hinterlegtes Spec-PDF, strukturierte Spec-Inhalte oder ein Spec-Dokument
@@ -91,9 +91,14 @@ if ($ids && !$istKapsel) {
     foreach (all("SELECT DISTINCT c.item_id AS id FROM charge c JOIN charge_analyse a ON a.charge_id=c.id WHERE c.item_id IN ($in)", $ids) as $r) $coaSet[(int)$r['id']] = 1;
     foreach (all("SELECT DISTINCT objekt_id AS id FROM dokument WHERE objekt_typ='item' AND typ='coa' AND objekt_id IN ($in)", $ids) as $r) $coaSet[(int)$r['id']] = 1;
     // Lieferant vorhanden + günstigster Lieferanten-EK je Item
-    foreach (all("SELECT item_id AS id, MIN(preis) AS mp FROM lieferant_preis WHERE item_id IN ($in) AND preis>0 GROUP BY item_id", $ids) as $r) {
+    // Block D (11.11.2026): „günstigster EK" nur aus gültigen Preisen; gibt es nur abgelaufene, der letzte mit Kennzeichen (nie still).
+    foreach (all("SELECT lp.item_id AS id, MIN(CASE WHEN lp.gueltig_bis IS NULL OR lp.gueltig_bis >= CURDATE() THEN lp.preis END) AS mp, MIN(lp.preis) AS mp_alle,
+                         MAX(lp.gueltig_bis) AS bis_max, SUM(lp.gueltig_bis IS NULL OR lp.gueltig_bis >= CURDATE()) AS n_gueltig
+                  FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
+                  WHERE lp.item_id IN ($in) AND lp.preis>0 AND COALESCE(l.gesperrt,0)=0 GROUP BY lp.item_id", $ids) as $r) {
         $liefSet[(int)$r['id']] = 1;
-        $liefMin[(int)$r['id']] = (float)$r['mp'];
+        $liefMin[(int)$r['id']] = (int)$r['n_gueltig'] > 0 ? (float)$r['mp'] : (float)$r['mp_alle'];
+        if ((int)$r['n_gueltig'] === 0) $liefAbg[(int)$r['id']] = (string)$r['bis_max'];
     }
 }
 
@@ -117,12 +122,14 @@ if ($fehlt !== '' && !$istKapsel) {
     });
 }
 // „Preis ab": günstigster bekannter EK (eigener EK vs. Lieferanten-EK), in der Einheit des Items.
-$preisAb = function ($r) use ($liefMin) {
+$preisAb = function ($r) use ($liefMin, $liefAbg) {
     $min = (float)$r['ek_preis'];
     $lm = $liefMin[(int)$r['id']] ?? 0;
     if ($lm > 0) $min = ($min > 0) ? min($min, $lm) : $lm;
     if ($min <= 0) return '<span class="muted">–</span>';
-    return 'ab ' . number_format($min, $min < 1 ? 4 : 2, ',', '.') . ' €/' . h($r['preis_bezug']);
+    $abg = $liefAbg[(int)$r['id']] ?? (!empty($r['ek_abgelaufen_seit']) ? (string)$r['ek_abgelaufen_seit'] : '');   // Block D: nie still
+    return 'ab ' . number_format($min, $min < 1 ? 4 : 2, ',', '.') . ' €/' . h($r['preis_bezug'])
+         . ($abg !== '' ? ' <span class="badge badge-err" title="Preis abgelaufen - Summe unsicher">abgelaufen seit ' . h(date('d.m.Y', strtotime($abg))) . '</span>' : '');
 };
 // Kompakte Verfügbarkeits-Marker: grün = vorhanden, grau = nicht.
 $verfTok = fn($label, $on) => '<span style="font-size:12px;' . ($on ? 'color:var(--gruen);font-weight:600' : 'color:#bbb') . '">' . $label . '</span>';

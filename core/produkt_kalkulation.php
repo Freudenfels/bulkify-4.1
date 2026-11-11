@@ -23,7 +23,7 @@ function pk_zukauf_kandidaten(int $pid, int $rid, float $einheiten, bool $schuet
     if (table_exists('produkt_lieferant_preis')) {
         foreach (lp_gueltig_auswahl(all("SELECT z.lieferant_id, z.lieferant_name, z.menge_ab, z.preis, LOWER(COALESCE(z.einheit,'')) AS e, z.stand, z.gueltig_bis, COALESCE(l.firma, z.lieferant_name, '') AS firma
                       FROM produkt_lieferant_preis z LEFT JOIN lieferanten l ON l.id=z.lieferant_id
-                      WHERE z.produkt_id=? AND z.preis>0 AND (z.waehrung IS NULL OR z.waehrung='EUR')", [$pid]))['rows'] as $r) {
+                      WHERE z.produkt_id=? AND z.preis>0 AND (z.waehrung IS NULL OR z.waehrung='EUR') AND (z.lieferant_id IS NULL OR z.lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$pid]), ['produkt', $pid])['rows'] as $r) {
             $pr = (float)$r['preis']; $ab = (float)$r['menge_ab'];
             if (in_array($r['e'], ['packung', 'pkg', 'pkg.', 'packungen'], true)) { $pr /= $ep; $ab *= $ep; }   // je Packung -> je Einheit
             if ($schuett && in_array($r['e'], ['kg'], true)) { $menge = $kg; $einh = 'kg'; } else { $menge = $einheiten; $einh = 'Stk'; }
@@ -35,7 +35,7 @@ function pk_zukauf_kandidaten(int $pid, int $rid, float $einheiten, bool $schuet
     if ($rid > 0 && table_exists('rezeptur_lief_angebot')) {
         foreach (lp_gueltig_auswahl(all("SELECT a.lieferant_id, a.menge, a.preis, LOWER(COALESCE(a.einheit,'')) AS e, a.stand, a.gueltig_bis, COALESCE(l.firma,'') AS firma
                       FROM rezeptur_lief_angebot a LEFT JOIN lieferanten l ON l.id=a.lieferant_id
-                      WHERE a.rezeptur_id IN (?, ?) AND a.preis>0", [$rid, function_exists('rezeptur_stamm_id') ? rezeptur_stamm_id($rid) : $rid]))['rows'] as $r) {
+                      WHERE a.rezeptur_id IN (?, ?) AND a.preis>0 AND (a.lieferant_id IS NULL OR a.lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$rid, function_exists('rezeptur_stamm_id') ? rezeptur_stamm_id($rid) : $rid]), ['rezeptur', $rid])['rows'] as $r) {
             $istKg = in_array($r['e'], ['kg', 'kilogramm'], true);
             if ($schuett !== $istKg && !($schuett && $r['e'] === '')) continue;   // Stück-Formen: Preis je Stk; Schüttgut: €/kg (Alt: ohne Einheit = €/kg)
             $k = 'r' . (int)$r['lieferant_id'] . '|' . mb_strtolower(trim((string)$r['firma']));
@@ -147,8 +147,8 @@ function produkt_kalkulation(int $pid, int $packungen = 1000): array {
         $pm = rezeptur_premixitem($rid, false);
         $zb = [];
         foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge, preis, LOWER(COALESCE(einheit,'')) AS e, gueltig_bis FROM rezeptur_lief_angebot WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis>0",
-                     [$rid, rezeptur_stamm_id($rid)]))['rows'] as $r) if ($r['e'] === 'kg') $zb[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
-        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]))['rows'] as $r)
+                     [$rid, rezeptur_stamm_id($rid)]), ['rezeptur', $rid])['rows'] as $r) if ($r['e'] === 'kg') $zb[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
+        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]), ['item', $pm])['rows'] as $r)
             $zb[] = [(int)$r['lieferant_id'], (float)$r['menge_ab'], (float)$r['preis']];
         $pp = staffel_je_lieferant($zb, $kgPack * $packungen); asort($pp);
         $lid = $pp ? (int) array_key_first($pp) : 0;
@@ -246,7 +246,7 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
         $k = (int)$r['lieferant_id'] . '|' . mb_strtolower(trim((string)$r['firma']));
         $zk[$k]['lid'] = (int)$r['lieferant_id']; $zk[$k]['firma'] = (string)$r['firma'];
         $zk[$k]['staffeln'][] = ['ab' => (float)$r['menge_ab'], 'preis' => (float)$r['preis'], 'einheit' => (string)($r['einheit'] ?: 'Stk'), 'waehrung' => (string)($r['waehrung'] ?: 'EUR'),
-                                 'incoterm' => (string)($r['incoterm'] ?? ''), 'versandart' => (string)($r['versandart'] ?? ''), 'stand' => (string)($r['stand'] ?? ''), 'quelle' => 'Produkt', 'id' => (int)$r['id']];
+                                 'incoterm' => (string)($r['incoterm'] ?? ''), 'versandart' => (string)($r['versandart'] ?? ''), 'stand' => (string)($r['stand'] ?? ''), 'abgelaufen' => !empty($r['gueltig_bis']) && (string)$r['gueltig_bis'] < gmdate('Y-m-d'), 'quelle' => 'Produkt', 'id' => (int)$r['id']];
     }
     if ($rid) foreach (all("SELECT a.*, COALESCE(l.firma,'') AS firma FROM rezeptur_lief_angebot a LEFT JOIN lieferanten l ON l.id=a.lieferant_id
                             WHERE a.rezeptur_id IN (?, ?) AND a.preis>0 ORDER BY a.menge", [$rid, rezeptur_stamm_id($rid)]) as $r) {
@@ -255,7 +255,7 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
         $k = ($istPm ? 'pm' : '') . (int)$r['lieferant_id'] . '|' . mb_strtolower(trim((string)$r['firma']));
         $zk[$k]['lid'] = (int)$r['lieferant_id']; $zk[$k]['firma'] = (string)$r['firma']; $zk[$k]['premix'] = $istPm;
         $zk[$k]['staffeln'][] = ['ab' => (float)$r['menge'], 'preis' => (float)$r['preis'], 'einheit' => (string)($r['einheit'] ?: 'Stk'), 'waehrung' => 'EUR',
-                                 'incoterm' => '', 'versandart' => '', 'stand' => (string)($r['stand'] ?: $r['angelegt']), 'quelle' => $istPm ? 'Premix (Rezeptur)' : 'Rezeptur', 'id' => 0];
+                                 'incoterm' => '', 'versandart' => '', 'stand' => (string)($r['stand'] ?: $r['angelegt']), 'abgelaufen' => !empty($r['gueltig_bis']) && (string)$r['gueltig_bis'] < gmdate('Y-m-d'), 'quelle' => $istPm ? 'Premix (Rezeptur)' : 'Rezeptur', 'id' => 0];
     }
     // Teil 7 (10.11.2026): Premix-Preise stehen als Lieferantenpreis am Premix-Artikel der Rezeptur (je kg).
     if ($rid && !$pkSchuett && ($pmB = rezeptur_premixitem($rid, false)))
@@ -263,7 +263,7 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
             $k = 'pm' . (int)$r['lieferant_id'] . '|' . mb_strtolower(trim((string)$r['firma']));
             $zk[$k]['lid'] = (int)$r['lieferant_id']; $zk[$k]['firma'] = (string)$r['firma']; $zk[$k]['premix'] = true;
             $zk[$k]['staffeln'][] = ['ab' => (float)$r['menge_ab'], 'preis' => (float)$r['preis'], 'einheit' => 'kg', 'waehrung' => (string)($r['waehrung'] ?: 'EUR'),
-                                     'incoterm' => (string)($r['incoterm'] ?? ''), 'versandart' => (string)($r['versandart'] ?? ''), 'stand' => (string)($r['stand'] ?? ''), 'quelle' => 'Premix-Artikel', 'id' => 0];
+                                     'incoterm' => (string)($r['incoterm'] ?? ''), 'versandart' => (string)($r['versandart'] ?? ''), 'stand' => (string)($r['stand'] ?? ''), 'abgelaufen' => !empty($r['gueltig_bis']) && (string)$r['gueltig_bis'] < gmdate('Y-m-d'), 'quelle' => 'Premix-Artikel', 'id' => 0];
         }
     $zukauf = [];
     foreach ($zk as $k => $z) {
@@ -277,8 +277,10 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
     $kalk = produkt_kalkulation($pid, $packungen);
     $roh = [];
     if ($rid) foreach (all("SELECT z.item_id, z.menge_mg, i.name, i.einheit, COALESCE(NULLIF(i.preis_bezug,''),'kg') AS bezug, i.ek_preis FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.menge_mg DESC", [$rid]) as $z) {
-        $pr = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, COALESCE(l.firma, lp.lieferant_name, '') AS firma FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
-                   WHERE lp.item_id=? AND lp.preis>0 ORDER BY lp.preis, lp.menge_ab", [(int)$z['item_id']]);
+        // Block D (11.11.2026): abgelaufene Preise markiert und hinten, gesperrte Lieferanten raus (nie still „günstigster").
+        $pr = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, lp.gueltig_bis, (lp.gueltig_bis IS NOT NULL AND lp.gueltig_bis < CURDATE()) AS abgelaufen,
+                          COALESCE(l.firma, lp.lieferant_name, '') AS firma FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
+                   WHERE lp.item_id=? AND lp.preis>0 AND COALESCE(l.gesperrt,0)=0 ORDER BY abgelaufen, lp.preis, lp.menge_ab", [(int)$z['item_id']]);
         $roh[] = $z + ['preise' => $pr, 'bestand' => (float) item_bestand((int)$z['item_id'], true)];
     }
     // (3) Verpackung mit Lieferant/Preis/Bestand.

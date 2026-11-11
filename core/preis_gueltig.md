@@ -93,3 +93,5 @@ Die Auswahl läuft je Lieferant (`lp_je_lieferant_gueltig()`). Gültige Zeilen h
 
 ## Aufgabe in „Zu erledigen“ (11.11.2026)
 `pg_bald_pruefen()` legt neben der Benachrichtigung eine Team-Aufgabe an: „Preis neu anfragen: … (gültig bis …)“, Prio hoch, fällig am Ablaufdatum, Bezug auf den Rohstoff (`ref_typ` item). Je Rohstoff und Datum nur einmal.
+
+**Abgelaufene Preise nie still (Block D, 11.11.2026):** `pg_auswahl($rows, $feld, $kontext)` merkt sich über `pg_abgelaufen_merken()`, wenn mangels gültigem Preis mit einem abgelaufenen gerechnet wird. `pg_abgelaufen_hinweis()` baut daraus den Hinweis „Preis abgelaufen - Summe unsicher“ mit verlinkten Artikeln/Produkten/Rezepturen. `core/layout.php` zeigt ihn oben auf jeder Dashboard-Seite, auf der das passiert.
