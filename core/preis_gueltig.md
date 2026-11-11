@@ -90,3 +90,6 @@ Stand 11.11.2026, Auftrag von Nico. Anlass: Manche Rohstoffpreise halten nur kur
 
 ## Bestellliste (11.11.2026)
 Die Auswahl läuft je Lieferant (`lp_je_lieferant_gueltig()`). Gültige Zeilen haben Vorrang, abgelaufene sind im Lieferanten-Auswahlfeld markiert. Siehe module/einkauf/einkaufsliste.md.
+
+## Aufgabe in „Zu erledigen“ (11.11.2026)
+`pg_bald_pruefen()` legt neben der Benachrichtigung eine Team-Aufgabe an: „Preis neu anfragen: … (gültig bis …)“, Prio hoch, fällig am Ablaufdatum, Bezug auf den Rohstoff (`ref_typ` item). Je Rohstoff und Datum nur einmal.

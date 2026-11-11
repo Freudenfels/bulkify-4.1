@@ -174,6 +174,15 @@ function pg_bald_pruefen(): int {
             benachrichtigung_add('Preis läuft bald ab: ' . $b['name'] . ' (bis ' . pg_datum($b['bis']) . ')',
                 'Steckt in offenen Angeboten: ' . implode(', ', array_column($ang, 'nummer')) . '. Neu anfragen oder Angebotsgültigkeit prüfen.',
                 '?p=rohstoff&id=' . $iid . '&tab=ek', 'sonstiges', true);
+            // Zusätzlich Aufgabe in „Zu erledigen" (Team, fällig am Ablaufdatum) - verschwindet erst, wenn jemand sie erledigt.
+            if (function_exists('aufgabe_neu') && table_exists('aufgabe')) {
+                try {
+                    aufgabe_neu('Preis neu anfragen: ' . $b['name'] . ' (gültig bis ' . pg_datum($b['bis']) . ')',
+                        'Der Lieferantenpreis läuft bald ab und steckt in offenen Angeboten: ' . implode(', ', array_column($ang, 'nummer'))
+                        . '. Am Rohstoff (Reiter Einkauf) „neu anfragen“ oder die Angebotsgültigkeit anpassen.',
+                        1, null, (string)$b['bis'], null, 'item', $iid);
+                } catch (Throwable $e) {}
+            }
             $n++;
         }
     } catch (Throwable $e) {}
