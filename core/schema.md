@@ -660,3 +660,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 `auftrag_material_loesen()` (11.11.2026): Lief die Zuordnung über eine ganze Bestellposition, wird deren `auftrag_id` beim Lösen zurückgesetzt (wie `auftrag_deckung_loesen()`).
 
 **Abgelaufene Preise (Block D, 11.11.2026, Fable 14.c):** `lp_gueltig_auswahl()` und `lp_je_lieferant_gueltig()` geben einen Kontext [typ, id] weiter. Betroffen sind: Beschaffungsweg Zukauf/Premix, `item_lieferant_preise`, `produkt_lieferant_preise(_pkg)`, `rezeptur_fremd_lieferant_preise`, `rohstoff_ek_detail` (VK-Rechnung), Express-Bestellung, Leerkapsel-EK (`produkt_kapsel_ek`) und der flache EK (`rohstoff_ek_bei_menge`). Der **Auto-EK** wird nicht mehr aus einem abgelaufenen Preis gesetzt: Der alte EK bleibt, `item.ek_abgelaufen_seit` ist das Kennzeichen.
+
+`etikett_bestand_info()` (Block D, 11.11.2026): **verbraucht** = versendete Aufträge voll + bei laufenden/erledigten die wirklich produzierte (gebuchte) Menge. Vorher zählte „Status erledigt“ als ganze Auftragsmenge, deshalb zeigte das Portal bei AB-3237 (175 von 500, 825 Kundenetiketten im Lager) „Ihre Etiketten im Lager: 0 von 500“.

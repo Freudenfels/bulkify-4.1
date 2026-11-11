@@ -11384,7 +11384,12 @@ function etikett_bestand_info(int $produkt_id, ?int $kunde_id = null): array {
     $wo = "produkt_id=? AND status<>'storniert'"; $p = [$produkt_id];
     if ($kunde_id) { $wo .= " AND kunde_id=?"; $p[] = $kunde_id; }
     $bezahlt    = (int) scalar("SELECT COALESCE(SUM(menge),0) FROM auftrag WHERE $wo", $p);
-    $verbraucht = (int) scalar("SELECT COALESCE(SUM(menge),0) FROM auftrag WHERE $wo AND status='erledigt'", $p);
+    // Block D (11.11.2026, AB-3237 „0 von 500" bei 825 Etiketten im Lager): verbraucht = was wirklich produziert ist, nicht
+    // „Status erledigt = ganze Auftragsmenge". Versendete Aufträge zählen voll, alle anderen mit der gebuchten Menge.
+    $verbraucht = (int) scalar("SELECT COALESCE(SUM(menge),0) FROM auftrag WHERE $wo AND status='versendet'", $p);
+    foreach (all("SELECT id FROM auftrag WHERE $wo AND status IN ('in_produktion','erledigt')", $p) as $ea) {
+        $mf = auftrag_mengenfortschritt((int)$ea['id']); $verbraucht += (int)($mf['gebucht'] ?? 0);
+    }
     $kundeRest  = max(0, $bezahlt - $verbraucht);
     return [
         'etikett_item_id' => $eid,
