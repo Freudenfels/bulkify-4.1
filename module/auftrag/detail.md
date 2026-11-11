@@ -362,3 +362,5 @@ Unter den Kacheln steht das Etikett-Design jetzt direkt als Bild. Nico wollte es
 - **Klick:** Ein Klick auf das Bild öffnet das Etikett-Fenster (nur mit Stift-Recht).
 - **Ohne Design:** Gibt es kein Design oder braucht der Auftrag kein Etikett, entfällt der Block.
 
+## Datum unlogisch (11.11.2026)
+Liegt das Datum eines Schritts vor dem eines früheren Schritts, zeigt die Schritt-Karte „Datum unlogisch“ in Rot. Der Kunde sieht dort kein Datum.

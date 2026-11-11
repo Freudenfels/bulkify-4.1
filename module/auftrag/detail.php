@@ -1346,7 +1346,7 @@ if (has_role('admin') || has_role('sales')):
             <span style="color:<?= $farbe ?>;font-size:16px;line-height:1;font-weight:700"><?= $ikon ?></span>
             <div>
               <div style="font-weight:600;font-size:14px">Schritt <?= $fi + 1 ?>/<?= $fsN ?>: <?= h($fDone ? $fFertig : $fStatus) ?></div>
-              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor ?><?= $fDatum ? ' · ' . h(fmt_zeit((string)$fDatum, 'd.m.Y')) : '' ?><?= $fSub ? ' · ' . h((string)$fSub) : '' ?><?= $fVon ? ' · abgeschlossen von ' . h((string)$fVon) : '' ?><?= $fOhneMeldung ? ' · <span title="Für diesen Schritt gibt es keine eigene Meldung. Er gilt als erledigt, weil ein späterer Schritt erledigt ist.">ohne Datum, mit späterem Schritt abgehakt</span>' : '' ?></div>
+              <div class="muted" style="font-size:12px"><?= h($stTxt) ?> · <?= $actor ?><?= $fDatum ? ' · ' . h(fmt_zeit((string)$fDatum, 'd.m.Y')) : '' ?><?= !empty($fx[7]) ? ' · <span style="color:#8f231b" title="Dieses Datum liegt vor dem Datum eines früheren Schritts. Der Kunde sieht hier kein Datum.">Datum unlogisch</span>' : '' ?><?= $fSub ? ' · ' . h((string)$fSub) : '' ?><?= $fVon ? ' · abgeschlossen von ' . h((string)$fVon) : '' ?><?= $fOhneMeldung ? ' · <span title="Für diesen Schritt gibt es keine eigene Meldung. Er gilt als erledigt, weil ein späterer Schritt erledigt ist.">ohne Datum, mit späterem Schritt abgehakt</span>' : '' ?></div>
             </div>
           </div>
           <?php if ($fi === $fsErster && $fStufe !== null && $fStufe > $curIdxA): ?>

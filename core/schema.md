@@ -627,3 +627,9 @@ Siehe `core/preis_gueltig.md`.
   Das gilt auch, wenn der Stand von Hand weiter gesetzt ist. „Versenden“ bzw. „Einlagern“ wird erst danach aktiv.
 - **`auftrag_fortschritt_fertig($a)`:** Ist „Abgeschlossen“ erledigt? Ergebnis wird je Request gemerkt.
 - **`kunde_bestell_status_label()`:** zeigt bei Status `erledigt` nur dann „versandbereit“ bzw. „wird eingelagert“, wenn der Fortschritt fertig ist, sonst „in Produktion“.
+
+## Fortschritt: Datum nie vor dem Vorgänger (11.11.2026)
+- **Intern:** `auftrag_fortschritt()` setzt je Schritt ein 8. Feld (`true`), wenn ein erledigter Schritt früher datiert ist als ein erledigter Schritt davor. Die Auftragsseite zeigt dann „Datum unlogisch“.
+- **Kunde:** `auftrag_fortschritt_kunde()` behandelt „Bestätigt“ als frühestes Datum.
+  - Ein früheres Ereignis zeigt das Bestätigungsdatum.
+  - Ein Datum vor dem des vorigen Schritts wird nicht gezeigt.

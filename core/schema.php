@@ -6559,6 +6559,18 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
         }
         unset($s);
     }
+    // Datum nie vor dem Vorgänger (Nico 11.11.2026): 8. Feld = true, wenn ein erledigter Schritt früher datiert ist als ein
+    // erledigter Schritt davor (z. B. „Abgeschlossen 13.10." vor „Produziert 04.11."). Intern Hinweis „Datum unlogisch";
+    // die Kundensicht (auftrag_fortschritt_kunde) zeigt dann kein Datum.
+    $prevD = null;
+    foreach ($steps as $i => &$s) {
+        $s[7] = false;
+        if ($s[2] !== 'done' || empty($s[3])) continue;
+        $dd = substr((string)$s[3], 0, 10);
+        if ($i > 0 && $prevD !== null && $dd < $prevD) { $s[7] = true; continue; }
+        $prevD = $dd;
+    }
+    unset($s);
     return ['steps' => $steps, 'energ' => $energ, 'menge' => ['ziel' => $ziel, 'geb' => $geb, 'vers' => $vers, 'offen' => $mengeOffen]];
 }
 // Fehlt bei einem Auftrag noch Menge (0 < gebucht < Ziel)? Rückgabe ['ziel','geb','rest'] oder null. Für das Rest-Pop-up und die Datenprüfung.
@@ -6586,6 +6598,17 @@ function auftrag_fortschritt_fertig(array $a): bool {
 // Kundensicht der neuen Kette (für das Portal, noch nicht eingebaut): interne Einkaufs-Stände der Etiketten (nicht bestellt / bestellt / auf Lager) sieht der Kunde
 // nur als „Etikettierung"; „Etiketten Daten fehlen" sieht er rot mit Upload-Link. Interne Untertexte (Liefertermin, abgefüllt) entfallen.
 function auftrag_fortschritt_kunde(array $steps): array {
+    // Daten für den Kunden (11.11.2026): „Bestätigt" ist das früheste Datum - ein früheres Ereignis (Ware schon vor der
+    // Bestätigung da) zeigt das Bestätigungsdatum. Liegt ein Datum vor dem des vorigen Schritts, zeigt der Kunde keins.
+    $best = !empty($steps[0][3]) ? substr((string)$steps[0][3], 0, 10) : null; $prevK = $best;
+    foreach ($steps as $i => &$s) {
+        if ($i === 0 || empty($s[3])) continue;
+        $dd = substr((string)$s[3], 0, 10);
+        if ($best !== null && $dd < $best) { $s[3] = $steps[0][3]; continue; }
+        if ($prevK !== null && $dd < $prevK) { $s[3] = null; continue; }
+        $prevK = $dd;
+    }
+    unset($s);
     foreach ($steps as &$s) {
         // Auffälliger Laborbefund ist intern rot; der Kunde sieht nur „Laboranalyse" in Prüfung (kein Upload-Link).
         if ($s[2] === 'err' && $s[0] === 'Laboranalyse') { $s[2] = 'current'; $s[4] = null; continue; }
