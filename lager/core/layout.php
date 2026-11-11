@@ -17,6 +17,7 @@ function lg_nav(): array {
 }
 function lg_nav_klein(): array {
     $k = ['bewegungen' => 'Bewegungen', 'papierkorb' => 'Mülleimer'];
+    if (function_exists('lg_darf_inventur') && lg_darf_inventur()) $k['inventur'] = 'Inventur';   // 11.11.2026, nur Admin + Lager
     if (lg_ist_admin()) $k['einstellungen'] = 'Einstellungen';
     return $k;
 }
@@ -29,6 +30,7 @@ function lg_nav_aktiv(string $aktiv): string {
         'bestand' => 'lager1', 'quarantaene' => 'lager1',
         'l2_bestand' => 'lager2', 'l2_artikel' => 'lager2', 'l2_artikel_edit' => 'lager2',
         'l2_finden' => 'finden', 'leisten' => 'finden',
+        'inventur_neu' => 'inventur', 'inventur_lauf' => 'inventur', 'inventur_zaehlen' => 'inventur', 'inventur_auswerten' => 'inventur', 'plaetze' => 'inventur', 'tara' => 'inventur',
     ];
     return $zu[$aktiv] ?? $aktiv;
 }

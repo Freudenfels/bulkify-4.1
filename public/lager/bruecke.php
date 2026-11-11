@@ -19,6 +19,7 @@ require_once __DIR__ . '/../../lager/core/kiste.php';        // blinker_fuer_cha
 require_once __DIR__ . '/../../lager/core/erp.php';          // erp_charge_voll fuers Etikett
 require_once __DIR__ . '/../../lager/core/etikett_pdf.php';  // lg_etikett_pdf fuer Druckjobs
 require_once __DIR__ . '/../../lager/core/lieferschein_pdf.php';  // lg_lieferschein_pdf fuer Druckjobs
+require_once __DIR__ . '/../../lager/core/inventur_etikett.php';  // Inventur: Platz- und Klärfall-Etiketten (11.11.2026)
 
 lg_schema();
 
@@ -108,6 +109,13 @@ foreach (all("SELECT id, ids, format, typ FROM lg_druckjob WHERE status='offen' 
     } elseif ($typ === 'palette') {
         $pdf = function_exists('lg_paletten_etikett_pdf') ? lg_paletten_etikett_pdf((int)$j['ids']) : null;   // 100 x 150 auf den Etikettendrucker
         $fehlt = 'Keine Paletten in der Sendung';
+    } elseif ($typ === 'platz') {
+        $pdf = function_exists('inv_platz_etikett_pdf') ? inv_platz_etikett_pdf(explode(',', (string)$j['ids'])) : null;   // Platz-Etiketten 100 x 70
+        $fehlt = 'Platz nicht gefunden';
+    } elseif ($typ === 'inventur') {
+        $drucker = $druckerGebinde ?: $druckerEtikett;
+        $pdf = function_exists('inv_klaerfall_etikett_pdf') ? inv_klaerfall_etikett_pdf((int)$j['ids']) : null;   // Gebinde ohne Etikett (Klärfall)
+        $fehlt = 'Klärfall nicht gefunden';
     } elseif ($typ === 'karton') {
         $drucker = $druckerKarton ?: $druckerEtikett;         // Kartonetiketten der Produktion (100 x 150) auf den Produktionsdrucker
         $pdf = function_exists('lg_produktion_karton_pdf') ? lg_produktion_karton_pdf((int)$j['ids']) : null;

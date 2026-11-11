@@ -7,14 +7,14 @@
 header('Content-Type: application/json; charset=utf-8');
 
 $typ = (string)($_POST['typ'] ?? 'etikett');
-if (!in_array($typ, ['etikett', 'lieferschein', 'label', 'zoll', 'probe', 'gebinde', 'palette'], true)) $typ = 'etikett';   // palette = Soll-Kette 7b
+if (!in_array($typ, ['etikett', 'lieferschein', 'label', 'zoll', 'probe', 'gebinde', 'palette', 'platz', 'inventur'], true)) $typ = 'etikett';   // palette = Soll-Kette 7b; platz/inventur = Inventur 11.11.2026
 
-if ($typ === 'etikett') {
+if ($typ === 'etikett' || $typ === 'platz') {   // platz: ids=<platz-ids> -> Platz-Etiketten (Inventur)
     $roh = (string)($_POST['ids'] ?? '');
     $ids = array_values(array_filter(array_map('intval', explode(',', $roh)), fn($x) => $x > 0));
-    if (!$ids) { echo json_encode(['ok' => false, 'fehler' => 'Keine Charge angegeben.']); exit; }
+    if (!$ids) { echo json_encode(['ok' => false, 'fehler' => $typ === 'platz' ? 'Kein Platz angegeben.' : 'Keine Charge angegeben.']); exit; }
     $refs = implode(',', $ids);
-    $format = 'gross';
+    $format = $typ === 'platz' ? 'klein' : 'gross';
 } else {
     $vid = (int)($_POST['id'] ?? 0);
     if ($vid <= 0) { echo json_encode(['ok' => false, 'fehler' => 'Keine Sendung angegeben.']); exit; }
@@ -26,7 +26,7 @@ if ($typ === 'etikett') {
         if (!$l || (string)($l['zoll_pdf'] ?? '') === '') { echo json_encode(['ok' => false, 'fehler' => 'Für diese Sendung gibt es kein Zollpapier.']); exit; }
     }
     $refs = (string)$vid;
-    $format = $typ === 'label' ? 'label' : (in_array($typ, ['probe', 'gebinde'], true) ? 'klein' : ($typ === 'palette' ? 'gross' : 'a4'));
+    $format = $typ === 'label' ? 'label' : (in_array($typ, ['probe', 'gebinde', 'inventur'], true) ? 'klein' : ($typ === 'palette' ? 'gross' : 'a4'));   // inventur: id=<zaehlung-id> (Klärfall-Etikett)
 }
 
 $uid = (int)(lg_benutzer()['id'] ?? 0);

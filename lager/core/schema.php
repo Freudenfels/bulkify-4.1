@@ -18,7 +18,7 @@ function lg_schema(): void {
 
     // Nur nach einer Aenderung an dieser Datei bauen, nicht bei jedem Aufruf (wie im Dashboard:
     // Marker = Aenderungszeit von schema.php). Fehlt lg_meta noch, wird einfach gebaut.
-    $build = (string)filemtime(__FILE__);
+    $build = (string)filemtime(__FILE__) . (is_file(__DIR__ . "/inventur.php") ? "-" . filemtime(__DIR__ . "/inventur.php") : "");   // Inventur-Tabellen (inv_schema) bauen mit
     try { if (lg_meta_lesen('schema_build') === $build) return; } catch (Throwable $e) {}
 
     // --- Lagerplatz: ein Fach im Regal. Bereich - Regal - Ebene - Fach. ------------------------
@@ -336,6 +336,9 @@ function lg_schema(): void {
         UNIQUE KEY nummer (nummer),
         KEY charge (charge_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // --- Inventur (11.11.2026): eigener Modus, blind zählen, Differenzen auflösen. Siehe core/inventur.md. ---------------
+    if (function_exists('inv_schema')) inv_schema();
 
     lg_meta_schreiben('schema_build', $build);
 }

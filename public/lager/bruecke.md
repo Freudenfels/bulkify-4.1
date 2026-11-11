@@ -15,3 +15,5 @@ Jeder Aufruf gilt als Lebenszeichen der Brücke. Geschützt ist das Ganze durch 
 Druckjob-Typ **karton** (Soll-Kette 6) → `lg_produktion_karton_pdf()` auf `drucker_karton` (sonst Standard-Etikettendrucker).
 
 Druckjob-Typ **palette** (Soll-Kette 7b) → `lg_paletten_etikett_pdf()` auf den Etikettendrucker.
+
+**Inventur (11.11.2026):** Druckjobs vom Typ `platz` (Platz-Etiketten) und `inventur` (Klärfall-Etikett) werden über `lager/core/inventur_etikett.php` erzeugt.

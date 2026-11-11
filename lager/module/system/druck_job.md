@@ -12,3 +12,7 @@ Parameter `typ`:
 
 Antwort JSON `{ok,id,meldung}` (meldet, ob die Brücke gerade läuft). Die PDF-Erzeugung + Druckerwahl je
 Typ passiert in `public/lager/bruecke.php`.
+
+**Inventur (11.11.2026):**
+- `typ=platz` mit `ids=<platz-ids>`: Platz-Etiketten 100 × 70 (`inv_platz_etikett_pdf`).
+- `typ=inventur` mit `id=<zaehlung-id>`: Etikett für ein Gebinde ohne Etikett (Klärfall, `inv_klaerfall_etikett_pdf`). Es geht auf den Gebinde-Drucker.

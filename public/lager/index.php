@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../lager/core/layout.php';
 require_once __DIR__ . '/../../lager/core/led.php';
 require_once __DIR__ . '/../../lager/core/leiste.php';
 require_once __DIR__ . '/../../lager/core/kiste.php';
+require_once __DIR__ . '/../../lager/core/inventur.php';
 
 lg_session_start();
 lg_schema();
@@ -66,9 +67,22 @@ $routen = [
     'sender'         => 'system/sender.php',
     'bruecke_skript' => 'system/bruecke_skript.php',
     'druck_job'      => 'system/druck_job.php',   // Etikett-Druckauftrag in die Warteschlange (kein Admin)
+    // Inventur (11.11.2026): eigener Modus, getrennt vom Tagesgeschäft. Nur Admin und Lager (lg_darf_inventur()).
+    'inventur'           => 'inventur/liste.php',
+    'inventur_neu'       => 'inventur/neu.php',          // nur Admin
+    'inventur_lauf'      => 'inventur/lauf.php',
+    'inventur_zaehlen'   => 'inventur/zaehlen.php',      // Zählen am Handy, blind
+    'inventur_api'       => 'inventur/api.php',          // JSON für das Zählen
+    'inventur_auswerten' => 'inventur/auswerten.php',    // nur Admin
+    'inventur_protokoll' => 'inventur/protokoll.php',    // nur Admin
+    'plaetze'            => 'inventur/plaetze.php',      // Lagerplätze Lager 1/2 (Anlegen nur Admin)
+    'tara'               => 'inventur/tara.php',         // Gebindetypen mit Tara, nur Admin
 ];
 // Nur fuer Admins.
 $nur_admin = ['einstellungen', 'sender', 'bruecke_skript'];
+// Inventur nur für Admin und Lager (Nico 11.11.2026); auswerten/anlegen/Protokoll/Tara nur Admin.
+$nur_inventur = ['inventur', 'inventur_lauf', 'inventur_zaehlen', 'inventur_api', 'plaetze'];
+array_push($nur_admin, 'inventur_neu', 'inventur_auswerten', 'inventur_protokoll', 'tara');
 
 $p = isset($_GET['p']) ? preg_replace('/[^a-z0-9_]/', '', (string)$_GET['p']) : 'uebersicht';
 // Alte Schnellmaske ?p=eingang stillgelegt (Soll-Handbuch 4.5, 08.11.2026): sie umging Gewicht je Karton, die Bulk-Regel und den
@@ -101,5 +115,6 @@ if ($p === 'login' && lg_angemeldet()) weiter('?p=uebersicht');
 
 if (!isset($routen[$p])) $p = lg_angemeldet() ? 'uebersicht' : 'login';
 if (in_array($p, $nur_admin, true) && !lg_ist_admin()) weiter('?p=bestand');
+if (in_array($p, $nur_inventur, true) && !lg_darf_inventur()) weiter('?p=bestand');
 
 require __DIR__ . '/../../lager/module/' . $routen[$p];
