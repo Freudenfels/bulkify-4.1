@@ -30,7 +30,15 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
 6. **Jeder Schritt braucht nur sein eigenes Material.** Ein Auftrag ist so weit produzierbar, wie das Material für den jeweiligen Schritt reicht (Abschnitt 4.7).
 7. **Rückverfolgbarkeit ohne Mehrarbeit.** Chargen, Unter-Chargen und Lieferungen werden lückenlos mitgeschrieben - durch Scannen und Vorbelegen, nicht durch Abtippen.
 8. **Die Daten bleiben.** Umbauten ändern Abläufe und Oberfläche, nicht die vorhandenen Daten. Bestehende Zuordnungen, Chargen, Belege müssen erhalten bleiben. Migrationen vorher melden.
-9. **Konventionen:** keine Emojis; "Stk" statt "Stück"; Tausenderpunkt in Anzeigen, deutsch-sicheres Zahlenparsing bei Eingaben (`erp_menge_parse()`/`zahl_lesen()`, nie `intval` auf Mengen, keine `type=number`-Felder für Mengen); Dropdowns mit mehr als 10 Einträgen als Suchfeld; Zeiten in UTC speichern, in Ortszeit zeigen; MySQL Strict-Mode; erst Testkopie, dann live; ein Fix = ein Commit.
+9. **Gesperrt/inaktiv heißt: nirgends mehr sichtbar (Abendpaket Block C, 11.11.2026).**
+   - **Betrifft:** gesperrte Lieferanten, Kunden und Artikel, inaktive Produkte und Rezepturen.
+   - **Ausgeblendet** in Auswahl- und Suchfeldern (Bestellung, Angebot, Auftrag, Produkt, Rezeptur, Wareneingang, Lager-App, Buchhaltung) und im Kundenportal.
+   - **Listen:** Die Listen haben den Schalter „Inaktive/gesperrte anzeigen“ (Standard aus). Offene Lieferanten-Bewerbungen und Kunden-Registrierungen bleiben sichtbar.
+   - **Preise:** Gesperrte Lieferanten zählen nicht bei „günstigster Lieferant“, Kalkulation und Auto-EK.
+   - **Weiter erreichbar** per Link und über den Schalter. Alte Belege zeigen sie weiter. Gelöscht wird nichts.
+   - **Portal:** Gesperrte Lieferanten und Kunden kommen nicht ins Portal.
+   - **Rezeptur:** Sie hat den Status „inaktiv“ (Knopf an der Rezeptur, nur Admin), der eigene Bulk- und Premix-Artikel wird mit gesperrt. Die Datenprüfung „Testdaten auf live“ findet Testeinträge und setzt sie auf Klick inaktiv.
+10. **Konventionen:** keine Emojis; "Stk" statt "Stück"; Tausenderpunkt in Anzeigen, deutsch-sicheres Zahlenparsing bei Eingaben (`erp_menge_parse()`/`zahl_lesen()`, nie `intval` auf Mengen, keine `type=number`-Felder für Mengen); Dropdowns mit mehr als 10 Einträgen als Suchfeld; Zeiten in UTC speichern, in Ortszeit zeigen; MySQL Strict-Mode; erst Testkopie, dann live; ein Fix = ein Commit.
 
 ---
 
@@ -509,6 +517,7 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 11.11.2026 | Lieferanten-Anfragen & Preise: Fertigprodukt-Preise, die der Lieferant selbst im Portal einträgt (ohne Anfrage), stehen als eigener Block "Aus dem Lieferanten-Portal" in der Liste und zählen bei "Preis da" mit | Nico / Claude Code |
 | 11.11.2026 | Auftrag, Reiter Details: Etikett-Design als Bild unter den Kacheln (PDF Seite 1 per pdf.js), Klick öffnet das Etikett-Fenster | Nico / Claude Code |
 | 11.11.2026 | Rohstoff-Unterlagen: Reiter "Aktuelle Anfragen" - alle offenen Anfragen (wie Menü-Zahl), älteste zuerst, je Anfrage Rohstoffe mit Stand und "Preis / Unterlage" zum Hochladen | Nico / Claude Code |
+| 11.11.2026 | Abendpaket Block C: Grundprinzip 9 gesperrt/inaktiv nirgends sichtbar (Auswahlfelder, Listen mit Schalter, günstigster Lieferant, Portale), Rezeptur-Status inaktiv, Datenprüfung Testdaten auf live | Nico / Claude Code |
 | 11.11.2026 | Abendpaket Block B: Charge Menge korrigieren (eine Funktion, Korrekturbewegung, Bestellung öffnet/schließt), Menge korrigieren und verknüpfen, Verknüpfung lösen, mehrere Chargen je Position (4.5) | Nico / Claude Code |
 | 11.11.2026 | Abendpaket Block A (Sofortfix nach der Fable-Prüfung): gesperrte Lieferanten/Kunden ohne Portal, interne Bestell-Notiz nie im Portal + "Hinweis an den Lieferanten", Cron-Token maskiert (4.3); "versandbereit" nur wenn fertig, Hand-"versendet" mit Grund (4.14); Preise 6 Nachkommastellen + Eingabe je 1.000 (4.2); Warnung Doppelbestellung (4.3); Etikett-Maß Beheben aus TrimBox, Meldung ab 5 mm | Nico / Claude Code |
 | 11.11.2026 | Preise mit Gültigkeit Teil 1+2: "gültig bis" an jedem Lieferantenpreis (leer = unbegrenzt), Eingabe mit Schnellwahl 7/14/30/90 im Portal und intern, KI liest es aus Preislisten; Rohstoff "Preis schwankt" + Standard-Tage: Vorbelegung, Pflicht im Lieferantenportal, Hinweis in der Anfrage (bei Rezeptur/Premix nur Hinweis); Portal: keine doppelte Staffel "ab 1", Zahlen mit Komma | Nico / Claude Code |
