@@ -138,7 +138,8 @@ function artikel_zusammenfuehren_voll(int $quelle_id, int $ziel_id, string $wer 
     if ($sp) return ['ok' => false, 'fehler' => 'Gesperrt: ' . implode(', ', $sp) . '.', 'zahlen' => []];
     $z = [];
     $pdo = db();
-    $pdo->beginTransaction();
+    $eigeneTx = !$pdo->inTransaction();   // Block D: auch aus der Datenprüfung (dort läuft schon eine Transaktion) aufrufbar
+    if ($eigeneTx) $pdo->beginTransaction();
     try {
         $ziele = [
             ['charge', 'item_id'], ['reservierung', 'item_id'], ['bestellung_position', 'item_id'], ['rezeptur_zutat', 'item_id'],
@@ -150,10 +151,13 @@ function artikel_zusammenfuehren_voll(int $quelle_id, int $ziel_id, string $wer 
             ['produkt', 'verpackung_id'], ['produkt', 'verschluss_id'], ['produkt', 'etikett_id'], ['produkt', 'karton_id'], ['produkt', 'beipack_id'], ['produkt', 'leerkapsel_id'],
             ['item', 'basis_item_id'], ['item', 'karton_item_id'],
         ];
+        $rest = [];   // Block D (11.11.2026): Zeilen, die bei Schlüssel-Kollision am alten Artikel bleiben (UPDATE IGNORE) – zählen und melden
         foreach ($ziele as [$t, $c]) {
             if (!table_exists($t) || !column_exists($t, $c)) continue;
             $n = q("UPDATE IGNORE `$t` SET `$c`=? WHERE `$c`=?", [$ziel_id, $quelle_id])->rowCount();
             if ($n) $z[$t . ($c !== 'item_id' ? '.' . $c : '')] = ($z[$t] ?? 0) + $n;
+            $bleibt = (int) scalar("SELECT COUNT(*) FROM `$t` WHERE `$c`=?", [$quelle_id]);
+            if ($bleibt > 0) $rest[$t . ($c !== 'item_id' ? '.' . $c : '')] = $bleibt;
         }
         // Stammdaten der Qualität (Wirkstoffe, Grenzwerte, Kennwerte): nur übernehmen, wenn der Hauptartikel noch keine hat.
         foreach (['item_wirkstoff', 'item_grenzwert', 'item_kennwert'] as $t) {
@@ -173,14 +177,16 @@ function artikel_zusammenfuehren_voll(int $quelle_id, int $ziel_id, string $wer 
         $vermerk = "\n[" . gmdate('d.m.Y') . '] zusammengeführt in Artikel #' . $ziel_id . ' – ' . mb_substr((string)$h['name'], 0, 80) . ($wer !== '' ? ' (' . $wer . ')' : '');
         q("UPDATE item SET gesperrt=1, zusammengefuehrt_in=?, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", [$ziel_id, $vermerk, $quelle_id]);
         aenderung_protokollieren('item', $quelle_id, ['zusammengefuehrt_in' => null, 'gesperrt' => 0], ['zusammengefuehrt_in' => $ziel_id, 'gesperrt' => 1], 'artikel_zusammenfuehren');
-        $pdo->commit();
+        if ($eigeneTx) $pdo->commit();
     } catch (\Throwable $e) {
+        if (!$eigeneTx) throw $e;
         $pdo->rollBack();
         return ['ok' => false, 'fehler' => 'Fehler, nichts geändert: ' . $e->getMessage(), 'zahlen' => []];
     }
     $txt = implode(', ', array_map(fn($k, $v) => $k . ' ' . $v, array_keys($z), $z));
-    log_aktivitaet('item', $quelle_id, 'team', 'Zusammengeführt in „' . $h['name'] . '“ (#' . $ziel_id . '). Umgezogen: ' . ($txt ?: 'nichts') . '.', 'notiz');
+    $restTxt = $rest ? 'Nicht umgezogen (gleicher Eintrag gab es am Ziel schon, bleibt am alten Artikel): ' . implode(', ', array_map(fn($k, $v) => $k . ' ' . $v, array_keys($rest), $rest)) . '.' : '';
+    log_aktivitaet('item', $quelle_id, 'team', 'Zusammengeführt in „' . $h['name'] . '“ (#' . $ziel_id . '). Umgezogen: ' . ($txt ?: 'nichts') . '.' . ($restTxt !== '' ? ' ' . $restTxt : ''), 'notiz');
     log_aktivitaet('item', $ziel_id, 'team', 'Doppel-Artikel „' . $q['name'] . '“ (#' . $quelle_id . ') hierher zusammengeführt. Umgezogen: ' . ($txt ?: 'nichts') . '. Alter Name ist jetzt Synonym.', 'notiz');
     if (function_exists('bedarf_bump')) bedarf_bump();
-    return ['ok' => true, 'fehler' => '', 'zahlen' => $z];
+    return ['ok' => true, 'fehler' => '', 'zahlen' => $z, 'rest' => $rest, 'hinweis' => $restTxt];
 }

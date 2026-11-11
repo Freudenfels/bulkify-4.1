@@ -4565,19 +4565,12 @@ function kapselgroesse_name(int $id): string {
 // Genutzt von der Rohstoff-Seite (artikel_merge) und der Datenprüfung (lose Bulk-Artikel, Soll-Kette 8).
 // Rückgabe ['ok'=>bool, 'fehler'=>'ziel'|'einheit'|null, 'chargen'=>int].
 function item_zusammenfuehren(int $quelle_id, int $ziel_id): array {
-    $z = $ziel_id ? one("SELECT id, name, einheit FROM item WHERE id=?", [$ziel_id]) : null;
-    $src = one("SELECT id, name, einheit FROM item WHERE id=?", [$quelle_id]);
-    if (!$z || !$src || $ziel_id === $quelle_id) return ['ok' => false, 'fehler' => 'ziel', 'chargen' => 0];
-    if ((string)($z['einheit'] ?? '') !== (string)($src['einheit'] ?? '')) return ['ok' => false, 'fehler' => 'einheit', 'chargen' => 0];
-    $nChg = q("UPDATE charge SET item_id=? WHERE item_id=?", [$ziel_id, $quelle_id])->rowCount();
-    q("UPDATE reservierung SET item_id=? WHERE item_id=?", [$ziel_id, $quelle_id]);
-    $vermerk = "\n[zusammengeführt in Artikel #" . $ziel_id . ' – ' . mb_substr((string)$z['name'], 0, 80) . ']';
-    if (column_exists('item', 'zusammengefuehrt_in')) q("UPDATE item SET gesperrt=1, zusammengefuehrt_in=?, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", [$ziel_id, $vermerk, $quelle_id]);
-    else                                              q("UPDATE item SET gesperrt=1, notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", [$vermerk, $quelle_id]);
-    log_aktivitaet('item', $quelle_id, 'team', 'Zusammengeführt in „' . (string)$z['name'] . '" (#' . $ziel_id . '): ' . $nChg . ' Charge(n) + Reservierungen verschoben, Doppel-Artikel deaktiviert.', 'notiz');
-    log_aktivitaet('item', $ziel_id, 'team', 'Doppel-Artikel „' . (string)$src['name'] . '" (#' . $quelle_id . ') hierher zusammengeführt: ' . $nChg . ' Charge(n) übernommen.', 'notiz');
-    if (function_exists('bedarf_bump')) bedarf_bump();
-    return ['ok' => true, 'fehler' => null, 'chargen' => $nChg];
+    // Block D (11.11.2026, Fable 11.21): nur noch EIN Weg – der volle (artikel_zusammenfuehren_voll) mit Sperre bei anderer
+    // Kapselgröße, Füllgewicht, Material, Einheit oder Warenart. Diese Funktion bleibt nur als Hülle für alte Aufrufer.
+    require_once __DIR__ . '/artikel_dubletten.php';
+    $wer = function_exists('current_user') ? (string)(current_user()['name'] ?? '') : '';
+    $r = artikel_zusammenfuehren_voll($quelle_id, $ziel_id, $wer);
+    return ['ok' => $r['ok'], 'fehler' => $r['ok'] ? null : (string)$r['fehler'], 'chargen' => (int)($r['zahlen']['charge'] ?? 0), 'hinweis' => (string)($r['hinweis'] ?? '')];
 }
 // Soll-Kette 2a (Nico/Dustin 04.11.2026): Ware ist beim Einbuchen frei. Quarantäne nur bei $problem (bewusst gewählt:
 // Beschädigung, Abweichung) oder wenn der Schalter wareneingang_quarantaene an ist.

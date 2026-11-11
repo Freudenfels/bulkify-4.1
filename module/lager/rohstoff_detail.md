@@ -223,3 +223,5 @@ Siehe `core/preis_gueltig.md`.
 **Bestand korrigieren an der Charge (Block B, 11.11.2026):** läuft über `core/charge_korrektur.php`, mit Art, Grund-Auswahl und Notiz. Die Ursprungsmenge wird nicht mehr still überschrieben, es entsteht eine Korrekturbewegung.
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Lieferanten-/Kunden-Auswahl ohne gesperrte (der gewählte bleibt). In den Lieferantenpreisen ist ein gesperrter Lieferant grau markiert („Lieferant gesperrt“) und nie „günstigster“.
+
+**Zusammenführen (Block D, 11.11.2026):** läuft über `artikel_zusammenfuehren_voll()` (gleiche Sperren wie die Seite „Artikel zusammenführen“). Fehler- und Kollisionshinweise erscheinen als Text.

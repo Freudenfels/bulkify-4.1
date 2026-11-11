@@ -30,3 +30,5 @@
   - Protokoll in `aenderung_log` und in den Aktivitäten beider Artikel. Gelöscht wird nichts.
 
 - `artikel_dubletten_gruppen()` gruppiert je **Warenart**. Bulk-Kapseln Größe 0 und 00 stehen so in einer Gruppe, gesperrt mit „andere Kapselgröße“. Rohstoffe stehen getrennt.
+
+**Ein Weg (Block D, 11.11.2026, Fable 11.21):** `artikel_zusammenfuehren_voll()` zählt Zeilen, die bei Schlüssel-Kollision (`UPDATE IGNORE`) am alten Artikel bleiben, und meldet sie (`rest`, `hinweis`, Verlauf). Läuft auch in einer schon offenen Transaktion (Datenprüfung).

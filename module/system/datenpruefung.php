@@ -814,12 +814,14 @@ $CHECKS = [
                             AND EXISTS (SELECT 1 FROM charge c WHERE c.item_id = i.id)) x
                     LEFT JOIN item z ON z.id = x._ziel_id
                     ORDER BY x.artikel",
-        'korrektur' => "-- je Zeile: item_zusammenfuehren(<ID>, <Ziel>): UPDATE charge/reservierung SET item_id=<Ziel> WHERE item_id=<ID>; UPDATE item SET gesperrt=1 WHERE id=<ID>;",
+        'korrektur' => "-- je Zeile: artikel_zusammenfuehren_voll(<ID>, <Ziel>) - alle Bezüge (Chargen, Reservierungen, Bestellungen, Preise …) auf das Ziel, Doppel-Artikel gesperrt; gesperrt bei anderer Kapselgröße/Füllgewicht/Material/Einheit",
         'ohne_fix'  => 'Ohne eindeutigen Vorschlag oder mit anderer Einheit bitte auf der Artikelseite von Hand zusammenführen.',
         'fix'   => ['tabelle' => 'item', 'typ' => 'item',
                     'waehlbar' => fn(array $r) => !empty($r['_ziel_id']) && (string)$r['einheit'] === (string)$r['ziel_einheit'],
                     'aktion' => function (array $r) {
-                        $res = item_zusammenfuehren((int)$r['_id'], (int)$r['_ziel_id']);
+                        // Block D (11.11.2026): derselbe Weg wie die Seite „Artikel zusammenführen" (mit Sperre), nicht mehr der alte.
+                        require_once BX_ROOT . '/core/artikel_dubletten.php';
+                        $res = artikel_zusammenfuehren_voll((int)$r['_id'], (int)$r['_ziel_id'], (string)(current_user()['name'] ?? 'Datenprüfung'));
                         if (!$res['ok']) return 0;
                         aenderung_protokollieren('item', (int)$r['_id'], ['zusammengefuehrt_in' => null], ['zusammengefuehrt_in' => (int)$r['_ziel_id']], 'datenpruefung');
                         return 1;

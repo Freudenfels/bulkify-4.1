@@ -654,3 +654,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 - **Preise gesperrter Lieferanten** zählen nicht mehr bei „günstigster Lieferant“, Kalkulation und Auto-EK. Betroffen sind `item_lieferant_preise`, `produkt_lieferant_preise`, `rezeptur_fremd_lieferant_preise`, `item_ek_aus_lieferantenpreis` und `rohstoff_ek_detail`. Bedingung: Lieferant nicht `gesperrt=1`; Preise ohne Lieferanten-ID bleiben.
 - **`rezeptur_inaktiv_setzen($rid, $inaktiv, $wer)`:** setzt den Status „inaktiv“ und merkt sich den alten Status in `rezeptur.status_vor_inaktiv`. Der eigene Bulk-Artikel und der Premix-Artikel werden mit gesperrt (`item.gesperrt_durch_rezeptur`). Beim Wieder-Aktivieren kommt alles zurück.
 - **`rezeptur_testdaten_inaktiv_einmal()`:** setzt einmalig RZ-4023, RZ-4033 und RZ-4034 auf inaktiv (app_meta `rz_test_inaktiv_1111`, von Nico ausdrücklich erlaubt).
+
+`item_zusammenfuehren()` ist seit 11.11.2026 nur noch eine Hülle für `artikel_zusammenfuehren_voll()` (eine Logik mit Sperre bei anderer Kapselgröße, Füllgewicht, Material, Einheit, Warenart).

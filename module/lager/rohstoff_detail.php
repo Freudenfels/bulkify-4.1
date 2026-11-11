@@ -324,8 +324,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'artik
     if (!has_role('admin')) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=1'); exit; }
     $ziel = (int)($_POST['ziel_item_id'] ?? 0);
     $r = item_zusammenfuehren((int)$id, $ziel);   // gemeinsame Logik (auch Datenprüfung)
-    if (!$r['ok']) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=' . $r['fehler']); exit; }
-    header('Location: ?p=rohstoff&id=' . $ziel . '&merged=1'); exit;
+    if (!$r['ok']) { header('Location: ?p=rohstoff&id=' . (int)$id . '&mergefehler=' . rawurlencode((string)$r['fehler'])); exit; }
+    header('Location: ?p=rohstoff&id=' . $ziel . '&merged=1' . ($r['hinweis'] !== '' ? '&mergehinweis=' . rawurlencode($r['hinweis']) : '')); exit;
 }
 // Rohstoff löschen (Bereinigung, z. B. Import-Dublette). Nur Admin; abgesichert in rohstoff_loeschen().
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'rohstoff_loeschen' && !$neu) {
@@ -1428,7 +1428,9 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
     <h2 style="margin-top:0">Mit anderem Artikel zusammenführen <span class="muted" style="font-weight:400;font-size:13px">(dieser Artikel wird danach deaktiviert)</span></h2>
     <?php if (($_GET['mergefehler'] ?? '') === 'ziel'): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Bitte einen gültigen Ziel-Artikel wählen (nicht denselben).</div>
     <?php elseif (($_GET['mergefehler'] ?? '') === 'einheit'): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Ziel-Artikel hat eine andere Einheit. Bitte erst die Einheit angleichen, damit der Bestand nicht vermischt wird.</div>
-    <?php elseif (isset($_GET['mergefehler'])): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Nur Admins dürfen Artikel zusammenführen.</div><?php endif; ?>
+    <?php elseif (($_GET['mergefehler'] ?? '') === '1'): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b">Nur Admins dürfen Artikel zusammenführen.</div>
+    <?php elseif (isset($_GET['mergefehler'])): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8f231b"><?= h((string)$_GET['mergefehler']) ?></div><?php endif; ?>
+    <?php if (isset($_GET['mergehinweis'])): ?><div style="padding:8px 12px;margin-bottom:10px;color:#8a6d1f"><?= h((string)$_GET['mergehinweis']) ?></div><?php endif; ?>
     <form method="post" onsubmit="return confirm('Diesen Artikel in den gewählten Ziel-Artikel zusammenführen? Chargen und Reservierungen wandern, dieser Artikel wird deaktiviert (nicht gelöscht).');">
       <input type="hidden" name="aktion" value="artikel_merge">
       <div class="bx-row" style="gap:14px;align-items:flex-end;flex-wrap:wrap">
