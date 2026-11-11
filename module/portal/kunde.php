@@ -190,6 +190,22 @@ function portal_labortest_upsell(array $kunde, int $angebotId): void {
     auftrag_laboranalyse_buchen($aufId, 250.0);
     log_aktivitaet('kunde', (int)$kunde['id'], 'kunde', 'Laboranalyse (Fixpreis 250 € netto) zur Bestellung dazugebucht – steht auf der Rechnung.', 'anfrage', 'auftrag', $aufId);
 }
+// Preis-Gültigkeit (11.11.2026): abgelaufene Angebote nicht annehmen (Server-Sperre für alle Annahme-Wege).
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['aktion'] ?? '', ['angebot_annehmen', 'bestaetigen', 'zelle_annehmen'], true)) {
+    $abA = one("SELECT id, status, gueltig_bis FROM angebot WHERE id=? AND kunde_id=?", [(int)($_POST['angebot_id'] ?? 0), (int)$k['id']]);
+    if ($abA && angebot_abgelaufen($abA)) { header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&abgelaufen=1'); exit; }
+}
+// „Aktualisierung anfragen" zu einem abgelaufenen Angebot -> Benachrichtigung ans Team (+ Verlauf).
+if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_aktualisierung') {
+    $akA = one("SELECT id, nummer FROM angebot WHERE id=? AND kunde_id=?", [(int)($_POST['angebot_id'] ?? 0), (int)$k['id']]);
+    if ($akA) {
+        log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Aktualisierung zu abgelaufenem Angebot ' . (string)$akA['nummer'] . ' angefragt.', 'angebot', 'angebot', (int)$akA['id']);
+        if (function_exists('benachrichtigung_add'))
+            benachrichtigung_add('Angebot aktualisieren: ' . (string)$akA['nummer'] . ' (' . (string)($k['firma'] ?? '') . ')',
+                'Der Kunde möchte ein aktualisiertes Angebot - das bisherige ist abgelaufen. Verlängern oder mit neuen Preisen neu rechnen.', '?p=angebot&id=' . (int)$akA['id'], 'sonstiges', true);
+    }
+    header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&aktualisierung=1'); exit;
+}
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_annehmen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT id, jahresvertrag, kategorie, nummer FROM angebot WHERE id=? AND kunde_id=? AND status='gesendet'", [$aid, (int)$k['id']]) : null;
@@ -2770,6 +2786,8 @@ portal_head('Kundenportal · ' . $k['firma']);
   <h1 style="margin-bottom:4px">Angebote &amp; Anfragen</h1>
   <p class="bx-sub">Alle Ihre Anfragen und deren Stand. Liegt ein Angebot vor, wählen Sie hier die Menge und bestätigen verbindlich.</p>
   <?php if (isset($_GET['freigabefehlt'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Für die verbindliche Annahme fehlen die Bestätigung und Ihr Name.</div><?php endif; ?>
+  <?php if (isset($_GET['abgelaufen'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Dieses Angebot ist abgelaufen und kann nicht mehr angenommen werden. Bitte über „Aktualisierung anfragen“ ein neues Angebot anfordern.</div><?php endif; ?>
+  <?php if (isset($_GET['aktualisierung'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Danke - wir aktualisieren das Angebot und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['annahmefehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Das Angebot konnte nicht automatisch angenommen werden. Wir sind informiert und melden uns kurzfristig – es ist noch nichts bestellt.</div><?php endif; ?>
   <?php if (isset($_GET['abgelehnt'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rückmeldung ist eingegangen – wir überarbeiten das Angebot.</div><?php endif; ?>
 

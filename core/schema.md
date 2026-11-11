@@ -602,3 +602,6 @@ Siehe `core/preis_gueltig.md`.
 - `lp_verlauf_sichern()` schreibt in die Tabelle `lieferant_preis_verlauf`.
 - Die Rückgaben von `rohstoff_bester_lieferant()`, `rohstoff_ek_detail()`, `angebot_rohstoffkosten()` und `auftrag_beschaffungswege()` sind erweitert.
 Siehe `core/preis_gueltig.md`.
+
+## Angebotsgültigkeit (11.11.2026)
+`angebot_gueltig_bis_default(?int $angebot_id)`, `angebot_ek_gueltig_bis()` und `angebot_abgelaufen()`, siehe `core/preis_gueltig.md` Teil 4.

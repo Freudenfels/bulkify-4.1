@@ -464,3 +464,7 @@ In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. D
 - **Ohne MOQ:** keine Sperre.
 - **Fehler behoben:** Das Einzelformular auf der Rohstoff-Detailseite (Felder `betreff`, `rohstoff_id`, `wunsch_menge`) kam bisher nicht an, weil der Handler nur `roh_*` las. Es wird jetzt in dieselbe Form gebracht.
 - **Steckbrief:** Der interne KI-Steckbrief wird im Portal nie ausgegeben.
+
+## Abgelaufene Angebote (11.11.2026)
+- Die Annahme wird serverseitig gesperrt, wenn `angebot_abgelaufen()`. Danach folgt die Meldung `abgelaufen=1`.
+- `aktion=angebot_aktualisierung` erzeugt eine Benachrichtigung ans Team und einen Verlaufseintrag. Danach folgt die Meldung `aktualisierung=1`.

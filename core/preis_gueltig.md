@@ -74,3 +74,16 @@ Stand 11.11.2026, Auftrag von Nico. Anlass: Manche Rohstoffpreise halten nur kur
 - **„neu anfragen“:** öffnet das Anfrage-Pop-up mit demselben Lieferanten vorausgewählt (`data-lieferant`) und denselben Staffelmengen (`data-staffel`). Weitere Lieferanten lassen sich dazuwählen.
 - **Preisverlauf:** Neue Tabelle `lieferant_preis_verlauf`. `lp_verlauf_sichern()` schreibt alte Preise hinein, bevor sie ersetzt oder gelöscht werden. Das gilt bei Angebot annehmen, Premix-Antwort und Löschen am Rohstoff. Auf der Rohstoffseite (Reiter Einkauf) steht der klappbare „Preisverlauf“ mit aktuellen und ersetzten Preisen (Datum, Lieferant, ab Menge, Preis, gültig bis).
 - **Bald ablaufend:** Läuft ein Preis in höchstens 3 Tagen ab, erscheint „läuft bald ab“. `pg_bald_pruefen()` läuft einmal am Tag beim Aufruf des Dashboards. Steckt ein solcher Preis in einem offenen Angebot (Entwurf oder gesendet), geht eine Benachrichtigung „Preis läuft bald ab“ an das Team, einmal je Rohstoff und Datum.
+
+## Teil 4: Angebote an Kunden
+- `angebot_ek_gueltig_bis($angebot_id)` liefert das früheste „gültig bis“ ab heute aller EK-Preise im Angebot (Rezeptur-Zutaten wie bei den Rohstoffkosten, dazu Rohstoff-Positionen) mit Rohstoffname.
+- `angebot_gueltig_bis_default($angebot_id)` liefert das Minimum aus dem Standard (`angebot_gueltig_tage`) und diesem Datum. Ohne begrenzte Preise gilt der bisherige Standard. Verwendet wird es beim Senden, im Kopfformular und beim Verlängern.
+- **Intern:**
+  - Am Feld „Gültig bis“ steht „Kürzester EK-Preis: … bis …“. Liegt die Angebotsgültigkeit später, steht dort „Angebot gilt länger als der Whey-Preis (bis …)“. Das ist nur ein Hinweis, keine Sperre.
+  - Im gesendeten Angebot gibt es zusätzlich den Knopf „Gültigkeit auf … setzen“.
+  - Bei einem abgelaufenen Angebot stehen das Badge „abgelaufen“ und der Knopf „Verlängern bis …“. Mit neuen Preisen: Positionen neu berechnen und erneut senden.
+- **Kundenportal:**
+  - `angebot_abgelaufen()` heißt: gesendet und „gültig bis“ liegt vor heute. Dann steht auf der Karte „abgelaufen - bitte neues Angebot anfordern“. Alle Annahme-Knöpfe fehlen, und es gibt den Knopf „Aktualisierung anfragen“.
+  - Dieser Knopf erzeugt eine Benachrichtigung ans Team und einen Eintrag im Kundenverlauf.
+  - Der Server sperrt die Annahme zusätzlich für `angebot_annehmen`, `bestaetigen` und `zelle_annehmen`.
+- **Nach der Annahme (Auftrag)** gilt der Preis des Auftrags. Ablaufende EK-Preise ändern nur die Hinweise in der Beschaffung.

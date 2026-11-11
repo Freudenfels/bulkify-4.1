@@ -6,3 +6,7 @@ Zeigt Status, PDF, Verpackung/Deckel/Etikett, die Rezeptur (Zutaten + Nährwerte
 
 ## Pulver: Packungsgröße = g (03.11.2026)
 `stueck` ist bei Pulver/Granulat die Füllmenge in g. Die Karte zeigt „300 g (≈ 60 Tagesdosen à 5 g)“ (`$paketTxt`, `tagesdosen_txt()`). Vorher stand fälschlich g × Portionsgewicht da (300 × 5 g = 1.500 g). Zutaten/Nährwerte heißen bei Pulver „je Tagesdosis“.
+
+## Abgelaufen (11.11.2026)
+- `$abgelaufen` setzt `$canAccept` auf falsch.
+- Die Karte zeigt „Dieses Angebot ist abgelaufen … - bitte neues Angebot anfordern“ und den Knopf „Aktualisierung anfragen“.

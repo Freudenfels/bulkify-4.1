@@ -26,6 +26,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$neu && ($_POST['aktion'] ?? '') =
     }
     header('Location: ?p=angebot&id=' . (int)$id . '&knok=1#kundennachricht'); exit;
 }
+// Preis-Gültigkeit (11.11.2026): Angebotsgültigkeit auf den kürzesten EK-Preis setzen bzw. abgelaufenes Angebot verlängern.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$neu && in_array($_POST['aktion'] ?? '', ['gueltig_ek_setzen', 'angebot_verlaengern'], true)) {
+    $neuBis = ($_POST['aktion'] === 'gueltig_ek_setzen') ? (angebot_ek_gueltig_bis((int)$id)['bis'] ?? null) : angebot_gueltig_bis_default((int)$id);
+    if ($neuBis) {
+        q("UPDATE angebot SET gueltig_bis=? WHERE id=?", [$neuBis, (int)$id]);
+        log_aktivitaet('angebot', (int)$id, 'team', 'Angebot gültig bis ' . date('d.m.Y', strtotime($neuBis)) . ($_POST['aktion'] === 'angebot_verlaengern' ? ' (verlängert).' : ' (kürzester EK-Preis).'), 'notiz');
+    }
+    header('Location: ?p=angebot&id=' . (int)$id . '&gueltigok=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? 'kopf_save';
     $f = fn($k) => trim($_POST[$k] ?? '');
@@ -146,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $anz = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [(int)$id]);
             if ($st === 'offen' && $anz > 0) {
                 q("UPDATE angebot SET status='gesendet', preise_kunde=1 WHERE id=?", [(int)$id]);
-                q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < CURDATE())", [angebot_gueltig_bis_default(), (int)$id]);
+                q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < CURDATE())", [angebot_gueltig_bis_default((int)$id), (int)$id]);
                 angebot_produkte_sichern((int)$id);
                 $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
                 if ($kd) {
@@ -193,7 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Gültigkeit zählt ab dem Tag, an dem das Angebot beim Kunden landet – ein alter Entwurf
         // wäre sonst schon abgelaufen. Ein selbst gesetztes Datum in der Zukunft bleibt stehen.
         q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < CURDATE())",
-          [angebot_gueltig_bis_default(), (int)$id]);
+          [angebot_gueltig_bis_default((int)$id), (int)$id]);
         // Jetzt – und erst jetzt – gelten die angebotenen Konfigurationen als eigene Produkte
         // (Rezeptur x Menge + Verpackung), und der Kunde darf deren Preise im Portal sehen.
         angebot_produkte_sichern((int)$id);
@@ -588,8 +597,20 @@ if (!$neu && !$editMode) {
         <?php if ($ort !== ''): ?><br><?= h($ort) ?><?php endif; ?>
         <?php if (($kd['kundennummer'] ?? '') !== ''): ?><br><span class="muted">Kunden-Nr.:</span> <?= h((string)$kd['kundennummer']) ?><?php endif; ?>
         <?php if ($paNr): ?><br><span class="muted">Produktionsauftrag:</span> <?= h((string)$paNr) ?><?php endif; ?>
-        <?php if (($a['gueltig_bis'] ?? null)): ?><br><span class="muted">Gültig bis:</span> <?= h(date('d.m.Y', strtotime((string)$a['gueltig_bis']))) ?><?php endif; ?>
+        <?php if (($a['gueltig_bis'] ?? null)): ?><br><span class="muted">Gültig bis:</span> <?= h(date('d.m.Y', strtotime((string)$a['gueltig_bis']))) ?><?= angebot_abgelaufen($a) ? ' ' . bx_badge('abgelaufen', 'err') : '' ?><?php endif; ?>
       </div>
+      <?php // Preis-Gültigkeit (11.11.2026): gilt das Angebot länger als der kürzeste EK-Preis darin? Nur Hinweis, keine Sperre.
+        $ekBis = angebot_ek_gueltig_bis((int)$id);
+        if (isset($_GET['gueltigok'])) echo '<div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-top:10px;display:inline-block">Gültigkeit gespeichert.</div>';
+        if ($ekBis && !empty($a['gueltig_bis']) && (string)$a['gueltig_bis'] > $ekBis['bis'] && !in_array((string)$a['status'], ['bestaetigt', 'abgelehnt'], true)): ?>
+      <div class="bx-panel" style="margin:10px 0 0;padding:10px 14px;border-left:3px solid var(--warn)">Angebot gilt länger als der <?= h($ekBis['name']) ?>-Preis (bis <?= h(date('d.m.Y', strtotime($ekBis['bis']))) ?>).
+        <form method="post" style="display:inline;margin:0 0 0 8px"><input type="hidden" name="aktion" value="gueltig_ek_setzen"><button class="btn btn-ghost btn-sm" type="submit">Gültigkeit auf <?= h(date('d.m.Y', strtotime($ekBis['bis']))) ?> setzen</button></form></div>
+      <?php endif; ?>
+      <?php if (angebot_abgelaufen($a)): ?>
+      <div class="bx-panel" style="margin:10px 0 0;padding:10px 14px;border-left:3px solid #8f231b">Das Angebot ist abgelaufen. Der Kunde kann es im Portal nicht mehr annehmen, nur eine Aktualisierung anfragen.
+        <form method="post" style="display:inline;margin:0 0 0 8px"><input type="hidden" name="aktion" value="angebot_verlaengern"><button class="btn btn-primary btn-sm" type="submit">Verlängern bis <?= h(date('d.m.Y', strtotime(angebot_gueltig_bis_default((int)$id)))) ?></button></form>
+        <span class="muted" style="font-size:12px;margin-left:6px">Mit neuen Preisen: Positionen unten neu berechnen und erneut senden.</span></div>
+      <?php endif; ?>
       <?php else: ?><div class="muted">Kein Kunde in den Kopfdaten hinterlegt.</div><?php endif; ?>
       <?php if (($a['notiz'] ?? '') !== ''): ?><div style="margin-top:12px;white-space:pre-line"><span class="muted">Notiz:</span> <?= h((string)$a['notiz']) ?></div><?php endif; ?>
     </div>
@@ -723,7 +744,9 @@ if (!$neu && !$editMode) {
       <div class="muted" style="font-size:12px">Verbindlich bestätigt durch <strong><?= h($a['freigabe_name']) ?></strong><?= $a['freigabe_am'] ? ' am ' . h(fmt_zeit($a['freigabe_am'])) . ' Uhr' : '' ?></div>
       <?php endif; ?>
     </div>
-    <div class="bx-field"><label>Gültig bis</label><input type="date" name="gueltig_bis" value="<?= h($v('gueltig_bis') !== '' ? $v('gueltig_bis') : angebot_gueltig_bis_default()) ?>"></div>
+    <?php $ekBisF = $neu ? null : angebot_ek_gueltig_bis((int)$id); $gbF = $v('gueltig_bis') !== '' ? $v('gueltig_bis') : angebot_gueltig_bis_default($neu ? null : (int)$id); ?>
+    <div class="bx-field"><label>Gültig bis</label><input type="date" name="gueltig_bis" value="<?= h($gbF) ?>">
+      <?php if ($ekBisF): ?><div style="font-size:12px;margin-top:3px;<?= $gbF > $ekBisF['bis'] ? 'color:#8a6d1f' : '' ?>" class="<?= $gbF > $ekBisF['bis'] ? '' : 'muted' ?>"><?= $gbF > $ekBisF['bis'] ? 'Angebot gilt länger als der ' . h($ekBisF['name']) . '-Preis (bis ' . h(date('d.m.Y', strtotime($ekBisF['bis']))) . ')' : 'Kürzester EK-Preis: ' . h($ekBisF['name']) . ' bis ' . h(date('d.m.Y', strtotime($ekBisF['bis']))) ?></div><?php endif; ?></div>
     <div class="bx-field"><label>Marge (%) <?= bx_hint('wirkt auf die automatischen Positionen. Leer = Marge je Form ('.rtrim(rtrim(number_format($defMarge,2,',','.'),'0'),',').' %).') ?></label><input type="number" step="0.1" name="marge" value="<?= ($a['marge_override'] ?? '') !== '' && $a['marge_override'] !== null ? h(rtrim(rtrim(number_format((float)$a['marge_override'],2,'.',''),'0'),'.')) : '' ?>" placeholder="<?= h(rtrim(rtrim(number_format($defMarge,2,',','.'),'0'),',')) ?> (Standard)"></div>
     <div class="bx-field"><label>Produktionszeit (Wochen)</label><input type="number" step="0.5" name="produktionszeit" value="<?= ($a['produktionszeit_wochen'] ?? '') !== '' && $a['produktionszeit_wochen'] !== null ? h(rtrim(rtrim(number_format((float)$a['produktionszeit_wochen'],1,'.',''),'0'),'.')) : '' ?>" placeholder="<?= h(rtrim(rtrim(number_format($defPz,1,',','.'),'0'),',')) ?> (Standard)"></div>
   </div>

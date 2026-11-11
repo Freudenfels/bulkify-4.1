@@ -216,3 +216,8 @@ Steht dort „unter MOQ“, ist das nur ein Hinweis und keine Sperre.
 - In „Rohstoffkosten je Lieferant“ steht bei einem nur abgelaufenen Preis „Preis abgelaufen seit … - neu anfragen“. Der Knopf „neu anfragen“ ist vorbelegt mit demselben Lieferanten und denselben Staffeln.
 - Darunter steht „Summe unsicher“.
 - Bei gültigen Preisen steht „gültig bis“.
+
+## Angebotsgültigkeit und EK-Preise (11.11.2026)
+- „Gültig bis“ ist mit dem kürzesten EK-Preis vorbelegt, wenn der vor dem Standard liegt.
+- Gilt das Angebot länger, kommt ein Hinweis mit dem Knopf „Gültigkeit auf … setzen“ (`aktion=gueltig_ek_setzen`).
+- Ein abgelaufenes, gesendetes Angebot zeigt den Knopf „Verlängern bis …“ (`aktion=angebot_verlaengern`).

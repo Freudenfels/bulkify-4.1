@@ -8,7 +8,9 @@
  * $accept=false -> reine Lese-Ansicht (Ort: „Angebote" = Datenablage): Preise sichtbar, keine Knöpfe.
  */
 $offen = $a['status'] === 'gesendet';
-$canAccept = $offen && !empty($accept);
+// Preis-Gültigkeit (11.11.2026): abgelaufenes Angebot ist nicht mehr annehmbar - nur „Aktualisierung anfragen".
+$abgelaufen = function_exists('angebot_abgelaufen') && angebot_abgelaufen($a);
+$canAccept = $offen && !empty($accept) && !$abgelaufen;
 $einh = (int)$a['einheiten_pro_packung'];
 $formPl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','fluessig'=>'ml'];
 // Pulver/Granulat (Nico 03.11.2026): die Packungsgröße SIND g (stueck = g), die Rezeptur ist eine Tagesdosis.
@@ -78,6 +80,13 @@ if ($a['status'] === 'bestaetigt') {
 
   <?php // Hat das Angebot explizite Staffeln (vom Team gebaut), zeigen wir GENAU die – nicht die
         // automatische Produkt-Matrix. Die Matrix greift nur, wenn keine Angebotsstaffel existiert. ?>
+  <?php if ($abgelaufen): ?>
+  <div class="bx-panel" style="margin:10px 0;padding:12px 16px;border-left:3px solid #8f231b">
+    Dieses Angebot ist abgelaufen (gültig bis <?= h(date('d.m.Y', strtotime((string)$a['gueltig_bis']))) ?>) - bitte neues Angebot anfordern.
+    <form method="post" style="margin:8px 0 0"><input type="hidden" name="aktion" value="angebot_aktualisierung"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
+      <button class="btn btn-primary btn-sm" type="submit">Aktualisierung anfragen</button></form>
+  </div>
+  <?php endif; ?>
   <?php if ($offen && !empty($inf['gesperrt'])): ?>
   <div class="bx-panel" style="margin-top:12px;border-color:var(--gold)">
     <strong>Preis wird gerade finalisiert.</strong>

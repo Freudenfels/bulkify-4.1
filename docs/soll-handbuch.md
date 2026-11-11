@@ -97,6 +97,14 @@ Sobald ein Auftrag neu ist, fragt das System aktiv (Auftrag erscheint in "Zu erl
 - **Handelsware** (zugekauft, kein Produktionsauftrag) hat ebenfalls einen Weg ("Zukauf · Handelsware").
 - **Eine Oberfläche (gebaut 10.11.2026):** Festgelegt wird im Reiter Beschaffungsweg bzw. im **Pop-up "Weg festlegen"** - beide zeigen dieselben vier Karten (Haben wir schon im Lager · Zukauf fertig · Premix · Einzelrohstoffe) mit Kosten, günstigstem Lieferanten und Rest. Kopf im Pop-up: Auftrag, Angebot, Kunde, Produkt als Links (neuer Tab), Menge, Kapselgröße, Glas, "Letzte Festlegung"; darunter die **Rezeptur für diesen Auftrag** (mg je Einheit, kg für den Auftrag, frei, unterwegs, Rest; Leerkapseln in Stk; "Rezeptur öffnen"). Das Pop-up steht auf der Bestellen-Seite (Block "warten auf Festlegung"), unter "Beschaffungsweg offen", auf der PA-Seite und der alten Seite Bedarf; jede Zeile hat Links zu Auftrag, Angebot und Rezeptur. **Entfallen:** die Knöpfe "Eigenproduktion / Fremdproduktion (zukaufen)" auf der Bestellen-Seite, "Herstellen / Einkaufen" im Reiter Produktion (nur noch "Produktionsauftrag anlegen"), die Sammel-Umstellung Eigen/Fremd in der Produktionsliste und die Eigen/Fremd-Auswahl auf der Seite Bedarf. Bleibt als Sonderfall: auf der PA-Seite nach Produktionsbeginn "auf fertige Kapseln umstellen" sowie die Rückabwicklung.
 
+**Preise mit Gültigkeit (11.11.2026):**
+- Jeder Lieferantenpreis kann ein „gültig bis“ haben. Leer heißt unbegrenzt.
+- Rohstoffe mit „Preis schwankt“ (z. B. Whey) bekommen eine Standard-Gültigkeit, die Vorbelegung und die Pflicht im Lieferantenportal.
+- Abgelaufene Preise werden markiert („abgelaufen seit …“, „neu anfragen“) und nie still verwendet. Gültige Preise gehen vor. Gibt es nur abgelaufene, ist die Summe „unsicher“.
+- Ein Angebot gilt standardmäßig nicht länger als der kürzeste EK-Preis darin. Ein späteres Datum ergibt nur einen Hinweis.
+- Ein abgelaufenes Angebot kann der Kunde nicht annehmen, nur eine Aktualisierung anfragen.
+- Nach der Annahme gilt der Auftragspreis.
+
 ### 4.3 Beschaffung - "Bei wem bestellen?"
 Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carnosin und 3.000 Etiketten - bei wem bestellen?" Lieferant und Preis sind vorgeschlagen.
 - **Kapsel und Premix:** direkter Knopf "Bestellen" je Lieferant (mit Gesamtkosten für den Auftrag).
@@ -459,3 +467,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 11.11.2026 | Auftrag, Reiter Details: Etikett-Design als Bild unter den Kacheln (PDF Seite 1 per pdf.js), Klick öffnet das Etikett-Fenster | Nico / Claude Code |
 | 11.11.2026 | Rohstoff-Unterlagen: Reiter "Aktuelle Anfragen" - alle offenen Anfragen (wie Menü-Zahl), älteste zuerst, je Anfrage Rohstoffe mit Stand und "Preis / Unterlage" zum Hochladen | Nico / Claude Code |
 | 11.11.2026 | Preise mit Gültigkeit Teil 1+2: "gültig bis" an jedem Lieferantenpreis (leer = unbegrenzt), Eingabe mit Schnellwahl 7/14/30/90 im Portal und intern, KI liest es aus Preislisten; Rohstoff "Preis schwankt" + Standard-Tage: Vorbelegung, Pflicht im Lieferantenportal, Hinweis in der Anfrage (bei Rezeptur/Premix nur Hinweis); Portal: keine doppelte Staffel "ab 1", Zahlen mit Komma | Nico / Claude Code |
+| 11.11.2026 | Preise mit Gültigkeit Teil 3+4: Kalkulation bevorzugt gültige Preise, abgelaufene markiert (Summe unsicher, "neu anfragen" vorbelegt), Preisverlauf am Rohstoff, Benachrichtigung bei bald ablaufenden Preisen in offenen Angeboten; Angebot gültig bis = kürzester EK-Preis (Hinweis bei späterem Datum), abgelaufenes Angebot im Portal nicht annehmbar ("Aktualisierung anfragen"), intern "Verlängern"; Handbuch 4.2 | Nico / Claude Code |

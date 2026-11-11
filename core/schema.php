@@ -7760,8 +7760,35 @@ function lieferung_paket_loeschen(int $paket_id, int $bestellung_id): bool {
 }
 
 // Angebote gelten standardmäßig 14 Tage (Einstellungen: angebot_gueltig_tage) – ab heute gerechnet.
-function angebot_gueltig_bis_default(): string {
-    return date('Y-m-d', strtotime('+' . max(1, (int) meta_get('angebot_gueltig_tage', 14)) . ' days'));
+// Preis-Gültigkeit (Nico 11.11.2026): Mit Angebots-ID gilt das Angebot standardmäßig nicht länger als der kürzeste
+// EK-Preis darin (angebot_ek_gueltig_bis). Ohne begrenzte Preise: bisheriger Standard.
+function angebot_gueltig_bis_default(?int $angebot_id = null): string {
+    $std = date('Y-m-d', strtotime('+' . max(1, (int) meta_get('angebot_gueltig_tage', 14)) . ' days'));
+    if ($angebot_id) { $ek = angebot_ek_gueltig_bis($angebot_id); if ($ek && $ek['bis'] < $std) return $ek['bis']; }
+    return $std;
+}
+// Frühestes „gültig bis" (ab heute) aller EK-Preise, die in die Kalkulation des Angebots eingehen:
+// Rezeptur-Zutaten (wie Rohstoffkosten) und Rohstoff-Positionen. Rückgabe ['bis'=>Y-m-d, 'name'=>Rohstoff] oder null.
+function angebot_ek_gueltig_bis(int $angebot_id): ?array {
+    $best = null;
+    $nimm = function (?string $bis, string $name) use (&$best) {
+        $bis = trim((string)$bis);
+        if ($bis === '' || $bis < date('Y-m-d')) return;
+        if ($best === null || $bis < $best['bis']) $best = ['bis' => $bis, 'name' => $name];
+    };
+    try {
+        foreach (angebot_rohstoffkosten($angebot_id)['zeilen'] as $z) $nimm($z['gueltig_bis'] ?? null, (string)$z['name']);
+        foreach (all("SELECT ap.artikelnr, ap.menge, i.id AS iid, i.name FROM angebot_position ap JOIN item i ON i.artikelnummer=ap.artikelnr AND i.kategorie='rohstoff'
+                      WHERE ap.angebot_id=? AND ap.quelle='rohstoff' AND ap.artikelnr<>''", [$angebot_id]) as $p) {
+            $d = rohstoff_ek_detail((int)$p['iid'], (float)$p['menge']);
+            $nimm($d['gueltig_bis'] ?? null, (string)$p['name']);
+        }
+    } catch (Throwable $e) {}
+    return $best;
+}
+// Angebot abgelaufen? (gesendet, gültig bis vor heute) – dann im Portal nicht mehr annehmbar.
+function angebot_abgelaufen(array $a): bool {
+    return ($a['status'] ?? '') === 'gesendet' && !empty($a['gueltig_bis']) && (string)$a['gueltig_bis'] < date('Y-m-d');
 }
 
 // Etikettenmaß „56 x 143" (auch „56x143 mm") in [Breite, Höhe] zerlegen.
