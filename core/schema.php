@@ -12361,7 +12361,7 @@ function produktion_posten_entnehmen(int $pa_id, array $posten, bool $trocken = 
         $gebucht[] = ['name'=>(string)scalar("SELECT name FROM item WHERE id=?", [(int)$b['item_id']]), 'menge'=>(float)$b['menge'], 'alternativ'=>$b['alt'], 'label'=>$b['label']];
     }
     if ($log && $gebucht && $pa && (int)($pa['kunde_id'] ?? 0) > 0 && function_exists('log_aktivitaet')) {
-        $zeilen = array_map(fn($g) => number_format($g['menge'], 0, ',', '.') . ' Stk ' . ($g['label'] ?: 'Artikel') . ' „' . $g['name'] . '"' . ($g['alternativ'] ? ' (Ersatzartikel – Kundenetikett ohne Bestand, Altbestand)' : ''), $gebucht);
+        $zeilen = array_map(fn($g) => number_format($g['menge'], 0, ',', '.') . ' Stk ' . ($g['label'] ?: 'Artikel') . ' „' . $g['name'] . '"' . ($g['alternativ'] ? ' (Ersatzartikel)' : ''), $gebucht);
         log_aktivitaet('kunde', (int)($pa['kunde_id'] ?? 0), 'team', 'Produktion ' . (string)$pa['nummer'] . ': abgebucht – ' . implode('; ', $zeilen) . '.', 'auftrag', 'auftrag', $auf ?: null);
     }
     return ['ok'=>true, 'fehlt'=>[], 'gebucht'=>$gebucht];
@@ -12383,8 +12383,9 @@ function produktion_verpackung_entnehmen(int $pa_id, ?float $bis = null, bool $t
     return produktion_posten_entnehmen($pa_id, $posten, $trocken);
 }
 // Etikett eines Produktionsauftrags entnehmen (1 je Packung, FEFO) – das KUNDENETIKETT dieses Auftrags (gebundene
-// Version). Hat es (noch) keinen Bestand, aber das generische Maß-Etikett des Behälters genug (Altbestand, der
-// vor dem Kundenetikett-Fix dort eingebucht wurde), wird davon abgebucht und im Verlauf vermerkt. Restbuchung bis $bis Packungen.
+// Version). Block E (11.11.2026, Entscheidung Nico): KEIN stiller Ersatz mehr durch das generische Maß-Etikett – sonst würde
+// mit einem generischen statt dem Kundendesign etikettiert. Fehlt Kundenetikett-Bestand, ist Etikettieren blockiert (wie im
+// Dashboard-Bedarf und in der Werk-App). Nur ein Produkt OHNE Kundenetikett nimmt das generische Etikett (das ist dort richtig).
 function produktion_etikett_entnehmen(int $pa_id, ?float $bis = null, bool $trocken = false): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id, verpackung_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa || empty($pa['produkt_id'])) return ['ok'=>true, 'fehlt'=>[]];
@@ -12393,9 +12394,11 @@ function produktion_etikett_entnehmen(int $pa_id, ?float $bis = null, bool $troc
     $eid = $auf > 0 ? etikett_item_fuer_auftrag_kunde($auf, (int)$pa['produkt_id']) : 0;
     $vid = (int)($pa['verpackung_id'] ?? 0) ?: (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
     $gen = $vid > 0 ? (int)(etikett_id_fuer_behaelter($vid) ?? 0) : 0;
-    if ($eid <= 0) { $eid = $gen; $gen = 0; }                          // kein Kundenetikett -> generisches Etikett (wie bisher im Bedarf)
+    if ($eid <= 0) $eid = $gen;                                        // kein Kundenetikett -> generisches Etikett (neutrales Produkt, normal)
     if ($eid <= 0) return ['ok'=>true, 'fehlt'=>[]];                   // kein Etikett nötig/definiert
-    return produktion_posten_entnehmen($pa_id, [['item_id'=>$eid, 'menge'=>produktion_ziel_pakete($pa_id, $bis), 'label'=>'Etikett', 'alternativ'=>($gen !== $eid ? $gen : 0)]], $trocken);
+    // Früher (bis 11.11.) schon über den Ersatz gebuchte generische Etiketten dieses PA zählen weiter als verbraucht.
+    $schonErsatz = ($gen > 0 && $gen !== $eid) ? produktion_verbraucht($pa_id, $gen) : 0.0;
+    return produktion_posten_entnehmen($pa_id, [['item_id'=>$eid, 'menge'=>max(0.0, produktion_ziel_pakete($pa_id, $bis) - $schonErsatz), 'label'=>'Etikett']], $trocken);   // kein 'alternativ' mehr (Block E)
 }
 
 // Auftrag versenden: Fertigware (FEFO) ausbuchen + Lieferschein (LS) + Status 'versendet'.

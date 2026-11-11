@@ -120,3 +120,5 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `erp_rollen_abbuchen()` bucht alle G
 **Eimerplanung (11.11.2026):** `erp_mischer_plan($pa, 0)` liefert den Plan des Systems aus `core/pa_eimer.php` (Buchstabe, Charge je Rohstoff, Grund), festgeschrieben ab dem 1. Eimer. `erp_mischer_eimer_abschliessen()` braucht keine Behältergröße mehr. Die FEFO-Funktionen bevorzugen `$GLOBALS['pa_bevorzugt']` (gescannte Chargen) und schreiben `teilmenge_id`.
 
 **Zahlen (Block D, 11.11.2026):** `pr_menge_parse()` – deutsche Zahlen-Eingabe (wie `erp_menge_parse` der Lager-App), für alle Mengenfelder der Produktions-App.
+
+**Kein Etikett-Ersatz mehr (Block E, 11.11.2026):** `erp_etikett_entnehmen()` hat keinen 'alternativ'-Ersatz mehr. Fehlt Kundenetikett-Bestand, ist Etikettieren blockiert, Werk-App und Dashboard rechnen gleich. Neutrale Produkte (`erp_etikett_item_id` = generisch) bleiben unverändert. Früher über den Ersatz gebuchte generische Etiketten zählen weiter.

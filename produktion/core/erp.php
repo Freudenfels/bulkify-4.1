@@ -1039,7 +1039,7 @@ function erp_posten_entnehmen(int $pa_id, array $posten, bool $trocken = false, 
         $gebucht[] = ['name'=>(string)scalar("SELECT name FROM item WHERE id=?", [(int)$b['item_id']]), 'menge'=>(float)$b['menge'], 'alternativ'=>$b['alt'], 'label'=>$b['label']];
     }
     if ($log && $gebucht && $pa && (int)($pa['kunde_id'] ?? 0) > 0) {
-        $zeilen = array_map(fn($g) => number_format($g['menge'], 0, ',', '.') . ' Stk ' . ($g['label'] ?: 'Artikel') . ' „' . $g['name'] . '"' . ($g['alternativ'] ? ' (Ersatzartikel – Kundenetikett ohne Bestand, Altbestand)' : ''), $gebucht);
+        $zeilen = array_map(fn($g) => number_format($g['menge'], 0, ',', '.') . ' Stk ' . ($g['label'] ?: 'Artikel') . ' „' . $g['name'] . '"' . ($g['alternativ'] ? ' (Ersatzartikel)' : ''), $gebucht);
         erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team', 'Produktion ' . (string)$pa['nummer'] . ': abgebucht – ' . implode('; ', $zeilen) . '.', 'auftrag', 'auftrag', $auf ?: null);
     }
     return ['ok'=>true, 'fehlt'=>[], 'gebucht'=>$gebucht];
@@ -1208,18 +1208,20 @@ function erp_generisches_etikett_fuer_behaelter(int $verp_id): int {
     }
     return 0;
 }
-// Etikett entnehmen (1 je Packung): das KUNDENETIKETT dieses Auftrags; bei fehlendem Bestand Ersatz = das generische
-// Maß-Etikett des Behälters (Altbestand, der vor dem Kundenetikett-Fix dort eingebucht wurde), falls dort genug liegt.
-// Spiegel von produktion_etikett_entnehmen(); Restbuchung bis $bis Packungen.
+// Etikett entnehmen (1 je Packung): das KUNDENETIKETT dieses Auftrags, bei neutralen Produkten das generische (erp_etikett_item_id).
+// Block E (11.11.2026, Entscheidung Nico): KEIN stiller Ersatz mehr durch das generische Behälter-Etikett, wenn das Kundenetikett
+// keinen Bestand hat – dann ist Etikettieren blockiert, genau wie im Dashboard (produktion_etikett_entnehmen). Restbuchung bis $bis.
 function erp_etikett_entnehmen(int $pa_id, ?float $bis = null, bool $trocken = false): array {
     $pa = one("SELECT menge, auftrag_id, produkt_id, verpackung_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     $eid = erp_etikett_item_id($pa_id);
     if (!$pa || $eid <= 0) return ['ok'=>true, 'fehlt'=>[]];            // kein Etikett nötig/definiert
+    // Früher (bis 11.11.) schon über den Ersatz gebuchte generische Etiketten dieses PA zählen weiter als verbraucht.
     $vid = (int)($pa['verpackung_id'] ?? 0);
     if ($vid <= 0 && !empty($pa['auftrag_id'])) $vid = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]);
     if ($vid <= 0) $vid = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
     $gen = erp_generisches_etikett_fuer_behaelter($vid);
-    return erp_posten_entnehmen($pa_id, [['item_id'=>$eid, 'menge'=>erp_ziel_pakete($pa_id, $bis), 'label'=>'Etikett', 'alternativ'=>($gen !== $eid ? $gen : 0)]], $trocken);
+    $schonErsatz = ($gen > 0 && $gen !== $eid) ? (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id=?", [$pa_id, $gen]) : 0.0;
+    return erp_posten_entnehmen($pa_id, [['item_id'=>$eid, 'menge'=>max(0.0, erp_ziel_pakete($pa_id, $bis) - $schonErsatz), 'label'=>'Etikett']], $trocken);
 }
 
 // Effektive Leerkapsel eines Produkts: manuelle Wahl hat Vorrang, sonst eindeutiger Treffer über
