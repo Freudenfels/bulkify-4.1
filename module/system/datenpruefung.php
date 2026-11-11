@@ -896,13 +896,16 @@ UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftra
     ],
     'etikett_mass_abweichung' => [
         'titel' => 'Etikett: Maß weicht vom Behälter-Endformat ab',
-        'info'  => 'Aktive Kundenetikett-Artikel, deren gespeichertes Maß (breite_mm/hoehe_mm bzw. etikett_final) um mehr als 2 mm vom Endformat des TATSÄCHLICHEN Produkt-Behälters abweicht (Behälter = jüngster Auftrags-Behälter mit Vorrang, sonst Produkt-Behälter; Endformat = item.etikett_final am Behälter). Ursache: v1 hat früher das Maß vom falschen generischen Maß-Etikett übernommen (z. B. 200-ml-Glas „67 x 188" statt 150-ml-Glas „60 x 172"). Beheben zieht Maß und Maß-Vorlage (etikett_vorlage_id) auf das passende Maß-Etikett des Behälters. Das aufgedruckte Design (etikett_druck) bleibt unberührt.',
+        'info'  => 'Aktive Kundenetikett-Artikel, deren gespeichertes Maß (breite_mm/hoehe_mm bzw. etikett_final) um MEHR ALS 5 mm vom Endformat des TATSÄCHLICHEN Produkt-Behälters abweicht (Behälter = jüngster Auftrags-Behälter mit Vorrang, sonst Produkt-Behälter). 2 bis 5 mm sind normal (Sicherheitsmaß, Nico 11.11.2026) und erscheinen nicht. '
+                 . 'Beheben setzt das Maß aus der TrimBox (sonst ArtBox/MediaBox) des hinterlegten Etikett-Designs – also das echte Etikett-Endformat, nicht das Glasmaß (Sofortfix 11.11.2026). Ohne Design-PDF gibt es keinen Knopf.',
         'sql'   => "SELECT i.id AS _id, i.produkt_id AS _pid, CONCAT('?p=verpackung&id=', i.id) AS _link, i.artikelnummer, i.name AS etikett,
                            i.breite_mm AS _breite_mm, i.hoehe_mm AS _hoehe_mm, i.etikett_final AS _etikett_final, i.etikett_vorlage_id AS _vorlage_alt,
-                           p.nummer AS produkt_nr, p.name AS produkt, CONCAT('?p=produkt&id=', p.id) AS _link_produkt, k.firma AS kunde
+                           p.nummer AS produkt_nr, p.name AS produkt, CONCAT('?p=produkt&id=', p.id) AS _link_produkt, k.firma AS kunde,
+                           d.id AS _dok_id, d.datei AS _datei
                     FROM item i
                     JOIN produkt p ON p.id = i.produkt_id
                     LEFT JOIN kunden k ON k.id = i.kunde_id
+                    LEFT JOIN dokument d ON d.id = i.etikett_dokument_id
                     WHERE i.verpackung_rolle = 'etikett' AND i.produkt_id IS NOT NULL AND COALESCE(i.gesperrt,0) = 0
                     ORDER BY i.id DESC",
         'zeilen' => function (array $rows): array {
@@ -918,35 +921,27 @@ UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftra
                        : etikett_masse((string)($r['_etikett_final'] ?? ''));
                 $eigenN = $eigen ? [max($eigen[0], $eigen[1]), min($eigen[0], $eigen[1])] : null;
                 $abw = $eigenN ? max(abs($eigenN[0] - $beh[0]), abs($eigenN[1] - $beh[1])) : null;
-                if ($eigenN !== null && $abw <= 2.0) continue;    // passt bis 2 mm -> kein Treffer
-                $vl = kundenetikett_vorlage($pid);                // Ziel-Maß/Vorlage aus dem tatsächlichen Behälter
-                $zielMass = (!empty($vl['breite_mm']) && !empty($vl['hoehe_mm']))
-                          ? ((float)$vl['breite_mm'] . ' x ' . (float)$vl['hoehe_mm'] . ' mm')
-                          : (!empty($vl['etikett_final']) ? (string)$vl['etikett_final'] : null);
+                if ($eigenN !== null && $abw <= 5.0) continue;    // bis 5 mm = Sicherheitsmaß, normal (Nico 11.11.2026)
+                // Ziel = Etikett-Endformat aus dem Design (TrimBox), nie das Glasmaß (Sofortfix 11.11.2026, Fable 3.6).
+                $pfad = !empty($r['_datei']) ? BX_UPLOADS . '/' . basename((string)$r['_datei']) : '';
+                $em = $pfad !== '' && is_file($pfad) ? pdf_etikett_mass($pfad) : null;
                 $r['etikett_mass']        = $eigenN ? ((float)$eigenN[0] . ' x ' . (float)$eigenN[1] . ' mm') : 'kein Maß';
                 $r['behaelter_endformat'] = (float)$beh[0] . ' x ' . (float)$beh[1] . ' mm';
                 $r['abweichung_mm']       = $eigenN ? round((float)$abw, 1) : null;
-                $r['_fixbar']             = !empty($vl['_vorlage']) && $zielMass !== null;
-                $r['aenderung']           = $r['_fixbar'] ? ('Maß/Vorlage -> ' . $zielMass) : 'nicht automatisch: kein passendes Maß-Etikett zum Behälter';
+                $r['_fixbar']             = $em !== null;
+                $r['aenderung']           = $em ? ('Maß -> ' . $em['label'] . ' (' . $em['quelle'] . ' des Designs)') : 'kein Design-PDF: Maß von Hand prüfen (kein Knopf)';
                 $out[] = $r;
             }
             return $out;
         },
-        'korrektur' => "-- je angehaktem Etikett: Maß + Maß-Vorlage auf das passende Maß-Etikett des Behälters ziehen (etikett_druck bleibt)\nUPDATE item SET breite_mm=<B>, hoehe_mm=<H>, etikett_format=<Format>, etikett_final=<Endformat>, etikett_vorlage_id=<Maß-Etikett>\n WHERE id=<Etikett> AND verpackung_rolle='etikett' AND produkt_id IS NOT NULL;   (Maße aus kundenetikett_vorlage(Produkt) = Behälter)",
-        'ohne_fix'  => 'Ändert nur die Maß-Felder des Etikett-Artikels, nicht das aufgedruckte Design und keine Aufträge. Zeilen ohne passendes Maß-Etikett zum Behälter sind nicht anwählbar – dort fehlt die Maß-Vorlage. Ist stattdessen der Behälter am Produkt/Auftrag falsch, dort korrigieren statt hier zu beheben.',
+        'korrektur' => "-- je angehaktem Etikett: Maß aus der TrimBox des Designs (etikett_mass_aus_pdf_setzen)\nUPDATE item SET breite_mm=<B>, hoehe_mm=<H>, etikett_format='<B> x <H> mm', etikett_final='<B> x <H>', etikett_druck=<MediaBox> WHERE id=<Etikett>;",
+        'ohne_fix'  => 'Ändert nur die Maß-Felder des Etikett-Artikels (aus dem eigenen Design-PDF), nicht das Design und keine Aufträge. Zeilen ohne Design-PDF sind nicht anwählbar. Weicht das Design-Maß trotzdem stark vom Glas ab, ist eher der Behälter am Produkt/Auftrag falsch – dort korrigieren.',
         'fix'   => ['tabelle' => 'item', 'typ' => 'item',
                     'waehlbar' => fn(array $r) => !empty($r['_fixbar']),
                     'aktion' => function (array $r): int {
-                        $iid = (int)$r['_id']; $pid = (int)$r['_pid'];
-                        $vl = kundenetikett_vorlage($pid);
-                        if (empty($vl['_vorlage'])) return 0;
-                        $vor = one("SELECT * FROM item WHERE id=?", [$iid]);
-                        if (!$vor) return 0;
-                        q("UPDATE item SET breite_mm=?, hoehe_mm=?, etikett_format=?, etikett_final=?, etikett_vorlage_id=?
-                           WHERE id=? AND verpackung_rolle='etikett' AND produkt_id IS NOT NULL AND COALESCE(gesperrt,0)=0",
-                          [$vl['breite_mm'] ?? null, $vl['hoehe_mm'] ?? null, $vl['etikett_format'] ?? null, $vl['etikett_final'] ?? null, (int)$vl['_vorlage'], $iid]);
-                        $nach = one("SELECT * FROM item WHERE id=?", [$iid]);
-                        return aenderung_protokollieren('item', $iid, $vor, $nach, 'datenpruefung') > 0 ? 1 : 0;
+                        // Sofortfix 11.11.2026: Maß aus der TrimBox des eigenen Designs (gleiche Funktion wie bei der Freigabe).
+                        $dok = !empty($r['_dok_id']) ? one("SELECT * FROM dokument WHERE id=?", [(int)$r['_dok_id']]) : null;
+                        return $dok && etikett_mass_aus_pdf_setzen((int)$r['_id'], $dok) ? 1 : 0;
                     }],
     ],
     // Sofort-Fix Etikett-Format (08.11.2026): Maß laut Druckdatei (TrimBox, sonst ArtBox, sonst MediaBox) gegen das am

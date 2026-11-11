@@ -143,3 +143,5 @@ Geklärt wird das in der Lager-Inventur mit der Ursache „Einheitenfehler“: F
 Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführen** (`artikel_dubletten`, Seite „Artikel zusammenführen“). Sonst wird auf zwei Artikel gezählt.
 
 **fortschritt_hand_weiter (11.11.2026):** schließt versendete Aufträge nicht mehr aus (AB-3244/3245: versendet bei laufendem Labor). Spalte „Schritt“ zeigt dann „Status versendet“. „Zurücksetzen“ lässt den Status versendet stehen und entfernt nur die Hand-Stufe.
+
+**etikett_mass_abweichung (Sofortfix 11.11.2026):** meldet erst ab **mehr als 5 mm** Abweichung zum Behälter (2 bis 5 mm = Sicherheitsmaß, normal). „Beheben“ setzt das Maß aus der TrimBox (sonst ArtBox/MediaBox) des hinterlegten Etikett-Designs über `etikett_mass_aus_pdf_setzen()` – nie mehr das Glasmaß. Ohne Design-PDF kein Knopf.
