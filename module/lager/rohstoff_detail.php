@@ -410,6 +410,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             if (abs((float)$vals[array_search('ek_preis', $felder)] - $ekAlt) > 1e-9) { try { q("UPDATE item SET ek_auto=0 WHERE id=?", [(int)$id]); } catch (Throwable $e) {} }
         }
         item_ek_aus_lieferantenpreis((int)$id);
+        // Preis schwankt (Nico 11.11.2026, z. B. Whey): Haken + Standard-Gültigkeit in Tagen - nur wenn das Feld im Formular war.
+        if (isset($_POST['preis_gueltig_tage_feld'])) {
+            pg_schema();
+            $pgS = isset($_POST['preis_schwankt']) ? 1 : 0;
+            $pgT = (int)($_POST['preis_gueltig_tage'] ?? 0);
+            q("UPDATE item SET preis_schwankt=?, preis_gueltig_tage=? WHERE id=?", [$pgS, $pgS ? max(1, $pgT ?: 14) : ($pgT > 0 ? $pgT : null), (int)$id]);
+        }
         // Eigene MOQ (Nico 11.11.2026) - nur wenn das Feld im Formular war (Rohstoffe).
         if (isset($_POST['moq_einheit'])) {
             moq_schema();
@@ -673,6 +680,7 @@ if (!$neu) {
         echo '<div class="bx-card"><div class="k">Besitzer (Fremdprodukt)</div><div class="v">' . h((string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$it['fremd_besitzer_id']])) . '</div></div>';
     echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h((string)($it['preis_bezug'] ?: ($it['einheit'] ?: 'Stk'))) . '</div></div>';
     if (($it['kategorie'] ?? '') === 'rohstoff') {
+        if (!empty($it['preis_schwankt'])) echo '<div class="bx-card"><div class="k">Preis schwankt</div><div class="v" style="font-size:16px;color:#8a6d1f">' . (int)($it['preis_gueltig_tage'] ?: 14) . ' Tage gültig</div></div>';
         $moqK = rohstoff_moq((int)$id);
         echo '<div class="bx-card"' . ($moqK && $moqK['notiz'] !== '' ? ' title="' . h($moqK['notiz']) . '"' : '') . '><div class="k">MOQ (unsere)</div><div class="v">'
            . ($moqK ? h(moq_wert($moqK)) : '<span class="muted">keine</span>') . '</div></div>';
@@ -842,6 +850,12 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
         <div class="bx-row" style="gap:6px;flex-wrap:nowrap;margin:0">
           <input type="text" name="moq_menge" inputmode="decimal" value="<?= $moqIt ? h(moq_zahl($moqIt['menge'])) : '' ?>" placeholder="z. B. 25" style="width:110px">
           <select name="moq_einheit" style="width:auto"><?php foreach (moq_einheiten() as $me): ?><option value="<?= $me ?>"<?= ($moqIt['einheit'] ?? 'kg') === $me ? ' selected' : '' ?>><?= $me ?></option><?php endforeach; ?></select>
+        </div></div>
+      <div class="bx-field"><label>Preis schwankt <?= bx_hint('Für Rohstoffe mit kurzlebigen Preisen (z. B. Whey). Dann wird „gültig bis" beim Eintragen mit heute + Standard-Gültigkeit vorbelegt, ist im Lieferantenportal Pflicht, und die Preisanfrage zeigt den Hinweis „Preis schwankt - bitte Gültigkeit angeben".') ?></label>
+        <input type="hidden" name="preis_gueltig_tage_feld" value="1">
+        <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:nowrap;margin:0">
+          <label class="bx-check" style="margin:0"><input type="checkbox" name="preis_schwankt" value="1"<?= !empty($it['preis_schwankt']) ? ' checked' : '' ?>> ja</label>
+          <input type="number" name="preis_gueltig_tage" min="1" max="365" value="<?= h((string)($it['preis_gueltig_tage'] ?? '')) ?>" placeholder="14" style="width:80px"> <span class="muted">Tage gültig</span>
         </div></div>
       <div class="bx-field"><label>MOQ-Notiz <span class="muted">(optional)</span></label><input type="text" name="moq_notiz" maxlength="190" value="<?= h((string)($moqIt['notiz'] ?? '')) ?>" placeholder="z. B. wegen Gebinde 25 kg"></div>
       <?php endif; ?>

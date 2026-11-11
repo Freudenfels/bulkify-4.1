@@ -124,3 +124,28 @@ function pg_fruehestes(array $daten): ?string {
     foreach ($daten as $d) { $d = trim((string)$d); if ($d !== '' && $d >= $heute && ($min === null || $d < $min)) $min = $d; }
     return $min;
 }
+
+// Teil 2: Wie schwankt der Preis bei einer Lieferanten-Anfrage?
+//  ['pflicht'=>bool, 'tage'=>?int, 'namen'=>[…]] - Pflicht nur, wenn der angefragte Artikel selbst „Preis schwankt" hat.
+//  Bei Premix/Bulk/Fremdfertigung (Rezeptur) mit einem schwankenden Rohstoff: nur Hinweis (namen gesetzt, pflicht=false).
+function pg_anfrage_schwankung(array $a): array {
+    $out = ['pflicht' => false, 'tage' => null, 'namen' => []];
+    $iid = (int)($a['item_id'] ?? 0);
+    if ($iid > 0 && ($t = pg_item_tage($iid))) {
+        $out['pflicht'] = true; $out['tage'] = $t; $out['namen'][] = (string) scalar("SELECT name FROM item WHERE id=?", [$iid]);
+        return $out;
+    }
+    $rid = (int)($a['rezeptur_id'] ?? 0);
+    if ($rid > 0) {
+        try {
+            foreach (all("SELECT DISTINCT i.name, i.preis_gueltig_tage FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id
+                          WHERE z.rezeptur_id=? AND i.preis_schwankt=1", [$rid]) as $r) {
+                $out['namen'][] = (string)$r['name'];
+                $t = max(1, (int)($r['preis_gueltig_tage'] ?: 14));
+                $out['tage'] = $out['tage'] === null ? $t : min($out['tage'], $t);
+            }
+        } catch (Throwable $e) {}
+    }
+    return $out;
+}
+

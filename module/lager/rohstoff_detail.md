@@ -207,3 +207,8 @@ Siehe `core/rohstoff_moq.md`.
 - Die Lieferantenpreise haben die Spalte „Gültig“ (unbegrenzt, gültig bis, läuft bald ab, abgelaufen).
 - „Preis hinzufügen“ hat das Feld „Preis gültig bis“. Bei „Preis schwankt“ ist es vorbelegt.
 Siehe `core/preis_gueltig.md`.
+
+## Preis schwankt (11.11.2026)
+- Die Stammdaten enthalten „Preis schwankt“ (Haken) und die Gültigkeit in Tagen. Gespeichert wird nur, wenn das Feld im Formular war (Marker `preis_gueltig_tage_feld`).
+- Die Kachel „Preis schwankt“ zeigt die Tage.
+- „gültig bis“ wird beim Preis-Hinzufügen vorbelegt.

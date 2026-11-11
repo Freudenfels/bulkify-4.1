@@ -19,7 +19,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     // Gefuehrter Rohstoff: neuer Preis als Vorschlag ans Team (Staffel moeglich). Nie direkt live.
     if ($aktion === 'preis_vorschlag') {
-        $r = katalog_preis_vorschlag($lid, (int)($_POST['item_id'] ?? 0),
+        // Preis schwankt: Gültigkeit Pflicht (Browser prüft schon, hier zur Sicherheit) - sonst nichts speichern.
+        $pgFehlt = pg_item_tage((int)($_POST['item_id'] ?? 0)) && !pg_lesen((string)($_POST['gueltig_bis'] ?? ''));
+        $r = $pgFehlt ? ['ok' => false, 'msg' => ['de' => 'Bitte angeben, wie lange Ihr Preis gilt.', 'en' => 'Please state how long your price is valid.', 'zh' => '请注明您的价格有效期。'][$spr] ?? 'Please state how long your price is valid.'] : katalog_preis_vorschlag($lid, (int)($_POST['item_id'] ?? 0),
             trim((string)($_POST['preis'] ?? '')) !== '' ? zahl_lesen((string)$_POST['preis'], false, $spr) : 0.0,
             trim((string)($_POST['menge_ab'] ?? '')) !== '' ? zahl_lesen((string)$_POST['menge_ab'], true, $spr) : null,
             (string)($_POST['einheit'] ?? ''), (string)($_POST['waehrung'] ?? 'EUR'), pg_lesen((string)($_POST['gueltig_bis'] ?? '')));
@@ -128,7 +130,7 @@ if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6
         <td class="bx-num" style="white-space:nowrap">
           <button type="button" class="btn btn-ghost btn-sm bx-preis-akt"
                   data-id="<?= (int)$g['id'] ?>" data-name="<?= h((string)$g['name']) ?>"
-                  data-einheit="<?= h((string)$g['einheit']) ?>"><?= h(lp_t('preis_akt')) ?></button>
+                  data-einheit="<?= h((string)$g['einheit']) ?>" data-pg="<?= h((string) pg_vorbelegung((int)$g['id'])) ?>"><?= h(lp_t('preis_akt')) ?></button>
         </td>
       </tr>
     <?php endforeach; ?>
@@ -176,6 +178,7 @@ if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6
       document.getElementById('pf_item').value=d.id;
       document.getElementById('pf_einheit').value=d.einheit||'';
       document.getElementById('pf_preis').value='';
+      var gb=dlg.querySelector('input[name="gueltig_bis"]'); if(gb){ gb.value=d.pg||''; gb.required=!!d.pg; }
       var a=document.getElementById('preisArtikel'); if(a) a.textContent=d.name||'';
       dlg.showModal(); document.getElementById('pf_preis').focus();
     });

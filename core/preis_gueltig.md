@@ -43,3 +43,14 @@ Stand 11.11.2026, Auftrag von Nico. Anlass: Manche Rohstoffpreise halten nur kur
   - Rohstoffseite (Spalte „Gültig“)
   - Lieferanten-Anfragen (Liste und Detail)
   - Portal (Zusammenfassung des Angebots, Rohstoff-Preise, Fertigprodukt-Preise)
+
+## Teil 2: Schwankende Rohstoffe markieren
+- **Am Rohstoff:** In den Stammdaten gibt es den Haken „Preis schwankt“ und die Standard-Gültigkeit in Tagen (Standard 14, z. B. Whey). Daraus entsteht die Kachel „Preis schwankt - 14 Tage gültig“. Die Felder sind `item.preis_schwankt` und `item.preis_gueltig_tage`.
+- **Vorbelegung:** „gültig bis“ ist mit heute plus Standard-Gültigkeit vorbelegt (`pg_vorbelegung()`). Das gilt bei:
+  - Rohstoffseite, Preis hinzufügen
+  - Pop-up „Preis & Unterlagen“
+  - Portal, Rohstoff-Preise
+  - Portal, Anfrage beantworten
+- **Pflicht im Lieferantenportal:** Ohne Gültigkeit wird nichts gespeichert, mit Meldung auf DE, EN oder ZH. Das gilt bei „Anfrage beantworten“, wenn der angefragte Artikel schwankt, und beim Dialog Rohstoff-Preise.
+- **Hinweis in der Anfrage:** Oben steht „Preis schwankt - bitte Gültigkeit angeben“.
+- **Premix, Bulk und Fremdfertigung (Anfrage an einer Rezeptur):** Enthält die Rezeptur einen schwankenden Rohstoff, kommt nur ein Hinweis mit dessen Namen, keine Pflicht. Die Vorbelegung nimmt die kürzeste Gültigkeit. Die Logik steckt in `pg_anfrage_schwankung($anfrage)`.

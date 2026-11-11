@@ -28,3 +28,7 @@ Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache de
 ## Preis-Gültigkeit (11.11.2026)
 - Der Dialog „Preis aktualisieren“ hat das Feld „Preis gültig bis“. Es geht an `lieferant_katalog.gueltig_bis` und bei der Übernahme an `lieferant_preis`.
 - Die aktuellen Preise zeigen „gültig bis …“ bzw. „abgelaufen seit …“.
+
+## Preis schwankt (11.11.2026)
+- Der Knopf „Preis aktualisieren“ trägt `data-pg` (Vorbelegung). Das Feld wird vorbelegt und ist dann Pflicht.
+- Der Server prüft zusätzlich und speichert ohne Datum nichts.

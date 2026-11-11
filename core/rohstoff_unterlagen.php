@@ -105,7 +105,8 @@ function rohstoff_unterlagen_panel(array $item_ids, string $kontext = 'diese Anf
 // Unterlage aus und füllt Kennwerte, Grenzwerte, Wirkstoffe (für die NRV) und leere Stammdaten. Ziel: ?p=rohstoff_erfassen
 // (module/anfrage/rohstoff_erfassen.php), danach zurück auf die aufrufende Seite. Dialog einmal je Seite ausgeben.
 function rohstoff_erfassen_knopf(int $item_id, string $name, string $label = 'Preis / Unterlage'): string {
-    return '<button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="bxRohErfassen(' . $item_id . ',' . h(json_encode($name, JSON_UNESCAPED_UNICODE)) . ')">' . h($label) . '</button>';
+    $vor = function_exists('pg_vorbelegung') ? (string) pg_vorbelegung($item_id) : '';   // „Preis schwankt": gültig bis vorbelegen
+    return '<button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="bxRohErfassen(' . $item_id . ',' . h(json_encode($name, JSON_UNESCAPED_UNICODE)) . ($vor !== '' ? ',' . h(json_encode($vor)) : '') . ')">' . h($label) . '</button>';
 }
 function rohstoff_erfassen_dialog(string $zurueck): string {
     static $done = false; if ($done) return ''; $done = true;

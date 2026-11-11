@@ -34,6 +34,8 @@ function lief_anfrage_pflicht_rohstoffe(array $a): array {
     return $out;
 }
 
+// Preis schwankt (Teil 2): beim angefragten Rohstoff Pflicht, bei Rezeptur/Premix mit solchem Rohstoff nur Hinweis.
+$pgSchw = $a ? pg_anfrage_schwankung($a) : ['pflicht' => false, 'tage' => null, 'namen' => []];
 if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = (string)($_POST['aktion'] ?? '');
     $fehler = '';
@@ -58,6 +60,8 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($fehlend) {
             $fehler = lp_t('roh_unterlage_fehlt') . ' ' . implode(', ', $fehlend);
+        } elseif ($pgSchw['pflicht'] && !pg_lesen((string)($_POST['gueltig_bis'] ?? ''))) {
+            $fehler = ['de' => 'Bitte angeben, wie lange Ihr Preis gilt (Preis gültig bis).', 'en' => 'Please state how long your price is valid (price valid until).', 'zh' => '请注明您的价格有效期（价格有效期至）。'][lp_sprache()] ?? 'Please state how long your price is valid.';
         } else {
             // Die erste Zeile ist der Hauptpreis mit der Menge, für die er gilt – sie zählt als
             // erste Staffel. Danach kommen die Zeilen, die der Lieferant selbst angehängt hat.
@@ -237,6 +241,9 @@ if (!$a):
     $zahl = fn($x, $n) => $x === '' || $x === null ? '' : lp_num($x, $n);
 ?>
   <h1 style="margin-bottom:4px"><?= h($a['nummer']) ?></h1>
+  <?php if ($pgSchw['namen']): $pgL = lp_sprache(); ?>
+    <div class="bx-panel" style="border-left:3px solid var(--warn);padding:10px 14px;margin-bottom:12px"><?= h(['de' => 'Preis schwankt - bitte Gültigkeit angeben', 'en' => 'Price fluctuates - please state how long it is valid', 'zh' => '价格波动 - 请注明有效期'][$pgL] ?? 'Price fluctuates - please state how long it is valid') ?><?= !$pgSchw['pflicht'] ? ' <span class="muted">(' . h(implode(', ', $pgSchw['namen'])) . ')</span>' : '' ?></div>
+  <?php endif; ?>
   <p class="bx-sub"><a href="?p=lieferant_anfrage">&larr; <?= h(lp_t('anfragen')) ?></a></p>
   <?php if (($a['status'] ?? '') === 'zurueckgezogen'): ?>
     <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px;margin-bottom:12px"><?= h(lp_t('anfrage_zurueck')) ?></div>
@@ -432,7 +439,7 @@ if (!$a):
         });
       })();
       </script>
-      <div style="margin:0 0 12px"><?= pg_eingabe('gueltig_bis', ($ang['gueltig_bis'] ?? null) ?: null, ['sprache' => lp_sprache()]) ?></div>
+      <div style="margin:0 0 12px"><?= pg_eingabe('gueltig_bis', ($ang['gueltig_bis'] ?? null) ?: ($pgSchw['tage'] ? pg_plus_tage((int)$pgSchw['tage']) : null), ['sprache' => lp_sprache(), 'pflicht' => $pgSchw['pflicht']]) ?></div>
       <div class="bx-field"><label><?= h(lp_t('notiz')) ?></label><textarea name="notiz" rows="3"><?= h($ang['notiz'] ?? '') ?></textarea></div>
       <?php $coaReq = (int)($a['coa_gewuenscht'] ?? 0) === 1;
         // CoA/Spezifikation je EINGESETZTEM Rohstoff (nicht eine Unterlage fürs Produkt). Schon am Rohstoff

@@ -81,3 +81,8 @@ Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache de
 - **„Preis gültig bis“:** Feld mit Schnellwahl 7, 14, 30 und 90 Tage vor der Notiz. Es geht an `lieferant_angebot.gueltig_bis` und gilt für das ganze Angebot inklusive Staffeln. Die Zusammenfassung zeigt die Zeile „Gültigkeit“.
 - **Doppelte Staffel behoben** (Wellgreen LA-5032): Ohne eigene Menge wird der Hauptpreis nicht mehr zusätzlich als „ab 1“ gespeichert, wenn eine Staffel denselben Preis trägt. Gleiche Mengen werden nur einmal gespeichert.
 - **Zahlen in der Portalsprache:** deutsch 0,0319 statt 0.0319, über `lp_num()`. Die Eingabe nimmt Komma und Punkt (`zahl_lesen()`).
+
+## Preis schwankt (11.11.2026)
+- **Angefragter Artikel schwankt:** Oben steht der Hinweis „Preis schwankt - bitte Gültigkeit angeben“. Das Feld ist vorbelegt und Pflicht, ohne Datum wird nicht gespeichert.
+- **Rezeptur, Premix oder Bulk mit schwankendem Rohstoff:** nur der Hinweis mit Namen.
+Siehe `pg_anfrage_schwankung()`.

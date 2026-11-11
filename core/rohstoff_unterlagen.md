@@ -28,3 +28,6 @@ Der Kasten „Unterlagen der Rohstoffe“ hat je Zeile diesen Knopf statt des Li
 ## Preis-Gültigkeit (11.11.2026)
 - Das Pop-up „Preis & Unterlagen“ enthält das Feld „Preis gültig bis“ (`pg_eingabe`).
 - `bxRohErfassen(id, name, vorbelegung)` setzt optional das Datum vor.
+
+## Preis schwankt (11.11.2026)
+`rohstoff_erfassen_knopf()` übergibt bei „Preis schwankt“ die Vorbelegung „gültig bis“ an das Pop-up.
