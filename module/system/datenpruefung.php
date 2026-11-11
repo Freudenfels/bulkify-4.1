@@ -228,6 +228,62 @@ $CHECKS = [
                     ORDER BY a.id DESC",
         'korrektur' => '– (nur anzeigen; Stufe am Auftrag unter „Fortschritt manuell auf eine Stufe setzen" anpassen)',
     ],
+    // Fortschritt (Nico 11.11.2026): von Hand (phase_override/Status) weiter als echte Mengen bzw. Labor - z. B. AB-3237, AB-3245, AB-3244.
+    // Nur auf Klick (rechnet je Auftrag den Fortschritt). Drei Knöpfe: zurücksetzen (aus den Daten) / Rest storniert / so lassen.
+    'fortschritt_hand_weiter' => [
+        'titel' => 'Fortschritt von Hand weiter als die echten Mengen bzw. das Labor',
+        'info'  => 'Aufträge, bei denen ein Schritt von Hand oder per manueller Stufe weiter steht als die eingegangene/produzierte Menge oder die Laboranalyse. '
+                 . 'Kunde und Dashboard zeigen inzwischen den echten Stand (teilweise / Labor offen); hier wird der Widerspruch in den Daten aufgeräumt. '
+                 . '„Zurücksetzen" entfernt die manuelle Stufe (Status „versandbereit" wird wieder „in Produktion"), „Rest storniert" rechnet den Fortschritt mit der gelieferten Menge (Hinweis Rechnung/Gutschrift prüfen), „So lassen" blendet die Zeile aus.',
+        'auf_klick' => true,
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer, k.firma AS kunde, a.status, a.phase_override
+                    FROM auftrag a LEFT JOIN kunden k ON k.id = a.kunde_id
+                    WHERE a.status NOT IN ('storniert','versendet') AND COALESCE(a.kategorie,'') <> 'dienstleistung'
+                      AND (a.phase_override >= 4 OR a.status = 'erledigt') AND COALESCE(a.fortschritt_geprueft,0) = 0
+                    ORDER BY a.id DESC",
+        'zeilen' => function (array $rows): array {
+            $out = []; $ph = auftrag_phasen(false);
+            foreach ($rows as $r) {
+                $a = one("SELECT * FROM auftrag WHERE id=?", [(int)$r['_id']]); if (!$a) continue;
+                $mo = auftrag_menge_offen($a);
+                $mf = auftrag_mengenfortschritt((int)$a['id']);
+                $labor = kunde_will_labortest((int)$a['kunde_id']) || !empty($a['laboranalyse_gebucht']);
+                $lt = $labor ? auftrag_labortest_status((int)$a['id'], isset($a['produkt_id']) ? (int)$a['produkt_id'] : null) : null;
+                $handHoch = (int)($a['phase_override'] ?? 0);
+                $laborOffen = $labor && ($lt['status'] ?? '') !== 'abgeschlossen' && ($a['status'] === 'erledigt' || $handHoch >= 6);
+                if (!$mo && !$laborOffen) continue;
+                $zielV = max((int)$a['menge'], (int)$mf['ziel']);
+                $out[] = ['_id' => (int)$a['id'], '_link' => $r['_link'], '_geb' => (int)$mf['gebucht'], '_mo' => $mo ? 1 : 0,
+                          'nummer' => $r['nummer'], 'kunde' => $r['kunde'],
+                          'schritt' => $handHoch > 0 ? ($ph[$handHoch] ?? ('Stufe ' . $handHoch)) . ' (von Hand)' : ($a['status'] === 'erledigt' ? 'Status versandbereit' : '–'),
+                          'ist_soll' => number_format((int)$mf['gebucht'], 0, ',', '.') . ' / ' . number_format($zielV, 0, ',', '.') . ' Stk',
+                          'labor' => $labor ? (['abgeschlossen' => 'abgeschlossen', 'laeuft' => 'läuft', 'auffaellig' => 'auffällig'][$lt['status'] ?? ''] ?? 'offen') : 'kein Labor'];
+            }
+            return $out;
+        },
+        'korrektur' => "zurücksetzen:  UPDATE auftrag SET phase_override=NULL, status=IF(status='erledigt','in_produktion',status) WHERE id=<ID>;\n"
+                     . "Rest storniert: UPDATE auftrag SET fortschritt_ziel=<gelieferte Menge>, rest_status='storniert' WHERE id=<ID>;  (+ Benachrichtigung Rechnung/Gutschrift)\n"
+                     . "so lassen:      UPDATE auftrag SET fortschritt_geprueft=1 WHERE id=<ID>;",
+        'fixes' => [
+            'zurueck' => ['label' => 'Zurücksetzen (aus den Daten berechnen)', 'aktion' => function (array $r): int {
+                $alt = one("SELECT phase_override, status FROM auftrag WHERE id=?", [(int)$r['_id']]); if (!$alt) return 0;
+                $neuSt = $alt['status'] === 'erledigt' ? 'in_produktion' : $alt['status'];
+                q("UPDATE auftrag SET phase_override=NULL, status=? WHERE id=?", [$neuSt, (int)$r['_id']]);
+                aenderung_protokollieren('auftrag', (int)$r['_id'], $alt, ['phase_override' => null, 'status' => $neuSt], 'datenpruefung');
+                log_aktivitaet('auftrag', (int)$r['_id'], 'team', 'Fortschritt zurückgesetzt (Datenprüfung): manuelle Stufe entfernt, Stand aus den Daten.', 'status', 'auftrag', (int)$r['_id']);
+                return 1; }],
+            'storniert' => ['label' => 'Rest storniert', 'waehlbar' => fn(array $r) => !empty($r['_mo']), 'aktion' => function (array $r): int {
+                q("UPDATE auftrag SET fortschritt_ziel=?, rest_status='storniert' WHERE id=?", [(int)$r['_geb'], (int)$r['_id']]);
+                aenderung_protokollieren('auftrag', (int)$r['_id'], ['fortschritt_ziel' => null], ['fortschritt_ziel' => (int)$r['_geb']], 'datenpruefung');
+                log_aktivitaet('auftrag', (int)$r['_id'], 'team', 'Rest storniert (Datenprüfung): Fortschritt rechnet mit ' . (int)$r['_geb'] . ' Stk. Rechnung/Gutschrift prüfen.', 'status', 'auftrag', (int)$r['_id']);
+                if (function_exists('benachrichtigung_add')) benachrichtigung_add('Rest storniert: ' . $r['nummer'] . ' - Rechnung/Gutschrift prüfen', 'Über die Datenprüfung. An der Rechnung wurde nichts geändert.', (string)$r['_link'], 'sonstiges', true);
+                return 1; }],
+            'lassen' => ['label' => 'So lassen', 'aktion' => function (array $r): int {
+                q("UPDATE auftrag SET fortschritt_geprueft=1 WHERE id=?", [(int)$r['_id']]);
+                aenderung_protokollieren('auftrag', (int)$r['_id'], ['fortschritt_geprueft' => 0], ['fortschritt_geprueft' => 1], 'datenpruefung');
+                return 1; }],
+        ],
+    ],
     's10_bulk' => [
         'titel' => 'S-10: Bulk-Bestellungen in g/ml mit €/kg-Preis',
         'info'  => 'Bulk-Positionen in g oder ml mit einem Preis, der nach €/kg aussieht (Summe dadurch 1.000-fach). Korrektur: Menge in kg bzw. l umrechnen'
@@ -1002,6 +1058,8 @@ function dp_neutral_herleitung(int $beutel_id): array {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheben') {
     $key = (string)($_POST['pruefung'] ?? '');
     $c = $CHECKS[$key] ?? null;
+    // Mehrere Knöpfe je Prüfung (fixes): gewählter Knopf kommt als „fix".
+    if ($c && !empty($c['fixes'])) $c['fix'] = $c['fixes'][(string)($_POST['fix'] ?? '')] ?? null;
     if (!$c || empty($c['fix'])) { header('Location: ?p=datenpruefung&err=' . rawurlencode('Für diese Prüfung gibt es keinen Beheben-Knopf.')); exit; }
     $fix = $c['fix'];
     // Nur IDs, die die Prüfung JETZT noch liefert und die behebbar sind.
@@ -1010,7 +1068,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
     foreach (dp_laden($c)['rows'] as $r)
         if (!isset($fix['waehlbar']) || ($fix['waehlbar'])($r)) $erlaubt[(int)$r['_id']] = $r;
     $sel = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), fn($i) => isset($erlaubt[$i]))));
-    if (!$sel) { header('Location: ?p=datenpruefung&err=' . rawurlencode('Keine (gültige) Zeile angehakt – nichts geändert.') . '#' . $key); exit; }
+    $dpL = !empty($c['auf_klick']) ? '&laden=' . rawurlencode($key) : '';   // „auf Klick"-Prüfung nach dem Beheben wieder geladen zeigen
+    if (!$sel) { header('Location: ?p=datenpruefung' . $dpL . '&err=' . rawurlencode('Keine (gültige) Zeile angehakt – nichts geändert.') . '#' . $key); exit; }
     if (!empty($fix['sortiert'])) sort($sel);   // z. B. Nummern in ID-Reihenfolge vergeben
     // Eigene Korrektur je Zeile über mehrere Tabellen (protokolliert selbst), z. B. Pulver-Auftrag + PA.
     if (isset($fix['aktion'])) {
@@ -1019,7 +1078,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
         try { $n = 0; foreach ($sel as $i) $n += (int)($fix['aktion'])($erlaubt[$i]); $pdo->commit(); }
         catch (\Throwable $e) { $pdo->rollBack(); header('Location: ?p=datenpruefung&err=' . rawurlencode('Fehler, nichts geändert: ' . $e->getMessage()) . '#' . $key); exit; }
         if (function_exists('bedarf_bump')) bedarf_bump();
-        header('Location: ?p=datenpruefung&ok=' . rawurlencode($c['titel'] . ': ' . $n . ' Datensatz/Datensätze geändert, im Protokoll.') . '#' . $key); exit;
+        header('Location: ?p=datenpruefung' . $dpL . '&ok=' . rawurlencode($c['titel'] . ': ' . $n . ' Datensatz/Datensätze geändert, im Protokoll.') . '#' . $key); exit;
     }
     $zielSp = $fix['ziel'] ?? '_id';
     $ids = array_values(array_unique(array_map(fn($i) => (int)$erlaubt[$i][$zielSp], $sel)));
@@ -1049,7 +1108,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
 
 // --- Anzeige -------------------------------------------------------------------------------------------------
 $ERG = [];
-foreach ($CHECKS as $k => $c) $ERG[$k] = dp_laden($c);
+$dpLaden = (string)($_GET['laden'] ?? '');
+foreach ($CHECKS as $k => $c) $ERG[$k] = (!empty($c['auf_klick']) && $dpLaden !== $k) ? ['rows' => [], 'fehler' => '', 'nicht_geladen' => true] : dp_laden($c);
 $offen = 0;
 foreach ($CHECKS as $k => $c) {
     $n = count($ERG[$k]['rows']);
@@ -1088,8 +1148,8 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
         $kind = $ERG[$k]['fehler'] !== '' ? 'err' : (($leerOk ? $n > 0 : $n === 0) ? 'warn' : 'ok'); ?>
       <tr>
         <td><a href="#<?= h($k) ?>"><?= h($c['titel']) ?></a></td>
-        <td><?= $ERG[$k]['fehler'] !== '' ? bx_badge('Fehler', 'err') : bx_badge(number_format($n, 0, ',', '.'), $kind) ?></td>
-        <td class="muted"><?= !empty($c['fix']) ? 'Beheben-Knopf' : 'nur Anzeige' ?></td>
+        <td><?= !empty($ERG[$k]['nicht_geladen']) ? '<a href="?p=datenpruefung&laden=' . h($k) . '#' . h($k) . '">auf Klick prüfen</a>' : ($ERG[$k]['fehler'] !== '' ? bx_badge('Fehler', 'err') : bx_badge(number_format($n, 0, ',', '.'), $kind)) ?></td>
+        <td class="muted"><?= !empty($c['fixes']) ? count($c['fixes']) . ' Knöpfe' : (!empty($c['fix']) ? 'Beheben-Knopf' : 'nur Anzeige') ?></td>
       </tr>
     <?php endforeach; ?>
     </tbody>
@@ -1097,7 +1157,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
 </div>
 
 <?php foreach ($CHECKS as $k => $c):
-    $rows = $ERG[$k]['rows']; $n = count($rows); $fix = $c['fix'] ?? null; $leerOk = $c['leer_ok'] ?? true;
+    $rows = $ERG[$k]['rows']; $n = count($rows); $fixes = $c['fixes'] ?? null; $fix = $c['fix'] ?? ($fixes ? ['waehlbar' => fn($r) => true] : null); $leerOk = $c['leer_ok'] ?? true;
     $kind = ($leerOk ? $n > 0 : $n === 0) ? 'warn' : 'ok';
     $spalten = $rows ? array_values(array_filter(array_keys($rows[0]), fn($s) => $s[0] !== '_')) : [];
     $hatLink = $rows && array_key_exists('_link', $rows[0]);
@@ -1107,7 +1167,9 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
     <h2 style="margin:0"><?= h($c['titel']) ?> <?= $ERG[$k]['fehler'] !== '' ? bx_badge('Fehler', 'err') : bx_badge(number_format($n, 0, ',', '.') . ' Treffer', $kind) ?></h2>
   </div>
   <p class="muted" style="margin:6px 0 12px"><?= h($c['info']) ?></p>
-  <?php if ($ERG[$k]['fehler'] !== ''): ?>
+  <?php if (!empty($ERG[$k]['nicht_geladen'])): ?>
+    <a class="btn btn-ghost btn-sm" href="?p=datenpruefung&laden=<?= h($k) ?>#<?= h($k) ?>">Prüfung starten</a> <span class="muted" style="font-size:12px">rechnet je Auftrag den Fortschritt, daher nur auf Klick</span>
+  <?php elseif ($ERG[$k]['fehler'] !== ''): ?>
     <div style="color:var(--err)">Abfrage fehlgeschlagen: <?= h($ERG[$k]['fehler']) ?></div>
   <?php elseif (!$rows): ?>
     <div class="muted"><?= $leerOk ? 'Keine Treffer.' : 'Niemand hat diese Rolle.' ?></div>
@@ -1130,7 +1192,10 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
       <?php endforeach; ?>
       </tbody>
     </table></div>
-    <?php if ($fix && $waehlbarN): ?>
+    <?php if ($fixes && $waehlbarN): ?>
+      <div class="bx-row" style="margin-top:12px;gap:8px;flex-wrap:wrap"><?php foreach ($fixes as $fk => $fd): ?><button class="btn <?= $fk === array_key_first($fixes) ? 'btn-primary' : 'btn-ghost' ?>" type="submit" name="fix" value="<?= h($fk) ?>"><?= h($fd['label']) ?></button><?php endforeach; ?></div>
+      <div class="muted" style="font-size:12px;margin-top:6px">Gilt für die angehakten Zeilen. „Rest storniert" nur bei Zeilen mit offener Menge.</div>
+    <?php elseif ($fix && $waehlbarN): ?>
       <div style="margin-top:12px"><button class="btn btn-primary" type="submit">Angehakte beheben</button></div>
     <?php endif; ?>
   </form>

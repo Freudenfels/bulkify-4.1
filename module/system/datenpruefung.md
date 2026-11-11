@@ -108,3 +108,17 @@ Weitere Prüfpunkte:
 
   Sortiert: in Rezepturen verwendete und beantwortete zuerst. Nur Anzeige.
 - Prüfpunkt **„Rohstoff: in Kunden-Anfragen bzw. offenen Rezepturen, aber ohne Lieferanten-Dokumente“** (10.11.2026): Rohstoffe aus Rezeptur-Wunschzeilen, Portal-Rohstoffanfragen und Rezepturen im Entwurf oder Vorschlag ohne Spezifikation, CoA oder Analyse am Rohstoff. Zeigt außerdem, ob schon eine Preisanfrage beim Lieferanten läuft. Nur Anzeige.
+
+## Fortschritt von Hand weiter als die echten Mengen bzw. das Labor (11.11.2026)
+Die Prüfung `fortschritt_hand_weiter` läuft **nur auf Klick** (`?p=datenpruefung&laden=fortschritt_hand_weiter`), weil sie je Auftrag den Fortschritt rechnet.
+- **Welche Aufträge:** nicht versendet bzw. storniert, keine Dienstleistung, manuelle Stufe ab „Produziert“ oder Status „erledigt“, nicht als „so lassen“ markiert. Davon die, bei denen entweder Menge fehlt (0 < gebucht < Ziel) oder das Labor noch nicht abgeschlossen ist.
+- **Spalten:** Auftrag, Kunde, Schritt (von Hand), Ist/Soll Stk, Labor.
+- **Knöpfe:**
+  - **Zurücksetzen:** manuelle Stufe weg, Status „erledigt“ wird „in_produktion“.
+  - **Rest storniert:** `fortschritt_ziel` = gelieferte Menge, Benachrichtigung „Rechnung/Gutschrift prüfen“. Nur bei offener Menge.
+  - **So lassen:** `fortschritt_geprueft=1`, die Zeile verschwindet.
+  Alles wird protokolliert.
+
+**Technik:**
+- Neu sind `fixes` (mehrere Knöpfe je Prüfung, Knopfname `fix`) und `auf_klick` (Prüfung erst auf Anforderung laden).
+- Nach dem Beheben wird die Prüfung wieder geladen angezeigt.

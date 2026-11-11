@@ -272,6 +272,13 @@ Stand nach dem Umbau "Auftragsseite entschlacken" (live 08.11.2026):
 
 ---
 
+**Fortschritt (11.11.2026): echte Mengen und Labor schlagen manuelles Abhaken.**
+- **Mengen:** Ist erst ein Teil produziert bzw. als Fertigware eingegangen, zeigen „Produziert“ und „Etikettiert“ „teilweise, x von y Stk“, und „Abgeschlossen“ bleibt offen. Das gilt auch, wenn von Hand weiter gesetzt. Dashboard und Kundenportal zeigen dasselbe.
+- **Labor:** „Abgeschlossen“ erst mit gebuchter, nicht auffälliger Laboranalyse. Kein „versandbereit“ bei offenem Schritt davor.
+- **Abhaken mit offenem Rest** fragt nach: „Rest kommt noch“ (optional mit Datum, das der Kunde sieht), „Rest storniert“ (Fortschritt rechnet mit der gelieferten Menge, Hinweis Rechnung/Gutschrift, nichts automatisch an der Rechnung) oder „Teillieferung jetzt versenden“.
+- **Daten:** Ein Schritt ist nie früher datiert als der vorige. Der Kunde sieht sonst kein Datum, intern steht „Datum unlogisch“. „Bestätigt“ ist das früheste Datum.
+- **Datenprüfung:** „Fortschritt von Hand weiter als die echten Mengen bzw. das Labor“ (auf Klick) mit „Zurücksetzen“, „Rest storniert“ und „So lassen“.
+
 ## 5a. Die Produktseite (je Sache eine Stelle)
 
 Stand nach dem Umbau "Produktseite aufräumen" (09.11.2026). Kopf: Name (Stift), P-Nummer, Status, Rezeptur-Link, "Beim Lieferanten anfragen", "Löschen".
@@ -470,3 +477,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 11.11.2026 | Preise mit Gültigkeit Teil 3+4: Kalkulation bevorzugt gültige Preise, abgelaufene markiert (Summe unsicher, "neu anfragen" vorbelegt), Preisverlauf am Rohstoff, Benachrichtigung bei bald ablaufenden Preisen in offenen Angeboten; Angebot gültig bis = kürzester EK-Preis (Hinweis bei späterem Datum), abgelaufenes Angebot im Portal nicht annehmbar ("Aktualisierung anfragen"), intern "Verlängern"; Handbuch 4.2 | Nico / Claude Code |
 | 11.11.2026 | Fremdfertigung: Lieferant wählt Rezepturen nicht mehr frei aus allen Rezepturen seiner Formen (blind, inkl. Kundenrezepturen). Wir haken an der Lieferantenseite an, welche er bepreisen soll ("Fertigprodukte anfragen", offene Aufträge oben) -> je Rezeptur eine Fremdfertigungs-Anfrage + Sammel-Mail; im Portal "Bitte bepreisen" mit Zusammensetzung; Rezeptur-Ansicht im Portal nur noch für angefragte/bepreiste/bestellte | Nico / Claude Code |
 | 11.11.2026 | Preis-Gültigkeit, Restpunkte: Bestellliste markiert abgelaufene Lieferantenpreise (gültige zuerst, "abgelaufen seit", Summe unsicher); bald ablaufender Preis in offenem Angebot -> zusätzlich Aufgabe in "Zu erledigen"; Katalog-Freigaben mit Spalte "Gültig bis" | Nico / Claude Code |
+| 11.11.2026 | Fortschritt: echte Mengen und Labor schlagen manuelles Abhaken (teilweise x von y, Abgeschlossen nur mit Labor + voller Menge, kein versandbereit bei offenem Schritt), Abhaken mit Rest fragt nach (kommt noch/storniert/Teillieferung), Datum nie vor dem Vorgänger, Datenprüfung "Fortschritt von Hand weiter" (auf Klick) | Nico / Claude Code |
