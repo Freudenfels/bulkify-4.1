@@ -5,7 +5,7 @@
 // Zählen / Abgleich / Buchen / Protokoll liegen in eigenen Dateien (unten eingebunden). Dashboard-Zugriffe nur über
 // erp_inventur.php (Naht).
 require_once __DIR__ . '/erp_inventur.php';
-foreach (['inventur_zaehlen', 'inventur_abgleich', 'erp_inventur_buchen', 'inventur_buchen', 'inventur_protokoll'] as $__f)
+foreach (['inventur_zaehlen', 'inventur_abgleich', 'erp_inventur_buchen', 'inventur_buchen', 'inventur_protokoll', 'inventur_anleitung'] as $__f)
     if (is_file(__DIR__ . '/' . $__f . '.php')) require_once __DIR__ . '/' . $__f . '.php';
 unset($__f);
 

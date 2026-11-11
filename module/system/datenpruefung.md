@@ -131,3 +131,13 @@ Die Prüfung `fortschritt_hand_weiter` läuft **nur auf Klick** (`?p=datenpruefu
 **Technik:**
 - Neu sind `fixes` (mehrere Knöpfe je Prüfung, Knopfname `fix`) und `auf_klick` (Prüfung erst auf Anforderung laden).
 - Nach dem Beheben wird die Prüfung wieder geladen angezeigt.
+
+## Vorbereitung Inventur (11.11.2026)
+**lager_einheit_verdaechtig** (nur Anzeige) listet Chargen mit Bestand, bei denen etwas nicht stimmt:
+- Die Einheit passt nicht zur Einheit des Artikels, z. B. Kapsel-Bulk in kg statt Stk.
+- Stück-Ware hat Nachkommastellen, z. B. „6,254 Stk“.
+- Ein Rohstoff hat 1.000 kg oder mehr je Charge, z. B. 12.000 kg statt 12 kg.
+
+Geklärt wird das in der Lager-Inventur mit der Ursache „Einheitenfehler“: Faktor und Einheit der Charge werden korrigiert, gelöscht wird nichts.
+
+Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführen** (`artikel_dubletten`, Seite „Artikel zusammenführen“). Sonst wird auf zwei Artikel gezählt.

@@ -65,3 +65,14 @@ Zwei Lager, eine App. **Lager 1** (eigener Bestand, `charge.fremd_kunde_id IS NU
 1. Chargen und Artikel einem Lagerplatz zuordnen (über `erp.php`).
 2. „Finden“-Knopf: Das Fach eines Artikels oder einer Charge leuchtet auf.
 3. Picklisten für Produktionsaufträge und den Versand: alle Fächer leuchten, eine Farbe je Auftrag, bestätigen bucht ab (FEFO, über `erp.php`).
+
+## Inventur (11.11.2026)
+Eigener Modus unter **Inventur** (klein unten im Menü, nur Admin und Lager). Er ist getrennt vom Tagesgeschäft, das normal weiterläuft.
+- **Admin legt einen Lauf an:** Lager 1 oder 2, Plätze/Kisten oder ganzes Lager, Warenarten, Zähler, Nachzählen ab x %.
+- **Dustin zählt blind am Handy:** Platz scannen, dann Gebinde scannen und die Menge erfassen (Stk, „voll“, wiegen mit Tara, Bulk-Kapseln, leer). Ware ohne Etikett wird ein Klärfall mit Foto, das Etikett wird gedruckt.
+- **Abgleich mit dem Buchbestand zum Scan-Zeitpunkt.** Der Admin entscheidet je Abweichung die Ursache, erst dann wird gebucht. Jede Buchung ist eine Bewegung vom Typ `inventur`.
+- **Abschluss:** Die Plätze werden gesetzt, das Protokoll wird als PDF und CSV abgelegt.
+- **Lagerplätze** gibt es dafür jetzt auch in Lager 1: `lg_platz` mit `lg_platz_inhalt`, Etikett `LP-00012`.
+
+Code liegt in `core/inventur*.php` (Naht zum Dashboard: `core/erp_inventur*.php`) und `module/inventur/`. Ausführlich in `core/inventur.md`.
+

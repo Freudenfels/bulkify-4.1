@@ -6,7 +6,7 @@ kopf('Inventur', 'inventur');
 seitenkopf('Inventur', 'Eigener Modus, getrennt vom Tagesgeschäft: blind zählen, danach Soll und Ist vergleichen, Nico entscheidet jede Korrektur.',
     ($admin ? '<a class="btn btn-ghost" href="?p=plaetze">Lagerplätze</a> <a class="btn btn-ghost" href="?p=tara">Gebindetypen</a> <a class="btn btn-primary" href="?p=inventur_neu">Neue Inventur</a>' : '<a class="btn btn-ghost" href="?p=plaetze">Lagerplätze</a>'));
 flash_zeigen();
-if (function_exists('inv_anleitung_html')) echo inv_anleitung_html();
+if (function_exists('inv_anleitung_html')) echo inv_anleitung_html((bool)array_filter($liste, fn($i) => $i['status'] === 'abgeschlossen'));   // zugeklappt, sobald es eine abgeschlossene Inventur gibt
 $offen = array_filter($liste, fn($i) => $i['status'] !== 'abgeschlossen');
 $zu    = array_filter($liste, fn($i) => $i['status'] === 'abgeschlossen');
 $tab = function (array $rows, string $titel, string $leer) {

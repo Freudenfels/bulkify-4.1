@@ -145,6 +145,23 @@ $CHECKS = [
         'fix'   => ['tabelle' => 'bestellung', 'typ' => 'bestellung',
                     'update' => "UPDATE bestellung b SET b.status='storniert' WHERE b.status<>'storniert' AND NOT EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0) AND b.id IN ({IDS})"],
     ],
+    // Vorbereitung Inventur (11.11.2026): Bestand mit verdächtiger Einheit/Menge. Nur Anzeige – geklärt wird in der Inventur
+    // (Ursache „Einheitenfehler": Faktor/Einheit der Charge korrigieren) bzw. an der Charge.
+    'lager_einheit_verdaechtig' => [
+        'titel' => 'Lager: Einheit oder Menge verdächtig (vor der Inventur prüfen)',
+        'info'  => 'Chargen mit Bestand, deren Einheit nicht zur Einheit des Artikels passt (z. B. Kapsel-Bulk in kg statt Stk), Stück-Ware mit Nachkommastellen (z. B. „6,254 Stk“) oder Rohstoffe ab 1.000 kg je Charge (z. B. 12.000 kg statt 12 kg). In der Inventur zählen und dort mit Ursache „Einheitenfehler“ korrigieren.',
+        'sql'   => "SELECT c.id AS _id, CONCAT('?p=chargen&id=', c.id) AS _link, i.name AS artikel, c.charge_nr, c.menge_verfuegbar AS menge, c.einheit, i.einheit AS artikel_einheit,
+                           CASE WHEN LOWER(TRIM(c.einheit)) <> LOWER(TRIM(i.einheit)) THEN 'Einheit Charge ≠ Artikel'
+                                WHEN LOWER(c.einheit) IN ('stk','stück') AND ABS(c.menge_verfuegbar - ROUND(c.menge_verfuegbar)) > 0.0005 THEN 'Stück mit Nachkommastellen'
+                                ELSE 'sehr große Menge' END AS grund
+                    FROM charge c JOIN item i ON i.id=c.item_id
+                    WHERE c.menge_verfuegbar > 0 AND COALESCE(c.status,'') <> 'leer'
+                      AND ( LOWER(TRIM(c.einheit)) <> LOWER(TRIM(i.einheit))
+                         OR (LOWER(c.einheit) IN ('stk','stück') AND ABS(c.menge_verfuegbar - ROUND(c.menge_verfuegbar)) > 0.0005)
+                         OR (i.kategorie='rohstoff' AND LOWER(c.einheit)='kg' AND c.menge_verfuegbar >= 1000) )
+                    ORDER BY i.name",
+        'ohne_fix' => 'In der Lager-App unter Inventur zählen; die Auswertung schlägt „Einheitenfehler“ vor (Faktor/Einheit der Charge korrigieren, nichts gelöscht).',
+    ],
     'artikel_dubletten' => [
         'titel' => 'Artikel: ähnliche Artikel (Dubletten-Gruppen)',
         'info'  => 'Gruppen aktiver Artikel mit gleicher Normalform des Namens (mit Synonymen, ohne Gehalt/Bio). Gleiche Qualität = ein Artikel mit mehreren Lieferanten; andere Spezifikation, Kapselgröße, Füllgewicht oder Material bleibt getrennt. Zusammenführen auf der Seite „Artikel zusammenführen“ (je Gruppe, Nico wählt den Hauptartikel).',

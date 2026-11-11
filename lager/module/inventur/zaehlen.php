@@ -40,6 +40,7 @@ flash_zeigen();
   <div id="izKarte"></div>
   <div class="iz-zeile"><button class="btn btn-ghost" id="izOhne" type="button" disabled>Gefunden ohne Etikett</button><button class="btn btn-primary" id="izFertig" type="button" disabled>Platz fertig</button></div>
   <div class="iz-karte"><div class="iz-zeile" style="justify-content:space-between"><b style="font-weight:600">Auf diesem Platz erfasst</b><span class="muted" id="izAnz"></span></div><div class="iz-liste" id="izListe"><span class="muted">Noch nichts.</span></div></div>
+  <?= function_exists('inv_anleitung_html') ? inv_anleitung_html(true) : '' ?>
   <div class="iz-karte" id="izNz" hidden><b style="font-weight:600">Nachzählen (zweite Person)</b><div class="iz-liste" id="izNzListe"></div></div>
 </div>
 <script>
