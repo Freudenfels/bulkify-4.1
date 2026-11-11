@@ -338,21 +338,21 @@ header('Content-Type: text/html; charset=utf-8');
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
-  <h1 style="font-size:24px;margin:0 0 14px"><?= h($T['what_produce']) ?> – Tagesplan</h1>
+  <h1 style="font-size:24px;margin:0 0 14px"><?= h($T['what_produce']) ?> – <?= h($T['wa_dayplan']) ?></h1>
   <?php if (!$jobs): ?>
     <div class="panel muted"><?= h($T['no_jobs']) ?></div>
   <?php else: ?>
   <div class="cards">
     <?php foreach ($jobs as $pa): $m = $pa['_m']; $grau = !$m['machbar']; $proz = (float)$pa['menge'] > 0 ? min(100, round((float)$pa['produziert'] * 100 / (float)$pa['menge'])) : 0; ?>
     <a class="card" href="<?= $grau ? '#' : '?p=werk&id=' . (int)$pa['id'] ?>"<?= $grau ? ' style="opacity:.45;pointer-events:none"' : '' ?>>
-      <div class="nr"><?= h((string)$pa['nummer']) ?><?= $pa['_heute'] ? ' <span class="badge b-bereit" style="margin:0 0 0 6px">heute</span>' : '' ?></div>
+      <div class="nr"><?= h((string)$pa['nummer']) ?><?= $pa['_heute'] ? ' <span class="badge b-bereit" style="margin:0 0 0 6px">' . h($T['wa_today_badge']) . '</span>' : '' ?></div>
       <div class="prod"><?= h((string)($pa['produkt'] ?: '–')) ?></div>
-      <div class="meta">Soll <?= menge_txt($pa['menge']) ?> Stk<?= !empty($pa['kunde']) ? ' · ' . h((string)$pa['kunde']) : '' ?></div>
-      <div class="meta"><?= $pa['geplant_am'] ? h(date('d.m.', strtotime((string)$pa['geplant_am']))) . ' · ' : '' ?><?= h((string)($pa['linie'] ?: 'Linie offen')) ?><?= $pa['mitarbeiter'] ? ' · ' . h((string)$pa['mitarbeiter']) : '' ?></div>
-      <span class="badge <?= $pa['_lauf'] ? 'b-lauf' : 'b-bereit' ?>"><?= $pa['_lauf'] ? h($T['in_production']) : ($grau ? 'nicht machbar' : ($m['stufe'] === 'bis_etikett' ? 'bis vor Etikettieren' : h($T['producible']))) ?></span>
-      <?php if ($m['grund'] !== ''): ?><div class="meta" style="margin-top:6px;color:#e0b54c"><?= h($m['grund']) ?></div><?php endif; ?>
+      <div class="meta"><?= h(sprintf($T['wa_target'], menge_txt($pa['menge']))) ?><?= !empty($pa['kunde']) ? ' · ' . h((string)$pa['kunde']) : '' ?></div>
+      <div class="meta"><?= $pa['geplant_am'] ? h(date('d.m.', strtotime((string)$pa['geplant_am']))) . ' · ' : '' ?><?= h((string)($pa['linie'] ?: $T['wa_line_open'])) ?><?= $pa['mitarbeiter'] ? ' · ' . h((string)$pa['mitarbeiter']) : '' ?></div>
+      <span class="badge <?= $pa['_lauf'] ? 'b-lauf' : 'b-bereit' ?>"><?= $pa['_lauf'] ? h($T['in_production']) : ($grau ? h($T['wa_not_doable']) : ($m['stufe'] === 'bis_etikett' ? h($T['wa_until_label']) : h($T['producible']))) ?></span>
+      <?php if ($m['grund'] !== ''): ?><div class="meta" style="margin-top:6px;color:#e0b54c"><?= h(werk_msg($m['grund'], $lang)) ?></div><?php endif; ?>
       <div class="prog"><div style="width:<?= (int)$proz ?>%"></div></div>
-      <div class="meta" style="margin-top:6px">produziert <?= menge_txt($pa['produziert']) ?> von <?= menge_txt($pa['menge']) ?></div>
+      <div class="meta" style="margin-top:6px"><?= h(sprintf($T['wa_produced_of'], menge_txt($pa['produziert']), menge_txt($pa['menge']))) ?></div>
     </a>
     <?php endforeach; ?>
   </div>
@@ -523,10 +523,10 @@ header('Content-Type: text/html; charset=utf-8');
             <div style="font-size:21px;font-weight:800"><?= h($T['container']) ?> <?= !empty($g['buchstabe']) ? h((string)$g['buchstabe']) : $i ?> <span class="muted" style="font-size:15px;font-weight:400">(<?= $i ?> / <?= $NM ?>)</span></div>
             <div style="font-size:18px;font-weight:700"><?= $nzM($g['kg']) ?> kg <?= h($T['total_word']) ?></div>
           </div>
-          <?php if (!empty($g['grund'])): ?><div style="color:var(--lime);font-size:16px;margin-top:6px"><?= h((string)$g['grund']) ?></div><?php endif; ?>
+          <?php if (!empty($g['grund'])): ?><div style="color:var(--lime);font-size:16px;margin-top:6px"><?= h(werk_msg((string)$g['grund'], $lang)) ?></div><?php endif; ?>
           <table class="mat" style="margin-top:8px"><tbody>
             <?php foreach ($g['zutaten'] as $z): ?>
-            <tr><td><?= h((string)$z['name']) ?><?= !empty($z['charge']) ? '<div class="muted" style="font-size:14px">Charge ' . h((string)$z['charge']) . ' (ältere zuerst)</div>' : '' ?></td><td class="num" style="font-weight:700;color:var(--lime)"><?= $nzM($z['kg']) ?> kg</td></tr>
+            <tr><td><?= h((string)$z['name']) ?><?= !empty($z['charge']) ? '<div class="muted" style="font-size:14px">' . h(sprintf($T['wa_older_first'], (string)$z['charge'])) . '</div>' : '' ?></td><td class="num" style="font-weight:700;color:var(--lime)"><?= $nzM($z['kg']) ?> kg</td></tr>
             <?php endforeach; ?>
           </tbody></table>
           <div style="margin-top:12px">
