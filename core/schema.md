@@ -633,3 +633,6 @@ Siehe `core/preis_gueltig.md`.
 - **Kunde:** `auftrag_fortschritt_kunde()` behandelt „Bestätigt“ als frühestes Datum.
   - Ein früheres Ereignis zeigt das Bestätigungsdatum.
   - Ein Datum vor dem des vorigen Schritts wird nicht gezeigt.
+
+## Fortschritt: Zukauf fertig vollständig (11.11.2026)
+Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingegangen, gilt „Produziert“ als erledigt. Das Datum ist der letzte Wareneingang.

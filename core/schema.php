@@ -6387,6 +6387,16 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
     $bulkDa = $pa ? one("SELECT MIN(COALESCE(c.wareneingang, c.angelegt)) d FROM charge c JOIN item i ON i.id=c.item_id
                          WHERE i.kategorie='fertig' AND (c.auftrag_id=? OR c.pa_id=?)", [$aid, (int)$pa['id']]) : null;
     $bulkDa = $bulkDa && !empty($bulkDa['d']) ? $bulkDa['d'] : null;
+    // Zukauf fertig (11.11.2026): Ist die volle Menge als Fertigware eingegangen (Chargen am Auftrag/PA), gilt „Produziert"
+    // ebenfalls - Datum = letzter Wareneingang. Teilmengen behandelt der Teilmengen-Block unten.
+    $mfVoll = auftrag_mengenfortschritt($aid);
+    $zielFw = (int)($a['fortschritt_ziel'] ?? 0) > 0 ? (int)$a['fortschritt_ziel'] : max((int)($a['menge'] ?? 0), (int)$mfVoll['ziel']);
+    if ($bulkDa === null && $zielFw > 0 && (int)$mfVoll['gebucht'] >= $zielFw) {
+        $fwD = scalar("SELECT MAX(COALESCE(c.wareneingang, c.angelegt)) FROM charge c JOIN item i ON i.id=c.item_id
+                       WHERE i.kategorie='verkaufsfertig' AND c.fremd_kunde_id IS NULL
+                         AND (c.auftrag_id=? OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'))", [$aid, $aid]);
+        if ($fwD) $bulkDa = (string)$fwD;
+    }
     $fertig = fn(array $list) => $list && !array_filter($list, fn($s) => (int)$s['erledigt'] !== 1);
     $datum  = function (array $list) { $m = null; foreach ($list as $s) if (!empty($s['erledigt_at']) && ($m === null || $s['erledigt_at'] > $m)) $m = $s['erledigt_at']; return $m; };
 

@@ -297,6 +297,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $idx    = (int)($_POST['phase'] ?? -1);
     if ($idx < 0 || $idx >= count($phasen)) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Ungültige Stufe.')); exit; }
     $last   = count($phasen) - 1;                       // Eingelagert (FF) bzw. Versendet (sonst)
+    // Abhaken mit offenem Rest fragt nach (Nico 11.11.2026): „Produziert" (4), „Etikettiert" (5), „Abgeschlossen" (6) bei
+    // 0 < gebucht < Ziel -> Pop-up „Was ist mit dem Rest?": kommt noch / storniert / Teillieferung.
+    if (in_array($idx, [4, 5, 6], true) && ($moR = auftrag_menge_offen(one("SELECT * FROM auftrag WHERE id=?", [$id]) ?: ['id' => $id]))) {
+        $restW = (string)($_POST['rest'] ?? '');
+        if ($restW === '') { header('Location: ?p=auftrag&id=' . $id . '&restfrage=' . $idx . '#schritte'); exit; }
+        $nfR = fn($x) => number_format((int)$x, 0, ',', '.');
+        if ($restW === 'kommt') {
+            $erw = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST['rest_erwartet'] ?? '')) ? (string)$_POST['rest_erwartet'] : null;
+            q("UPDATE auftrag SET rest_status='kommt', rest_erwartet=? WHERE id=?", [$erw, $id]);
+            log_aktivitaet('auftrag', $id, 'team', 'Rest kommt noch: ' . $nfR($moR['rest']) . ' von ' . $nfR($moR['ziel']) . ' Stk' . ($erw ? ', erwartet am ' . date('d.m.Y', strtotime($erw)) : '') . ' - Schritt bleibt teilweise.', 'status', 'auftrag', $id);
+            header('Location: ?p=auftrag&id=' . $id . '&restok=kommt#schritte'); exit;
+        }
+        if ($restW === 'teillieferung') {
+            q("UPDATE auftrag SET rest_status='teillieferung' WHERE id=?", [$id]);
+            log_aktivitaet('auftrag', $id, 'team', 'Teillieferung: ' . $nfR($moR['geb']) . ' von ' . $nfR($moR['ziel']) . ' Stk jetzt versenden - Schritt bleibt teilweise.', 'status', 'auftrag', $id);
+            header('Location: ?p=auftrag&id=' . $id . '&restok=teil#schritte'); exit;
+        }
+        if ($restW !== 'storniert') { header('Location: ?p=auftrag&id=' . $id . '#schritte'); exit; }
+        // Rest storniert: Ziel für den Fortschritt = gelieferte Menge, dann normal abhaken. Rechnung NICHT automatisch ändern.
+        q("UPDATE auftrag SET fortschritt_ziel=?, rest_status='storniert' WHERE id=?", [$moR['geb'], $id]);
+        $nrR = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$id]);
+        log_aktivitaet('auftrag', $id, 'team', 'Rest storniert: ' . $nfR($moR['rest']) . ' Stk kommen nicht - Fortschritt rechnet mit ' . $nfR($moR['geb']) . ' Stk. Rechnung/Gutschrift prüfen.', 'status', 'auftrag', $id);
+        if (function_exists('benachrichtigung_add'))
+            benachrichtigung_add('Rest storniert: ' . $nrR . ' - Rechnung/Gutschrift prüfen',
+                $nfR($moR['rest']) . ' von ' . $nfR($moR['ziel']) . ' Stk kommen nicht. Geliefert: ' . $nfR($moR['geb']) . ' Stk. An der Rechnung wurde nichts geändert.', '?p=auftrag&id=' . $id, 'sonstiges', true);
+    }
     // Groben Auftragsstatus passend zur gewaehlten Stufe mitfuehren (erlaubt auch das Zurueckstufen, wie die
     // alte Status-Auswahl). Override als „mindestens diese Stufe" (0 = Basis -> kein Override, NULL).
     $neuStatus = $idx >= $last ? 'versendet' : ($idx >= 6 ? 'erledigt' : ($idx >= 3 ? 'in_produktion' : 'offen'));
@@ -1318,7 +1344,28 @@ if (has_role('admin') || has_role('sales')):
       $nPh     = count($phasenA);
       $berWartet = (($berSt ?? '') === 'wartet'); ?>
   <?php if (isset($_GET['statusok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Status aktualisiert – der Kunde sieht es sofort.</div><?php endif; ?>
-  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+  <?php if (($_GET['restok'] ?? '') === 'kommt'): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Gespeichert: Rest kommt noch – der Schritt bleibt teilweise.</div><?php endif; ?>
+  <?php if (($_GET['restok'] ?? '') === 'teil'): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin:14px 0 0;display:inline-block">Teillieferung: die vorhandene Menge unter <a href="?p=versand">Versand</a> versenden. Der Kunde sieht „Teilweise versendet“.</div><?php endif; ?>
+  <?php // Pop-up „Was ist mit dem Rest?" (Teil 2, 11.11.2026)
+    $rfIdx = (int)($_GET['restfrage'] ?? 0);
+    if (in_array($rfIdx, [4, 5, 6], true) && ($rfMo = auftrag_menge_offen($a))): $rfN = fn($x) => number_format((int)$x, 0, ',', '.'); ?>
+  <dialog id="dlgRest" class="bx-dialog" style="max-width:560px" open>
+    <h2 style="margin-top:0">Es fehlen noch <?= $rfN($rfMo['rest']) ?> von <?= $rfN($rfMo['ziel']) ?> Stk</h2>
+    <p class="muted" style="margin-top:0">Da sind <?= $rfN($rfMo['geb']) ?> Stk. Was ist mit dem Rest?</p>
+    <form method="post" style="margin:0">
+      <input type="hidden" name="aktion" value="phase_setzen"><input type="hidden" name="phase" value="<?= $rfIdx ?>">
+      <label class="bx-check" style="display:block;margin:8px 0"><input type="radio" name="rest" value="kommt" checked> <strong style="font-weight:600">Rest kommt noch</strong> – Schritt bleibt „teilweise“, nichts wird abgehakt</label>
+      <div style="margin:0 0 10px 26px"><label class="muted" style="font-size:12px">Erwartet am (optional, sieht der Kunde)</label><br><input type="date" name="rest_erwartet" value="<?= h((string)($a['rest_erwartet'] ?? '')) ?>" style="width:auto"></div>
+      <label class="bx-check" style="display:block;margin:8px 0"><input type="radio" name="rest" value="storniert"> <strong style="font-weight:600">Rest storniert</strong> – Fortschritt rechnet mit <?= $rfN($rfMo['geb']) ?> Stk, der Schritt wird abgehakt. Rechnung/Gutschrift bitte selbst prüfen (Hinweis kommt).</label>
+      <label class="bx-check" style="display:block;margin:8px 0"><input type="radio" name="rest" value="teillieferung"> <strong style="font-weight:600">Teillieferung jetzt versenden</strong> – Schritt bleibt „teilweise“, die <?= $rfN($rfMo['geb']) ?> Stk können raus</label>
+      <div class="bx-row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+        <a class="btn btn-ghost" href="?p=auftrag&id=<?= (int)$a['id'] ?>#schritte">Abbrechen</a>
+        <button class="btn btn-primary" type="submit">Übernehmen</button>
+      </div>
+    </form>
+  </dialog>
+  <?php endif; ?>
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)" id="schritte">
     <div class="k muted" style="margin-bottom:10px">Schritte</div>
     <?php // Schritt-Karten aus der NEUEN Kette (gleiche Schritte wie die Leiste oben, inkl. Etiketten-Stand und Teilmengen).
           // „Schritt abschließen" setzt die passende bisherige Stufe (phase_setzen) – Logik dahinter unverändert.

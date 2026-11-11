@@ -364,3 +364,10 @@ Unter den Kacheln steht das Etikett-Design jetzt direkt als Bild. Nico wollte es
 
 ## Datum unlogisch (11.11.2026)
 Liegt das Datum eines Schritts vor dem eines früheren Schritts, zeigt die Schritt-Karte „Datum unlogisch“ in Rot. Der Kunde sieht dort kein Datum.
+
+## Abhaken mit offenem Rest (11.11.2026)
+Wer „Produziert“, „Etikettiert“ oder „Abgeschlossen“ setzt (`phase_setzen` mit Stufe 4, 5 oder 6), während noch Menge fehlt (`auftrag_menge_offen()`), bekommt das Pop-up „Es fehlen noch x von y Stk. Was ist mit dem Rest?“. Das gilt für den Knopf und für das manuelle Setzen.
+- **Rest kommt noch:** `rest_status=kommt`, optional mit `rest_erwartet`. Nichts wird abgehakt. Der Kunde sieht beim Schritt „Rest erwartet am …“.
+- **Rest storniert:** `fortschritt_ziel` wird die gelieferte Menge, `rest_status=storniert`. Danach wird normal abgehakt. Es kommt die Benachrichtigung „Rechnung/Gutschrift prüfen“, an der Rechnung ändert sich nichts.
+- **Teillieferung jetzt versenden:** `rest_status=teillieferung`. Der Schritt bleibt teilweise, mit Hinweis auf „Versand“ (Teilmenge). Der Kunde sieht dann „Teilweise versendet“.
+Alle drei Wege stehen im Verlauf.
