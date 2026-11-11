@@ -5,6 +5,7 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/charge_norm.php';
 require_once __DIR__ . '/rohstoff_alternative.php';   // Alternative zu einer Rohstoff-Anfrage (Dashboard + Kundenportal)
+require_once __DIR__ . '/pa_ablauf.php';   // Produktion ein Weg (11.11.2026): Unter-Chargen, Teilmengen, Kartons – gemeinsam mit der Werk-App
 require_once __DIR__ . '/wareneingang_bestellung.php';   // Wareneingang gegen Bestellung (Einkauf gerade ziehen, Teil 1-3) – eine Stelle für Dashboard + Lager-App   // toleranter Chargen-Vergleich (Handbuch 4.5/4.12) – eine Stelle für alle Programme
 
 // Master-/Test-Scan: in der Produktion überspringt dieser Code Charge-Prüfung und Bestandsabbuchung
@@ -3474,6 +3475,9 @@ function produktion_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $t
     if ($verf + 0.0001 < $benoetigt)
         return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>produktion_fertigware_einheit($pa)]]];
     if ($trocken) return ['ok'=>true, 'fehlt'=>[]];
+    // Ein Weg (11.11.2026): gescannte Bulk-Charge(n) der laufenden Unter-Charge zuerst (core/pa_ablauf.php).
+    if (!empty($GLOBALS['pa_bevorzugt'])) { $bev = array_flip(array_map('intval', (array)$GLOBALS['pa_bevorzugt']));
+        usort($chargen, fn($x, $y) => (int)!isset($bev[(int)$x['id']]) <=> (int)!isset($bev[(int)$y['id']])); }
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
@@ -3483,6 +3487,7 @@ function produktion_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $t
         // Verbrauch in der Einheit der Charge (Pulver-Bulk in g), nicht pauschal „Stk".
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
           [$pa_id, (int)$c['item_id'], $c['id'], $nimm, (string)($c['einheit'] ?? '') ?: produktion_fertigware_einheit($pa), gmdate('Y-m-d H:i:s')]);
+        if (!empty($GLOBALS['pa_teilmenge_id'])) q("UPDATE produktion_verbrauch SET teilmenge_id=? WHERE id=?", [(int)$GLOBALS['pa_teilmenge_id'], insert_id()]);
         $rest -= $nimm;
     }
     return ['ok'=>true, 'fehlt'=>[]];
@@ -3573,6 +3578,8 @@ function charge_basis_pa(int $pa_id): string {
 }
 // Nächste (Teil-)Chargennummer für einen Produktionsauftrag: Basis + Tagesbuchstabe .A/.B/.C … (je Teilproduktion eine).
 function charge_naechste_nr(int $pa_id): string {
+    // Ein Weg (11.11.2026): nächster freier Buchstabe nach allen benutzten (Unter-Chargen + vorhandene Chargen), siehe core/pa_ablauf.php.
+    if (function_exists('pa_naechster_buchstabe')) return charge_basis_pa($pa_id) . '.' . pa_naechster_buchstabe($pa_id);
     $basis = charge_basis_pa($pa_id);
     $n = (int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id=?", [$pa_id]);   // bereits gebuchte Teilchargen
     $buchstabe = ($n >= 0 && $n < 26) ? chr(ord('A') + $n) : ('X' . ($n + 1));   // 0->A, 1->B, …
@@ -12183,13 +12190,17 @@ function produktion_rollen_abbuchen(int $charge_id, float $menge, int $pa_id, in
 // EINEN Artikel FEFO aus freien eigenen Chargen abbuchen und als Verbrauch buchen (+ Rollenbestand mitführen).
 function produktion_fefo_buchen(int $pa_id, int $item_id, float $menge, string $einheit, int $auftrag_id = 0): void {
     $rest = $menge;
-    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
+    // Ein Weg (11.11.2026): gescannte Chargen der laufenden Unter-Charge zuerst ($GLOBALS['pa_bevorzugt'], core/pa_ablauf.php), dann FEFO.
+    $bev = array_values(array_filter(array_map('intval', (array)($GLOBALS['pa_bevorzugt'] ?? []))));
+    $bevSql = $bev ? '(id IN (' . implode(',', $bev) . ')) DESC, ' : '';
+    foreach (all("SELECT * FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL ORDER BY " . $bevSql . "(mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
           [$pa_id, $item_id, $c['id'], $nimm, $einheit, gmdate('Y-m-d H:i:s')]);
+        if (!empty($GLOBALS['pa_teilmenge_id'])) q("UPDATE produktion_verbrauch SET teilmenge_id=? WHERE id=?", [(int)$GLOBALS['pa_teilmenge_id'], insert_id()]);   // Verbrauch je Teilmenge
         produktion_rollen_abbuchen((int)$c['id'], $nimm, $pa_id, $auftrag_id);
         $rest -= $nimm;
     }

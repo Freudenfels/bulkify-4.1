@@ -12,6 +12,7 @@
 // (produktion_schritt_erledigen() etc.) in eine von beiden Programmen nutzbare Bibliothek ausgelagert
 // wurden. NICHT core/schema.php des Dashboards hier einbinden (zieht das ganze Dashboard herein).
 require_once __DIR__ . '/db.php';
+require_once dirname(__DIR__, 2) . '/core/pa_ablauf.php';   // Produktion ein Weg (11.11.2026): gemeinsamer Kern mit dem Dashboard
 
 // --- Benutzer (gemeinsame Logins mit dem Dashboard) ------------------------------------------
 function erp_benutzer_per_mail(string $email): ?array {
@@ -968,15 +969,19 @@ function erp_materialbedarf(int $pa_id): array {
 function erp_fefo_abbuchen(int $pa_id, int $item_id, float $menge, string $einheit): void {
     $rest = $menge;
     $auf = (int) scalar("SELECT COALESCE(auftrag_id,0) FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    // Ein Weg (11.11.2026): gescannte Chargen der laufenden Unter-Charge zuerst ($GLOBALS['pa_bevorzugt']), dann FEFO.
+    $bev = array_values(array_filter(array_map('intval', (array)($GLOBALS['pa_bevorzugt'] ?? []))));
+    $bevSql = $bev ? '(id IN (' . implode(',', $bev) . ')) DESC, ' : '';
     foreach (all("SELECT id, menge_verfuegbar FROM charge
                   WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL
-                  ORDER BY (mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
+                  ORDER BY " . $bevSql . "(mhd IS NULL), mhd ASC, id ASC", [$item_id]) as $c) {
         if ($rest <= 0.0001) break;
         $nimm = min($rest, (float)$c['menge_verfuegbar']);
         $neu  = (float)$c['menge_verfuegbar'] - $nimm;
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
           [$pa_id, $item_id, $c['id'], $nimm, $einheit, gmdate('Y-m-d H:i:s')]);
+        if (!empty($GLOBALS['pa_teilmenge_id'])) q("UPDATE produktion_verbrauch SET teilmenge_id=? WHERE id=?", [(int)$GLOBALS['pa_teilmenge_id'], insert_id()]);   // Verbrauch je Teilmenge
         erp_rollen_abbuchen((int)$c['id'], $nimm, $pa_id, $auf);
         $rest -= $nimm;
     }
@@ -1155,6 +1160,9 @@ function erp_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $trocken 
     if ($verf + 0.0001 < $benoetigt)
         return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>erp_fertigware_einheit($pa_id)]]];
     if ($trocken) return ['ok'=>true, 'fehlt'=>[]];
+    // Ein Weg (11.11.2026): gescannte Bulk-Charge(n) der laufenden Unter-Charge zuerst (core/pa_ablauf.php).
+    if (!empty($GLOBALS['pa_bevorzugt'])) { $bev = array_flip(array_map('intval', (array)$GLOBALS['pa_bevorzugt']));
+        usort($chargen, fn($x, $y) => (int)!isset($bev[(int)$x['id']]) <=> (int)!isset($bev[(int)$y['id']])); }
     $rest = $benoetigt;
     foreach ($chargen as $c) {
         if ($rest <= 0.0001) break;
@@ -1163,6 +1171,7 @@ function erp_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $trocken 
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $c['id']]);
         q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
           [$pa_id, (int)$c['item_id'], $c['id'], $nimm, (string)($c['einheit'] ?? '') ?: erp_fertigware_einheit($pa_id), gmdate('Y-m-d H:i:s')]);   // Einheit der Charge (Pulver g)
+        if (!empty($GLOBALS['pa_teilmenge_id'])) q("UPDATE produktion_verbrauch SET teilmenge_id=? WHERE id=?", [(int)$GLOBALS['pa_teilmenge_id'], insert_id()]);
         $rest -= $nimm;
     }
     return ['ok'=>true, 'fehlt'=>[]];
@@ -1492,6 +1501,7 @@ function erp_charge_naechste_nr(int $pa_id): string {
     $nummer = (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
     $basis  = trim(preg_replace('/^PR[-\s]*/i', '', $nummer));
     if ($basis === '') $basis = 'PR' . $pa_id;
+    if (function_exists('pa_naechster_buchstabe')) return $basis . '.' . pa_naechster_buchstabe($pa_id);   // Ein Weg (11.11.2026)
     $n = (int) scalar("SELECT COUNT(*) FROM charge WHERE pa_id=?", [$pa_id]);
     $buchstabe = ($n >= 0 && $n < 26) ? chr(ord('A') + $n) : ('X' . ($n + 1));
     return $basis . '.' . $buchstabe;
