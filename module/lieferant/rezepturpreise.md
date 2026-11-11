@@ -17,3 +17,10 @@
 - **4-Wochen-Regel:** ist der neueste `stand` älter als `lieferanten.preis_intervall_tage` (Standard 28), roter Hinweis + „Alle als aktuell bestätigen" (setzt alle `stand=heute`).
 
 **Intern:** `module/rezeptur/lief_preise.php` (`?p=rezept_preise`, Menü Produkt → Rezeptur-Preise) listet alle Lieferantenpreise je Rezeptur, sortiert nach Preis; der **günstigste** je Rezeptur ist mit Badge „günstigster" markiert. EK (Herstellpreis) + empf. VK (EK × Marge).
+
+## Übersetzung Einheit und Form (11.11.2026)
+Nico hat gemeldet, dass „Kapsel“ und „Tablette“ im chinesischen Portal deutsch blieben.
+- Die Einheit hinter dem Preis läuft über `lp_einheit()`, z. B. „€ / Kapsel“ → „€ / capsule“ bzw. „€ / 粒“, „Tablette“ → „tablet“ bzw. „片“.
+- „Für Sie freigeschaltete Formen“ wird über `anfrage_art_label('', form)` übersetzt, z. B. „胶囊, 片剂“.
+- Die Spalte Form zeigt nur die Form, z. B. „胶囊“. Vorher stand dort fälschlich „Rohstoff · Kapseln“ („原料 · 胶囊“), obwohl es um Fremdfertigung geht.
+- In der Datenbank bleibt die Einheit deutsch. Übersetzt wird nur bei der Anzeige.

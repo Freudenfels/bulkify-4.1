@@ -73,3 +73,6 @@ Anfragen mit Status `zurueckgezogen` (dem Lieferanten wurde die Rohstoff-Berecht
 Neue Übersetzungsschlüssel in `portal_layout.php`: variante, variante_hint, spec_pflicht, kapsel_andere, kapsel_andere_grund, kapsel_passt_nicht (DE/EN/ZH).
 
 Übersetzungsschlüssel für CoA/Spec je Rohstoff (2026-10-30): roh_unterlage_titel, roh_unterlage_hinweis, roh_liegt_vor, roh_fehlt, roh_unterlage_fehlt (DE/EN/ZH).
+
+## Einheiten übersetzt (11.11.2026)
+Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache des Lieferanten, z. B. Kapsel → capsule / 粒. kg, g, L und ml bleiben unverändert.

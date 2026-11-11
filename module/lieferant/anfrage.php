@@ -184,7 +184,7 @@ if (!$a):
                 <?php $typL = anfrage_art_label((string)($r['art'] ?? ''), (string)($r['form'] ?? ''), lp_sprache()); ?>
                 <?php if ($typL !== ''): ?><div class="muted" style="font-size:12px"><?= h($typL) ?></div><?php endif; ?></td>
             <td class="bx-num"><?= $r['menge'] ? h(lp_num($r['menge'])) . ' ' . h(lp_einheit($r['einheit'] ?: ($r['item_einheit'] ?? ''), (float)$r['menge'])) : '–' ?></td>
-            <td class="bx-num"><?= ($r['preis'] !== null && $r['preis'] !== '') ? h(lp_num($r['preis'], 4)) . ($r['ang_einheit'] ? ' / ' . h($r['ang_einheit']) : '') : '<span class="muted">–</span>' ?></td>
+            <td class="bx-num"><?= ($r['preis'] !== null && $r['preis'] !== '') ? h(lp_num($r['preis'], 4)) . ($r['ang_einheit'] ? ' / ' . h(lp_einheit($r['ang_einheit'], 1)) : '') : '<span class="muted">–</span>' ?></td>
             <td><?= $r['status'] === 'offen' ? h(lp_t('anfrage_offen')) : h(lp_t('anfrage_beant')) ?></td>
             <td class="bx-num"><span class="muted" style="font-size:18px">&#8250;</span></td></tr>
       <?php endforeach; ?></tbody>

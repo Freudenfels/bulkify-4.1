@@ -138,7 +138,7 @@ $zahl = fn($x, $n) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format(
         <td><?= h($z['name']) ?><?php if (!empty($z['bio'])): ?> <span class="bx-badge" style="font-size:11px;background:rgba(29,158,117,.15);color:#1D9E75"><?= h(lp_t('bio_ja')) ?></span><?php endif; ?><?php if (!empty($z['name_original']) && $z['name_original'] !== $z['name']): ?><div class="muted" style="font-size:12px">Original: <?= h($z['name_original']) ?></div><?php endif; ?><?php if ($z['herkunft']): ?><div class="muted" style="font-size:12px"><?= h($z['herkunft']) ?></div><?php endif; ?></td>
         <td><?= h(anfrage_art_label($z['art'] === 'fertigprodukt' ? 'fertigprodukt' : 'rohstoff', (string)$z['form'], $spr)) ?></td>
         <td><?= h((string)$z['spezifikation']) ?></td>
-        <td class="bx-num"><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . $z['einheit'] : '')) : '–' ?></td>
+        <td class="bx-num"><?= $z['preis'] !== null ? h($zahl($z['preis'], 4) . ' ' . $z['waehrung'] . ($z['einheit'] ? ' / ' . lp_einheit($z['einheit'], 1) : '')) : '–' ?></td>
         <td class="bx-num"><?= $z['menge_ab'] !== null ? h(lp_num($z['menge_ab'], 3)) : '–' ?></td>
         <td><?= $neu ? h(lp_t('katalog_geprueft_nein')) : ($z['status'] === 'uebernommen' ? h(lp_t('katalog_uebernommen')) : h(lp_t('katalog_abgelehnt'))) ?></td>
         <td class="bx-num" style="white-space:nowrap"><?php if ($neu): ?>

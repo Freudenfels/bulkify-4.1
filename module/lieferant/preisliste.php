@@ -121,7 +121,7 @@ if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6
         <td style="font-size:13px">
           <?php if (!$g['preise']): ?><span class="muted"><?= h(lp_t('kein_preis')) ?></span>
           <?php else: foreach ($g['preise'] as $p): ?>
-            <div><?= h(lp_num($p['preis'], 4)) ?> <?= h((string)($p['waehrung'] ?: 'EUR')) ?><?= $g['einheit'] ? ' / ' . h((string)$g['einheit']) : '' ?><?php if ((float)$p['menge_ab'] > 0): ?> <span class="muted">· <?= h(lp_t('ab_menge')) ?> <?= h(lp_num($p['menge_ab'], 3)) ?></span><?php endif; ?></div>
+            <div><?= h(lp_num($p['preis'], 4)) ?> <?= h((string)($p['waehrung'] ?: 'EUR')) ?><?= $g['einheit'] ? ' / ' . h(lp_einheit((string)$g['einheit'], 1)) : '' ?><?php if ((float)$p['menge_ab'] > 0): ?> <span class="muted">· <?= h(lp_t('ab_menge')) ?> <?= h(lp_num($p['menge_ab'], 3)) ?></span><?php endif; ?></div>
           <?php endforeach; endif; ?>
         </td>
         <td class="bx-num" style="white-space:nowrap">
@@ -196,7 +196,7 @@ if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6
           <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
             <input type="hidden" name="aktion" value="preis_save"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
             <input type="text" name="eur_kg" value="<?= h($num($r['eur_kg'])) ?>" style="width:90px;text-align:right" inputmode="decimal">
-            <span class="muted">€ / <?= h($r['einheit'] ?: 'kg') ?></span>
+            <span class="muted">€ / <?= h(lp_einheit($r['einheit'] ?: 'kg', 1)) ?></span>
             <button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('aktualisieren')) ?></button>
           </form>
         </td>

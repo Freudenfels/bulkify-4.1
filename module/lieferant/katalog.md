@@ -16,3 +16,6 @@ Offene Zeilen kann der Lieferant selbst **bearbeiten** (`aktion=zeile_save`) ode
 
 ## „Mein Katalog" = reines Portfolio (Stand 2026-10-08)
 Diese Seite zeigt **nur noch das Portfolio** des Lieferanten (was er anbietet). Der frühere zweite Abschnitt „Von bulkify bei Ihnen geführt" (die von uns geführten Rohstoffe + „Preis aktualisieren" → `katalog_preis_vorschlag()`) ist **auf die Seite „Rohstoff-Preise" (`?p=lieferant_preisliste`) umgezogen** – siehe `preisliste.md`. Damit sind Portfolio (Katalog) und zu pflegende Rohstoff-Preise (mit Staffel) klar getrennt. Der `preis_vorschlag`-Handler und das `#dlgPreis`-Popup leben jetzt in `preisliste.php`; `katalog_preis_vorschlag()` bleibt in `core/lieferant_katalog.php`.
+
+## Einheiten übersetzt (11.11.2026)
+Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache des Lieferanten, z. B. Kapsel → capsule / 粒. kg, g, L und ml bleiben unverändert.

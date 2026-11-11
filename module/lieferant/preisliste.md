@@ -21,3 +21,6 @@
 **Intern:** Auf der Lieferanten-Detailseite (Reiter „Preise / Angebote") zeigt ein Panel **„Preisliste des Lieferanten"** dieselben Preise + ein Badge **aktuell/überfällig** (Alter in Tagen).
 
 **Import:** `tools/v3_import.php` verknüpft die Preislisten-Zeilen mit dem Lieferanten (Name) und übernimmt das Intervall aus v3. Greift auf beta nach erneutem Import; die Namenszuordnung bestehender Zeilen läuft zusätzlich einmalig über die Migration (`preisliste_lief_link`).
+
+## Einheiten übersetzt (11.11.2026)
+Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache des Lieferanten, z. B. Kapsel → capsule / 粒. kg, g, L und ml bleiben unverändert.

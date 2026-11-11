@@ -35,3 +35,6 @@ Lieferanten können zu einer Bestellung jetzt auch einen **Lieferschein** hochla
 
 ## Chargen & Dokumente (08.11.2026)
 Vor „Dokumente & Rechnung“ steht derselbe Block wie auf der Bestellseite des Teams (`bestellung_chargen_panel($b, 'lieferant', lp_sprache())`): Charge, MHD, Menge, CoA je Charge, Spezifikation. Aktionen `bch_*` über `bestellung_chargen_post($b, 'lieferant', …)`; der Lieferant entfernt nur Eigenes. Die Dokumentenliste darunter zeigt nur noch Dokumente ohne Position. Eine zweite Rechnung wird abgelehnt, wenn schon eine vorliegt (z. B. vom Team hochgeladen).
+
+## Einheiten übersetzt (11.11.2026)
+Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache des Lieferanten, z. B. Kapsel → capsule / 粒. kg, g, L und ml bleiben unverändert.

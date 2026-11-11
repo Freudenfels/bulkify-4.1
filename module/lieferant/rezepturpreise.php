@@ -99,7 +99,7 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
 <h1 style="margin-bottom:4px"><?= h(lp_t('rez_preise_titel')) ?></h1>
 <p class="bx-sub"><?= h(lp_t('rez_preise_sub')) ?></p>
 <?php if ($fertigFormen): ?>
-  <p class="muted" style="font-size:13px;margin:-6px 0 12px"><?= h(lp_t('freigeschaltet_formen')) ?>: <strong><?= h(implode(', ', array_map(fn($f) => $formLabel[$f] ?? $f, $fertigFormen))) ?></strong></p>
+  <p class="muted" style="font-size:13px;margin:-6px 0 12px"><?= h(lp_t('freigeschaltet_formen')) ?>: <strong><?= h(implode(', ', array_map(fn($f) => anfrage_art_label('', $f, $spr) ?: ($formLabel[$f] ?? $f), $fertigFormen))) ?></strong></p>
 <?php else: ?>
   <div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px"><?= h(lp_t('keine_formen')) ?></div>
 <?php endif; ?>
@@ -129,12 +129,12 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
     <?php foreach ($rows as $r): $alt = $r['stand'] ? (int) floor((time() - strtotime((string)$r['stand'])) / 86400) : null; ?>
       <tr>
         <td><a href="?p=lieferant_rezeptur&id=<?= (int)$r['rezeptur_id'] ?>"><?= h($r['name']) ?></a> <span class="muted" style="font-size:12px"><?= h($r['nummer']) ?></span></td>
-        <td><?= h(anfrage_art_label('rohstoff', (string)$r['form'], $spr) ?: $formEinheit($r['form'])) ?></td>
+        <td><?= h(anfrage_art_label('', (string)$r['form'], $spr) ?: lp_einheit($formEinheit($r['form']), 2)) ?></td>
         <td class="bx-num">
           <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
             <input type="hidden" name="aktion" value="preis_save"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
             <input type="text" name="preis" value="<?= h($num($r['preis'])) ?>" style="width:90px;text-align:right" inputmode="decimal">
-            <span class="muted">€ / <?= h($r['einheit'] ?: $formEinheit($r['form'])) ?></span>
+            <span class="muted">€ / <?= h(lp_einheit($r['einheit'] ?: $formEinheit($r['form']), 1)) ?></span>
             <button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('aktualisieren')) ?></button>
           </form>
           <?php if (($r['preis_vorschlag'] ?? null) !== null && (float)$r['preis_vorschlag'] > 0): ?>

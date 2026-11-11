@@ -145,7 +145,7 @@ if (!$b):
               <?= $p['artikelnummer'] ? '<div class="muted" style="font-size:12px">' . h($p['artikelnummer']) . '</div>' : '' ?>
               <?php if (!empty($p['rezeptur_id'])): ?><div style="margin-top:4px;font-size:13px"><?= h(lp_t('rezeptur') ?: 'Rezeptur') ?>: <strong><?= h(trim((string)($p['rez_nr'] ?? '') . ' ' . (string)($p['rez_name'] ?? ''))) ?: ('#' . (int)$p['rezeptur_id']) ?></strong> <a class="btn btn-ghost btn-sm" style="margin-left:6px" href="?p=lieferant_rezeptur&id=<?= (int)$p['rezeptur_id'] ?>"><?= h(lp_t('rez_ansehen')) ?></a></div><?php endif; ?></td>
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$p['menge'], 3, ',', '.'), '0'), ',') ?></td>
-            <td><?= h($p['einheit'] ?? '') ?></td>
+            <td><?= h(lp_einheit($p['einheit'] ?? '', (float)$p['menge'])) ?></td>
             <?php $ekEff = bestellposition_ek($p, (int)$lid); ?>
             <td class="bx-num"><?= $money($ekEff, 4) ?></td>
             <td class="bx-num"><?= $money((float)$p['menge'] * $ekEff, 2) ?></td></tr>
