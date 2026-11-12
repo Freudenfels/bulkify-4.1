@@ -6246,7 +6246,7 @@ function auftrag_rohstoffe_beschafft(int $aid): ?string {
     if (!$roh) return null;                       // keine eingekauften Rohstoffe -> Signal nicht anwendbar
     $earliest = null; $hatBestellung = false;
     foreach ($roh as $iid => $fehlt) {
-        $bp = one("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
+        $bp = one("SELECT COALESCE(SUM(" . bp_rest_sql() . "),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
                    FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                    WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
         $ordered = (float)($bp['menge'] ?? 0);
@@ -10274,7 +10274,7 @@ function item_unterwegs(int $item_id): float {
     if ($item_id <= 0) return 0.0;
     $ck = 'uw:' . $item_id;
     if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
-    $v = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+    $v = (float) scalar("SELECT COALESCE(SUM(" . bp_rest_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                          WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$item_id]);
     if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
     return $v;
@@ -10857,7 +10857,7 @@ function meldebestand_bedarf(): array {
                   WHERE mindestbestand IS NOT NULL AND mindestbestand > 0 AND gesperrt=0 ORDER BY name") as $it) {
         $iid = (int)$it['id'];
         $bestand = item_bestand($iid, true);
-        $offen = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $offen = (float) scalar("SELECT COALESCE(SUM(" . bp_rest_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
         $soll = (float)$it['mindestbestand'];
         $verf = $bestand + $offen;
@@ -11077,7 +11077,7 @@ function auftrag_fehlbedarf(int $pa_id): array {
         $fehltBest = (float)($r['zu_bestellen'] ?? $r['fehlt']);
         if ($fehltBest <= 1e-6 || (int)$r['item_id'] <= 0) continue;
         // schon offen bestellt: für diesen Auftrag ODER als Sammelbestellung (Lager, auftrag_id NULL)
-        $offen = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $offen = (float) scalar("SELECT COALESCE(SUM(" . bp_rest_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND (bp.auftrag_id=? OR bp.auftrag_id IS NULL)", [(int)$r['item_id'], $aid]);
         $noch = $fehltBest - $offen;
         if ($noch <= 1e-6) continue;
@@ -11789,7 +11789,7 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
         $quar = item_quarantaene($iid);
         $unt  = item_unterwegs($iid);
         $eigen = [];
-        foreach ($aids as $aid) $eigen[$aid] = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid, $aid]);
+        foreach ($aids as $aid) $eigen[$aid] = (float) scalar("SELECT COALESCE(SUM(" . bp_rest_sql() . "),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid, $aid]);
         $pool = $frei + $quar + max(0.0, $unt - array_sum($eigen));
         foreach ($keys as $k) {                                // Überschuss gebundener Bestellungen geht in den Topf
             $aid = (int)$agg[$k]['auftrag_id'];
@@ -11878,7 +11878,8 @@ function bulk_bestell_menge(float $menge, string $einheit): array {
 // 600.000 g als 600 gezählt und der Bedarf erneut bestellt.
 function bulk_position_basis_sql(string $a = 'bp'): string {
     // Nur der noch offene Rest (Teillieferung, Nacht 1c) – die Funktion wird ausschließlich für „unterwegs" genutzt.
-    $r = "GREATEST($a.menge - COALESCE($a.geliefert_menge,0), 0)";
+    // Fable-3 T2.7 (13.11.2026): dieselbe Rest-Regel wie überall (bp_rest_sql) – stornierte Positionen/Reste zählen nicht als unterwegs.
+    $r = bp_rest_sql($a);
     return "CASE WHEN LOWER($a.einheit) IN ('kg','l') THEN $r*1000 ELSE $r END";
 }
 function bedarf_bulk(bool $nur_gemeldet = false): array {
