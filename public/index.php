@@ -31,8 +31,9 @@ if (($_GET['p'] ?? '') === 'api_einlager') {
     $pa_id = (int)($_POST['pa_id'] ?? 0);
     if ($pa_id <= 0) { http_response_code(400); echo json_encode(['ok'=>false, 'meldung'=>'pa_id fehlt.']); exit; }
     try {
-        $r = einlager_buchen($pa_id);
-        echo json_encode(['ok'=>true, 'ziel'=>$r['ziel'] ?? null, 'label'=>$r['label'] ?? null, 'charge_id'=>$r['charge_id'] ?? null]);
+        $r = einlager_buchen($pa_id, 'Lager-App');
+        echo json_encode(empty($r['ok']) ? ['ok'=>false, 'meldung'=>(string)($r['msg'] ?? 'Einlagern nicht möglich.')]
+                                         : ['ok'=>true, 'ziel'=>$r['ziel'] ?? null, 'label'=>$r['label'] ?? null, 'charge_id'=>$r['charge_id'] ?? null]);
     } catch (\Throwable $e) {
         http_response_code(500); echo json_encode(['ok'=>false, 'meldung'=>$e->getMessage()]);
     }

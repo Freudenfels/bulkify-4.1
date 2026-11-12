@@ -282,8 +282,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 // Einlagern direkt am Auftrag anstoßen (an Lager übergeben / nachholen): bucht die fertige Ware ins Lager 1/2.
 // Für fertig produzierte Aufträge, die noch nicht eingelagert sind (z. B. Altaufträge) – ohne Modulwechsel.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'einlagern_nachholen') {
+    // Fable-3 T4.2: nur Admin mit Grund, nie während eine Unter-Charge läuft (einlager_buchen prüft), Eintrag im Chargenprotokoll.
+    if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Einlagern nachholen nur Admin (mit Grund).')); exit; }
+    $grundE = trim((string)($_POST['grund'] ?? ''));
+    if ($grundE === '') { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Bitte einen Grund angeben.')); exit; }
     $paid = (int) scalar("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$id]);
-    if ($paid) { $r = einlager_buchen($paid); header('Location: ?p=auftrag&id=' . $id . '&einlagerok=' . urlencode((string)($r['label'] ?? 'Lager'))); exit; }
+    if ($paid) {
+        $r = einlager_buchen($paid, (string)(current_user()['name'] ?? 'Admin'), $grundE);
+        if (empty($r['ok'])) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode((string)$r['msg'])); exit; }
+        header('Location: ?p=auftrag&id=' . $id . '&einlagerok=' . urlencode((string)($r['label'] ?? 'Lager'))); exit;
+    }
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Produktionsauftrag zum Einlagern vorhanden.')); exit;
 }
 
@@ -1873,7 +1881,8 @@ if ($pa && in_array((string)($pa['status'] ?? ''), ['offen', 'laufend'], true) &
     <div class="k muted" style="margin-bottom:4px">Einlagern</div>
     <form method="post" style="margin:0" onsubmit="return confirm('Fertige Ware in Lager 1 (Warenlager) buchen? Danach ist der Auftrag versandbereit; das Lager entscheidet beim Versand zwischen Kunde und Lager 2.');">
       <input type="hidden" name="aktion" value="einlagern_nachholen">
-      <button class="btn btn-primary btn-sm" type="submit">In Lager 1 buchen</button>
+      <?php if (has_role('admin')): ?><input type="text" name="grund" required placeholder="Grund (nur Admin)" style="width:220px"> <button class="btn btn-primary btn-sm" type="submit">In Lager 1 buchen</button>
+      <?php else: ?><span class="muted" style="font-size:12px">Einlagern nachholen nur Admin mit Grund.</span><?php endif; ?>
     </form>
     <div class="muted" style="font-size:12px;margin-top:4px">Produktion ist fertig. Die Ware wird in <strong>Lager 1</strong> gebucht und der Auftrag wird <strong>versandbereit</strong>. Ob sie an den Kunden geht oder an Lager 2 (Fremdlager), entscheidet das Lager anschließend beim Versand.</div>
   </div>

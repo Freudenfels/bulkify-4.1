@@ -3616,6 +3616,8 @@ function produktion_gebucht(int $pa_id): float {
 }
 // Was von der Produktionsmenge noch nicht gebucht ist.
 function produktion_rest(int $pa_id): float {
+    require_once __DIR__ . '/pa_ablauf.php';
+    if (pa_rest_storniert($pa_id)) return 0.0;   // Fable-3 T4.2: „Rest storniert“ = kein Rest mehr
     $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
     return max(0.0, $menge - produktion_gebucht($pa_id));
 }
@@ -3848,11 +3850,16 @@ function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd =
 // Bucht den noch OFFENEN Rest der Produktionsmenge (Teilchargen, die vorher über
 // produktion_teilmenge_einbuchen() gebucht wurden, sind abgezogen). Ist nichts mehr offen, passiert nichts.
 // Chargennummer = PR-Basis + nächster Buchstabe (.A, .B …), MHD = heute + 18 Monate.
-function produktion_fertigware_einbuchen(int $pa_id): ?int {
+function produktion_fertigware_einbuchen(int $pa_id, string $wer = '', string $grund = ''): ?int {
     $rest = produktion_rest($pa_id);
-    if ($rest <= 0) return null;   // schon voll eingebucht
+    if ($rest <= 0) return null;   // schon voll eingebucht (oder Rest storniert)
     $r = produktion_teilmenge_einbuchen($pa_id, $rest);
-    return $r['ok'] ? (int)$r['charge_id'] : null;
+    if (empty($r['ok'])) return null;
+    // Fable-3 T4.2: Eintrag im Chargenprotokoll – dieser Weg bucht an den Unter-Chargen vorbei.
+    require_once __DIR__ . '/pa_ablauf.php';
+    $nr = (string) scalar("SELECT charge_nr FROM charge WHERE id=?", [(int)$r['charge_id']]);
+    pa_ereignis($pa_id, null, 'abweichung', 'Rest ' . pa_mz($rest) . ' Stk ohne Unter-Charge eingebucht (Einlagern): Charge ' . $nr . ($grund !== '' ? '. Grund: ' . $grund : '') . '.', '', '', '', $wer !== '' ? $wer : 'Lager');
+    return (int)$r['charge_id'];
 }
 
 // ===== Einlagern: Produktion → Lager-Übergabe (das LAGER bucht in Lager 1 oder 2) =====
@@ -3881,11 +3888,13 @@ function produktion_an_lager_uebergeben(int $pa_id): int {
 }
 // Das Lager bucht die Fertigware ein (Ziel L1/L2 ergibt sich aus Produkt/Kunde) und schließt die Einlager-Aufgabe.
 // Idempotent: ist schon alles gebucht, wird nur die Aufgabe geschlossen. Rückgabe: ['ok','charge_id','ziel','label'].
-function einlager_buchen(int $pa_id): array {
+function einlager_buchen(int $pa_id, string $wer = '', string $grund = ''): array {
     // Bucht die Fertigware IMMER in Lager 1 (Warenlager). Der Auftrag bleibt danach „versandbereit" – auch
     // bei Fulfillment-Kunden. Die Weiterleitung (an Kunden senden ODER an Lager 2 übergeben) entscheidet das
     // Lager erst beim Versand (auftrag_versenden / auftrag_ins_fremdlager). So ist der Ablauf für alle gleich.
-    $cid  = produktion_fertigware_einbuchen($pa_id);
+    require_once __DIR__ . '/pa_ablauf.php';
+    if (($sp = pa_einlagern_alt_sperre($pa_id)) !== '') return ['ok' => false, 'msg' => $sp];   // Fable-3 T4.2
+    $cid  = produktion_fertigware_einbuchen($pa_id, $wer, $grund);
     $ziel = einlager_ziel_fuer_pa($pa_id);
     foreach (all("SELECT id FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [$pa_id]) as $a)
         aufgabe_erledigen((int)$a['id'], null);

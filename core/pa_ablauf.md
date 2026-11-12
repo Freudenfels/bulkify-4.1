@@ -57,3 +57,5 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
   - Buchung schlägt fehl: `pa_nachtrag_verwerfen()` löscht die eben angelegte Unter-Charge samt Start-Ereignis – kein Buchstabe verbraucht, die laufende Unter-Charge bleibt offen,
   - Buchung gelingt: Nachtrag für heute ohne laufende Unter-Charge läuft weiter (wie bisher), sonst wird die Nachtrag-Unter-Charge abgeschlossen; eine Charge-Abweichung geht erst jetzt als Aufgabe ans Büro,
   - Datum in der Zukunft: abgelehnt.
+
+**Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** `pa_rest_storniert($pa_id)`: PA mit „Rest storniert“ abgeschlossen = kein offener Rest (für `produktion_rest()` und `erp_produktion_rest()`). `pa_einlagern_alt_sperre($pa_id)`: Einlagern über den alten Weg nicht, solange eine Unter-Charge läuft.

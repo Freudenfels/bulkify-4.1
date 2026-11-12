@@ -1263,6 +1263,7 @@ function erp_produktion_gebucht(int $pa_id): float {
     return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
 }
 function erp_produktion_rest(int $pa_id): float {
+    if (function_exists('pa_rest_storniert') && pa_rest_storniert($pa_id)) return 0.0;   // Fable-3 T4.2: gleiche Regel wie produktion_rest()
     $menge = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
     return max(0.0, $menge - erp_produktion_gebucht($pa_id));
 }

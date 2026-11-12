@@ -163,6 +163,17 @@ function pa_unter_chargen(int $pa_id): array {
     pa_schema();
     return all("SELECT * FROM pa_unter_charge WHERE pa_id=? ORDER BY id", [$pa_id]);
 }
+// Wurde der PA mit „Rest storniert“ abgeschlossen (Ereignis abschluss/storniert)? Dann gibt es keinen offenen Rest mehr –
+// kein Phantombestand über den alten Einlager-Weg (Fable-3 T4.2, 13.11.2026). Eine Regel für Dashboard und Produktions-App.
+function pa_rest_storniert(int $pa_id): bool {
+    try { return (int) scalar("SELECT COUNT(*) FROM pa_ereignis WHERE pa_id=? AND typ='abschluss' AND wert='storniert'", [$pa_id]) > 0; }
+    catch (\Throwable $e) { return false; }
+}
+// Alter Einlager-Weg (Rest als eigene Charge ohne Unter-Charge): nicht, solange eine Unter-Charge läuft. '' = darf, sonst Grund.
+function pa_einlagern_alt_sperre(int $pa_id): string {
+    $uc = pa_aktuelle_unter_charge($pa_id);
+    return $uc ? 'Es läuft noch die Unter-Charge ' . $uc['charge_nr'] . ' – erst in der Werk-App abschließen, dann einlagern.' : '';
+}
 function pa_unter_charge(int $id): ?array { pa_schema(); return $id > 0 ? one("SELECT * FROM pa_unter_charge WHERE id=?", [$id]) : null; }
 function pa_aktuelle_unter_charge(int $pa_id): ?array {
     pa_schema();

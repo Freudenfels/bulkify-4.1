@@ -40,3 +40,5 @@ angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Re
 `?p=rohstoff_steckbrief` -> `module/lager/rohstoff_steckbrief.php`: KI-Steckbrief erstellen oder bearbeiten (POST, nur intern).
 
 **api_versand aktion=fertig (11.11.2026):** `ids` (Komma-Liste) -> `{ok, fertig:[ids]}`, welche Aufträge wirklich versandbereit sind (`auftrag_status_kunde`). Für die Lager-App.
+
+**Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** `api_einlager` gibt die Sperre („Es läuft noch die Unter-Charge …“) als Meldung an die Lager-App zurück.
