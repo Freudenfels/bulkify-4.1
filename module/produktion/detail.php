@@ -2,6 +2,12 @@
 // Produktionsauftrag – Stationen/Gates der Reihe nach abarbeiten
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/item_link.php';   // Material anklickbar (Nico 12.11.2026)
+// Artikel-IDs der fehlenden Materialien für die Fehlermeldung (Links „Material öffnen“).
+function pa_teilitems_q(array $r): string {
+    $ids = array_values(array_unique(array_filter(array_map(fn($f) => (int)($f['item_id'] ?? 0), (array)($r['fehlt'] ?? [])))));
+    return $ids ? '&teilitems=' . implode(',', array_slice($ids, 0, 10)) : '';
+}
 
 $id = (int)($_GET['id'] ?? 0);
 
@@ -38,7 +44,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
         }
         pa_ereignis($id, $uc, 'teilmenge', 'Schon geliefert: ' . number_format($menge, 0, ',', '.') . ' Stk per Lieferschein wieder ausgebucht.', '', '', '', $wer);
     }
-    header('Location: ?p=produktionsauftrag&id=' . $id . ($r['ok'] ? '&nachok=' . urlencode($r['msg']) : '&teilfehler=' . urlencode($r['msg']) . '&nachtragen=1') . '#unterchargen'); exit;
+    header('Location: ?p=produktionsauftrag&id=' . $id . ($r['ok'] ? '&nachok=' . urlencode($r['msg']) : '&teilfehler=' . urlencode($r['msg']) . pa_teilitems_q($r) . '&nachtragen=1') . '#unterchargen'); exit;
 }
 
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erledigen') {
@@ -75,7 +81,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
         if ($paT && $paT['kunde_id']) log_aktivitaet('kunde', (int)$paT['kunde_id'], 'team', 'Produktion ' . $paT['nummer'] . ': Teilmenge ' . number_format((float)$_POST['menge'], 0, ',', '.') . ' Stk als Charge ' . $r['charge_nr'] . ' eingebucht.', 'auftrag', 'auftrag', (int)$paT['auftrag_id']);
         header('Location: ?p=produktionsauftrag&id=' . $id . '&teil=' . urlencode($r['charge_nr'])); exit;
     }
-    header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r['msg'])); exit;
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r['msg']) . pa_teilitems_q($r)); exit;
 }
 
 // Nachbuchen „komplett versendet" (Admin, Nico 06.11.2026): Auftrag steht schon auf versendet, gebucht wurde aber nichts.
@@ -259,7 +265,7 @@ if ($kapId) {
     $einhK = produktion_stueck_je_packung($pa);
     $needK = (float)$pa['menge'] * $einhK;
     $verfK = item_bestand($kapId, true);
-    $kapNeed = ['name'=>scalar("SELECT name FROM item WHERE id=?", [$kapId]), 'benoetigt'=>$needK, 'verfuegbar'=>$verfK, 'fehlt'=>max(0.0, $needK - $verfK)];
+    $kapNeed = ['item_id'=>(int)$kapId, 'name'=>scalar("SELECT name FROM item WHERE id=?", [$kapId]), 'benoetigt'=>$needK, 'verfuegbar'=>$verfK, 'fehlt'=>max(0.0, $needK - $verfK)];
 }
 $verbrauch = all("SELECT v.*, c.charge_nr, i.name AS item_name, l.firma AS lieferant FROM produktion_verbrauch v
                   LEFT JOIN charge c ON c.id=v.charge_id LEFT JOIN item i ON i.id=v.item_id
@@ -322,7 +328,15 @@ if (isset($_GET['reserviert'])) echo '<div class="bx-panel badge-ok" style="padd
 if (isset($_GET['resfrei'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Reservierungen freigegeben.</div>';
 if (isset($_GET['teil'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Teilmenge als Charge ' . h((string)$_GET['teil']) . ' eingebucht.</div>';
 if (isset($_GET['schrittfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Schritt nicht abgeschlossen: ' . h((string)$_GET['schrittfehler']) . '</div>';
-if (isset($_GET['teilfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Teilmenge nicht gebucht: ' . h((string)$_GET['teilfehler']) . '</div>';
+if (isset($_GET['teilfehler'])) {
+    $tiLinks = [];
+    foreach (array_slice(array_filter(array_map('intval', explode(',', (string)($_GET['teilitems'] ?? '')))), 0, 10) as $tiId) {
+        $tiN = (string) scalar("SELECT name FROM item WHERE id=?", [$tiId]);
+        if ($tiN !== '') $tiLinks[] = item_link_html($tiId, $tiN) . ' <span class="muted">(Bestand ' . h(rtrim(rtrim(number_format(item_bestand($tiId, true), 3, ',', '.'), '0'), ',')) . ')</span>';
+    }
+    echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Teilmenge nicht gebucht: ' . h((string)$_GET['teilfehler'])
+       . ($tiLinks ? '<div style="margin-top:8px;color:var(--text)">Material öffnen: ' . implode(' · ', $tiLinks) . '</div>' : '') . '</div>';
+}
 if (isset($_GET['godstufe'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">God-Mode: Produktion auf Stufe „' . h((string)$_GET['godstufe']) . '" gesetzt – Gate übersprungen, ohne Bestandsbuchung.</div>';
 if (isset($_GET['godfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">God-Mode: ' . h((string)$_GET['godfehler']) . '</div>';
 if (isset($_GET['mengeok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Produktionsmenge an den Auftrag angeglichen – der Materialbedarf ist jetzt neu berechnet.</div>';
@@ -552,7 +566,7 @@ ob_start(); ?>
     <tbody>
       <?php foreach ($ber['fehlend'] as $f): $fehlt = (float)$f['benoetigt'] - (float)$f['verfuegbar']; ?>
         <tr>
-          <td><?= h($f['name']) ?></td>
+          <td><?= item_link_html((int)($f['item_id'] ?? 0), (string)$f['name']) ?></td>
           <td class="bx-num"><?= $mfmt($f['benoetigt']) ?> <?= h($f['einheit']) ?></td>
           <td class="bx-num"><?= $mfmt($f['verfuegbar']) ?> <?= h($f['einheit']) ?></td>
           <td class="bx-num"><?= bx_fehlt_quar(max(0,$fehlt), (float)($f['quarantaene'] ?? 0), $mfmt(max(0,$fehlt)) . ' ' . $f['einheit'], $mfmt((float)($f['quarantaene'] ?? 0)) . ' ' . $f['einheit'], quarantaene_freigabe_url((int)($f['item_id'] ?? 0))) ?></td>
@@ -725,7 +739,7 @@ ob_start(); ?>
       <thead><tr><th>Rohstoff</th><th>Charge</th><th>Lieferant</th><th class="bx-num">Entnommen</th><th>Datum</th></tr></thead>
       <tbody>
       <?php foreach ($verbrauch as $vb): ?>
-        <tr><td><?= h($vb['item_name'] ?: '–') ?></td><td><?= h($vb['charge_nr'] ?: '–') ?></td>
+        <tr><td><?= item_link_html((int)($vb['item_id'] ?? 0), (string)($vb['item_name'] ?: '–')) ?></td><td><?= h($vb['charge_nr'] ?: '–') ?></td>
             <td class="muted"><?= h($vb['lieferant'] ?: '–') ?></td>
             <td class="bx-num"><?= $mng($vb['menge'], $vb['einheit']) ?></td>
             <td class="muted"><?= !empty($vb['angelegt']) ? h(date('d.m.Y', strtotime((string)$vb['angelegt']))) : '–' ?></td></tr>
@@ -744,7 +758,7 @@ ob_start(); ?>
       <?php $erl = ($pa['status'] === 'erledigt'); ?>
       <?php foreach ($bedarf as $b): $ok = $b['fehlt'] <= 0.0001; ?>
         <tr>
-          <td><?= h($b['name']) ?></td>
+          <td><?= item_link_html((int)($b['item_id'] ?? 0), (string)$b['name']) ?></td>
           <td class="bx-num"><?= $mng($b['benoetigt'], $b['einheit']) ?></td>
           <td class="bx-num"><?= $mng($b['verfuegbar'], $b['einheit']) ?></td>
           <td><?= $ok ? bx_badge('genug','ok') : ($erl ? bx_badge('nicht gebucht','info') : bx_fehlt_quar((float)$b['fehlt'], (float)($b['quarantaene'] ?? 0), html_entity_decode($mng($b['fehlt'], $b['einheit'])), html_entity_decode($mng((float)($b['quarantaene'] ?? 0), $b['einheit'])), quarantaene_freigabe_url((int)$b['item_id']))) ?></td>
@@ -752,7 +766,7 @@ ob_start(); ?>
       <?php endforeach; ?>
       <?php if ($kapNeed): $okK = $kapNeed['fehlt'] <= 0.0001; ?>
         <tr>
-          <td><?= h($kapNeed['name']) ?> <?= bx_badge('Kapselhülle','info') ?></td>
+          <td><?= item_link_html((int)($kapNeed['item_id'] ?? 0), (string)$kapNeed['name']) ?> <?= bx_badge('Kapselhülle','info') ?></td>
           <td class="bx-num"><?= number_format($kapNeed['benoetigt'],0,',','.') ?> Stk</td>
           <td class="bx-num"><?= number_format($kapNeed['verfuegbar'],0,',','.') ?> Stk</td>
           <td><?= $okK ? bx_badge('genug','ok') : ($erl ? bx_badge('nicht gebucht','info') : bx_badge('fehlt ' . number_format($kapNeed['fehlt'],0,',','.') . ' Stk','err')) ?></td>
@@ -822,7 +836,7 @@ if ($bedarfListe):
             $tint = $ok ? 'rgba(29,158,117,.08)' : 'rgba(143,35,27,.08)'; ?>
         <tr style="background:<?= $tint ?>">
           <td style="text-align:center;font-size:16px"><?= $ok ? '<span class="bx-ok">&#10003;</span>' : '<span style="color:#8f231b">&#10007;</span>' ?></td>
-          <td><?= h($r['name']) ?></td>
+          <td><?= item_link_html((int)($r['item_id'] ?? 0), (string)$r['name']) ?></td>
           <td><?= $rolleBadge($r['rolle']) ?></td>
           <td class="bx-num"><?= $mfmt($r['benoetigt']) ?> <?= h($r['einheit']) ?></td>
           <td class="bx-num"><?= $mfmt($r['verfuegbar']) ?> <?= h($r['einheit']) ?></td>

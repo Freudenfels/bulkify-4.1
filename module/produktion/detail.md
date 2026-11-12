@@ -176,3 +176,6 @@ Vor Produktionsbeginn öffnen „Verkürzter Weg“ und „voller Produktionsweg
 - Der Kopf-Knopf heißt jetzt „In der Werk-App produzieren“.
 
 **Doppelbestellung (11.11.2026):** Vor dem Anlegen prüft `core/bestellung_doppelt.php` offene Bestellungen desselben Artikels bzw. Auftrags. Treffer: Pop-up mit Link, weiter nur mit „Trotzdem bestellen“ (steht im Verlauf).
+
+## Material anklickbar (12.11.2026)
+Alle Materialnamen auf der Seite führen per Klick zum Artikel, und zwar in den Reiter **Lager** (`core/item_link.php`). Das gilt für „Material“ (Komponenten), „Wartet auf Material“, „Materialbedarf“ inkl. Kapselhülle und „Entnommene Materialien“. Bei „Teilmenge nicht gebucht“ hängen die fehlenden Artikel als `&teilitems=` an der Umleitung (`pa_teilitems_q()`). Unter der Meldung steht dann „Material öffnen: …“ mit Link und aktuellem freiem Bestand.
