@@ -19,3 +19,5 @@ Funktionen: `lu_fehlt`, `lu_position_fehlt`, `lu_bestellung_fehlt`, `lu_bestelle
 
 ## Unterlagen-Sperre zentral (13.11.2026)
 `lu_bestellen_pruefen($bid, $ausnahme_grund, $wer)`: eine Prüfung für alle Bestellwege. Genutzt von `bestellung_als_bestellt_markieren()` (Bestellseite, Einkauf mobil) und `bestellung_direkt_abschliessen()` (Einkaufsliste, Beschaffungsweg am Auftrag, Produktionsauftrag). Fehlen Unterlagen: gesperrt, Bestellung bleibt Entwurf; Admin-Ausnahme mit Pflicht-Grund. Online-Bestellungen ausgenommen.
+
+**Stornierte Positionen (13.11.2026, Fable-3 T2.5):** `lu_bestellung_fehlt()` zählt Positionen mit `rest_storniert_am` (Position storniert bzw. Rest storniert) nicht mit – eine stornierte Position sperrt das Bestellen nicht mehr.

@@ -82,7 +82,9 @@ function lu_bestellung_fehlt(int $bestellung_id): array {
     $lid = (int)($b['lieferant_id'] ?? 0);
     if ($lid <= 0 || (string)($b['bestellart'] ?? '') === 'online') return [];
     $out = [];
-    foreach (all("SELECT item_id, auftrag_id, bezeichnung FROM bestellung_position WHERE bestellung_id=? AND menge>0", [$bestellung_id]) as $bp)
+    // Fable-3 T2.5 (13.11.2026): stornierte Positionen (rest_storniert_am) zählen für die Sperre nicht mit.
+    $ohneStorno = (function_exists('column_exists') && column_exists('bestellung_position', 'rest_storniert_am')) ? " AND rest_storniert_am IS NULL" : "";
+    foreach (all("SELECT item_id, auftrag_id, bezeichnung FROM bestellung_position WHERE bestellung_id=? AND menge>0" . $ohneStorno, [$bestellung_id]) as $bp)
         foreach (lu_position_fehlt($lid, $bp) as $f) $out[$f['art'] . ':' . $f['item_id'] . ':' . $f['rezeptur_id']] = $f;
     return array_values($out);
 }
