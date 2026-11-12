@@ -1309,7 +1309,7 @@ function erp_fertigware_dokumente_melden(int $charge_id, bool $bericht): array {
         if ($t === '') { $t = bin2hex(random_bytes(16)); q("INSERT INTO app_meta (k,v) VALUES ('einlager_api_token', ?) ON DUPLICATE KEY UPDATE v=VALUES(v)", [$t]); }
         $u = function_exists('pr_benutzer') ? pr_benutzer() : null;
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-        $ch = curl_init($scheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro') . '/?p=api_qm_freigabe');
+        $ch = curl_init($scheme . '://' . (function_exists('bx_intern_host') ? bx_intern_host() : (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro')) . '/?p=api_qm_freigabe');
         curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30, CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_POSTFIELDS => http_build_query(['charge_id' => $charge_id, 'token' => $t, 'wer' => (string)($u['name'] ?? ''), 'bericht' => $bericht ? '1' : '0', 'anlass' => 'produktion']),
             CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 2, CURLOPT_POSTREDIR => 7]);

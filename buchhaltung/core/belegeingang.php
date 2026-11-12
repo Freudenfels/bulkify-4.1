@@ -254,6 +254,7 @@ function be_mail_bereit(): bool {
         && (string) meta_get('belege_imap_user', '') !== '';
 }
 function be_mail_abholen(int $max = 20): array {
+    if (function_exists('bx_testumgebung') && bx_testumgebung()) return ['ok' => false, 'grund' => bx_test_gesperrt('Der Beleg-Abruf'), 'anzahl' => 0];   // 13.11.2026
     if (!function_exists('imap_open')) return ['ok' => false, 'grund' => 'PHP-imap-Extension fehlt auf dem Server.', 'anzahl' => 0];
     $host = (string) meta_get('belege_imap_host', '');
     $user = (string) meta_get('belege_imap_user', '');

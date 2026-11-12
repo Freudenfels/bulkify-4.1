@@ -22,6 +22,19 @@ function ta_sperre(): string {
     $zielHost = strtolower((string) DB_HOST); $zielName = (string) DB_NAME;
     if (strtolower(ta_wert('LIVE_DB_HOST', '127.0.0.1')) === $zielHost && ta_wert('LIVE_DB_NAME') === $zielName)
         return 'Quelle und Ziel sind dieselbe Datenbank – Abzug gesperrt.';
+    // 13.11.2026: nicht nur die Texte vergleichen, sondern die echten Verbindungen (Server, Port, Datenbank, Server-UUID).
+    try {
+        $kennung = function (PDO $p): array {
+            $r = $p->query("SELECT @@hostname AS h, @@port AS p, DATABASE() AS d")->fetch(PDO::FETCH_ASSOC) ?: [];
+            try { $r['u'] = (string) $p->query("SELECT @@server_uuid")->fetchColumn(); } catch (\Throwable $e) { $r['u'] = ''; }   // MariaDB kennt server_uuid nicht
+            return $r;
+        };
+        $q = $kennung(ta_live()); $z = $kennung(db());
+        if ((string)$q['d'] === (string)$z['d'] && (((string)$q['u'] !== '' && (string)$q['u'] === (string)$z['u']) || ((string)$q['h'] === (string)$z['h'] && (string)$q['p'] === (string)$z['p'])))
+            return 'Quelle und Ziel sind laut Datenbank-Server dieselbe Datenbank (' . $z['h'] . ':' . $z['p'] . '/' . $z['d'] . ') – Abzug gesperrt.';
+        $zm = db()->query("SELECT v FROM app_meta WHERE k='umgebung'"); $zm = $zm ? (string)($zm->fetchColumn() ?: '') : '';
+        if ($zm === 'live') return 'Das Ziel trägt den Live-Marker (app_meta umgebung=live) – Abzug gesperrt, live wird nie überschrieben.';
+    } catch (\Throwable $e) { return 'Verbindungsprüfung fehlgeschlagen (' . $e->getMessage() . ') – Abzug gesperrt.'; }
     return '';
 }
 
@@ -71,6 +84,8 @@ function ta_tabelle(string $t): int {
         if (count($paket) >= 300) $schreib();
     }
     $schreib();
+    // 13.11.2026: der Live-Marker darf nie in der Testdatenbank stehen (sonst sperrt der Riegel – und er gehört nur live).
+    if ($t === 'app_meta') { $ziel->exec("DELETE FROM app_meta WHERE k='umgebung'"); $ziel->exec("INSERT INTO app_meta (k, v) VALUES ('umgebung', 'test')"); }
     $ziel->exec('SET FOREIGN_KEY_CHECKS=1');
     return $n;
 }
@@ -100,4 +115,7 @@ function ta_dateien(int $max = 2000): array {
 // Nach dem Abzug: Merker setzen, damit sichtbar ist, von wann der Datenstand ist.
 function ta_fertig(): void {
     meta_set('test_abzug_am', gmdate('Y-m-d H:i:s'));
+    // 13.11.2026: interne Schlüssel nach dem Abzug in test neu (sonst gälte der Live-Token auch hier).
+    meta_set('einlager_api_token', bin2hex(random_bytes(16)));
+    meta_set('umgebung', 'test');
 }

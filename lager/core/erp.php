@@ -213,7 +213,7 @@ function erp_dashboard_versand(string $aktion, int $auftrag_id, int $menge = 0, 
     if (!function_exists('curl_init')) return ['ok' => false, 'msg' => 'PHP-curl fehlt.'];
     $token = erp_einlager_token();
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $ch = curl_init($scheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro') . '/?p=api_versand');
+    $ch = curl_init($scheme . '://' . (function_exists('bx_intern_host') ? bx_intern_host() : (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro')) . '/?p=api_versand');
     curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 45, CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_POSTFIELDS => http_build_query(['aktion' => $aktion, 'auftrag_id' => $auftrag_id, 'menge' => $menge, 'token' => $token] + $extra),
         CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 2, CURLOPT_POSTREDIR => 7]);
@@ -1541,7 +1541,7 @@ function erp_qm_freigabe_melden(int $charge_id): array {
     if ($token === '') return ['ok' => false];
     $u = function_exists('lg_benutzer') ? lg_benutzer() : null;
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $host   = (function_exists('bx_intern_host') ? bx_intern_host() : (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro'));
     $ch = curl_init($scheme . '://' . $host . '/?p=api_qm_freigabe');
     curl_setopt_array($ch, [
         CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 45, CURLOPT_CONNECTTIMEOUT => 15,
@@ -1559,7 +1559,7 @@ function erp_einlager_buchen(int $pa_id): array {
     $token = erp_einlager_token();
     if ($token === '') return ['ok' => false, 'meldung' => 'app_meta nicht verfügbar – Token kann nicht gesetzt werden.'];
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $host   = (function_exists('bx_intern_host') ? bx_intern_host() : (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro'));
     $url    = $scheme . '://' . $host . '/?p=api_einlager';
     $ch = curl_init($url);
     curl_setopt_array($ch, [

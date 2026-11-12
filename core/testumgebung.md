@@ -22,3 +22,10 @@ Live (app.bulkify.pro) ist nie betroffen.
 ## Funktionen
 `bx_testumgebung()`, `bx_test_mail_an()`, `bx_test_mail_umleiten($to, $betreff)`, `bx_test_gesperrt($was)`,
 `bx_test_band_html()`, `bx_test_start()` (Ausgabepuffer, setzt Band + noindex).
+
+## Riegel und Datei-Marker (13.11.2026)
+- Datei-Marker `.testumgebung` im Projektstamm des Test-Ordners: Testmodus auch auf der Kommandozeile (`bx_test_marker_da()`), bevor eine secrets.php geladen ist. Der Test-Deploy legt ihn an.
+- `bx_test_riegel($pdo)`: jedes Programm ruft ihn direkt nach dem Verbinden. Testmodus + `app_meta umgebung=live` = sofort Abbruch (503). Live setzt den Marker auf app.bulkify.pro selbst.
+- Sub-Apps (Lager, CRM, Buchhaltung, Produktion) nehmen im Test-Ordner nur die eigene secrets.php, nie `BULKIFY_SECRETS` oder Nachbar-/Elternordner.
+- `bx_intern_host()`: interne Aufrufe Lager/Produktion -> Dashboard und QR-Links fallen im Testmodus nie auf app.bulkify.pro zurück.
+- Beleg-Abruf der Buchhaltung (`be_mail_abholen`) im Testmodus gesperrt.

@@ -12,13 +12,52 @@
 
 if (!function_exists('bx_testumgebung')) {
 
+// 13.11.2026: zusätzlich der Datei-Marker „.testumgebung“ im Projektstamm des Test-Ordners – erkennt den Testmodus auch auf der
+// Kommandozeile (Crons, tools/), bevor eine secrets.php geladen ist. Der Test-Deploy legt ihn an, live gibt es ihn nie.
+function bx_test_marker_da(): bool {
+    static $da = null;
+    if ($da === null) $da = is_file(dirname(__DIR__) . '/.testumgebung');
+    return $da;
+}
 function bx_testumgebung(): bool {
     static $an = null;
     if ($an !== null) return $an;
     $an = (defined('BX_TESTUMGEBUNG') && BX_TESTUMGEBUNG)
         || !empty($GLOBALS['BX_TESTUMGEBUNG'])
+        || bx_test_marker_da()
         || (PHP_SAPI !== 'cli' && preg_match('/^test\./i', (string)($_SERVER['HTTP_HOST'] ?? '')) === 1);
     return $an;
+}
+
+// Riegel „Testmodus an, Datenbank ist live“ (13.11.2026): Jedes Programm (Dashboard, Lager, CRM, Buchhaltung, Produktion) ruft
+// das direkt nach dem Verbinden auf. Live trägt den Marker app_meta umgebung=live (setzt sich auf app.bulkify.pro selbst).
+// Testmodus + Marker gefunden = sofort Abbruch mit Meldung – die Testumgebung schreibt nie in die Live-Datenbank.
+function bx_test_riegel(PDO $pdo): void {
+    static $geprueft = false;
+    if ($geprueft) return;
+    $geprueft = true;
+    try {
+        if (bx_testumgebung()) {
+            $st = $pdo->prepare("SELECT v FROM app_meta WHERE k='umgebung'"); $st->execute();
+            if ((string)($st->fetchColumn() ?: '') === 'live') {
+                if (PHP_SAPI !== 'cli' && !headers_sent()) { http_response_code(503); header('Content-Type: text/plain; charset=utf-8'); }
+                echo 'Abbruch: Testmodus ist an, aber die Datenbank ist die LIVE-Datenbank (app_meta umgebung=live). Bitte die secrets.php der Testumgebung prüfen.';
+                exit(1);
+            }
+        } elseif (PHP_SAPI !== 'cli' && preg_match('/^app\.bulkify\.pro$/i', (string)($_SERVER['HTTP_HOST'] ?? '')) === 1) {
+            // Live markiert sich selbst (einmal je Anfrage geprüft, geschrieben nur, wenn er fehlt).
+            $st = $pdo->prepare("SELECT v FROM app_meta WHERE k='umgebung'"); $st->execute();
+            if ((string)($st->fetchColumn() ?: '') !== 'live') $pdo->prepare("INSERT INTO app_meta (k, v) VALUES ('umgebung', 'live') ON DUPLICATE KEY UPDATE v='live'")->execute();
+        }
+    } catch (\Throwable $e) { /* app_meta noch nicht da (frische Installation) */ }
+}
+
+// Host für interne Aufrufe Lager/Produktion -> Dashboard und für QR-Links (13.11.2026): im Testmodus nie app.bulkify.pro.
+function bx_intern_host(): string {
+    $h = (string)($_SERVER['HTTP_HOST'] ?? '');
+    if ($h !== '') return $h;
+    if (bx_testumgebung()) return defined('BX_TEST_HOST') ? (string) BX_TEST_HOST : 'test.bulkify.pro';
+    return 'app.bulkify.pro';
 }
 
 // Ziel aller Mails im Testmodus. '' = nur ins Mail-Protokoll schreiben, nichts versenden.

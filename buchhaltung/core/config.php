@@ -19,6 +19,9 @@ $__kandidaten = [BX_ROOT . '/secrets.php'];
 $__ausUmgebung = getenv('BULKIFY_SECRETS');
 if ($__ausUmgebung !== false && trim($__ausUmgebung) !== '') $__kandidaten[] = trim($__ausUmgebung);
 $__kandidaten[] = dirname(BX_ROOT) . '/secrets.php';
+// 13.11.2026: im Test-Ordner (Marker .testumgebung im Projektstamm) NUR die eigene secrets.php – nie BULKIFY_SECRETS,
+// Nachbar- oder Elternordner (die könnten auf live zeigen).
+if (is_file(dirname(BX_ROOT) . '/.testumgebung')) $__kandidaten = [BX_ROOT . '/secrets.php', dirname(BX_ROOT) . '/secrets.php'];
 foreach ($__kandidaten as $__pfad) {
     if (!is_file($__pfad) || !is_readable($__pfad)) continue;
     require $__pfad;

@@ -29,7 +29,7 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
     $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn($x) => $x > 0)));
     if (!$ids) return null;
 
-    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $host   = (function_exists('bx_intern_host') ? bx_intern_host() : (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro'));
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 
     $mm = fn(float $v): float => $v / 25.4 * 72;
@@ -275,7 +275,7 @@ function lg_probe_etikett_pdf(int $probe_id): ?string {
     $p = erp_probe_etikett_daten($probe_id);
     if (!$p) return null;
 
-    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $host   = (function_exists('bx_intern_host') ? bx_intern_host() : (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro'));
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $cid    = (int)($p['charge_id'] ?? 0);
     $url    = $cid > 0 ? $scheme . '://' . $host . '/lager/?p=charge&id=' . $cid : '';
@@ -473,7 +473,7 @@ function lg_gebinde_etikett_pdf(int $charge_id, string $format = 'gross'): ?stri
     $c = erp_charge_voll($charge_id);
     if (!$c) return null;
 
-    $host   = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+    $host   = (function_exists('bx_intern_host') ? bx_intern_host() : (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro'));
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $format = $format === 'klein' ? 'klein' : 'gross';
     $mm = fn(float $v): float => $v / 25.4 * 72;

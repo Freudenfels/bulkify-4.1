@@ -15,3 +15,9 @@ Reihenfolge: `app_meta` zuerst (Merker gelten sofort), `benutzer` zuletzt (danac
 
 Funktionen: `ta_sperre()`, `ta_live()`, `ta_tabellen()`, `ta_tabelle($t)`, `ta_dateien($max)`, `ta_fertig()`.
 Aufruf: Dashboard `?p=test_abzug` (Admin) oder `php tools/test_abzug.php`.
+
+## Sicherer Abzug (13.11.2026)
+- Quelle und Ziel werden über die echte Verbindung verglichen (`@@hostname`, `@@port`, `DATABASE()`, `@@server_uuid`), nicht nur als Text.
+- Trägt das Ziel den Live-Marker `app_meta umgebung=live`: Abbruch.
+- Beim Kopieren von `app_meta` wird der Marker im Ziel auf `test` gesetzt.
+- `ta_fertig()` erzeugt `einlager_api_token` neu.

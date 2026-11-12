@@ -15,3 +15,6 @@ Thumbs.db
 # Backups
 *.bak
 *.sql
+
+# Datei-Marker der Testumgebung (legt der Test-Deploy auf dem Server an, nie committen)
+.testumgebung
