@@ -40,7 +40,15 @@ function bestellung_doppelt_treffer(array $item_ids = [], array $bulk_produkt_id
 // Treffer gefunden, noch nicht bestätigt: Formular-Daten merken, zurück auf die Seite, dort erscheint das Pop-up.
 function bestellung_doppelt_stopp(array $treffer, string $zurueck): void {
     $_SESSION['bx_doppelt'] = ['post' => $_POST, 'uri' => (string)($_SERVER['REQUEST_URI'] ?? ''), 'treffer' => $treffer, 'zurueck' => $zurueck];
+    $_SESSION['bx_doppelt_vorbelegung'] = $_POST;   // Fable-3 T2.10: das Formular dahinter bleibt ausgefüllt (bestellung_doppelt_vorbelegung)
     header('Location: ' . $zurueck); exit;
+}
+// Eingaben, die zur Doppel-Warnung geführt haben – einmalig, damit die Seite dahinter ihr Formular wieder ausfüllen kann
+// („Abbrechen“ leert so nichts). null = keine.
+function bestellung_doppelt_vorbelegung(): ?array {
+    $p = $_SESSION['bx_doppelt_vorbelegung'] ?? null;
+    unset($_SESSION['bx_doppelt_vorbelegung']);
+    return is_array($p) ? $p : null;
 }
 // Nach dem bestätigten Anlegen: Vermerk im Verlauf jeder neuen Bestellung (wer, welche offene Bestellung).
 function bestellung_doppelt_vermerken(array $neue_ids, array $treffer): void {
@@ -73,6 +81,6 @@ function bestellung_doppelt_dialog(): string {
          . '<p class="muted" style="margin-top:0">Für diesen Auftrag/Artikel ist schon bestellt:</p><ul style="margin:0 0 12px 18px;padding:0">' . $zeilen . '</ul>'
          . '<p class="muted">Trotzdem bestellen? Die Bestätigung steht im Verlauf der neuen Bestellung.</p>'
          . '<form method="post" action="' . h($ziel) . '" style="margin:0">' . $hidden . '<input type="hidden" name="doppelt_ok" value="1">'
-         . '<div class="bx-row" style="justify-content:flex-end;gap:8px;margin-top:14px"><a class="btn btn-ghost" href="' . h((string)$d['zurueck']) . '">Abbrechen</a>'
+         . '<div class="bx-row" style="justify-content:flex-end;gap:8px;margin-top:14px"><button type="button" class="btn btn-ghost" onclick="this.closest(&quot;dialog&quot;).close()" title="Zurück zum Formular – die Eingaben bleiben stehen">Abbrechen</button>'
          . '<button class="btn btn-primary" type="submit">Trotzdem bestellen</button></div></form></dialog>';
 }

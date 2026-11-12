@@ -13,3 +13,5 @@ Sofortfix 11.11.2026 (Fable-Prüfung 3.6, Zusatzfrage B). Live waren am 09.11. d
 - `bestellung_doppelt_vermerken($neueIds, $treffer)` – Verlaufseintrag „Trotz offener Bestellung BE-… angelegt – bestätigt von …“.
 
 **Eingebaut in:** Einkaufsliste (Vorsorglich und Bestellen in allen drei Modi: Portal, Direkt, Online), Beschaffungsweg am Auftrag (`auftrag_beschaffung_bestellen`, legt bei Rest 0 serverseitig nichts an), Produktionsauftrag „Bedarf bestellen“.
+
+**Abbrechen leert nichts (13.11.2026, Fable-3 T2.10):** „Abbrechen“ schließt nur das Pop-up. `bestellung_doppelt_stopp()` merkt die Eingaben zusätzlich für die Seite dahinter; `bestellung_doppelt_vorbelegung()` gibt sie einmalig zurück (Bestellseite „Neue Bestellung“ füllt Lieferant, Notizen und Positionen wieder aus).

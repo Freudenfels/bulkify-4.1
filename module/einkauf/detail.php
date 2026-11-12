@@ -298,6 +298,19 @@ if ($neu && isset($_GET['ki']) && !empty($_SESSION['ki_best'])) {
     }
     if ($kiPos) $positionen = $kiPos;   // Formular unten mit den erkannten Zeilen vorbelegen
 }
+// Fable-3 T2.10: kommt die Seite von der Doppel-Warnung zurück, steht das Formular wieder mit den Eingaben da („Abbrechen“ leert nichts).
+if ($neu) {
+    require_once BX_ROOT . '/core/bestellung_doppelt.php';
+    if (($vb = bestellung_doppelt_vorbelegung()) !== null) {
+        $b['lieferant_id'] = (int)($vb['lieferant_id'] ?? 0); $b['notiz'] = (string)($vb['notiz'] ?? ''); $b['hinweis_lieferant'] = (string)($vb['hinweis_lieferant'] ?? '');
+        $positionen = [];
+        foreach ((array)($vb['p_item'] ?? []) as $i => $iid) {
+            if ((int)$iid <= 0) continue;
+            $positionen[] = ['id' => 0, 'item_id' => (int)$iid, 'menge' => zahl_lesen((string)($vb['p_menge'][$i] ?? ''), true) ?: '',
+                             'ek_preis' => ($vb['p_ek'][$i] ?? '') !== '' ? zahl_lesen((string)$vb['p_ek'][$i]) : '', 'auftrag_id' => (string)($vb['p_auftrag'][$i] ?? '')];
+        }
+    }
+}
 
 function pos_options(array $items, $sel): string {
     $s = '<option value="">– Artikel wählen –</option>';

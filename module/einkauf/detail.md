@@ -111,3 +111,5 @@ Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artik
 **Bearbeiten speichert ohne Neuschreiben (13.11.2026, Fable-3 T2.6):** „Speichern“ aktualisiert die Positionen über ihre ID (`p_id[]`, `bestellung_positionen_speichern()`) statt alle zu löschen und neu anzulegen. Positions-Storno, Liefermenge und Chargen-Verknüpfung bleiben erhalten. Stornierte oder gelieferte Positionen (`bestellung_position_gesperrt()`) stehen nur zur Anzeige im Formular und werden nie geändert oder gelöscht. Eine entfernte Position, an der Lieferanten-Chargen oder Dokumente hängen, bleibt (Hinweis).
 
 **Stornierte Bestellung (13.11.2026, Fable-3 T2.8):** Die Spalte „offen“ zeigt 0 (nichts mehr unterwegs).
+
+**Doppel-Warnung (13.11.2026, Fable-3 T2.10):** Nach der Warnung steht das Formular „Neue Bestellung“ wieder mit den Eingaben da (`bestellung_doppelt_vorbelegung()`); „Abbrechen“ leert nichts.
