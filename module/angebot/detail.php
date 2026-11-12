@@ -37,6 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$neu && in_array($_POST['aktion'] 
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? 'kopf_save';
+    // Im Bearbeiten-Modus bleiben (Nico 12.11.2026): Speichern der Tabelle soll nicht in die Übersicht springen, sondern
+    // die Tabelle mit neuem Gesamtpreis zeigen. Die Formulare posten auf die aktuelle URL, ?edit=1 ist also mit dabei.
+    $editQ = isset($_GET['edit']) ? '&edit=1' : '';
     $f = fn($k) => trim($_POST[$k] ?? '');
 
     if ($aktion === 'kopf_save') {
@@ -70,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Kundenspezifischer Produktname (je Produkt+Kunde) – nur setzen, wenn ausgefüllt (leer löscht NICHT,
             // um ihn nicht versehentlich beim Kopf-Speichern zu verlieren; Entfernen geht am Produkt).
             if ($produkt_id && $kunde_id && $f('kn_name') !== '') produkt_kundenname_setzen((int)$produkt_id, (int)$kunde_id, $f('kn_name'));
-            header('Location: ?p=angebot&id=' . $id . '&gespeichert=1'); exit;
+            header('Location: ?p=angebot&id=' . $id . '&gespeichert=1' . $editQ); exit;
         }
     } elseif ($aktion === 'ki_pdf' && !$neu) {
         // Angebots-PDF (v3) per KI auslesen und die Positionen + Staffel dieses Angebots damit füllen.
@@ -176,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q("UPDATE angebot SET preise_kunde=0 WHERE id=?", [(int)$id]);
             $warnP = '&preisgesperrt=1';
         }
-        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1' . $warnP . '#positionen'); exit;
+        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1' . $editQ . $warnP . '#positionen'); exit;
     } elseif ($aktion === 'preise_freigeben' && !$neu) {
         // Preise ausdruecklich fuer den Kunden freigeben (Bestaetigung erfolgt im UI-Popup).
         q("UPDATE angebot SET preise_kunde=1 WHERE id=?", [(int)$id]);
@@ -272,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=angebote&geloescht=1'); exit;
     } elseif ($aktion === 'pos_reset' && !$neu) {
         q("DELETE FROM angebot_position WHERE angebot_id=?", [(int)$id]);
-        header('Location: ?p=angebot&id=' . $id . '&zurueckgesetzt=1'); exit;
+        header('Location: ?p=angebot&id=' . $id . '&zurueckgesetzt=1' . $editQ); exit;
     } elseif ($aktion === 'rezeptur_verknuepfen' && !$neu) {
         // Angebot ohne Rezeptur mit einer bestehenden Rezeptur verknüpfen (Override am Angebot).
         $rzid = (int)($_POST['rezeptur_id'] ?? 0);
@@ -280,9 +283,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q("UPDATE angebot SET rezeptur_id=? WHERE id=?", [$rzid, (int)$id]);
             $pidA = (int) scalar("SELECT produkt_id FROM angebot WHERE id=?", [(int)$id]);
             if ($pidA && !(int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [$pidA])) q("UPDATE produkt SET rezeptur_id=? WHERE id=?", [$rzid, $pidA]);
-            header('Location: ?p=angebot&id=' . $id . '&rezverk=1'); exit;
+            header('Location: ?p=angebot&id=' . $id . '&rezverk=1' . $editQ); exit;
         }
-        header('Location: ?p=angebot&id=' . $id . '&rezverkfehler=1'); exit;
+        header('Location: ?p=angebot&id=' . $id . '&rezverkfehler=1' . $editQ); exit;
     } elseif (in_array($aktion, ['add_rezeptur','add_rohstoff','add_dienstleistung'], true) && !$neu) {
         $aRow = one("SELECT kunde_id, marge_override FROM angebot WHERE id=?", [(int)$id]);
         $kid = (int)($aRow['kunde_id'] ?? 0) ?: null;
@@ -310,7 +313,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($dlid > 0 && function_exists('dl_position_add')) {
                 $mng = (float)str_replace(',', '.', $_POST['add_dl_menge'] ?? '1') ?: 1;
                 dl_position_add((int)$id, $dlid, $mng);
-                header('Location: ?p=angebot&id=' . $id . '&gespeichert=1#positionen'); exit;
+                header('Location: ?p=angebot&id=' . $id . '&gespeichert=1' . $editQ . '#positionen'); exit;
             }
             $bez = trim($_POST['add_bez'] ?? '');
             if ($bez !== '') {
@@ -320,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 angebot_gruppe_anhaengen((int)$id, [['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>trim($_POST['add_besch'] ?? ''), 'menge'=>$mng, 'einheit'=>trim($_POST['add_einheit'] ?? ''), 'preis_cent'=>(int)round($preis*100), 'preis_e4'=>(int)round($preis*10000), 'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'manuell']]);
             }
         }
-        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1#positionen'); exit;
+        header('Location: ?p=angebot&id=' . $id . '&gespeichert=1' . $editQ . '#positionen'); exit;
     } elseif ($aktion === 'anfrage_uebernehmen' && !$neu) {
         // Der Kunde hat seine Anfrage (z. B. Menge) geaendert. Die neu angefragte Konfiguration aus der
         // verknuepften Portal-Anfrage als Positionen ins Angebot uebernehmen (ersetzt die bisherigen).

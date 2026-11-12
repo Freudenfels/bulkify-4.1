@@ -226,3 +226,7 @@ Steht dort „unter MOQ“, ist das nur ein Hinweis und keine Sperre.
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 Rohstoffkosten: Kennzeichen „Unterlagen fehlen“ beim gewählten Lieferanten (kalkulieren erlaubt, bestellen erst mit Unterlagen).
+
+## Im Bearbeiten-Modus bleiben (12.11.2026)
+Nico: „Wenn ich die Tabelle bearbeite und speichere, lande ich in der Übersicht. Ich will die Tabelle speichern und sehen, wie sich der Gesamtpreis ändert.“
+Kommt das Speichern aus dem Bearbeiten-Modus (`?edit=1`), behält jede Weiterleitung `&edit=1` (Variable `$editQ`). Das gilt für Positionen speichern, Kopf speichern, Rezeptur/Rohstoff/Dienstleistung hinzufügen, Positionen zurücksetzen und Rezeptur verknüpfen. Man bleibt also in der Tabelle bei `#positionen` und sieht die neuen Summen. „Speichern & an Kunden senden“ geht weiter in die Übersicht.
