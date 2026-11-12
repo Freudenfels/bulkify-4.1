@@ -824,6 +824,7 @@ function werk_msg(string $msg, string $lang): string {
         'Keine laufende Unter-Charge.' => ['No running sub-batch.', 'Немає активної підпартії.'],
         'Bitte die Menge im Karton angeben.' => ['Please enter the quantity in the carton.', 'Вкажіть кількість у коробці.'],
         'Erst Kapseln wiegen (Stichprobe), dann den Sack.' => ['Weigh capsules first (sample), then the bag.', 'Спочатку зважте капсули (проба), потім мішок.'],
+        'Bitte den Gebindetyp (Tara) wählen.' => ['Please choose the container type (tare).', 'Виберіть тип тари.'],
         'Sackgewicht minus Tara muss größer 0 sein.' => ['Bag weight minus tare must be greater than 0.', 'Вага мішка мінус тара має бути більше 0.'],
         ' Bitte mehrmals wiegen (mind. 3 Proben).' => [' Please weigh several times (at least 3 samples).', ' Зважте кілька разів (мінімум 3 проби).'],
         'Produktionsauftrag nicht gefunden.' => ['Production order not found.', 'Виробниче замовлення не знайдено.'],

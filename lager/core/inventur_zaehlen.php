@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../core/gewicht.php';   // gewicht_lesen(), tara_aus_id() (13.11.2026)
 // Inventur – Zählen (11.11.2026). Blind: Nichts hier gibt dem Zähler eine Soll-Menge zurück. Soll und gebuchter Ort werden
 // beim Speichern eines Scans eingefroren (lg_inventur_zaehlung.soll/soll_ort) – Bewegungen danach ändern die Zählung nicht.
 
@@ -89,7 +90,10 @@ function inv_ist_rechnen(array $o, array $e): array {
     if ($art === 'leer') return $r;
     if ($art === 'voll') { $info = inv_objekt_info(['id' => 0], $o); $r['ist'] = (float)($info['voll'] ?? 0); return $r; }
     if ($art === 'wiegen' || $art === 'kapsel') {
-        $r['brutto'] = $n('brutto'); $r['tara'] = max(0, $n('tara'));
+        $r['brutto'] = $n('brutto');
+        // 13.11.2026 (Fable-3 T1.1): Tara aus lg_tara über die ID; die Zahl aus dem Feld nur, wenn sie von Hand geändert wurde.
+        $ta = empty($e['tara_hand']) ? tara_aus_id((int)($e['tara_id'] ?? 0)) : null;
+        $r['tara'] = $ta ? (float)$ta['kg'] : max(0, $n('tara'));
         $netto = max(0.0, $r['brutto'] - $r['tara']);   // kg
         if ($art === 'kapsel') {
             $r['mg'] = $n('kapsel_mg') ?: erp_inv_kapsel_mg((int)$o['item_id'], (int)$o['charge_id']);

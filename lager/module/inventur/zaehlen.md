@@ -9,7 +9,7 @@ Ablauf:
 2. Jedes Gebinde scannen. Angezeigt werden Artikel, Charge, MHD und die Einheit groß.
 3. Menge eingeben:
    - Stk eingeben oder „voll, original verschlossen“
-   - wiegen: Brutto, Gebindetyp/Tara, Netto wird live gerechnet
+   - wiegen: Brutto, Gebindetyp/Tara, Netto wird live gerechnet. Die Auswahl sendet die ID des Gebindetyps; ein von Hand geändertes Tara-Feld wird als Zahl mitgeschickt.
    - Bulk-Sack: Kapselgewicht, Kapseln werden live gerechnet
    - „Gebinde leer“
 4. Ware ohne Etikett: „Gefunden ohne Etikett“. Erfasst werden Artikelsuche mit Synonymen und Kapselgröße, Charge, MHD, Menge und ein Pflichtfoto. Danach wird das Etikett gedruckt.

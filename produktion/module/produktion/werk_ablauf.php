@@ -108,8 +108,8 @@ $kap = erp_wa_kapsel_info($id);
     <div class="step-sub" style="margin-top:14px"><?= h($T['wa_bag_h']) ?></div>
     <form method="post" class="wa-zeile"><input type="hidden" name="aktion" value="wa_sack"><input type="hidden" name="pa_id" value="<?= (int)$id ?>">
       <input type="text" inputmode="decimal" name="brutto" placeholder="<?= h($T['wa_bag_ph']) ?>" style="width:220px">
-      <select name="tara" onchange="this.form.tara_name.value=this.options[this.selectedIndex].text"><?php foreach ($tara as $t): ?><option value="<?= h((string)$t['tara_kg']) ?>"><?= h((string)$t['name']) ?> (<?= h($mz($t['tara_kg'])) ?> kg)</option><?php endforeach; ?></select>
-      <input type="hidden" name="tara_name" value="<?= h((string)($tara[0]['name'] ?? '')) ?>"><button class="btn btn-ghost" type="submit"><?= h($T['wa_save_bag']) ?></button></form>
+      <select name="tara_id"><?php foreach ($tara as $t): ?><option value="<?= (int)$t['id'] ?>"><?= h((string)$t['name']) ?> (<?= h($mz($t['tara_kg'])) ?> kg)</option><?php endforeach; ?></select>
+      <button class="btn btn-ghost" type="submit"><?= h($T['wa_save_bag']) ?></button></form>
     <div class="muted" style="font-size:16px"><?= h(sprintf($T['wa_bags_info'], count($saecke), $mz($uc['kapseln_bulk'] ?? 0))) ?><?= $kap['je_packung'] ? h(sprintf($T['wa_bags_jars'], $mz(floor((float)($uc['kapseln_bulk'] ?? 0) / max(1, $kap['je_packung']))), $kap['je_packung'])) : '' ?></div>
     <?php endif; ?>
   </div>

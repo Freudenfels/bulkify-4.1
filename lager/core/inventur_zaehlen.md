@@ -11,7 +11,7 @@ Seit 11.11.2026. **Keine Funktion gibt dem Zähler eine Soll-Menge zurück.** Be
 - **`inv_objekt_info()`** zeigt: Artikel, Charge, MHD, Einheit (groß), Gebinde x von y, Inhalt „voll, original verschlossen“ und Eingabeart.
   - Der Inhalt „voll“ kommt aus der Gebinde-Menge beim Wareneingang, bei Chargen ohne Gebinde aus Menge ÷ Pakete.
 - **Eingabeart (`inv_modus`):**
-  - `wiegen` (kg/g): Brutto minus Tara aus `lg_tara` (änderbar).
+  - `wiegen` (kg/g): Brutto minus Tara aus `lg_tara` (änderbar). Das Formular sendet `tara_id`; solange das Tara-Feld nicht von Hand geändert ist (`tara_hand=0`), nimmt der Server den Wert aus `lg_tara` (`tara_aus_id()`), sonst die getippte Zahl (13.11.2026).
   - `kapsel` (Bulk-Kapseln in Stk): Kapseln = Netto ÷ Kapselgewicht. Das Kapselgewicht ist Füllgewicht der Rezeptur plus Leerkapsel und änderbar. Angezeigt werden kg und Stk.
   - `stk`: Menge oder „voll, original verschlossen“.
   - „Gebinde leer“ gibt Ist 0, die Ausbuchung wird dann vorgeschlagen.

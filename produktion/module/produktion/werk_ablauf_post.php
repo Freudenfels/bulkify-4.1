@@ -91,7 +91,7 @@ if ($aktion === 'wa_kapselprobe' && function_exists('pa_kapselprobe')) {
     $flash($r['msg'], $r['ok']); weiter($zur);
 }
 if ($aktion === 'wa_sack' && function_exists('pa_sackgewicht')) {
-    $r = pa_sackgewicht((int)$uc['id'], $dez('brutto'), $dez('tara'), (string)($_POST['tara_name'] ?? ''), $von);
+    $r = pa_sackgewicht((int)$uc['id'], $dez('brutto'), (int)($_POST['tara_id'] ?? 0), $von);   // 13.11.2026: Tara nur als ID
     $flash($r['msg'], $r['ok']); weiter($zur);
 }
 if ($aktion === 'wa_abschluss') {

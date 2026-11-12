@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/gewicht.php';   // gewicht_lesen(), tara_aus_id() (13.11.2026)
 // Kapselzahl aus dem Gewicht (Soll-Handbuch 4.8, Nico 11.11.2026 Ergänzung 5). Gemeinsam (nur q/one/all/scalar).
 // - Stichproben: mehrmals je 10 Kapseln wiegen -> Ø-Gewicht je Kapsel (pa_unter_charge.kapsel_mg).
 // - Sack wiegen: Kapseln = (Sack − Tara des Sacktyps aus lg_tara) ÷ Ø-Gewicht (pa_unter_charge.kapseln_bulk = Summe aller Säcke).
@@ -18,7 +19,11 @@ function pa_kapselprobe(int $uc_id, float $gramm, int $anzahl, string $von): arr
     $n = (int) scalar("SELECT COUNT(*) FROM pa_ereignis WHERE unter_charge_id=? AND typ='kapselprobe'", [$uc_id]);
     return ['ok' => true, 'msg' => 'Probe gespeichert: ' . pa_mz($mg) . ' mg je Kapsel. Ø aus ' . $n . ' Probe(n): ' . pa_mz($avg) . ' mg.' . ($n < 3 ? ' Bitte mehrmals wiegen (mind. 3 Proben).' : '')];
 }
-function pa_sackgewicht(int $uc_id, float $brutto_kg, float $tara_kg, string $tara_name, string $von): array {
+// 13.11.2026 (Fable-3 T1.1): Tara kommt nur als ID aus dem Formular, Wert und Name aus lg_tara (tara_aus_id()).
+function pa_sackgewicht(int $uc_id, float $brutto_kg, int $tara_id, string $von): array {
+    $tara = tara_aus_id($tara_id);
+    if (!$tara) return ['ok' => false, 'msg' => 'Bitte den Gebindetyp (Tara) wählen.'];
+    $tara_kg = (float)$tara['kg']; $tara_name = (string)$tara['name'];
     $uc = pa_unter_charge($uc_id);
     if (!$uc) return ['ok' => false, 'msg' => 'Keine laufende Unter-Charge.'];
     if ((float)$uc['kapsel_mg'] <= 0) return ['ok' => false, 'msg' => 'Erst Kapseln wiegen (Stichprobe), dann den Sack.'];

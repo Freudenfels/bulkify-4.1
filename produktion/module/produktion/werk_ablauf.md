@@ -12,7 +12,7 @@ Seit 11.11.2026. Wird in der Schritt-Ansicht von `werk.php` eingebunden, wenn `e
    - Falsches Material wird gesperrt.
    - Ein Bulk oder Eimer einer anderen Charge ergibt **STOPP**, bis die aktuelle fertig ist.
    - Ware in Quarantäne wird gesperrt.
-4. **Kapselgewicht und Sack:** Stichproben und Sackgewicht mit Tara (Teil 9).
+4. **Kapselgewicht und Sack:** Stichproben und Sackgewicht mit Tara (Teil 9). Die Tara-Auswahl sendet die ID des Gebindetyps, den Wert holt der Server aus `lg_tara` (13.11.2026).
 5. **Kartons:** je vollem Karton „Karton drucken“, Menge vorbelegt, Nummer fortlaufend, Druck über die Lager-Brücke (`pakarton`).
 6. **Teilmenge fertig:**
    - Die Menge ist aus den noch nicht gebuchten Kartons vorbelegt.
