@@ -26,14 +26,31 @@ $mengeInBasis = function(string $raw, bool $gewicht): float {
 // Express-Bestellung (nur Admin): überspringt Einkaufsbedarf/-liste und bestellt direkt beim Lieferanten.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'express_bestellung') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    // 13.11.2026: Doppelbestell-Warnung auch hier (Hinweis statt Sperre, gleiche Funktion wie auf den anderen Bestellwegen).
+    require_once BX_ROOT . '/core/bestellung_doppelt.php';
+    $paX = auftrag_aktiver_pa($id);   // auftrag_fehlbedarf() rechnet je Produktionsauftrag
+    $bxDoppelt = $paX ? bestellung_doppelt_treffer(array_column(auftrag_fehlbedarf((int)$paX['id']), 'item_id')) : [];
+    if ($bxDoppelt && empty($_POST['doppelt_ok'])) bestellung_doppelt_stopp($bxDoppelt, '?p=auftrag&id=' . $id);
     $bid = auftrag_express_bestellung($id, (int)($_POST['lieferant_id'] ?? 0));
+    if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
     if ($bid) { header('Location: ?p=bestellung&id=' . $bid . '&ok=1'); exit; }
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nichts zu bestellen – alles auf Lager oder der Lieferant bietet die fehlenden Rohstoffe nicht.')); exit;
 }
 // Express-Zukauf des FERTIGPRODUKTS (Bulk) – nur Admin.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'express_bulk') {
     if (!has_role('admin')) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nur Admins.')); exit; }
+    // 13.11.2026: Doppelbestell-Warnung für Bulk-Zukauf und Fertigware/Zukauf fertig: offene Bulk-Positionen dieses Produkts,
+    // die Bestellungen dieses Auftrags und offene Bestellungen des Fertigware-Artikels.
+    require_once BX_ROOT . '/core/bestellung_doppelt.php';
+    $pidE = (int) scalar("SELECT produkt_id FROM auftrag WHERE id=?", [$id]);
+    $vfE  = $pidE > 0 ? (int) produkt_lageritem($pidE) : 0;
+    $bxDoppelt = [];
+    foreach (array_merge(bestellung_doppelt_treffer($vfE ? [$vfE] : [], $pidE ? [$pidE] : [], $id), $vfE ? bestellung_doppelt_treffer([$vfE]) : []) as $tE)
+        $bxDoppelt[(int)$tE['bestellung_id'] . '|' . $tE['bez']] = $tE;
+    $bxDoppelt = array_values($bxDoppelt);
+    if ($bxDoppelt && empty($_POST['doppelt_ok'])) bestellung_doppelt_stopp($bxDoppelt, '?p=auftrag&id=' . $id);
     $bid = auftrag_express_bulk_bestellung($id, (int)($_POST['lieferant_id'] ?? 0));
+    if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
     if ($bid) { header('Location: ?p=bestellung&id=' . $bid . '&ok=1'); exit; }
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Zukaufpreis für dieses Produkt bei dem Lieferanten hinterlegt.')); exit;
 }

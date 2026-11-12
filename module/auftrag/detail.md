@@ -379,3 +379,6 @@ Alle drei Wege stehen im Verlauf.
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
 
 **Preise & Rechnung (Block D, 11.11.2026, Fable 13.11):** Der EK je Bedarf nimmt gültige Preise zuerst und keine gesperrten Lieferanten. Gibt es nur abgelaufene, steht oben „Preis abgelaufen - Summe unsicher“.
+
+## Doppelbestell-Warnung Express (13.11.2026)
+Express-Bestellung (fehlende Rohstoffe) und Express-Zukauf (Bulk und Fertigware/Zukauf fertig) zeigen vor dem Anlegen das Doppelbestell-Pop-up. Geprüft werden offene Bestellungen der Artikel, des Produkts (Bulk) und des Fertigware-Artikels.

@@ -100,3 +100,6 @@ Bereich „Labels / Aufkleber“ wie im Portal (Direkt-Bestellungen, Nachdruck);
   Geht auch an einer schon eingegangenen Bestellung. Danach rechnet die Bestellung neu: alle Positionen storniert und nichts
   geliefert = Bestellung storniert, sonst schließt sie sich ggf.
 - Aktionen: `storno` (Feld `grund`), `pos_storno` (Felder `bp_id`, `grund`).
+
+## Doppelbestell-Warnung (13.11.2026)
+Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artikel zeigen das Pop-up (`bestellung_doppelt_treffer()`), weiter nur mit Bestätigung, die im Verlauf steht.

@@ -224,6 +224,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($neuePosEin + $bulkDa === 0) {
         header('Location: ?p=bestellung&id=' . ($neu ? 'neu' : (int)$id) . '&fehler=' . urlencode('Bitte mindestens eine Position (Artikel + Menge) hinzufügen, bevor die Bestellung gespeichert wird.')); exit;
     }
+    // 13.11.2026: neue Bestellung von Hand – Doppelbestell-Warnung für die Artikel der Positionen (Hinweis statt Sperre).
+    $bxDoppelt = [];
+    if ($neu) {
+        require_once BX_ROOT . '/core/bestellung_doppelt.php';
+        $bxDoppelt = bestellung_doppelt_treffer(array_map('intval', (array)($_POST['p_item'] ?? [])));
+        if ($bxDoppelt && empty($_POST['doppelt_ok'])) bestellung_doppelt_stopp($bxDoppelt, '?p=bestellung&id=neu');
+    }
     if ($neu) {
         q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,hinweis_lieferant) VALUES (?,?,?,?,?)",
           [naechste_nummer('BE'), $lief, 'offen', trim($_POST['notiz'] ?? ''), trim((string)($_POST['hinweis_lieferant'] ?? '')) ?: null]);
@@ -243,6 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?)",
           [(int)$id, $iid, $menge, $ek, $einh, $aid, $i]);
     }
+    if ($bxDoppelt) bestellung_doppelt_vermerken([(int)$id], $bxDoppelt);
     header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
 }
 
