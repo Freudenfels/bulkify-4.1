@@ -9,6 +9,8 @@ name: Deploy to Server (SFTP)
 #   Server schon auf diesem oder einem neueren Stand, setzt prep mode=skip -> kein Upload, kein mark, Lauf gruen.
 #   mark schreibt nie einen aelteren Stand in .deploy_sha (liest direkt vorher erneut).
 # - Upload-Werkzeug seit 11.11.2026: Python/paramiko (.github/scripts/sftp_deploy.py) statt apt/lftp.
+# - Passwort seit 13.11.2026 aus secrets.DEPLOY_PASSWORD (nicht mehr SERVER_PASSWORD): alte Workflow-Fassungen (haengende
+#   Laeufe #1813-#1815, "Re-run" alter Laeufe) lesen SERVER_PASSWORD und scheitern an der Anmeldung, sobald es geloescht ist.
 # WARUM .deploy_sha (2026-11-03): GitHub haelt je Concurrency-Gruppe nur EINEN wartenden Lauf; bei schnell
 # aufeinanderfolgenden Pushes werden Zwischenlaeufe verworfen. Frueher lud jeder Lauf nur die Dateien SEINES
 # Commits (event.before..sha) hoch -> Dateien aus verworfenen Laeufen kamen nie auf den Server. Jetzt rechnet
@@ -77,7 +79,7 @@ jobs:
           SFTP_HOST: ${{ secrets.SERVER_HOST }}
           SFTP_PORT: ${{ secrets.SERVER_PORT }}
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
-          SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
+          SFTP_PASS: ${{ secrets.DEPLOY_PASSWORD }}
           SFTP_PATH: ${{ secrets.SERVER_PATH }}
         run: python .github/scripts/sftp_deploy.py prep
 
@@ -90,7 +92,7 @@ jobs:
           SFTP_HOST: ${{ secrets.SERVER_HOST }}
           SFTP_PORT: ${{ secrets.SERVER_PORT }}
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
-          SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
+          SFTP_PASS: ${{ secrets.DEPLOY_PASSWORD }}
           SFTP_PATH: ${{ secrets.SERVER_PATH }}
         run: python .github/scripts/sftp_deploy.py upload
 
@@ -102,7 +104,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           port: ${{ secrets.SERVER_PORT }}
           username: ${{ secrets.SERVER_USERNAME }}
-          password: ${{ secrets.SERVER_PASSWORD }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
           remote_folder: ${{ secrets.SERVER_PATH }}
           local_folder: '.'
           cleanup: false
@@ -118,6 +120,6 @@ jobs:
           SFTP_HOST: ${{ secrets.SERVER_HOST }}
           SFTP_PORT: ${{ secrets.SERVER_PORT }}
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
-          SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
+          SFTP_PASS: ${{ secrets.DEPLOY_PASSWORD }}
           SFTP_PATH: ${{ secrets.SERVER_PATH }}
         run: python .github/scripts/sftp_deploy.py mark
