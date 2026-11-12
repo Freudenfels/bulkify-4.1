@@ -67,6 +67,10 @@ function coa_uebersicht_daten(int $charge_id): ?array {
     if ($name === '') $name = (string)($prod['name'] ?? $c['item_name']);
     $zut = $rid ? all("SELECT rz.item_id, COALESCE(NULLIF(rz.bezeichnung,''), i.name) AS name, rz.menge_mg
                        FROM rezeptur_zutat rz LEFT JOIN item i ON i.id=rz.item_id WHERE rz.rezeptur_id=? AND rz.menge_mg > 0 ORDER BY rz.sort, rz.id", [$rid]) : [];
+    // Fable-3 T3.6 (13.11.2026): Zutaten- und Produktnamen im Informationsdokument ohne Lieferantennamen.
+    foreach ($zut as &$zz) $zz['name'] = kunde_text_neutral((string)$zz['name']);
+    unset($zz);
+    $name = kunde_text_neutral($name);
     $summe = array_sum(array_map(fn($z) => (float)$z['menge_mg'], $zut));
     // Verbrauchte Rohstoff-Chargen dieses PA je Artikel (Rückverfolgbarkeit).
     $verb = [];

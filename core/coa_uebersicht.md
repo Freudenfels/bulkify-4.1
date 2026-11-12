@@ -61,3 +61,5 @@ Charge immer über `kunde_charge_anzeige()` (core/kunde_charge.php): nur die Gru
 
 ## Quellchargen ohne Lieferantennummer (13.11.2026)
 In „Eingesetzte Rohstoffe und Quellchargen“ steht nur die Charge, keine Lieferantennummer.
+
+**Ohne Lieferantennamen (13.11.2026, Fable-3 T3.6):** `coa_uebersicht_daten()`: Zutaten- und Produktnamen laufen durch `kunde_text_neutral()`.

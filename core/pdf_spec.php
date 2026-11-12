@@ -325,6 +325,8 @@ function build_coa_pdf(int $charge_id): ?string {
     $c = one("SELECT c.*, i.name AS item_name, i.spec_nr, i.spec_version, i.herkunftsland, i.allergene, l.lieferantennummer AS lieferant_nr
               FROM charge c JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id WHERE c.id=?", [$charge_id]);
     if (!$c) return null;
+    // Fable-3 T3.6 (13.11.2026): Artikelname im Kunden-CoA ohne Lieferantennamen (z. B. „Ashwagandha (Wellgreen)“).
+    $c['item_name'] = kunde_text_neutral((string)$c['item_name']);
     // Eine echte COA braucht echte Analysewerte (Schwermetalle/Mikrobiologie …). Fehlen sie, ist das Dokument
     // KEINE COA, sondern höchstens eine Spezifikation – dann Titel/Schlusssatz entsprechend kennzeichnen.
     $istCoa = charge_coa_hat_analysewerte($charge_id);
