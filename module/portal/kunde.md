@@ -480,3 +480,8 @@ In der Bestellliste zeigt „Schritt X/N" bei einem roten Punkt diesen zuerst. D
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 Downloads (Laboranalyse, Auftrags-Dokument, Zertifikat, Druckvorlagen) über kunde_datei_ausliefern; Hersteller-Unterlagen gesperrt; Rohstoff-Dokumente, DL-Ergebnis und Alt-Rechnung ohne Original-Dateinamen; Rückfrage-Antworten, DL-Schritte und KI-Info ohne Lieferantennamen.
+
+## Nur Grundcharge, kein Produktionsdatum (12.11.2026)
+Nico: „Grundcharge ist 2775, die Buchstaben stehen nur für verschiedene Tage. Der Kunde soll nicht sehen, wann wir was produziert haben.“
+- **Charge & Qualität** (Bestellseite): eine Zeile je **Grundcharge** (2775) statt je Buchstabe (2775.A/.B). Die Spalte **Produktionsdatum ist weg**. MHD = das früheste der Teile, Status = der schlechteste. CoA, Laboranalyse oder Informationsdokument zählen für die ganze Grundcharge, auch wenn sie an einer Buchstaben-Charge abgelegt sind. So entsteht kein Wunsch nach einem CoA je Buchstabe.
+- **Bestellliste, Suche, Dokumente:** Angezeigt wird überall die Grundcharge (`$kundeChargeBasis()`, `$auftragChargen[...]['roh']` behält die Buchstaben). Die Suche findet auch „2775.A“.

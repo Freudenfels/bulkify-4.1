@@ -6,6 +6,18 @@ if (is_file(BX_ROOT . '/core/kunde_neutral.php')) require_once BX_ROOT . '/core/
 //                       OHNE Produktionsart – es darf nie ein Zukauf durchscheinen)
 $pa = $D['pa']; $fertig = $D['fertig']; $done = $D['done']; $schritte = $D['schritte'];
 $fuerKunde = !empty($fuerKunde);
+// Kundenversion (Nico 12.11.2026): nur die GRUNDCHARGE (2775) – die Buchstaben (2775.A/.B) sind unsere Produktionstage – und
+// KEINE Daten, wann was produziert wurde. Fertigware-Chargen werden je Grundcharge zusammengefasst (Menge summiert, frühestes MHD).
+if ($fuerKunde && !empty($D['fwChargen'])) {
+    $fwG = [];
+    foreach ($D['fwChargen'] as $c0) {
+        $b0 = (string) preg_replace('/\.[A-Z]{1,2}$/', '', trim((string)$c0['charge_nr']));
+        if (!isset($fwG[$b0])) { $c0['charge_nr'] = $b0; $fwG[$b0] = $c0; continue; }
+        $fwG[$b0]['menge'] = (float)$fwG[$b0]['menge'] + (float)$c0['menge'];
+        if ($c0['mhd'] && (!$fwG[$b0]['mhd'] || (string)$c0['mhd'] < (string)$fwG[$b0]['mhd'])) $fwG[$b0]['mhd'] = $c0['mhd'];
+    }
+    $D['fwChargen'] = array_values($fwG);
+}
 $mng  = fn($x,$e) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',') . ' ' . h($e ?: '');
 $zahl = fn($x,$d=0) => number_format((float)$x, $d, ',', '.');
 $dt   = fn($s) => $s ? h(fmt_zeit($s)) . ' Uhr' : '–';
@@ -31,8 +43,10 @@ $kundeStation = function(string $st): string {
     <tr><td>Status</td><td><?= $fertig ? 'Abgeschlossen' : ($pa['status'] === 'laufend' ? 'In Produktion' : 'Offen') ?><?= $fuerKunde ? '' : ' · Fortschritt ' . $done . '/' . count($schritte) ?></td></tr>
     <?php if (!$fuerKunde && $pa['kunde_firma']): ?><tr><td>Kunde (intern)</td><td><?= h($pa['kunde_firma']) ?></td></tr><?php endif; ?>
     <?php if (!$fuerKunde): ?><tr><td>Produktionsart</td><td><?= ($pa['produktionsart'] ?? '') === 'fremd' ? 'Fremdfertigung / Zukauf' : 'Eigenfertigung' ?></td></tr><?php endif; ?>
+    <?php if (!$fuerKunde): // Kunde sieht keine Produktionszeiten (Nico 12.11.2026), nur „Freigegeben am“ ?>
     <tr><td>Angelegt</td><td><?= $dt($pa['angelegt']) ?></td></tr>
     <tr><td>Abgeschlossen</td><td><?= $D['abg'] ? $dt($D['abg']) : '<span class="muted">–</span>' ?></td></tr>
+    <?php endif; ?>
     <?php if ($fuerKunde && !empty($pa['bericht_freigegeben_am'])): ?><tr><td>Freigegeben am</td><td><?= h(date('d.m.Y', strtotime((string)$pa['bericht_freigegeben_am']))) ?></td></tr><?php endif; ?>
   </tbody></table></div>
 </div>
@@ -84,15 +98,15 @@ $kundeStation = function(string $st): string {
 <div class="bx-panel pb-sec">
   <h2><?= $fuerKunde ? 'Herstellung &amp; Prüfung' : 'Produktionsschritte' ?></h2>
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>#</th><th>Schritt</th><th>Status</th><th>Datum</th><?php if (!$fuerKunde): ?><th>Bearbeiter</th><th>Charge (Scan)</th><?php endif; ?></tr></thead>
+    <thead><tr><th>#</th><th>Schritt</th><th>Status</th><?php if (!$fuerKunde): ?><th>Datum</th><th>Bearbeiter</th><th>Charge (Scan)</th><?php endif; ?></tr></thead>
     <tbody>
       <?php foreach ($schritte as $i => $s): $d = (int)$s['erledigt'] === 1; ?>
       <tr>
         <td class="muted"><?= $i + 1 ?></td>
         <td><?= h($fuerKunde ? $kundeStation((string)$s['station']) : (string)$s['station']) ?></td>
         <td><?= $d ? bx_badge('erledigt', 'ok') : bx_badge('ausstehend', 'info') ?></td>
-        <td class="muted"><?= $d && $s['erledigt_at'] ? $dt($s['erledigt_at']) : '–' ?></td>
         <?php if (!$fuerKunde): ?>
+          <td class="muted"><?= $d && $s['erledigt_at'] ? $dt($s['erledigt_at']) : '–' ?></td>
           <td><?= $d && !empty($s['erledigt_von']) ? h((string)$s['erledigt_von']) : '<span class="muted">–</span>' ?></td>
           <td><?= !empty($s['scan_charge']) ? h((string)$s['scan_charge']) : '<span class="muted">–</span>' ?></td>
         <?php endif; ?>

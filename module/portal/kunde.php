@@ -1332,13 +1332,23 @@ $auftraege = array_values(array_filter($auftraege, function ($a) {
     return (int) scalar("SELECT COUNT(*) FROM dl_auftrag_schritt WHERE auftrag_id=?", [(int)$a['id']]) > 0;
 }));
 // Fertigware-Chargen je Bestellung (Charge-Nr steht auf dem Produkt, deshalb sichtbar fuer den Kunden).
+// Nico 12.11.2026: Der Kunde sieht nur die GRUNDCHARGE (2775) – die Buchstaben (2775.A/.B) stehen nur für unsere Produktionstage.
+// 'roh' behält die Buchstaben-Chargen für die Suche (der Kunde liest 2775.A vom Stempel ab und findet trotzdem).
+$kundeChargeBasis = fn(string $nr): string => (string) preg_replace('/\.[A-Z]{1,2}$/', '', trim($nr));
 $auftragChargen = [];
 if ($auftraege) {
     $aids = array_map(fn($a) => (int)$a['id'], $auftraege);
     $inA  = implode(',', array_fill(0, count($aids), '?'));
     foreach (all("SELECT pa.auftrag_id, c.charge_nr, c.mhd FROM charge c JOIN produktionsauftrag pa ON pa.id=c.pa_id
-                  WHERE pa.auftrag_id IN ($inA) AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id", $aids) as $cr)
-        $auftragChargen[(int)$cr['auftrag_id']][] = ['nr' => (string)$cr['charge_nr'], 'mhd' => $cr['mhd']];
+                  WHERE pa.auftrag_id IN ($inA) AND c.charge_nr IS NOT NULL AND c.charge_nr<>'' ORDER BY c.id", $aids) as $cr) {
+        $aidC = (int)$cr['auftrag_id']; $bC = $kundeChargeBasis((string)$cr['charge_nr']); $gefunden = false;
+        foreach ($auftragChargen[$aidC] ?? [] as $ix => $vorh) if ($vorh['nr'] === $bC) {
+            $auftragChargen[$aidC][$ix]['roh'][] = (string)$cr['charge_nr'];
+            if ($cr['mhd'] && (!$vorh['mhd'] || (string)$cr['mhd'] < (string)$vorh['mhd'])) $auftragChargen[$aidC][$ix]['mhd'] = $cr['mhd'];   // frühestes MHD
+            $gefunden = true; break;
+        }
+        if (!$gefunden) $auftragChargen[$aidC][] = ['nr' => $bC, 'mhd' => $cr['mhd'], 'roh' => [(string)$cr['charge_nr']]];
+    }
 }
 $rechnungen = all("SELECT b.*, COALESCE(NULLIF(pkn.name,''), NULLIF(a.produkt_bezeichnung,''), NULLIF(p.kundenname,''), p.name) AS produkt_name
                    FROM beleg b
@@ -4697,12 +4707,23 @@ portal_head('Kundenportal · ' . $k['firma']);
   </div>
   <?php endif; ?>
 
-  <?php // „Charge & Qualität" (Nico 03.11.2026): Charge(n), MHD, Produktionsdatum IMMER, sobald produziert. Produktionsbericht
-        // und CoA, sobald freigegeben (automatisch bei der QM-Freigabe der Fertigware; das Team kann bewusst zurückhalten).
-        // Ein am Fertigprodukt gemessenes CoA (Laboranalyse) hat Vorrang vor der berechneten Übersicht.
-        $cqCh = all("SELECT c.id, c.charge_nr, c.mhd, c.angelegt, c.status FROM charge c JOIN item i ON i.id=c.item_id
+  <?php // „Charge & Qualität" (Nico 03.11.2026): Charge, MHD, sobald produziert. Produktionsbericht und CoA, sobald freigegeben
+        // (automatisch bei der QM-Freigabe der Fertigware; das Team kann bewusst zurückhalten). Ein am Fertigprodukt gemessenes CoA
+        // (Laboranalyse) hat Vorrang vor der berechneten Übersicht.
+        // Nico 12.11.2026: nur die GRUNDCHARGE (2775) in EINER Zeile – keine Zeile je Buchstabe (2775.A/.B = unsere Produktionstage),
+        // KEIN Produktionsdatum (der Kunde soll nicht sehen, wann wir was produziert haben), eine Laboranalyse für die ganze Charge.
+        $cqRoh = all("SELECT c.id, c.charge_nr, c.mhd, c.status FROM charge c JOIN item i ON i.id=c.item_id
                      WHERE i.kategorie='verkaufsfertig' AND (c.auftrag_id=? OR c.pa_id IN (SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert'))
                      ORDER BY c.id", [(int)$a['id'], (int)$a['id']]);
+        $cqCh = [];
+        foreach ($cqRoh as $r0) {
+            $b0 = $kundeChargeBasis((string)$r0['charge_nr']);
+            if (!isset($cqCh[$b0])) { $cqCh[$b0] = ['charge_nr' => $b0, 'mhd' => $r0['mhd'], 'status' => (string)$r0['status']]; continue; }
+            if ($r0['mhd'] && (!$cqCh[$b0]['mhd'] || (string)$r0['mhd'] < (string)$cqCh[$b0]['mhd'])) $cqCh[$b0]['mhd'] = $r0['mhd'];   // frühestes MHD gilt
+            $rang = ['gesperrt' => 3, 'quarantaene' => 2];   // schlechtester Status der Teile gilt für die Grundcharge
+            if (($rang[(string)$r0['status']] ?? 0) > ($rang[$cqCh[$b0]['status']] ?? 0)) $cqCh[$b0]['status'] = (string)$r0['status'];
+        }
+        $cqCh = array_values($cqCh);
         $pbFrei = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND bericht_freigegeben_am IS NOT NULL ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
         $cqDoks = all("SELECT id, titel, charge_nr, befund, COALESCE(hochgeladen_von,'') AS quelle FROM dokument
                        WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' AND kunde_sichtbar=1 ORDER BY id", [(int)$a['id']]);
@@ -4712,16 +4733,17 @@ portal_head('Kundenportal · ' . $k['firma']);
     <h2 style="margin:0 0 8px;font-size:16px">Charge &amp; Qualität</h2>
     <?php if ($cqCh): ?>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Charge</th><th>Mindesthaltbar bis</th><th>Produktionsdatum</th><th>Status</th><th>Dokumente zur Charge</th></tr></thead>
+      <thead><tr><th>Charge</th><th>Mindesthaltbar bis</th><th>Status</th><th>Dokumente zur Charge</th></tr></thead>
       <tbody>
       <?php foreach ($cqCh as $ch):
-          $gem = array_values(array_filter($cqDoks, fn($d) => $d['quelle'] !== 'coa_ueb' && ((string)$d['charge_nr'] === '' || (string)$d['charge_nr'] === (string)$ch['charge_nr'])));
-          $ueb = array_values(array_filter($cqDoks, fn($d) => $d['quelle'] === 'coa_ueb' && (string)$d['charge_nr'] === (string)$ch['charge_nr']));
+          // Dokumente zur Grundcharge: ohne Charge, mit der Grundcharge oder einer ihrer Buchstaben-Chargen (ältere Ablage je .A).
+          $gem = array_values(array_filter($cqDoks, fn($d) => $d['quelle'] !== 'coa_ueb' && ((string)$d['charge_nr'] === '' || $kundeChargeBasis((string)$d['charge_nr']) === (string)$ch['charge_nr'])));
+          $ueb = array_values(array_filter($cqDoks, fn($d) => $d['quelle'] === 'coa_ueb' && $kundeChargeBasis((string)$d['charge_nr']) === (string)$ch['charge_nr']));
+          $ueb = array_slice($ueb, 0, 1);   // eine Übersicht je Grundcharge, nicht je Buchstabe
           $coa = $gem ?: $ueb; ?>
         <tr>
           <td style="white-space:nowrap"><strong><?= h((string)$ch['charge_nr']) ?></strong></td>
           <td style="white-space:nowrap"><?= $ch['mhd'] ? h(date('d.m.Y', strtotime((string)$ch['mhd']))) : '<span class="muted">–</span>' ?></td>
-          <td style="white-space:nowrap"><?= $ch['angelegt'] ? h(fmt_zeit((string)$ch['angelegt'], 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
           <td><?= (string)$ch['status'] === 'quarantaene' ? bx_badge('in Qualitätsprüfung', 'warn') : ((string)$ch['status'] === 'gesperrt' ? bx_badge('gesperrt', 'err') : bx_badge('freigegeben', 'ok')) ?></td>
           <td><?php if ($coa): foreach ($coa as $d): $bf = laboranalyse_befund_label($d['befund'] ?? null); ?>
               <a class="btn btn-ghost btn-sm" href="<?= $portalLink('analyse_datei') ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= $d['quelle'] === 'coa_ueb' ? 'Informationsdokument zum Produkt' : 'CoA (Laboranalyse)' ?></a>
@@ -5007,7 +5029,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     if ($ql !== '') {
         foreach ($auftraege as $a) {
             $chg = $auftragChargen[(int)$a['id']] ?? [];
-            $chgTxt = ''; foreach ($chg as $c) $chgTxt .= ' ' . $c['nr'] . ' ' . ($c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) . ' ' . $c['mhd'] : '');
+            $chgTxt = ''; foreach ($chg as $c) $chgTxt .= ' ' . $c['nr'] . ' ' . implode(' ', $c['roh'] ?? []) . ' ' . ($c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) . ' ' . $c['mhd'] : '');
             if ($hit($a['nummer'] . ' ' . $titelFuer($a) . $chgTxt)) {
                 $sub = kunde_bestell_status_label($a, $k) . ' · ' . number_format((int)$a['menge'], 0, ',', '.') . ' Packungen' . ($chg ? ' · Charge ' . implode(', ', array_map(fn($c) => $c['nr'], $chg)) . (($chg[0]['mhd'] ?? null) ? ' · MHD ' . date('d.m.Y', strtotime((string)$chg[0]['mhd'])) : '') : '');
                 $add('Bestellung', $a['nummer'] . ' – ' . $titelFuer($a), $sub, $portalLink('bestellung') . '&aid=' . (int)$a['id'], $a['angelegt'] ?? null, 'info');
@@ -5310,7 +5332,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         if ($dkVon !== '' && $tag < $dkVon) return false;
         if ($dkBis !== '' && $tag > $dkBis) return false;
         if ($dkCh !== '') {
-            $nrs = array_map(fn($c) => mb_strtolower($c['nr']), $auftragChargen[(int)$x['id']] ?? []);
+            $nrs = []; foreach ($auftragChargen[(int)$x['id']] ?? [] as $cN) foreach (array_merge([$cN['nr']], $cN['roh'] ?? []) as $nN) $nrs[] = mb_strtolower($nN);   // Grundcharge + Buchstaben-Chargen
             if (!array_filter($nrs, fn($n) => str_contains($n, mb_strtolower($dkCh)))) return false;
         }
         return true;
