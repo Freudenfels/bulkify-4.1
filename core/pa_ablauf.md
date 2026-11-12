@@ -44,3 +44,6 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 
 ## Tagesregel serverseitig (13.11.2026)
 `pa_uc_tag_pruefen($uc, $tag)`: Gehört die laufende Unter-Charge zu einem anderen Produktionstag (Berlin), bucht weder `pa_teilmenge_buchen()` (Nachtrag: gewähltes Datum) noch `pa_karton_anlegen()` noch der Scan in der Werk-App. Meldung „Neuer Tag - bitte neu starten“.
+
+## Datum in Ortszeit (13.11.2026)
+`pa_tag_heute()` = `heute_ort()` (core/zeit_ort.php). MHD-Vorgabe ab heute in Berlin, Wareneingang der Fertigcharge = Produktionstag (Berlin, beim Nachtrag das gewählte Datum).

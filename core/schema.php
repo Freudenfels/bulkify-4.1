@@ -3,6 +3,7 @@
 // Regel: erst CREATE (frisch installierbar), dann additive Migrationen via ensure_column().
 // Nie Spalten loeschen. Alles UTF-8 (utf8mb4).
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/zeit_ort.php';   // heute_ort(): Tag in Europe/Berlin (13.11.2026)
 require_once __DIR__ . '/charge_norm.php';
 require_once __DIR__ . '/rohstoff_alternative.php';   // Alternative zu einer Rohstoff-Anfrage (Dashboard + Kundenportal)
 require_once __DIR__ . '/pa_ablauf.php';   // Produktion ein Weg (11.11.2026): Unter-Chargen, Teilmengen, Kartons – gemeinsam mit der Werk-App

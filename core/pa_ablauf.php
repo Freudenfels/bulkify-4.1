@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/zeit_ort.php';   // heute_ort() (13.11.2026)
 // Produktion – EIN geführter Ablauf (Nico 11.11.2026, plan-produktion-gefuehrt.md, Teil 3 + 5).
 // GEMEINSAMER Kern für Dashboard (PA-Seite, Nachtragen) UND Werk-App (Sub-App /produktion/): nutzt nur q/one/all/scalar/insert_id
 // und ruft fachliche Funktionen über pa_fn() auf (Dashboard-Name, sonst der erp_-Spiegel der Produktions-App). Darf deshalb NICHT
@@ -151,7 +152,7 @@ function pa_mhd_vorgabe(int $pa_id, int $bulk_charge_id = 0): string {
     $pa = one("SELECT pa.mhd, p.haltbarkeit FROM produktionsauftrag pa LEFT JOIN produkt p ON p.id=pa.produkt_id WHERE pa.id=?", [$pa_id]) ?: [];
     $mon = (int) preg_replace('/\D+/', '', (string)($pa['haltbarkeit'] ?? ''));
     if ($mon <= 0) $mon = (int) (pa_meta('mhd_monate_standard') ?: 18);
-    $mhd = !empty($pa['mhd']) ? (string)$pa['mhd'] : date('Y-m-d', strtotime('today +' . $mon . ' months'));
+    $mhd = !empty($pa['mhd']) ? (string)$pa['mhd'] : heute_ort_plus('+' . $mon . ' months');   // 13.11.2026: ab heute in Berlin
     if ($bulk_charge_id > 0) { $bm = (string) scalar("SELECT mhd FROM charge WHERE id=?", [$bulk_charge_id]); if ($bm !== '' && $bm < $mhd) $mhd = $bm; }
     return $mhd;
 }
@@ -167,7 +168,7 @@ function pa_aktuelle_unter_charge(int $pa_id): ?array {
 // Vorschlag für Charge + MHD bei gegebenem Bulk (Werk-App zeigt ihn groß an): gleicher Bulk wie die laufende Unter-Charge =
 // gleicher Buchstabe, sonst der nächste.
 // Produktionstag (Europe/Berlin) – heute bzw. der Tag einer Unter-Charge: letzte Teilmenge (datum), sonst Anlage (UTC -> Berlin).
-function pa_tag_heute(): string { return (new DateTime('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d'); }
+function pa_tag_heute(): string { return heute_ort(); }
 function pa_uc_tag(array $uc): string {
     $d = (string) scalar("SELECT MAX(datum) FROM pa_teilmenge WHERE unter_charge_id=?", [(int)$uc['id']]);
     if ($d !== '') return substr($d, 0, 10);
@@ -325,8 +326,8 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
         $item = $istBulk ? (int) pa_fn('rezeptur_bulkitem', 'erp_rezeptur_bulkitem', (int)$pa['rezeptur_id']) : (int) pa_fn('produkt_lageritem', 'erp_produkt_lageritem', (int)$pa['produkt_id']);
         if ($item <= 0) return ['ok' => false, 'msg' => 'Lagerartikel zum Produkt fehlt – Teilmenge nicht eingebucht (Verbrauch ist gebucht, bitte Büro).', 'teilmenge_id' => $tm];
         if (!$istBulk && (pa_fn('auftrag_ist_fulfillment', 'erp_auftrag_ist_fulfillment', (int)($pa['auftrag_id'] ?? 0)))) pa_fn('bsku_ensure', 'erp_bsku_ensure', $item);
-        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt) VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?, ?)",
-          [(string)$uc['charge_nr'], $item, $menge, $menge, (string)$uc['mhd'], 'Aus Produktion ' . $pa['nummer'] . ' (Unter-Charge ' . $uc['charge_nr'] . ')', $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
+        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt) VALUES (?,?,?,?, 'Stk', ?, ?, 'frei', ?, ?, ?, ?)",   /* Wareneingang = Produktionstag (Berlin), 13.11.2026 */
+          [(string)$uc['charge_nr'], $item, $menge, $menge, (string)$uc['mhd'], $datum, 'Aus Produktion ' . $pa['nummer'] . ' (Unter-Charge ' . $uc['charge_nr'] . ')', $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
         $cid = insert_id();
         q("UPDATE pa_unter_charge SET fertig_charge_id=? WHERE id=?", [$cid, $uc_id]);
         $neu = true;

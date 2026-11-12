@@ -68,7 +68,7 @@ $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl
   <form method="post" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:12px;max-width:820px">
     <input type="hidden" name="aktion" value="nachtragen">
     <div class="bx-row" style="gap:12px;flex-wrap:wrap">
-      <div class="bx-field" style="width:160px"><label>Produktionsdatum</label><input type="date" name="datum" value="<?= h(date('Y-m-d')) ?>" required></div>
+      <div class="bx-field" style="width:160px"><label>Produktionsdatum</label><input type="date" name="datum" value="<?= h(heute_ort()) ?>" required></div>
       <div class="bx-field" style="width:150px"><label>Menge (Stk)</label><input type="text" inputmode="numeric" name="menge" required placeholder="max. <?= $nfA($restA) ?>"></div>
       <div class="bx-field" style="flex:1;min-width:240px"><label>Bulk-Charge</label>
         <select name="bulk_charge_id" id="naBulk"><option value="0">ohne (kein Bulk-Bezug)</option><?php foreach ($bulkWahl as $b): ?><option value="<?= (int)$b['id'] ?>"<?= $akt && (int)$akt['bulk_charge_id'] === (int)$b['id'] ? ' selected' : '' ?>><?= h(($b['charge_nr'] ?: '#' . $b['id']) . ' · ' . $nfA($b['menge_verfuegbar']) . ' ' . $b['einheit'] . ($b['mhd'] ? ' · MHD ' . date('d.m.Y', strtotime((string)$b['mhd'])) : '')) ?></option><?php endforeach; ?></select></div>

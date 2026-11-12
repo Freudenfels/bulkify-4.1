@@ -1293,7 +1293,7 @@ function erp_teilmenge_einbuchen(int $pa_id, float $menge): ?int {
     // Fertigcharge an den Auftrag binden (S-09, Spiegel von produktion_teilmenge_einbuchen): auftrag_id + pa_id.
     // Soll-Kette 5 (04.11.2026): eigene Fertigware ist sofort FREI (kein QM-Gate). Bericht + CoA entstehen im Dashboard (Loopback).
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, '" . heute_ort() . "', 'frei', ?, ?, ?, ?)",
       [$charge_nr, $item_id, $menge, $menge, erp_mhd_standard(), 'Aus Produktion ' . $pa['nummer'], $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
     $cid = (int) insert_id();
     erp_fertigware_dokumente_melden($cid, erp_produktion_rest($pa_id) <= 0.0001);
@@ -1560,11 +1560,11 @@ function erp_restmischung_einbuchen(int $pa_id, float $menge_kg, string $von = '
     $jetzt = gmdate('Y-m-d H:i:s');
     if (erp_spalte_da('charge', 'standort'))
         q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,standort,pa_id,notiz,angelegt)
-           VALUES (?,?,?,?,?,?,CURDATE(),'frei','lager1',?,?,?)",
+           VALUES (?,?,?,?,?,?,'" . heute_ort() . "','frei','lager1',?,?,?)",
           [$chargeNr, $bulk, $menge_kg, $menge_kg, 'kg', $mhd, $pa_id, $notiz, $jetzt]);
     else
         q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,pa_id,notiz,angelegt)
-           VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?)",
+           VALUES (?,?,?,?,?,?,'" . heute_ort() . "','frei',?,?,?)",
           [$chargeNr, $bulk, $menge_kg, $menge_kg, 'kg', $mhd, $pa_id, $notiz, $jetzt]);
     $cid = (int) insert_id();
     if (function_exists('bedarf_bump')) bedarf_bump();
