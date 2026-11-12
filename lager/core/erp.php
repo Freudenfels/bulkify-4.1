@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../core/gewicht.php';   // gewicht_lesen() – eine Regel für Gewichte (13.11.2026)
 // DIE NAHT ZUM DASHBOARD. Die einzige Datei im Lager-Programm, die Tabellen des Dashboards kennt.
 //
 // Warum an einer Stelle: Das Dashboard wird weiterentwickelt (und irgendwann von v5 abgeloest).

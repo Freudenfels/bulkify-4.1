@@ -85,18 +85,19 @@ function inv_bereich_starten(array $inv, string $key): array {
 function inv_ist_rechnen(array $o, array $e): array {
     $art = (string)($e['art'] ?? 'stk');
     $ie = erp_einheit_norm((string)$o['item_einheit']) ?: (string)$o['item_einheit'];
-    $n = fn($k) => erp_menge_parse((string)($e[$k] ?? ''));
+    $n = fn($k) => erp_menge_parse((string)($e[$k] ?? ''));   // Stück
+    $g = fn($k) => gewicht_lesen((string)($e[$k] ?? ''));     // 13.11.2026 (Fable-3 T1.2): Gewichte (Brutto, Tara, mg je Kapsel)
     $r = ['art' => $art, 'ist' => 0.0, 'einheit' => $ie, 'brutto' => null, 'tara' => null, 'mg' => null];
     if ($art === 'leer') return $r;
     if ($art === 'voll') { $info = inv_objekt_info(['id' => 0], $o); $r['ist'] = (float)($info['voll'] ?? 0); return $r; }
     if ($art === 'wiegen' || $art === 'kapsel') {
-        $r['brutto'] = $n('brutto');
+        $r['brutto'] = $g('brutto');
         // 13.11.2026 (Fable-3 T1.1): Tara aus lg_tara über die ID; die Zahl aus dem Feld nur, wenn sie von Hand geändert wurde.
         $ta = empty($e['tara_hand']) ? tara_aus_id((int)($e['tara_id'] ?? 0)) : null;
-        $r['tara'] = $ta ? (float)$ta['kg'] : max(0, $n('tara'));
+        $r['tara'] = $ta ? (float)$ta['kg'] : max(0, $g('tara'));
         $netto = max(0.0, $r['brutto'] - $r['tara']);   // kg
         if ($art === 'kapsel') {
-            $r['mg'] = $n('kapsel_mg') ?: erp_inv_kapsel_mg((int)$o['item_id'], (int)$o['charge_id']);
+            $r['mg'] = $g('kapsel_mg') ?: erp_inv_kapsel_mg((int)$o['item_id'], (int)$o['charge_id']);
             $r['ist'] = $ie === 'Stk' ? ($r['mg'] > 0 ? round($netto * 1000000 / $r['mg']) : 0) : ($ie === 'g' ? $netto * 1000 : $netto);
         } else $r['ist'] = $ie === 'g' ? round($netto * 1000, 3) : ($ie === 'Stk' ? $netto : round($netto, 3));
         return $r;

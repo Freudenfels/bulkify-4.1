@@ -50,6 +50,12 @@ flash_zeigen();
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   function zahl(v){ v=String(v||'').trim(); if(v.indexOf(',')>=0) v=v.replace(/\./g,'').replace(',','.'); else if(/^\d{1,3}(\.\d{3})+$/.test(v)) v=v.replace(/\./g,''); return parseFloat(v)||0; }
   function fmt(n,d){ return Number(n).toLocaleString('de-DE',{maximumFractionDigits:d==null?3:d}); }
+  // Gewichte (13.11.2026): wie gewicht_lesen() – Punkt und Komma = Dezimal, beide da = das letzte; Vorbelegung ohne Tausenderpunkt.
+  function gew(v){ v=String(v||'').replace(/\s/g,''); var p=v.lastIndexOf('.'), k=v.lastIndexOf(',');
+    if(p>=0&&k>=0){ v= p>k ? v.replace(/,/g,'') : v.replace(/\./g,'').replace(',','.'); }
+    else if(p>=0||k>=0){ var z=p>=0?'.':','; v = v.split(z).length>2 ? v.split(z).join('') : v.replace(',','.'); }
+    return parseFloat(v)||0; }
+  function fmtG(n,d){ return Number(n).toLocaleString('de-DE',{maximumFractionDigits:d==null?3:d,useGrouping:false}); }
   function msg(t,ok){ msgEl.innerHTML=t?'<div class="iz-msg '+(ok?'ok':'err')+'">'+esc(t)+'</div>':''; }
   function api(a,data,cb){ var fd=data instanceof FormData?data:new FormData(); if(!(data instanceof FormData)) for(var k in (data||{})) fd.append(k,data[k]);
     fetch('?p=inventur_api&id='+INV+'&a='+a,{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json();}).then(cb).catch(function(){ msg('Keine Verbindung – nichts verloren, bitte nochmal.',false); }); }
@@ -71,18 +77,18 @@ flash_zeigen();
       if(o.voll) h+='<button type="button" class="btn btn-ghost izVoll">voll, original verschlossen ('+fmt(o.voll)+' '+esc(o.einheit)+')</button>'; }
     else { h+='<div class="iz-zeile"><input type="text" inputmode="decimal" class="izBrutto" placeholder="Brutto"> <span class="iz-gross">kg brutto</span></div>'
           +'<div class="iz-zeile">'+taraSelect()+' <input type="text" inputmode="decimal" class="izTaraKg" style="width:120px" placeholder="Tara"> <span>kg Tara</span></div>';
-      if(o.modus==='kapsel') h+='<div class="iz-zeile"><input type="text" inputmode="decimal" class="izMg" style="width:120px" value="'+(o.kapsel_mg?fmt(o.kapsel_mg,2):'')+'"> <span>mg je Kapsel</span></div>';
+      if(o.modus==='kapsel') h+='<div class="iz-zeile"><input type="text" inputmode="decimal" class="izMg" style="width:120px" value="'+(o.kapsel_mg?fmtG(o.kapsel_mg,2):'')+'"> <span>mg je Kapsel</span></div>';
       h+='<div class="iz-gross izNetto muted">Netto: –</div>'; }
     return h; }
   function verdrahte(box,o){
     var t=box.querySelector('.izTara'), tk=box.querySelector('.izTaraKg');
-    if(t&&tk){ tk.value=fmt(taraKg(t)); t.addEventListener('change',function(){ tk.value=fmt(taraKg(t)); rechne(); }); }
-    function rechne(){ var n=box.querySelector('.izNetto'); if(!n) return; var net=Math.max(0,zahl(box.querySelector('.izBrutto').value)-zahl(tk.value));
-      var t2='Netto: '+fmt(net)+' kg'; if(o.modus==='kapsel'){ var mg=zahl(box.querySelector('.izMg').value); t2+= mg>0?' = '+fmt(Math.round(net*1e6/mg),0)+' Kapseln':' (Kapselgewicht fehlt)'; } n.textContent=t2; }
+    if(t&&tk){ tk.value=fmtG(taraKg(t)); t.addEventListener('change',function(){ tk.value=fmtG(taraKg(t)); rechne(); }); }
+    function rechne(){ var n=box.querySelector('.izNetto'); if(!n) return; var net=Math.max(0,gew(box.querySelector('.izBrutto').value)-gew(tk.value));
+      var t2='Netto: '+fmt(net)+' kg'; if(o.modus==='kapsel'){ var mg=gew(box.querySelector('.izMg').value); t2+= mg>0?' = '+fmt(Math.round(net*1e6/mg),0)+' Kapseln':' (Kapselgewicht fehlt)'; } n.textContent=t2; }
     box.addEventListener('input',rechne); }
   function werte(box,o){ var d={};
     if(o.modus==='stk'){ d.art='stk'; d.menge=box.querySelector('.izMenge').value; }
-    else { d.art=o.modus==='kapsel'?'kapsel':'wiegen'; d.brutto=box.querySelector('.izBrutto').value; var tt=box.querySelector('.izTara'), tv=box.querySelector('.izTaraKg').value; d.tara_id=tt?tt.value:0; d.tara=tv; d.tara_hand=(tt && tv===fmt(taraKg(tt)))?0:1; if(o.modus==='kapsel') d.kapsel_mg=box.querySelector('.izMg').value; }
+    else { d.art=o.modus==='kapsel'?'kapsel':'wiegen'; d.brutto=box.querySelector('.izBrutto').value; var tt=box.querySelector('.izTara'), tv=box.querySelector('.izTaraKg').value; d.tara_id=tt?tt.value:0; d.tara=tv; d.tara_hand=(tt && tv===fmtG(taraKg(tt)))?0:1; if(o.modus==='kapsel') d.kapsel_mg=box.querySelector('.izMg').value; }
     return d; }
   function zeigeObjekt(o){
     ladeStamm(function(){

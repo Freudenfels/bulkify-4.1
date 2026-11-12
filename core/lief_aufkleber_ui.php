@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/gewicht.php';   // gewicht_lesen() (13.11.2026)
 // Bereich „Labels / Aufkleber“ an der Bestellung – EIN Baustein für Lieferantenportal und Dashboard (Paket 12.11.2026 Teil 5).
 // Je Position und Charge (aus „Chargen & Dokumente“): Charge, Herstelldatum, MHD; Knopf „Aufkleber drucken“ mit Netto,
 // Brutto (optional), Stück je Gebinde (optional), Anzahl und Format; Liste der gedruckten Aufkleber mit Nachdruck und Storno.
@@ -17,6 +18,8 @@ function la_zahl(string $s, string $sprache = 'de', bool $stueck = false): ?floa
     $s = trim(str_replace(' ', '', $s));
     if ($s === '') return null;
     if ($stueck && preg_match('/^\d{1,3}([.,]\d{3})+$/', $s)) $s = str_replace(['.', ','], '', $s);
+    // 13.11.2026 (Fable-3 T1.2): Netto/Brutto sind Gewichte – gewicht_lesen() („25.000“ und „25,000“ kg = 25), Sprache egal.
+    if (!$stueck) { $v = gewicht_lesen($s); return $v > 0 ? $v : null; }
     if (function_exists('zahl_lesen')) { $v = zahl_lesen($s, true, $sprache); return $v > 0 ? (float)$v : null; }
     $s = preg_match('/,\d{1,3}$/', $s) ? str_replace(['.', ','], ['', '.'], $s) : str_replace(',', '', $s);
     return is_numeric($s) && (float)$s > 0 ? (float)$s : null;

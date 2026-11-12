@@ -8,7 +8,7 @@ $zur  = '?p=werk&id=' . $paId;
 $waLang = werk_lang(); $T = werk_texte($waLang);   // Block F (11.11.2026): Texte DE/EN/UK, Kern-Meldungen über werk_msg()
 $flash = function (string $t, bool $ok) use ($waLang) { $_SESSION['werk_flash'] = werk_msg($t . (!empty($GLOBALS['pa_hinweis']) ? ' ' . $GLOBALS['pa_hinweis'] : ''), $waLang); $_SESSION['werk_flash_ok'] = $ok; };   // Gegenprobe = nur Hinweis
 $zahl = fn($k) => pr_menge_parse((string)($_POST[$k] ?? '0'));   // Block D: gleiche Regel überall (135.000 = 135000, 12,5 = 12,5)
-$dez  = fn($k) => pr_menge_parse((string)($_POST[$k] ?? '0'));   // 13.11.2026: gemeinsamer Mengen-Parser (Kapselprobe g, Sack brutto/tara)
+$dez  = fn($k) => gewicht_lesen((string)($_POST[$k] ?? '0'));   // 13.11.2026 (Fable-3 T1.2): Gewichte – Punkt und Komma = Dezimal („6.482“ g = 6,482)
 $uc = pa_aktuelle_unter_charge($paId);
 
 if ($aktion === 'wa_start') {

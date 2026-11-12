@@ -49,7 +49,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             // Produktionscharge CH/CHE anbinden + eingesetzte Rohstoff-Batches verknüpfen (Spec 7.5).
             $mm_menge = null;
             $mmv = trim((string)($_POST['daten']['mischmenge'] ?? ''));
-            if ($mmv !== '') $mm_menge = pr_menge_parse($mmv);   // 13.11.2026: gemeinsamer Mengen-Parser
+            if ($mmv !== '') $mm_menge = gewicht_lesen($mmv);   // 13.11.2026: Gewicht (kg) – „25.125“ = 25,125
             $pc = erp_prod_charge_fuer_station($id, (string)$r['station'], $mid, $mm_menge, $akteur);
             if ($pc) {
                 $zusatz .= ' Charge ' . $pc['nummer'] . ($pc['neu'] ? ' angelegt' : '')
@@ -58,7 +58,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             // Mischer-Kapazität (Spec 7.7): kg je Gebinde -> Gebinde-Unterchargen anlegen (ein Etikett je Gebinde).
             $capv = trim((string)($_POST['kg_pro_gebinde'] ?? ''));
             if ((string)$r['station'] === 'Mischen' && $capv !== '') {
-                $cap = pr_menge_parse($capv);   // 13.11.2026: „1.500“ = 1500 wie überall
+                $cap = gewicht_lesen($capv);   // 13.11.2026: kg je Gebinde = Gewicht („8.125“ = 8,125)
                 if ($cap > 0) {
                     pr_daten_setzen($id, 'kg_pro_gebinde', $capv, $akteur);
                     $ng = erp_mischer_unterchargen_anlegen($id, $cap, $akteur);
@@ -100,7 +100,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'von'=>$akteur, 'an_wen'=>(string)($_POST['an_wen'] ?? ''), 'grund'=>(string)($_POST['grund'] ?? '')]);
         flash(($art === 'schichtende' ? 'Schichtwechsel' : 'Pause') . ' erfasst – an einem sauberen Punkt zwischen den Schritten.');
     } elseif ($aktion === 'restmischung') {   // Teil 4 (Schritt 5): Restmischung ins Lager 1 einbuchen
-        $kg = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // Tausenderpunkt (Block D)
+        $kg = gewicht_lesen((string)($_POST['menge'] ?? '0'));   // 13.11.2026: Gewicht (kg)
         $r = function_exists('erp_restmischung_einbuchen') ? erp_restmischung_einbuchen($id, $kg, $akteur) : ['ok'=>false, 'msg'=>'Fehler.'];
         if (!empty($r['ok'])) {
             $kgTxt = rtrim(rtrim(number_format((float)$r['menge'], 3, ',', '.'), '0'), ',');
@@ -183,7 +183,7 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
     $anl = station_anleitung_text((string)$cur['station']);
     $mat = erp_schritt_material($id, (string)$cur['station']);
     $istMischen = (string)$cur['station'] === 'Mischen';
-    $cap = $istMischen ? pr_menge_parse((string)($_GET['cap'] ?? ($daten['kg_pro_gebinde']['wert'] ?? ''))) : 0.0;
+    $cap = $istMischen ? gewicht_lesen((string)($_GET['cap'] ?? ($daten['kg_pro_gebinde']['wert'] ?? ''))) : 0.0;   // 13.11.2026: Gewicht
     $capTxt = $cap > 0 ? rtrim(rtrim(number_format($cap, 3, '.', ''), '0'), '.') : '';
     $mischplan = $istMischen ? erp_mischer_plan($id, $cap) : null;
     // Fehlt PFLICHT-Material für diesen Schritt? Dann ist er (noch) nicht erledigbar.

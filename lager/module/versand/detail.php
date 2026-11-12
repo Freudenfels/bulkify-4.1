@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ((array)($_POST['z_hs'] ?? []) as $pid => $hs) {
             $pid = (int)$pid;
             $wert = ($_POST['z_wert'][$pid] ?? '') !== '' ? erp_menge_parse((string)$_POST['z_wert'][$pid]) : null;
-            $gew  = ($_POST['z_gewicht'][$pid] ?? '') !== '' ? (int)round(erp_menge_parse((string)$_POST['z_gewicht'][$pid])) : null;   // 13.11.2026: „1.500“ g = 1500
+            $gew  = ($_POST['z_gewicht'][$pid] ?? '') !== '' ? (int)round(gewicht_lesen((string)$_POST['z_gewicht'][$pid])) : null;   // 13.11.2026 (Fable-3): Gewicht – Punkt/Komma = Dezimal
             lg_versand_pos_zoll_set($pid, (string)$hs, (string)($_POST['z_ursprung'][$pid] ?? ''), $wert, $gew);
         }
         flash('Zolldaten gespeichert.');
@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($ok) foreach (array_map('intval', (array)($_POST['ps_ids'] ?? [])) as $pid) q("UPDATE lg_packstueck SET parent_id=? WHERE id=? AND versand_id=? AND art<>'palette'", [$ziel ?: null, $pid, $id]);
         }
         if ($aktion === 'ps_del') { $pid = (int)($_POST['ps_id'] ?? 0); q("UPDATE lg_packstueck SET parent_id=NULL WHERE parent_id=? AND versand_id=?", [$pid, $id]); q("DELETE FROM lg_packstueck WHERE id=? AND versand_id=?", [$pid, $id]); }
-        if ($aktion === 'ps_gewicht') foreach ((array)($_POST['gew'] ?? []) as $pid => $g) q("UPDATE lg_packstueck SET gewicht_kg=? WHERE id=? AND versand_id=?", [trim((string)$g) !== '' ? erp_menge_parse((string)$g) : null, (int)$pid, $id]);
+        if ($aktion === 'ps_gewicht') foreach ((array)($_POST['gew'] ?? []) as $pid => $g) q("UPDATE lg_packstueck SET gewicht_kg=? WHERE id=? AND versand_id=?", [trim((string)$g) !== '' ? gewicht_lesen((string)$g) : null, (int)$pid, $id]);
         // Pakete/Paletten zählen für Label und Lieferschein mit.
         $nPs = (int) scalar("SELECT COUNT(*) FROM lg_packstueck WHERE versand_id=? AND (art='palette' OR (art<>'palette' AND parent_id IS NULL))", [$id]);
         if ($nPs > 0) q("UPDATE lg_versand SET pakete=? WHERE id=?", [$nPs, $id]);
@@ -206,7 +206,7 @@ flash_zeigen();
         </select>
       </div>
       <div class="bx-field" style="margin:0;max-width:120px"><label>Pakete</label><input type="number" name="pakete" min="1" step="1" value="<?= (int)($v['pakete'] ?? 1) ?>"></div>
-      <div class="bx-field" style="margin:0;max-width:160px"><label>Gewicht (kg)<?= (string)$v['typ'] === 'palette' ? ' <span class="muted">(gesamt)</span>' : '' ?></label><input type="text" name="gewicht_kg" inputmode="decimal" value="<?= $v['gewicht_kg'] !== null ? h(rtrim(rtrim(number_format((float)$v['gewicht_kg'],3,',','.'),'0'),',')) : '' ?>"></div>
+      <div class="bx-field" style="margin:0;max-width:160px"><label>Gewicht (kg)<?= (string)$v['typ'] === 'palette' ? ' <span class="muted">(gesamt)</span>' : '' ?></label><input type="text" name="gewicht_kg" inputmode="decimal" value="<?= $v['gewicht_kg'] !== null ? h(gewicht_feld($v['gewicht_kg'])) : '' ?>"></div>
       <?php $mz = fn($x) => $x !== null && $x !== '' ? h(rtrim(rtrim(number_format((float)$x,1,',',''),'0'),',')) : ''; ?>
       <div class="bx-field vs-masse" style="margin:0;max-width:110px"><label>Länge (cm)</label><input type="text" name="masse_l" inputmode="decimal" value="<?= $mz($v['masse_l'] ?? null) ?>" placeholder="120"></div>
       <div class="bx-field vs-masse" style="margin:0;max-width:110px"><label>Breite (cm)</label><input type="text" name="masse_b" inputmode="decimal" value="<?= $mz($v['masse_b'] ?? null) ?>" placeholder="80"></div>

@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = erp_schritt_abschliessen($sid, $werkName ?: 'Mitarbeiter', $werkUid);
         // Mischen: je Mischbehälter eine Gebinde-Untercharge anlegen (ein Etikett je Behälter, FEFO beim Abfüllen).
         if (!empty($r['ok']) && ($r['station'] ?? '') === 'Mischen') {
-            $cap = pr_menge_parse((string)($_POST['cap'] ?? ''));
+            $cap = gewicht_lesen((string)($_POST['cap'] ?? ''));   // 13.11.2026: kg je Gebinde = Gewicht
             if ($cap > 0 && function_exists('erp_mischer_unterchargen_anlegen')) {
                 $wn = $werkName ?: 'Mitarbeiter';
                 if (function_exists('pr_daten_setzen')) pr_daten_setzen($paId, 'kg_pro_gebinde', rtrim(rtrim(number_format($cap, 3, '.', ''), '0'), '.'), $wn);
@@ -86,14 +86,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $g = [];
         foreach ((array)($_POST['rest'] ?? []) as $cid => $val) {
             $cid = (int)$cid; if ($cid <= 0) continue;
-            $g[$cid] = pr_menge_parse((string)$val);   // 13.11.2026
+            $g[$cid] = pr_menge_einheit_lesen((string)$val, erp_charge_einheit($cid));   // 13.11.2026 (Fable-3): kg/g = Gewicht, Stk = Menge
         }
         // Gewicht & Bestand pro Gebinde: je gescanntem Karton/Sack das neu gewogene Ist-Gewicht (+ Bestätigung „verschlossen“).
         $gb = [];
         foreach ((array)($_POST['rest_g'] ?? []) as $gid => $val) {
             if (trim((string)$val) === '') continue;
             $v = trim((string)$val);
-            $gb[(int)$gid] = pr_menge_parse($v);   // 13.11.2026: 1.234,5 / 25,5 / 25.5 / 1.500 wie überall
+            $gb[(int)$gid] = pr_menge_einheit_lesen($v, erp_gebinde_einheit((int)$gid));   // 13.11.2026 (Fable-3): kg „25.125“ = 25,125; Stk „1.500“ = 1500
         }
         if ($gb && empty($_POST['verschlossen'])) {
             $_SESSION['werk_flash'] = $T['return_closed_req']; $_SESSION['werk_flash_ok'] = false;
@@ -120,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Einen Mischbehälter (Eimer) abschließen: Gebinde anlegen + Etikett drucken. Letzter Eimer schließt Mischen ab.
         $paId = (int)($_POST['pa_id'] ?? 0);
         $nr   = (int)($_POST['nr'] ?? 0);
-        $cap  = pr_menge_parse((string)($_POST['cap'] ?? ''));
+        $cap  = gewicht_lesen((string)($_POST['cap'] ?? ''));   // 13.11.2026: kg je Gebinde = Gewicht
         $r = erp_mischer_eimer_abschliessen($paId, $cap, $nr, $werkName ?: 'Mitarbeiter');
         if (!empty($r['ok'])) {
             $msg = sprintf($T['fl_eimer_done'], (int)$r['nr'], (int)$r['anzahl']);
@@ -169,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($werkUid && $aktion === 'werk_restmischung') {
         // Teil 4 (Schritt 5): übrige gemischte Bulkware (kg) als Bulkware zur Rezeptur in Lager 1 einbuchen.
         $paId = (int)($_POST['pa_id'] ?? 0);
-        $kg   = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // Tausenderpunkt (Block D)
+        $kg   = gewicht_lesen((string)($_POST['menge'] ?? '0'));   // 13.11.2026: Restmischung in kg = Gewicht
         $r = (function_exists('erp_restmischung_einbuchen') && $paId > 0)
            ? erp_restmischung_einbuchen($paId, $kg, $werkName ?: 'Mitarbeiter')
            : ['ok' => false, 'msg' => $T['fl_rest_fail']];
@@ -500,7 +500,7 @@ header('Content-Type: text/html; charset=utf-8');
         <form method="get" style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           <input type="hidden" name="p" value="werk"><input type="hidden" name="id" value="<?= (int)$id ?>">
           <div><div class="muted" style="font-size:14px;margin-bottom:4px"><?= h($T['kg_per_container']) ?></div>
-            <input type="text" inputmode="decimal" name="cap" value="<?= h($capM > 0 ? $nzM($capM) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
+            <input type="text" inputmode="decimal" name="cap" value="<?= h($capM > 0 ? gewicht_feld($capM) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
           <button class="btn btn-ghost" type="submit" style="min-height:52px"><?= h($T['calc_containers']) ?></button>
         </form>
         <?php endif; ?>
@@ -529,7 +529,7 @@ header('Content-Type: text/html; charset=utf-8');
                 <input type="hidden" name="aktion" value="werk_eimer_fertig">
                 <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
                 <input type="hidden" name="nr" value="<?= $i ?>">
-                <input type="hidden" name="cap" value="<?= h($nzM($capM)) ?>">
+                <input type="hidden" name="cap" value="<?= h(gewicht_feld($capM)) ?>">
                 <button class="btn btn-lime btn-lg" type="submit"><?= h(sprintf($T['eimer_fertig_btn'], $i)) ?></button>
               </form>
             <?php else: ?>
@@ -560,7 +560,7 @@ header('Content-Type: text/html; charset=utf-8');
         }
     $isGate = str_contains((string)$cur['station'], 'Freigabe');
     $istMischen = (string)$cur['station'] === 'Mischen';
-    $cap  = $istMischen ? pr_menge_parse((string)($_GET['cap'] ?? '')) : 0.0;
+    $cap  = $istMischen ? gewicht_lesen((string)($_GET['cap'] ?? '')) : 0.0;   // 13.11.2026: Gewicht
     $plan = $istMischen ? erp_mischer_plan($id, $cap) : null;
     $nz   = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
     // Scan-Pflicht: jede Pflicht-Zeile mit bekannter Charge muss vor dem Abschließen gescannt werden.
@@ -580,7 +580,7 @@ header('Content-Type: text/html; charset=utf-8');
       <form method="get" style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
         <input type="hidden" name="p" value="werk"><input type="hidden" name="id" value="<?= (int)$id ?>">
         <div><div class="muted" style="font-size:14px;margin-bottom:4px"><?= h($T['kg_per_container']) ?></div>
-          <input type="text" inputmode="decimal" name="cap" value="<?= h($cap > 0 ? $nz($cap) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
+          <input type="text" inputmode="decimal" name="cap" value="<?= h($cap > 0 ? gewicht_feld($cap) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
         <button class="btn btn-ghost" type="submit" style="min-height:52px"><?= h($T['calc_containers']) ?></button>
       </form>
       <?php if (!empty($plan['gebinde'])): ?>
@@ -657,7 +657,7 @@ header('Content-Type: text/html; charset=utf-8');
           <input type="hidden" name="aktion" value="werk_erledigt">
           <input type="hidden" name="schritt_id" value="<?= (int)$cur['id'] ?>">
           <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
-          <?php if ($istMischen && $cap > 0): ?><input type="hidden" name="cap" value="<?= h($nz($cap)) ?>"><?php endif; ?>
+          <?php if ($istMischen && $cap > 0): ?><input type="hidden" name="cap" value="<?= h(gewicht_feld($cap)) ?>"><?php endif; ?>
           <input type="hidden" name="scanned" id="scannedfield" value="">
           <button class="btn btn-lime btn-lg" type="submit" id="erledigtbtn"<?= $scanAktiv ? ' disabled data-scan-gate="1"' : '' ?>><?= $isGate ? h($T['release']) : h($T['done_next']) ?></button>
         </form>

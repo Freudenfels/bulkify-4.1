@@ -1899,6 +1899,17 @@ function pr_menge_parse(string $s): float {
     elseif ($hatP && preg_match('/^-?[1-9]\d{0,2}(\.\d{3})+$/', $s)) { $s = str_replace('.', '', $s); }
     return (float)$s;
 }
+// Menge in ihrer Einheit lesen (13.11.2026, Fable-3 T1.2): Gewicht/Volumen -> gewicht_lesen() (Punkt und Komma = Dezimal),
+// Stück -> pr_menge_parse() (Tausenderpunkt). Für Felder, deren Einheit je Zeile wechselt (Rückgabe je Charge/Gebinde).
+function pr_menge_einheit_lesen(string $s, string $einheit): float { return einheit_ist_gewicht($einheit) ? gewicht_lesen($s) : pr_menge_parse($s); }
+function erp_charge_einheit(int $charge_id): string {
+    return (string)(scalar("SELECT COALESCE(NULLIF(c.einheit,''), NULLIF(i.einheit,''), 'kg') FROM charge c LEFT JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]) ?: 'kg');
+}
+function erp_gebinde_einheit(int $gebinde_id): string {
+    $r = one("SELECT g.einheit, g.charge_id FROM charge_gebinde g WHERE g.id=?", [$gebinde_id]);
+    if (!$r) return 'kg';
+    return trim((string)$r['einheit']) !== '' ? (string)$r['einheit'] : erp_charge_einheit((int)$r['charge_id']);
+}
 function erp_mischer_fertig_anzahl(int $pa_id): int { return count(erp_gebinde_unterchargen($pa_id)); }
 
 // Einen Eimer (Mischbehälter) abschließen: legt GENAU EINE Gebinde-Untercharge an (der Reihe nach).

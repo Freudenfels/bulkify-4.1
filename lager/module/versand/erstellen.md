@@ -20,4 +20,6 @@ Erreichbar über den eigenen Menüpunkt **„Lieferschein erstellen“** (Lager 
 **Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.
 
 ## Mengen-Parser (13.11.2026)
-Alle Mengen-, Gewichts- und Maßfelder lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.
+Alle Mengen- und Maßfelder (Gewichte siehe unten) lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.
+
+**Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Hier: Gewicht gesamt (kg, automatische Vorbelegung ohne Tausenderpunkt) und Gewicht je Position (g).

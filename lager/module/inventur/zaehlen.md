@@ -18,3 +18,5 @@ Ablauf:
 Die Liste „Auf diesem Platz erfasst“ zeigt die eigenen Ist-Werte. Offene Nachzählungen erscheinen für eine zweite Person.
 
 Nach einer Unterbrechung merkt sich das Gerät den zuletzt offenen Platz. Alle Daten liegen sofort auf dem Server.
+
+**Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Die Netto-Anzeige rechnet im Browser mit derselben Regel (`gew()`), Tara und mg je Kapsel sind ohne Tausenderpunkt vorbelegt.

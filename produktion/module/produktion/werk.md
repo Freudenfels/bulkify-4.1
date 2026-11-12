@@ -81,7 +81,9 @@ Rückgabe nach dem Mischen (04.11.2026): Hat eine Charge in die Produktion gesca
 **Sprachen (Block F, 11.11.2026):** Alle Texte des geführten Ablaufs laufen über `werk_texte()` (`wa_*`), Meldungen aus dem Kern über `werk_msg()`. Der Umschalter DE/EN/УКР wirkt auf Tagesplan, Start, Material-Scan, Kapselprobe, Kartons, Teilmenge, Abschluss und alle Meldungen.
 
 ## Mengen-Parser (13.11.2026)
-Alle Mengen-, Gewichts- und Maßfelder lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.
+Alle Mengen- und Maßfelder (Gewichte siehe unten) lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.
 
 ## Ein Weg für Teilmengen (13.11.2026)
 Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App, Werk-App außerhalb Abfüllen/Verpacken) sind entfernt; ihre POST-Aktionen buchen nichts mehr und verweisen auf den geführten Ablauf. Gebucht wird nur über `pa_teilmenge_buchen()` (Werk-App Abfüllen/Verpacken, Dashboard „Teilmenge nachtragen“).
+
+**Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Hier: kg je Gebinde, Restmischung kg, Rückgabe je Charge und je Gebinde: je nach Einheit der Charge/des Gebindes (`pr_menge_einheit_lesen()`, kg/g = Gewicht, Stk = Menge).

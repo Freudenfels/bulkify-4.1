@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../core/gewicht.php';   // gewicht_lesen() – eine Regel für Gewichte (13.11.2026)
 // Die eigenen Tabellen des Lager-Programms. ALLE heissen `lg_...`. Dashboard-Tabellen werden hier
 // NIE angelegt oder geaendert - wer dort etwas lesen will, geht ueber core/erp.php.
 //
@@ -429,7 +430,7 @@ function lg_versand_anlegen(array $d): int {
        $d['empf_email'] ?? '', $d['empf_telefon'] ?? '', $d['adress_quelle'] ?? 'frei',
        in_array(($d['typ'] ?? 'paket'), ['paket', 'palette', 'abholung'], true) ? ($d['typ'] ?? 'paket') : 'paket',
        $d['notiz'] ?? '',
-       (($d['gewicht_kg'] ?? '') !== '' ? lg_zahl($d['gewicht_kg']) : null),
+       (($d['gewicht_kg'] ?? '') !== '' ? gewicht_lesen($d['gewicht_kg']) : null),
        max(1, (int)($d['pakete'] ?? 1)),
        (int)($u['id'] ?? 0) ?: null, mb_substr((string)($u['name'] ?? ''), 0, 120), jetzt_utc()]);
     return (int) insert_id();
@@ -464,7 +465,7 @@ function lg_lieferschein_erstellen(array $d): int {
            $kartons ?: null, $mk ?: null, $einzel ?: null, $gewG ?: null]);
     }
     $vic    = (($d['versicherung_cent'] ?? '') !== '') ? max(0, (int)$d['versicherung_cent']) : $vicSum;
-    $gewKg  = (($d['gewicht_kg'] ?? '') !== '') ? lg_zahl($d['gewicht_kg']) : round($gewSumG / 1000, 3);
+    $gewKg  = (($d['gewicht_kg'] ?? '') !== '') ? gewicht_lesen($d['gewicht_kg']) : round($gewSumG / 1000, 3);
     $pakete = max(1, ((int)($d['pakete'] ?? 0)) ?: $kartonsSum ?: 1);
     q("UPDATE lg_versand SET versicherung_cent=?, gewicht_kg=?, pakete=? WHERE id=?", [$vic ?: null, $gewKg ?: null, $pakete, $vid]);
     return $vid;
@@ -516,7 +517,7 @@ function lg_versand_kopf_speichern(int $id, array $d): void {
        strtoupper(trim((string)($d['empf_land'] ?? 'DE'))) ?: 'DE', $d['empf_email'] ?? '', $d['empf_telefon'] ?? '',
        $d['adress_quelle'] ?? 'frei', in_array(($d['typ'] ?? 'paket'), ['paket', 'palette', 'abholung'], true) ? ($d['typ'] ?? 'paket') : 'paket',
        $d['notiz'] ?? '',
-       (($d['gewicht_kg'] ?? '') !== '' ? lg_zahl($d['gewicht_kg']) : null),
+       (($d['gewicht_kg'] ?? '') !== '' ? gewicht_lesen($d['gewicht_kg']) : null),
        max(1, (int)($d['pakete'] ?? 1)), $mass($d['masse_l'] ?? ''), $mass($d['masse_b'] ?? ''), $mass($d['masse_h'] ?? ''),
        (($d['dhl_groesse'] ?? 'gross') === 'klein' ? 'klein' : 'gross'), $id]);
 }

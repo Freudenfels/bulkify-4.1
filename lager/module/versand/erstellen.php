@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erste
             'kartons'         => (int)($kart[$i] ?? 0),
             'menge_karton'    => (string)($mk[$i] ?? ''),
             'einzelwert_cent' => (int)round(erp_menge_parse((string)($einz[$i] ?? 0)) * 100),   // 13.11.2026: gemeinsamer Parser
-            'gewicht_g'       => (int)round(erp_menge_parse((string)($gew[$i] ?? 0))),
+            'gewicht_g'       => (int)round(gewicht_lesen((string)($gew[$i] ?? 0))),   // 13.11.2026: Gewicht
             'einheit'         => 'Stk',
         ];
     }
@@ -196,7 +196,7 @@ flash_zeigen();
     });
     var vicEl=document.getElementById('versicherung'), gewEl=document.getElementById('gewicht_kg'), pakEl=document.getElementById('pakete');
     if(!vicEl.dataset.touched) vicEl.value = vicSum>0 ? nf(vicSum,2) : '';
-    if(!gewEl.dataset.touched) gewEl.value = gewSum>0 ? nf(gewSum/1000,3) : '';
+    if(!gewEl.dataset.touched) gewEl.value = gewSum>0 ? (Math.round(gewSum)/1000).toLocaleString('de-DE',{maximumFractionDigits:3,useGrouping:false}) : '';   // Gewicht ohne Tausenderpunkt (gewicht_lesen)
     if(!pakEl.dataset.touched && kartSum>0) pakEl.value = kartSum;
     var pk = parseInt(pakEl.value||0,10)||0;
     document.getElementById('gewProPaket').textContent = (gewSum>0 && pk>0) ? ('≈ '+nf(gewSum/1000/pk,3)+' kg je Paket') : '';

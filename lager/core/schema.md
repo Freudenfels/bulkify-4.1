@@ -22,4 +22,6 @@ Soll-Kette 7 (04.11.2026): `lg_versand_pos.auftrag_id`; Versandart `abholung` (S
 | `lg_packstueck` | **Packstücke einer Sendung (Soll-Kette 7b)**: `versand_id`, `art` (palette/karton/paket), `nr` (je Art laufend), `parent_id` (Karton liegt auf Palette), `auftrag_id`, `pa_id`, `bezeichnung`, `charge_nr`, `menge` (Pkg), `gewicht_kg`. Helfer `lg_packstueck_liste/_anlegen`, `lg_packstueck_kartons_uebernehmen($versand_id)` legt je Auftrag der Sendung die Kartons aus den Kartonwerten der Produktion an (`karton_stueck`/`karton_menge`, Schritt 6; letzter Karton = Rest). |
 
 ## Mengen-Parser (13.11.2026)
-Alle Mengen-, Gewichts- und Maßfelder lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.
+Alle Mengen- und Maßfelder (Gewichte siehe unten) lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.
+
+**Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Hier: `gewicht_kg` der Sendung.

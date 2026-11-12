@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
     // MHD-Warnung (Tage vor Ablauf) + Schwund-Grenze (kg) für die Benachrichtigungen/Wiege-Prüfung.
     meta_set('mhd_warn_tage', (string)max(1, (int)($_POST['mhd_warn_tage'] ?? 30)));
-    meta_set('schwund_grenze_kg', (string)max(0, zahl_lesen((string)((string)($_POST['schwund_grenze_kg'] ?? '1')), true)));
+    meta_set('schwund_grenze_kg', (string)max(0, gewicht_lesen((string)($_POST['schwund_grenze_kg'] ?? '1'))));   // 13.11.2026: Gewicht
     meta_set('wareneingang_quarantaene', isset($_POST['wareneingang_quarantaene']) ? '1' : '0');   // Wareneingang: Standard sofort frei (Nico 04.11.2026)
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
 }

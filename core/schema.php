@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/gewicht.php';   // gewicht_lesen(), gewicht_feld(), tara_aus_id() – eine Regel für Gewichte (13.11.2026)
 // Schema + additive Migrationen bulkify 4.1
 // Regel: erst CREATE (frisch installierbar), dann additive Migrationen via ensure_column().
 // Nie Spalten loeschen. Alles UTF-8 (utf8mb4).

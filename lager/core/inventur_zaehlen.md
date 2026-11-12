@@ -23,3 +23,5 @@ Seit 11.11.2026. **Keine Funktion gibt dem Zähler eine Soll-Menge zurück.** Be
   - Gebucht wird erst bei der Auswertung.
 - **`inv_bereich_fertig()`:** „Platz fertig“. Danach entsteht der Abgleich für den Admin.
 - **`inv_nachzaehl_aufgaben()`:** offene Nachzählungen für eine zweite Person, ohne Mengen.
+
+**Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Hier: Brutto, Tara (nur bei Handeingabe) und mg je Kapsel.
