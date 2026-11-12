@@ -11,10 +11,13 @@ function la_t(string $sprache): callable {
 function la_sichtbar(array $b): bool {
     return (int)($b['bestaetigt'] ?? 0) === 1 && !in_array((string)($b['status'] ?? ''), ['storniert'], true);
 }
-function la_zahl(string $s): ?float {
+// Zahl aus dem Aufkleber-Formular (Nachbesserung 13.11.2026): Mengenfeld-Lesart in der Sprache des Lieferanten (zahl_lesen(..., true)).
+// $stueck: Stück je Gebinde sind ganze Zahlen - „12.000“ und „12,000“ sind dann beide 12000 (Tausendertrenner, egal welcher).
+function la_zahl(string $s, string $sprache = 'de', bool $stueck = false): ?float {
     $s = trim(str_replace(' ', '', $s));
     if ($s === '') return null;
-    if (function_exists('zahl_lesen')) { $v = zahl_lesen($s, false); return $v > 0 ? (float)$v : null; }
+    if ($stueck && preg_match('/^\d{1,3}([.,]\d{3})+$/', $s)) $s = str_replace(['.', ','], '', $s);
+    if (function_exists('zahl_lesen')) { $v = zahl_lesen($s, true, $sprache); return $v > 0 ? (float)$v : null; }
     $s = preg_match('/,\d{1,3}$/', $s) ? str_replace(['.', ','], ['', '.'], $s) : str_replace(',', '', $s);
     return is_numeric($s) && (float)$s > 0 ? (float)$s : null;
 }
@@ -51,7 +54,7 @@ function la_post(array $b, string $von, string $sprache): ?array {
     }
     if ($aktion === 'la_drucken' && $gehoert) {
         $fehler = '';
-        $ids = la_anlegen($bcId, la_zahl((string)($_POST['netto'] ?? '')), la_zahl((string)($_POST['brutto'] ?? '')), la_zahl((string)($_POST['stueck'] ?? '')),
+        $ids = la_anlegen($bcId, la_zahl((string)($_POST['netto'] ?? ''), $sprache), la_zahl((string)($_POST['brutto'] ?? ''), $sprache), la_zahl((string)($_POST['stueck'] ?? ''), $sprache, true),
                           (int)($_POST['anzahl'] ?? 0), $von, $fehler);
         if (!$ids) return ['ok' => false, 'msg' => ['netto' => $t('Bitte das Nettogewicht je Gebinde angeben.', 'Please enter the net weight per package.', '请填写每件净重。'),
                                                      'anzahl' => $t('Anzahl 1 bis 200.', 'Quantity 1 to 200.', '数量 1 至 200。')][$fehler] ?? $t('Nicht gespeichert.', 'Not saved.', '未保存。'), 'pdf' => ''];
