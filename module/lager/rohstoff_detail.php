@@ -639,7 +639,9 @@ function bx_bald(string $modul): void {
 render_header('rohstoffe', $neu ? 'Neuer Rohstoff' : $it['name']);
 bx_head($neu ? 'Neuer Rohstoff' : $v('name'),
         $neu ? 'Item anlegen' : trim(($v('artikelnummer') ? $v('artikelnummer').' · ' : '') . item_warenart_label($it) . ($v('name_lat') ? ' · '.$v('name_lat') : '')),
-        bx_btn('Zurück zur Liste', '?p=rohstoffe', 'ghost'));
+        // „Preis anfragen" auch oben im Kopf (Nico 12.11.2026) – gleiches Pop-up wie im Reiter Einkauf (core/anfrage_ui.php).
+        ($neu ? '' : '<button type="button" class="btn btn-primary" data-name="' . $v('name') . '" onclick="bxAnfrageOeffnen(' . (int)$id . ',this)">Preis anfragen</button> ')
+        . bx_btn('Zurück zur Liste', '?p=rohstoffe', 'ghost'));
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.'
     . (isset($_GET['coacharge']) ? ' Aus der CoA wurde eine Charge angelegt (noch ohne Ware) – bei der Warenannahme wird sie über die Chargennummer abgeglichen und eingebucht.' : '')

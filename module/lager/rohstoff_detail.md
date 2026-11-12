@@ -227,3 +227,6 @@ Siehe `core/preis_gueltig.md`.
 **Zusammenführen (Block D, 11.11.2026):** läuft über `artikel_zusammenfuehren_voll()` (gleiche Sperren wie die Seite „Artikel zusammenführen“). Fehler- und Kollisionshinweise erscheinen als Text.
 
 **EK aus abgelaufenem Preis (Block D, 11.11.2026):** Unter dem EK steht rot „aus abgelaufenem Preis (seit …)“, wenn es keinen gültigen Lieferantenpreis mehr gibt (`item.ek_abgelaufen_seit`).
+
+## Preis anfragen oben im Kopf (12.11.2026)
+Nico: „Hier bitte Anfrage mit einbauen, damit ich Preise anfragen kann.“ Der Knopf „Preis anfragen“ stand bisher nur im Reiter **Einkauf** und war beim Öffnen der Seite nicht zu sehen. Jetzt steht er zusätzlich oben neben „Zurück zur Liste“. Er öffnet dasselbe Pop-up (`bxAnfrageOeffnen`, core/anfrage_ui.php): Lieferanten wählen, Menge, Notiz, CoA/Spec, Lieferbedingung. Nach dem Senden landet man im Reiter Einkauf mit der Meldung „n Preisanfrage(n) verschickt“.
