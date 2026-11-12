@@ -8,6 +8,14 @@ $id = (int)($_GET['id'] ?? 0);
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') === 'schritt_ab') {
     $schritt_id = (int)($_POST['schritt_id'] ?? 0);
     $akteur = (string)(pr_benutzer()['name'] ?? '');
+    // 13.11.2026: gleiche Regel wie im Dashboard – Schritte ohne Menge abhaken nur Admin mit Pflicht-Grund (QM-Gates normal).
+    $stA = erp_schritt_station($schritt_id);
+    if (!in_array($stA, erp_qm_stationen(), true)) {
+        $grundA = trim((string)($_POST['grund'] ?? ''));
+        if (!pr_ist_admin()) { flash('Produziert wird in der Werk-App mit Mengen. Abhaken ohne Menge nur für Admin.', 'warn'); weiter('?p=pa&id=' . $id); }
+        if ($grundA === '') { flash('Bitte einen Grund angeben.', 'warn'); weiter('?p=pa&id=' . $id); }
+        pa_ereignis($id, null, 'abweichung', 'Schritt „' . $stA . '“ ohne Menge abgehakt (Admin, Produktions-App): ' . $grundA, '', '', '', $akteur);
+    }
     $r = erp_schritt_abschliessen($schritt_id, $akteur, pr_uid());
     if ($r['ok']) {
         flash($r['fertig']
@@ -292,9 +300,11 @@ if ($bedarf && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($bedarf as $b
         <td class="muted"><?= h((string)($s['erledigt_von'] ?? '')) ?></td>
         <td class="muted"><?= h(fmt_zeit($s['erledigt_at'] ?? null)) ?></td>
         <td class="bx-num">
-          <?php if ($dran): ?>
-          <form method="post" style="margin:0" onsubmit="return confirm('Schritt &quot;<?= h((string)$s['station']) ?>&quot; abschließen? Material wird nach FEFO abgebucht.');">
-            <input type="hidden" name="aktion" value="schritt_ab">
+          <?php $qmA = in_array((string)$s['station'], erp_qm_stationen(), true); if ($dran && !$qmA && !pr_ist_admin()): ?>
+          <span class="muted">in der Werk-App</span>
+          <?php elseif ($dran): ?>
+          <form method="post" style="margin:0" <?= $qmA ? 'onsubmit="return confirm(\'Schritt &quot;' . h((string)$s['station']) . '&quot; abschließen?\');"' : pa_admin_grund_js() ?>>
+            <input type="hidden" name="aktion" value="schritt_ab"><input type="hidden" name="grund" value="">
             <input type="hidden" name="schritt_id" value="<?= (int)$s['id'] ?>">
             <button type="submit" class="btn btn-primary btn-sm">Abschließen</button>
           </form>

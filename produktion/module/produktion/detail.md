@@ -32,3 +32,6 @@ Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … �
 
 ## Ein Weg für Teilmengen (13.11.2026)
 Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App, Werk-App außerhalb Abfüllen/Verpacken) sind entfernt; ihre POST-Aktionen buchen nichts mehr und verweisen auf den geführten Ablauf. Gebucht wird nur über `pa_teilmenge_buchen()` (Werk-App Abfüllen/Verpacken, Dashboard „Teilmenge nachtragen“).
+
+## Schritt abhaken (13.11.2026)
+`schritt_ab` folgt der Dashboard-Regel: QM-Stationen normal, alle anderen nur Admin mit Pflicht-Grund (Rückfrage im Browser, serverseitig geprüft), Ereignis „abweichung“ im Chargenprotokoll. Andere sehen „in der Werk-App“.
