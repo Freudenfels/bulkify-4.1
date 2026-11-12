@@ -38,3 +38,6 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
   - Rest kommt noch: Der PA bleibt offen.
   - Rest storniert: `auftrag.fortschritt_ziel`, Aufgabe ans Büro.
   - Sonst werden die Produktionsschritte (ohne QM-Stationen) erledigt, weiter geht es mit QM und Freigaben.
+
+## Quarantäne-Bulk (13.11.2026)
+`pa_starten()` prüft den Status der Bulk-Charge: Quarantäne oder gesperrt = keine Unter-Charge (Start, Wiederanlauf, Nachtrag), Meldung „erst nach der QM-Freigabe produzieren“.

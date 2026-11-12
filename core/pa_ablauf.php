@@ -191,6 +191,12 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     $bulk = (int)($d['bulk_charge_id'] ?? 0); $eimer = (int)($d['prod_charge_id'] ?? 0);
     $nachtrag = !empty($d['nachtrag']);   // Nachtrag im Dashboard (Produktion ist schon gelaufen): keine Fotos möglich
     if (!$nachtrag && (($d['foto_linie'] ?? '') === '' || ($d['foto_stempel'] ?? '') === '')) return ['ok' => false, 'msg' => 'Bitte Foto „Linie leer“ und Foto vom Stempelbild machen.'];
+    // 13.11.2026: Bulk-Charge in Quarantäne oder gesperrt startet keine Unter-Charge (auch kein Wiederanlauf/Nachtrag).
+    if ($bulk > 0) {
+        $bSt = one("SELECT COALESCE(charge_nr, CONCAT('#', id)) AS nr, status FROM charge WHERE id=?", [$bulk]);
+        if ($bSt && in_array((string)$bSt['status'], ['quarantaene', 'gesperrt'], true))
+            return ['ok' => false, 'msg' => 'Bulk-Charge ' . $bSt['nr'] . ' ist ' . ((string)$bSt['status'] === 'gesperrt' ? 'gesperrt' : 'in Quarantäne') . ' – erst nach der QM-Freigabe produzieren.'];
+    }
     $tag = ($nachtrag && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($d['datum'] ?? ''))) ? (string)$d['datum'] : pa_tag_heute();
     $v = pa_vorgabe($pa_id, $bulk, $eimer, $tag);
     $akt = pa_aktuelle_unter_charge($pa_id);
