@@ -110,7 +110,7 @@ if ($schritt === 'vorschau' && !empty($_SESSION['auftrag_import'])):
     $kid = (int)$S['kid'];
     $kunde = one("SELECT firma, kundennummer FROM kunden WHERE id=?", [$kid]);
     // Dedup
-    $rezExist = one("SELECT id, nummer FROM rezeptur WHERE name=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$d['produkt_name'], $kid]);
+    $rezExist = one("SELECT id, nummer FROM rezeptur WHERE name=? AND COALESCE(status,'')<>'inaktiv' ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$d['produkt_name'], $kid]);   // Fable-3 T4.3: ohne gesperrte/inaktive
     $verpId = !empty($d['verpackung']) ? verpackung_finden((string)$d['verpackung']) : null;
     $verpName = $verpId ? (string) scalar("SELECT name FROM item WHERE id=?", [$verpId]) : '';
     $aufExist = !empty($d['ab_nummer']) ? one("SELECT id, nummer FROM auftrag WHERE kunde_id=? AND import_ref=? LIMIT 1", [$kid, $d['ab_nummer']]) : null;

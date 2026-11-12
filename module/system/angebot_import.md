@@ -24,3 +24,5 @@ Der Match-Schritt zeigt **je Produkt einen Block** (Name/Rezeptur-Match, Stück,
 
 ## Bulk-gerechte Beschriftung (Stand 2026-10-09)
 Im Match-Schritt richten sich die Staffel-Spalten nach der **Einheit** je Produkt (JS): „Menge (Stk.)" / „VK je Stk. (netto)" statt fix „Packungen"/„je Packung". Das Feld **„Stück je Packung"** erscheint nur, wenn eine **Verpackung** gewählt ist – bei Bulk (keine Verpackung) ist es ausgeblendet und wird beim Übernehmen als 0 gespeichert (lose Ware hat keinen Packungsinhalt).
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Gesperrter Kunde aus dem Import: Meldung statt Zuordnung.

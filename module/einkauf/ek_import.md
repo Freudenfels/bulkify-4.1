@@ -64,3 +64,5 @@ beim Seitenaufruf idempotent nachgezogen (`lieferant_alias_anwenden()`). Tabelle
 
 Logik in `core/ek_ki.php`. Der manuelle Pfad ist überall verifiziert; der KI-Pfad läuft
 identisch, nur mit KI-Vorschlag statt Handeingabe.
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Rohstoff-Vorschlagsliste ohne gesperrte Artikel.

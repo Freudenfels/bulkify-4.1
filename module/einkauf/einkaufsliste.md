@@ -123,3 +123,5 @@ Anlass: Beim „Vorsorglich bestellen“ bei Wellgreen kam „keinen aktiven Acc
 **Unterlagen-Sperre = Entwurf (13.11.2026, Fable-3 T2.1):** Greift beim Bestellen die Unterlagen-Sperre, setzt `bestellung_als_entwurf()` die Bestellung auf Entwurf zurück (Status „offen“, ohne Bestelldatum) – wie bei „Vorsorglich bestellen“. Meldung „nur als Entwurf angelegt“ und Status stimmen überein; der Bedarf gilt nicht als bestellt.
 
 **Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Vorbelegung „Labelisten“ nur, wenn der Lieferant nicht gesperrt ist.

@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anwen
     $kid = 0;
     if ($kModus === 'neu') { $ku = kunde_finden_oder_anlegen((string)($d['kunde_name'] ?? ''), (string)($d['kunde_nr'] ?? '')); $kid = (int)$ku['id']; }
     elseif (ctype_digit($kModus) && (int)$kModus > 0) { $kid = (int)$kModus; }
-    if ($kid <= 0) { $_SESSION['angimp_fehler'] = 'Bitte einen Kunden zuordnen (oder neu anlegen).'; header('Location: ?p=angebot_import&schritt=match'); exit; }
+    if ($kid <= 0) { $_SESSION['angimp_fehler'] = !empty($ku['gesperrt']) ? 'Dieser Kunde ist gesperrt – bitte einen anderen Kunden zuordnen oder den Kunden erst entsperren.' : 'Bitte einen Kunden zuordnen (oder neu anlegen).'; header('Location: ?p=angebot_import&schritt=match'); exit; }
 
     // Rezeptur je Produkt per Name auflösen (Haus-Rezeptur bevorzugt).
     foreach ($produkte as &$pp) { $rezF = rezeptur_finden_fuzzy($pp['name'], $kid ?: null); $pp['rezid'] = $rezF ? (int)$rezF['id'] : 0; } unset($pp);

@@ -81,11 +81,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
     if ($kModus === 'neu') {
         $ku = kunde_finden_oder_anlegen((string)$d['kunde_name'], (string)$d['kunde_nr']);
         $kid = $ku['id']; $kneu = $ku['neu'];
+        if (!empty($ku['gesperrt'])) { $fehler = 'Der Kunde aus dem Angebot ist gesperrt – bitte einen anderen Kunden wählen oder ihn erst entsperren.'; }   // Fable-3 T4.3
     } elseif (ctype_digit($kModus) && (int)$kModus > 0) {
         $kid = (int)$kModus;
     }
 
-    $r = angebotsscan_speichern($d, [
+    $r = !empty($fehler) ? ['ok' => false, 'fehler' => $fehler] : angebotsscan_speichern($d, [
         'kunde_id' => $kid, 'kunde_neu' => $kneu,
         'datei' => $S['datei'], 'orig' => $S['orig'], 'bemerkung' => $S['bemerkung'],
         'benutzer_id' => (int)(current_user()['id'] ?? 0),

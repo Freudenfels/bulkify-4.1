@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
         $fehler = 'Bitte die Rechnung in eigenen Worten beschreiben – oder eine Datei hochladen.';
     } else { try {
         // Kundenliste als Kontext, damit die KI auf eine bestehende Firma matcht.
-        $kundenAll = all("SELECT firma FROM kunden WHERE firma<>'' ORDER BY firma");
+        $kundenAll = all("SELECT firma FROM kunden WHERE firma<>'' AND COALESCE(gesperrt,0)=0 ORDER BY firma");   // Fable-3 T4.3: ohne gesperrte/inaktive
         $firmen = array_slice(array_column($kundenAll, 'firma'), 0, 400);
         $system = "Du bist die Rechnungs-Assistenz eines Lohnherstellers für Nahrungsergänzungsmittel (Marke bulkify). "
             . "Aus der Beschreibung des Nutzers baust du die Daten für EINE Ausgangsrechnung. "

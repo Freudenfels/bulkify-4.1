@@ -12359,6 +12359,7 @@ function produktion_materialbedarf(int $pa_id, bool $ohnePremix = false): array 
 // Rückgabe: neue bestellung-id, oder null (kein Produktionsauftrag / Lieferant bietet nichts Fehlendes).
 function auftrag_express_bestellung(int $auftrag_id, int $lieferant_id): ?int {
     if ($auftrag_id <= 0 || $lieferant_id <= 0) return null;
+    if ((int) scalar("SELECT COALESCE(gesperrt,0) FROM lieferanten WHERE id=?", [$lieferant_id]) === 1) return null;   // Fable-3 T4.3: nie an gesperrte Lieferanten
     $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? ORDER BY id DESC LIMIT 1", [$auftrag_id]);
     if (!$pa) return null;
     $pos = [];
@@ -12393,6 +12394,7 @@ function auftrag_express_bestellung(int $auftrag_id, int $lieferant_id): ?int {
 // Verknüpft über bestellung_position.auftrag_id. Rückgabe: bestellung-id oder null (kein Zukaufpreis).
 function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?int {
     if ($auftrag_id <= 0 || $lieferant_id <= 0) return null;
+    if ((int) scalar("SELECT COALESCE(gesperrt,0) FROM lieferanten WHERE id=?", [$lieferant_id]) === 1) return null;   // Fable-3 T4.3: nie an gesperrte Lieferanten
     $a = one("SELECT a.menge, a.produkt_id, p.name, p.einheiten_pro_packung
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
     if (!$a || !$a['produkt_id']) return null;
@@ -13562,7 +13564,7 @@ function rezeptur_finden_oder_anlegen(string $name, string $form, array $zutaten
 // der Import-Prüfschritt lässt den Kunden ändern. LIKE mit ESCAPE '=' (Backslash crasht die Live-DB).
 function kunde_finden_fuzzy(string $name, string $nr = ''): ?array {
     $name = trim($name); $nr = trim($nr);
-    if ($nr !== '') { $k = one("SELECT id, firma, kundennummer FROM kunden WHERE kundennummer=? LIMIT 1", [$nr]); if ($k) return $k; }
+    if ($nr !== '') { $k = one("SELECT id, firma, kundennummer FROM kunden WHERE kundennummer=? AND COALESCE(gesperrt,0)=0 LIMIT 1", [$nr]); if ($k) return $k; }   // Fable-3 T4.3: ohne gesperrte/inaktive
     if ($name === '') return null;
     $k = one("SELECT id, firma, kundennummer FROM kunden WHERE COALESCE(gesperrt,0)=0 AND LOWER(TRIM(firma))=LOWER(TRIM(?)) LIMIT 1", [$name]); if ($k) return $k;   // 13.11.2026: keine gesperrten
     $esc = str_replace(['=', '%', '_'], ['==', '=%', '=_'], $name);
@@ -13572,13 +13574,14 @@ function kunde_finden_fuzzy(string $name, string $nr = ''): ?array {
 }
 function kunde_finden_oder_anlegen(string $firma, string $nr = ''): array {
     $firma = trim($firma); $nr = trim($nr);
+    // Fable-3 T4.3: ein gesperrter Kunde wird nicht weiter verwendet – und auch nicht doppelt angelegt (id 0 + Hinweis „gesperrt“).
     if ($nr !== '') {
-        $k = scalar("SELECT id FROM kunden WHERE kundennummer=? LIMIT 1", [$nr]);
-        if ($k) return ['id' => (int)$k, 'neu' => false];
+        $k = one("SELECT id, COALESCE(gesperrt,0) AS g FROM kunden WHERE kundennummer=? LIMIT 1", [$nr]);
+        if ($k) return (int)$k['g'] === 1 ? ['id' => 0, 'neu' => false, 'gesperrt' => true] : ['id' => (int)$k['id'], 'neu' => false];
     }
     if ($firma !== '') {
-        $k = scalar("SELECT id FROM kunden WHERE LOWER(firma)=LOWER(?) LIMIT 1", [$firma]);
-        if ($k) return ['id' => (int)$k, 'neu' => false];
+        $k = one("SELECT id, COALESCE(gesperrt,0) AS g FROM kunden WHERE LOWER(firma)=LOWER(?) ORDER BY COALESCE(gesperrt,0), id LIMIT 1", [$firma]);
+        if ($k) return (int)$k['g'] === 1 ? ['id' => 0, 'neu' => false, 'gesperrt' => true] : ['id' => (int)$k['id'], 'neu' => false];
     }
     if ($firma === '') return ['id' => 0, 'neu' => false];   // ohne Firmennamen keinen Kunden anlegen
     q("INSERT INTO kunden (kundennummer,firma,land,zahlungsart,notiz) VALUES (?,?,?,?,?)",

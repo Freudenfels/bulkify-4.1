@@ -58,3 +58,5 @@ Im Match-/Vorschau-Schritt wird das hochgeladene **Original** (PDF im iframe, Bi
 - **Layout**: gelesener Kundenname unter das Feld (umbrechend) statt ins einzeilige Label (lief vorher aus dem Panel).
 - **Original-Viewer** (PDF/Bild) oben im Match-Schritt (schritt=datei streamt die Session-Datei).
 - Kunde in Tabelle zeigt internes Kürzel (kunde_link/kunde_anzeige), 08.11.2026
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Gesperrter Kunde aus dem Angebot: Meldung statt Speichern.

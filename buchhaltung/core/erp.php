@@ -292,7 +292,7 @@ function verpackung_finden(string $text): ?int {
 // Rezeptur zu Name (+ Zutaten) finden oder neu anlegen. Liest/schreibt GETEILTE rezeptur/rezeptur_zutat.
 function rezeptur_finden_oder_anlegen(string $name, string $form, array $zutaten, ?int $kunde_id): array {
     $name = trim($name) !== '' ? mb_substr(trim($name), 0, 190) : 'Rezeptur-Import';
-    $treffer = one("SELECT id FROM rezeptur WHERE name=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$name, $kunde_id]);
+    $treffer = one("SELECT id FROM rezeptur WHERE name=? AND COALESCE(status,'')<>'inaktiv' ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$name, $kunde_id]);   // Fable-3 T4.3: ohne gesperrte/inaktive
     if ($treffer) return ['id' => (int)$treffer['id'], 'neu' => false];
     q("INSERT INTO rezeptur (nummer,name,kunde_id,darreichungsform,status,notiz) VALUES (?,?,?,?,?,?)",
       [naechste_nummer('RZ'), $name, $kunde_id ?: null, $form ?: 'kapsel', 'eingefroren', 'Aus Angebot/AB importiert (KI).']);
@@ -367,7 +367,7 @@ function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int
     if ($rezeptur_id <= 0 || $stueck <= 0) return null;
     $v = $vorlage_produkt_id ? one("SELECT * FROM produkt WHERE id=?", [$vorlage_produkt_id]) : null;
     [$verp_id, $v] = erp_produkt_slots_neutral($verp_id, $v);
-    $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 ORDER BY id LIMIT 1",
+    $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 AND COALESCE(status,'')<>'inaktiv' ORDER BY id LIMIT 1",
                    [$rezeptur_id, $stueck, $verp_id]);
     if ($treffer) return (int)$treffer['id'];
     $form = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rezeptur_id]) ?: 'kapsel';

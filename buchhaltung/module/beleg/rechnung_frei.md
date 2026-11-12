@@ -48,3 +48,5 @@ Rechnungen-Liste ([rechnungen_liste.md](rechnungen_liste.md)).
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
 
 **Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Kundenliste für die KI ohne gesperrte Kunden.

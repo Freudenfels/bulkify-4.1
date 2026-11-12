@@ -38,3 +38,5 @@ die Zuordnung auf Dokument + Charge. Details: `core/dokimport.md`.
 `import`, `abbrechen` – alle mit Redirect auf `?p=dok_massenimport`.
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Rohstoff-Vorschlagsliste ohne gesperrte Artikel.

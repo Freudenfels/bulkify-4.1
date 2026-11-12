@@ -71,9 +71,9 @@ function fastaction_aufloesen(array $erkannt): array {
     $kn = trim((string)($erkannt['kunde'] ?? ''));
     if ($kn !== '') $res['kunde'] = one("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 AND firma LIKE ? ORDER BY (LOWER(firma)=LOWER(?)) DESC, LENGTH(firma) LIMIT 1", ['%' . $kn . '%', $kn]);
     $rn = trim((string)($erkannt['rezeptur'] ?? ''));
-    if ($rn !== '') $res['rezeptur'] = one("SELECT id, name FROM rezeptur WHERE name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $rn . '%', $rn]);
+    if ($rn !== '') $res['rezeptur'] = one("SELECT id, name FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' AND name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $rn . '%', $rn]);
     $pn = trim((string)($erkannt['produkt'] ?? ''));
-    if ($pn !== '') $res['produkt'] = one("SELECT id, name FROM produkt WHERE name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $pn . '%', $pn]);
+    if ($pn !== '') $res['produkt'] = one("SELECT id, name FROM produkt WHERE COALESCE(status,'')<>'inaktiv' AND name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $pn . '%', $pn]);
     return $res;
 }
 

@@ -271,7 +271,7 @@ $auftraege = all("SELECT a.id, a.nummer, a.menge, COALESCE(NULLIF(a.produkt_beze
                   ORDER BY a.angelegt DESC, a.id DESC");
 $mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name");
 // Bulkware zur optionalen Auswahl: fertige Bulk-Zwischenprodukte (item.kategorie='fertig').
-$bulkItems = all("SELECT id, name, COALESCE(NULLIF(einheit,''),'kg') AS einheit FROM item WHERE kategorie='fertig' ORDER BY name");
+$bulkItems = all("SELECT id, name, COALESCE(NULLIF(einheit,''),'kg') AS einheit FROM item WHERE kategorie='fertig' AND COALESCE(gesperrt,0)=0 ORDER BY name");   // Fable-3 T4.3: ohne gesperrte/inaktive
 $letzte = all("SELECT e.*, a.nummer AS auftrag_nr FROM easy_production e LEFT JOIN auftrag a ON a.id=e.auftrag_id ORDER BY e.id DESC LIMIT 12");
 
 // Vorbelegung der Felder (nach Vorschau erhalten bleiben).

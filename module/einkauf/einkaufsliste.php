@@ -239,7 +239,7 @@ foreach (all("SELECT DISTINCT lieferant_id FROM benutzer WHERE lieferant_id IS N
 $BM_KAT = betriebsmittel_kategorien();
 // Standard-Lieferant für Etiketten (Nico 08.11.2026: „bei Etiketten immer Labelisten"): vorbelegt, wenn am Artikel kein
 // Hauptlieferant steht – im Direkt-Weg je Zeile, im Online-Weg als Händler. Bleibt änderbar.
-$etLief = one("SELECT id, firma FROM lieferanten WHERE firma LIKE '%labelist%' ORDER BY id LIMIT 1") ?: ['id' => 0, 'firma' => 'Labelisten'];
+$etLief = one("SELECT id, firma FROM lieferanten WHERE firma LIKE '%labelist%' AND COALESCE(gesperrt,0)=0 ORDER BY id LIMIT 1") ?: ['id' => 0, 'firma' => 'Labelisten'];   // Fable-3 T4.3: ohne gesperrte/inaktive
 
 $aktTyp = $_GET['typ'] ?? '';
 // Produktions-Typen + Nachbestellung (Meldebestand) + freie Betriebsmittel-Typen als eigene Reiter.

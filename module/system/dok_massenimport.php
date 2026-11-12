@@ -390,7 +390,7 @@ $sichKind  = ['hoch' => 'ok', 'mittel' => '', 'niedrig' => 'warn'];
     <?php
     // Datalist fuer die manuelle Zuordnung (Autovervollstaendigung ueber Rohstoff-Namen).
     echo '<datalist id="roh_dl">';
-    foreach (all("SELECT name FROM item WHERE kategorie='rohstoff' ORDER BY name LIMIT 1500") as $r) echo '<option value="' . h((string)$r['name']) . '">';
+    foreach (all("SELECT name FROM item WHERE kategorie='rohstoff' AND COALESCE(gesperrt,0)=0 ORDER BY name LIMIT 1500") as $r) echo '<option value="' . h((string)$r['name']) . '">';
     echo '</datalist>';
     ?>
 

@@ -21,3 +21,5 @@ Gleiche Logik wie im Dashboard – wird von `core/mail.php` für Portal-Links in
 - erp_kunden_kuerzel() (08.11.2026): liest kunden.kuerzel als Map id => Kürzel (nur gepflegte; fehlt die Spalte, leere Map). Genutzt von kunde_kuerzel() in ui.php.
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Auftrag-Import verwendet keine inaktive Rezeptur und kein inaktives Produkt wieder.

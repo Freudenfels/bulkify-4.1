@@ -1452,7 +1452,7 @@ function erp_rezeptur_liste(): array {
                       FROM rezeptur r
                       LEFT JOIN item bi ON bi.rezeptur_id = COALESCE(NULLIF(r.stamm_rezeptur_id,0), r.id) AND bi.kategorie='fertig'
                       LEFT JOIN kapselgroesse kg ON kg.id = r.kapselgroesse_id
-                     WHERE r.status <> 'entwurf'
+                     WHERE r.status <> 'entwurf' AND COALESCE(r.status,'') <> 'inaktiv'   -- Fable-3 T4.3: keine inaktiven Rezepturen
                      ORDER BY r.name, r.id");
     } catch (Throwable $e) { return []; }
 }

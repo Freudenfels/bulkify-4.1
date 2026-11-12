@@ -137,8 +137,8 @@ if (mb_strlen($q) >= 2) {
              LEFT JOIN rezeptur rz ON rz.id=la.rezeptur_id
              LEFT JOIN kunden kz ON kz.id=rz.kunde_id
              LEFT JOIN item i ON i.id=la.item_id
-             WHERE la.nummer LIKE ? OR l.firma LIKE ? OR la.betreff LIKE ? OR rz.name LIKE ? OR i.name LIKE ?
-                   OR (?<>'' AND REPLACE(REPLACE(LOWER(la.nummer),'-',''),' ','') LIKE ?)
+             WHERE (la.nummer LIKE ? OR l.firma LIKE ? OR la.betreff LIKE ? OR rz.name LIKE ? OR i.name LIKE ?
+                   OR (?<>'' AND REPLACE(REPLACE(LOWER(la.nummer),'-',''),' ','') LIKE ?))" . ($mitInaktiv ? "" : " AND COALESCE(l.gesperrt,0)=0") . "   -- Fable-3 T4.3: gesperrte Lieferanten nur mit Schalter
              ORDER BY la.id DESC LIMIT $LIMIT", [$like, $like, $like, $like, $like, $qk, $likeK]),
         fn($r) => '?p=lief_anfrage_detail&id=' . (int)$r['id'],
         fn($r) => ($r['nummer'] ?: 'LA-' . $r['id']),

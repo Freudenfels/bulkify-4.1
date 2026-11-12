@@ -272,7 +272,7 @@ echo '</datalist>';
 if ($rows) {
     if ($typ === 'rohstoff') {
         echo '<datalist id="roh_dl">';
-        foreach (all("SELECT name FROM item WHERE kategorie='rohstoff' ORDER BY name LIMIT 1500") as $r) echo '<option value="' . h($r['name']) . '">';
+        foreach (all("SELECT name FROM item WHERE kategorie='rohstoff' AND COALESCE(gesperrt,0)=0 ORDER BY name LIMIT 1500") as $r) echo '<option value="' . h($r['name']) . '">';
         echo '</datalist>';
     } else {
         echo '<datalist id="prod_dl">';

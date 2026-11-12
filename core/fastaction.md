@@ -5,3 +5,5 @@ Prompt + Auswertung für den Schnell-Posteingang (`module/system/fastaction.php`
 - `fastaction_analyse($text,$pfad=null)` – ruft `ki_json($text,...)` bzw. `ki_datei_frage($pfad,...)` (bei Datei/Bild). Rückgabe `['ok'=>bool,'daten'=>[...],'fehler'=>...]`. Braucht `ki_bereit()` (nur beta).
 - `fastaction_aufloesen($erkannt)` – löst erkannte Namen per LIKE zu echten Datensätzen auf (kunde/rezeptur/produkt) für Direkt-Links.
 - `fastaction_prio($dringlichkeit)` – hoch=1, mittel=2, niedrig=3.
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Fastaction löst Rezeptur und Produkt nur unter nicht inaktiven auf.

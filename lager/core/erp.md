@@ -150,3 +150,5 @@ erp_la_scan() / erp_la_abschluss() / erp_charge_gebinde_anhaengen() / erp_la_auf
 
 ## Aufkleber-Scan sicher (13.11.2026)
 `erp_la_scan()` belegt den Aufkleber zuerst (`UPDATE ... WHERE status='aktiv'`, genau eine Zeile) und bucht erst dann: gleichzeitige Scans buchen nie doppelt. Scheitert das Buchen, wird der Aufkleber wieder frei. Gesperrt sind nur stornierte Bestellungen und stornierte Aufkleber (Meldung, nichts gebucht). Eine schon „geliefert“ geschlossene Bestellung (98-%-Regel) nimmt aktive Aufkleber weiter an: das letzte Gebinde und jede Überlieferung werden gebucht (13.11.2026, Fable-3 T1.6).
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** `erp_rezeptur_liste()` ohne inaktive Rezepturen.

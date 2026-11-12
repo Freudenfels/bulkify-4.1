@@ -29,3 +29,5 @@ Das Kategorie-Label kommt jetzt aus `kategorie_labels()` (`core/schema.php`) sta
 
 ## Inventarnummer (08.11.2026)
 7–8 Ziffern im Suchfeld finden zusätzlich Etikettenrollen/Gebinde über `charge_gebinde.inventar_nr` (Altdaten: erste 7 Ziffern). Treffer: Nummer · Artikel, darunter Charge, Menge, Status, Auftrag; Klick öffnet den Artikel.
+
+**Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Lieferanten-Anfragen gesperrter Lieferanten nur mit Schalter „auch inaktive“.
