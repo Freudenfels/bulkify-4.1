@@ -6,10 +6,17 @@ Warum: Seit 11.11.2026 nachmittags kann der GitHub-Runner die Ubuntu-Paketquelle
 exit 100 ab, damit fiel jeder Deploy aus. Dieses Skript braucht nur Python + paramiko (PyPI).
 
 Verhalten wie bisher:
-  prep   - liest .deploy_sha vom Server, bestimmt Modus (incremental/full) und schreibt
+  prep   - liest .deploy_sha vom Server, bestimmt Modus (incremental/full/skip) und schreibt
            changed_filtered.txt. Ergebnis "mode=..." nach $GITHUB_OUTPUT.
   upload - laedt die Dateien aus changed_filtered.txt hoch (legt Ordner an, loescht NICHTS).
-  mark   - schreibt AFTER_SHA nach <SERVER_PATH>/.deploy_sha.
+  mark   - schreibt AFTER_SHA nach <SERVER_PATH>/.deploy_sha (nie einen aelteren Stand).
+
+Schutz gegen Zurueckdrehen (12.11.2026): Nach der GitHub-Stoerung vom 11.11. hingen alte Laeufe
+(#1813-#1815) in der Warteschlange. Startet so ein Lauf, nachdem live schon neuer ist, darf er nichts
+hochladen und .deploy_sha nicht ueberschreiben:
+  - prep: AFTER_SHA gleich oder Vorfahre des Server-Stands -> mode=skip.
+  - prep: Vollupload nur fuer den aktuellen main HEAD, sonst mode=skip.
+  - mark: liest .deploy_sha direkt vor dem Schreiben erneut und schreibt nie einen aelteren Stand.
 
 Ausgeschlossen bleiben: secrets.php, .git/, .github/, data/, *.sql, *.bak, *.log.
 """
@@ -62,6 +69,36 @@ def git(*args):
     return subprocess.run(['git', *args], capture_output=True, text=True)
 
 
+def is_commit(sha):
+    return len(sha) == 40 and git('cat-file', '-e', f'{sha}^{{commit}}').returncode == 0
+
+
+def is_ancestor(older, newer):
+    # True, wenn older == newer oder older ein Vorfahre von newer ist.
+    return git('merge-base', '--is-ancestor', older, newer).returncode == 0
+
+
+def main_head():
+    # Aktueller main HEAD - frisch vom Remote (ls-remote), Rueckfall auf den beim Checkout geholten Stand.
+    res = git('ls-remote', 'origin', 'refs/heads/main')
+    if res.returncode == 0 and res.stdout.strip():
+        sha = res.stdout.split()[0].strip()
+        if len(sha) == 40:
+            return sha
+    res = git('rev-parse', '--verify', '-q', 'refs/remotes/origin/main')
+    sha = res.stdout.strip() if res.returncode == 0 else ''
+    return sha if len(sha) == 40 else ''
+
+
+def read_server_sha(sftp, root):
+    try:
+        with sftp.open(f'{root}/.deploy_sha', 'r') as fh:
+            raw = fh.read().decode('utf-8', 'ignore')
+    except IOError:
+        return ''
+    return ''.join(ch for ch in raw if ch in '0123456789abcdef')[:40]
+
+
 def set_output(key, value):
     out = os.environ.get('GITHUB_OUTPUT')
     if out:
@@ -75,21 +112,21 @@ def cmd_prep():
     after = env('AFTER_SHA')
     root = remote_root()
 
-    base = ''
+    client, sftp = connect()
     try:
-        client, sftp = connect()
-        try:
-            with sftp.open(f'{root}/.deploy_sha', 'r') as fh:
-                raw = fh.read().decode('utf-8', 'ignore')
-            base = ''.join(ch for ch in raw if ch in '0123456789abcdef')[:40]
-        except IOError:
-            base = ''
-        finally:
-            sftp.close()
-            client.close()
-    except SystemExit:
-        raise
+        base = read_server_sha(sftp, root)
+    finally:
+        sftp.close()
+        client.close()
     print(f'Deployter Stand auf dem Server: {base or "<keiner>"}')
+    print(f'Stand dieses Laufs: {after}')
+
+    # Schutz 1: Server ist schon auf diesem oder einem neueren Stand -> nichts tun.
+    if len(after) == 40 and is_commit(base) and is_ancestor(after, base):
+        print(f'Server ist schon neuer ({base}) - nichts zu tun' if base != after
+              else f'Server hat diesen Stand schon ({base}) - nichts zu tun')
+        set_output('mode', 'skip')
+        return
 
     mode = 'incremental'
     if event != 'push':
@@ -118,6 +155,12 @@ def cmd_prep():
             print(f)
         print('----------------------')
     else:
+        # Schutz 2: Vollupload nur fuer den aktuellen main HEAD (sonst koennte ein alter Lauf alten Code komplett hochladen).
+        head = main_head()
+        if not head or after != head:
+            print(f'Vollupload nur fuer main HEAD ({head or "unbekannt"}) - dieser Lauf ({after}) ist es nicht, uebersprungen.')
+            set_output('mode', 'skip')
+            return
         print('Modus: Vollupload (Fallback).')
     set_output('mode', mode)
 
@@ -191,6 +234,17 @@ def cmd_mark():
         sys.exit('AFTER_SHA fehlt - .deploy_sha wird nicht geschrieben.')
     client, sftp = connect()
     try:
+        # Schutz 3: direkt vor dem Schreiben erneut lesen - nie einen aelteren Stand schreiben (auch nicht bei einem Wettlauf).
+        cur = read_server_sha(sftp, root)
+        if cur and cur != after:
+            if not is_commit(cur):
+                git('fetch', '-q', 'origin', 'main')
+            if is_commit(cur) and is_ancestor(after, cur):
+                print(f'Server ist schon neuer ({cur}) - .deploy_sha bleibt.')
+                return
+            if not (is_commit(cur) and is_ancestor(cur, after)) and after != main_head():
+                print(f'Server-Stand {cur} ist kein Vorfahre von {after} und dieser Lauf ist nicht main HEAD - .deploy_sha bleibt.')
+                return
         with sftp.open(f'{root}/.deploy_sha', 'w') as fh:
             fh.write(after + '\n')
     finally:

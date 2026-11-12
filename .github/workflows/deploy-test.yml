@@ -7,6 +7,7 @@ name: Deploy Testumgebung (test.bulkify.pro)
 #  - schlaegt er fehl, bleibt der Live-Lauf gruen (eigener Lauf, eigenes Ergebnis)
 # Ziel: Secret TEST_SERVER_PATH (eigener Ordner, NICHT der Live-Ordner und NICHT beta). Fehlt es, passiert nichts.
 # Zugang: dieselben SERVER_HOST/PORT/USERNAME/PASSWORD wie live (gleiches Hosting).
+# Alte Laeufe (12.11.2026): ist die Testumgebung schon neuer, setzt prep mode=skip -> kein Upload, kein mark.
 # Auf dem Server legt Nico einmalig <TEST_SERVER_PATH>/secrets.php an (Test-DB, BX_TESTUMGEBUNG) - wird nie hochgeladen.
 on:
   workflow_run:
@@ -67,7 +68,7 @@ jobs:
         run: python .github/scripts/sftp_deploy.py prep
 
       - name: Upload (inkrementell, beim ersten Mal alles)
-        if: steps.ziel.outputs.los == '1'
+        if: steps.ziel.outputs.los == '1' && steps.prep.outputs.mode != 'skip'
         timeout-minutes: 20
         env:
           EVENT_NAME: push
@@ -82,7 +83,7 @@ jobs:
           if [ "$MODE" = "full" ]; then python .github/scripts/sftp_deploy.py upload_all; else python .github/scripts/sftp_deploy.py upload; fi
 
       - name: robots.txt nur fuer test (Suchmaschinen aussperren)
-        if: steps.ziel.outputs.los == '1'
+        if: steps.ziel.outputs.los == '1' && steps.prep.outputs.mode != 'skip'
         timeout-minutes: 3
         env:
           SFTP_HOST: ${{ secrets.SERVER_HOST }}
@@ -95,7 +96,7 @@ jobs:
           python .github/scripts/sftp_deploy.py put robots_test.txt public/robots.txt
 
       - name: Deployten Stand merken (.deploy_sha der Testumgebung)
-        if: steps.ziel.outputs.los == '1'
+        if: steps.ziel.outputs.los == '1' && steps.prep.outputs.mode != 'skip'
         timeout-minutes: 3
         env:
           EVENT_NAME: push

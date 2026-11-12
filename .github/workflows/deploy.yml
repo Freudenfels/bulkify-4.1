@@ -3,7 +3,11 @@ name: Deploy to Server (SFTP)
 # Auto-Deploy fuer bulkify-4.1.
 # - Push auf main: alle Dateien, die sich seit dem ZULETZT DEPLOYTEN Stand geaendert haben, werden per SFTP
 #   hochgeladen (inkrementell). Der deployte Stand steht auf dem Server in .deploy_sha (ausserhalb von public/).
-# - Vollupload-Fallback: keine/ungueltige .deploy_sha, manueller Start, oder paramiko nicht installierbar.
+# - Vollupload-Fallback: keine/ungueltige .deploy_sha, manueller Start, oder paramiko nicht installierbar -
+#   aber NUR fuer den aktuellen main HEAD (12.11.2026).
+# - Schutz gegen Zurueckdrehen (12.11.2026, haengende Laeufe #1813-#1815 nach der GitHub-Stoerung): ist der
+#   Server schon auf diesem oder einem neueren Stand, setzt prep mode=skip -> kein Upload, kein mark, Lauf gruen.
+#   mark schreibt nie einen aelteren Stand in .deploy_sha (liest direkt vorher erneut).
 # - Upload-Werkzeug seit 11.11.2026: Python/paramiko (.github/scripts/sftp_deploy.py) statt apt/lftp.
 # WARUM .deploy_sha (2026-11-03): GitHub haelt je Concurrency-Gruppe nur EINEN wartenden Lauf; bei schnell
 # aufeinanderfolgenden Pushes werden Zwischenlaeufe verworfen. Frueher lud jeder Lauf nur die Dateien SEINES
@@ -53,6 +57,16 @@ jobs:
         timeout-minutes: 4
         run: python -m pip install --disable-pip-version-check --retries 5 --timeout 20 paramiko
 
+      # Fuer den Notfall-Vollupload ohne paramiko: ist dieser Lauf der aktuelle main HEAD? (sonst nie Vollupload)
+      - name: main HEAD pruefen
+        id: head
+        timeout-minutes: 2
+        run: |
+          HEAD_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"
+          [ -z "$HEAD_SHA" ] && HEAD_SHA="$(git rev-parse -q --verify refs/remotes/origin/main || true)"
+          echo "main HEAD: ${HEAD_SHA:-unbekannt} - dieser Lauf: $GITHUB_SHA"
+          if [ "$HEAD_SHA" = "$GITHUB_SHA" ]; then echo "ishead=1" >> "$GITHUB_OUTPUT"; else echo "ishead=0" >> "$GITHUB_OUTPUT"; fi
+
       - name: Aenderungsumfang bestimmen (ab deploytem Stand oder Vollupload)
         id: prep
         if: steps.pyp.outcome == 'success'
@@ -81,7 +95,7 @@ jobs:
         run: python .github/scripts/sftp_deploy.py upload
 
       - name: Vollupload (Fallback, nichts loeschen)
-        if: steps.prep.outputs.mode == 'full' || steps.pyp.outcome != 'success'
+        if: steps.prep.outputs.mode == 'full' || (steps.pyp.outcome != 'success' && steps.head.outputs.ishead == '1')
         uses: sand4rt/ftp-deployer@v1.10
         with:
           sftp: true
@@ -96,7 +110,7 @@ jobs:
           exclude: '["secrets.php",".git/**",".github/**","data/**","**/*.sql","**/*.bak","**/*.log"]'
 
       - name: Deployten Stand merken (.deploy_sha)
-        if: steps.pyp.outcome == 'success'
+        if: steps.pyp.outcome == 'success' && steps.prep.outputs.mode != 'skip'
         timeout-minutes: 3
         env:
           EVENT_NAME: ${{ github.event_name }}
