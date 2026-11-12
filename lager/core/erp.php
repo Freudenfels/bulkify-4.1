@@ -2331,7 +2331,8 @@ function erp_la_scan(string $code, string $wer = ''): array {
     if (!erp_la_laden()) return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Gebindeaufkleber sind auf diesem Server nicht eingerichtet.'];
     $id = la_code_id($code);
     if ($id <= 0) return ['ok' => false, 'art' => 'unbekannt', 'meldung' => la_ist_code($code) ? 'Code ungültig (Prüfziffer passt nicht) – kein Aufkleber von bulkify.' : 'Kein Lieferanten-Aufkleber (BX…).'];
-    $a = one("SELECT la.*, bc.charge_nr, bc.mhd, bp.item_id, bp.auftrag_id, bp.bezeichnung, bp.einheit AS bp_einheit, b.nummer AS bestellung_nr, b.lieferant_id
+    $a = one("SELECT la.*, bc.charge_nr, bc.mhd, bp.item_id, bp.auftrag_id, bp.bezeichnung, bp.einheit AS bp_einheit, b.nummer AS bestellung_nr, b.lieferant_id,
+                     b.status AS b_status
               FROM lief_aufkleber la JOIN bestellung_charge bc ON bc.id=la.bestellung_charge_id JOIN bestellung_position bp ON bp.id=la.bestellung_position_id
               JOIN bestellung b ON b.id=la.bestellung_id WHERE la.id=?", [$id]);
     if (!$a) return ['ok' => false, 'art' => 'unbekannt', 'meldung' => 'Aufkleber nicht gefunden.'];
@@ -2339,6 +2340,9 @@ function erp_la_scan(string $code, string $wer = ''): array {
     $info = ['code' => la_code($id), 'bestellung' => (string)$a['bestellung_nr'], 'charge' => (string)$a['charge_nr'], 'mhd' => (string)($a['mhd'] ?? ''),
              'netto' => (float)$a['netto_kg'], 'stueck' => $a['stueck'] !== null ? (float)$a['stueck'] : null, 'artikel' => (string)$a['bezeichnung']];
     if ($a['status'] === 'storniert') return ['ok' => false, 'art' => 'storniert', 'meldung' => 'Dieser Aufkleber wurde vom Lieferanten storniert – Gebinde nicht buchen, bitte klären.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+    // 13.11.2026: auf eine stornierte oder schon als geliefert abgeschlossene Bestellung wird nicht gebucht.
+    if ((string)$a['b_status'] === 'storniert') return ['ok' => false, 'art' => 'storniert', 'meldung' => 'Die Bestellung ' . $a['bestellung_nr'] . ' ist storniert – Gebinde nicht buchen, bitte klären.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+    if ((string)$a['b_status'] === 'geliefert' && $a['status'] === 'aktiv') return ['ok' => false, 'art' => 'schon', 'meldung' => 'Die Bestellung ' . $a['bestellung_nr'] . ' ist schon als geliefert abgeschlossen – nicht gebucht, bitte im Dashboard klären.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
     if ($a['status'] === 'erfasst') return ['ok' => false, 'art' => 'schon', 'meldung' => 'Schon erfasst (' . (string)$a['erfasst_am'] . ').', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
 
     // Artikel: an der Position, sonst Bulk-Artikel der Auftrags-Rezeptur.
@@ -2356,6 +2360,10 @@ function erp_la_scan(string $code, string $wer = ''): array {
     elseif ($a['stueck'] !== null && (float)$a['stueck'] > 0) { $menge = (float)$a['stueck']; $einheit = (string)$it['einheit']; }
     else return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Der Artikel wird in ' . $it['einheit'] . ' geführt, auf dem Aufkleber fehlt die Stückzahl – bitte normal über „Bestellung wählen“ buchen.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
 
+    // 13.11.2026: Aufkleber ZUERST belegen (nur aus 'aktiv', genau eine Zeile) – zwei gleichzeitige Scans buchen nie doppelt.
+    $belegt = q("UPDATE lief_aufkleber SET status='erfasst', erfasst_am=?, erfasst_von=? WHERE id=? AND status='aktiv'", [jetzt_utc(), mb_substr($wer, 0, 190) ?: null, $id])->rowCount();
+    if ($belegt !== 1) return ['ok' => false, 'art' => 'schon', 'meldung' => 'Schon erfasst (gerade eben, z. B. doppelter Scan) – nicht noch einmal gebucht.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+    $freigeben = function () use ($id) { q("UPDATE lief_aufkleber SET status='aktiv', erfasst_am=NULL, erfasst_von=NULL WHERE id=? AND charge_id IS NULL", [$id]); };
     $cid = (int) scalar("SELECT charge_id FROM lief_aufkleber WHERE bestellung_charge_id=? AND status='erfasst' AND charge_id IS NOT NULL ORDER BY id LIMIT 1", [(int)$a['bestellung_charge_id']]);
     $hinweis = '';
     if ($cid <= 0) {
@@ -2365,7 +2373,7 @@ function erp_la_scan(string $code, string $wer = ''): array {
         $status = $passt ? 'auto' : 'quarantaene';
         $cid = (int) erp_wareneingang_buchen($iid, $menge, (string)$a['charge_nr'], $a['mhd'] ?: null, $a['lieferant_id'] ? (int)$a['lieferant_id'] : null,
                                              'Wareneingang per Gebindeaufkleber (' . $a['bestellung_nr'] . ')', $status, $einheit);
-        if ($cid <= 0) return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Buchen nicht möglich.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
+        if ($cid <= 0) { $freigeben(); return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Buchen nicht möglich.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid]; }
         $cm = (float) scalar("SELECT menge_verfuegbar FROM charge WHERE id=?", [$cid]);
         erp_charge_gebinde_mit_mengen($cid, [$cm]);
         $gid = (int) scalar("SELECT id FROM charge_gebinde WHERE charge_id=? ORDER BY nummer DESC, id DESC LIMIT 1", [$cid]);
@@ -2379,7 +2387,7 @@ function erp_la_scan(string $code, string $wer = ''): array {
         [$mI] = erp_menge_in_item_einheit($menge, erp_einheit_norm($einheit), (string)$it['einheit']);
         $gid = erp_charge_gebinde_anhaengen($cid, (float)$mI);
     }
-    q("UPDATE lief_aufkleber SET status='erfasst', charge_id=?, gebinde_id=?, erfasst_am=?, erfasst_von=? WHERE id=?", [$cid, $gid ?: null, jetzt_utc(), mb_substr($wer, 0, 190) ?: null, $id]);
+    q("UPDATE lief_aufkleber SET charge_id=?, gebinde_id=? WHERE id=?", [$cid, $gid ?: null, $id]);   // Status ist oben schon belegt
     if (function_exists('lg_bewegung_log')) lg_bewegung_log($cid, 'ein', $menge, $einheit, (string)$it['name'], 'Gebindeaufkleber ' . la_code($id) . ' (' . $a['bestellung_nr'] . ')');
     erp_bestellung_lieferung_erfassen($bid, [$cid], [$cid => (int)$a['bestellung_position_id']]);
     $info['charge_id'] = $cid;

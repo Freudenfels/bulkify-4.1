@@ -147,3 +147,6 @@ Umlagern Lager 1 -> Lager 2 (04.11.2026): `erp_umlagern_kandidaten()` (freie Fer
 
 ## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
 erp_la_scan() / erp_la_abschluss() / erp_charge_gebinde_anhaengen() / erp_la_aufgabe(): Scan der Lieferanten-Gebindeaufkleber (ein Scan = ein Gebinde, Charge beim ersten Scan, Chargen-Abgleich gegen CoA -> Quarantäne + Aufgabe, Abschluss mit Meldung an Nico und Aufgabe für Dustin).
+
+## Aufkleber-Scan sicher (13.11.2026)
+`erp_la_scan()` belegt den Aufkleber zuerst (`UPDATE ... WHERE status='aktiv'`, genau eine Zeile) und bucht erst dann: gleichzeitige Scans buchen nie doppelt. Scheitert das Buchen, wird der Aufkleber wieder frei. Stornierte oder schon als geliefert abgeschlossene Bestellung: Meldung, nichts gebucht.
