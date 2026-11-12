@@ -83,6 +83,10 @@ function kunde_pdf_neutral(string $pdf): string {
 }
 
 // Firmennamen der Lieferanten (ohne bulkify/Maniso, ohne Labore), lange zuerst, je Anfrage einmal.
+// Paketdienste/Spediteure nennen wir dem Kunden offen (Versand per DHL) – nie ersetzen (Fable-3 T3.4).
+function kunde_filter_paketdienst(string $name): bool {
+    return (bool) preg_match('/(?<![\p{L}])(dhl|ups|dpd|gls|fedex|tnt|hermes|deutsche post|post ag|schenker|dachser|kühne|kuehne|rhenus|trans-o-flex|go!\s*express|db schenker|raben|geodis)(?![\p{L}])/iu', $name);
+}
 function kunde_lieferanten_namen(): array {
     static $n = null;
     if ($n !== null) return $n;
@@ -95,14 +99,21 @@ function kunde_lieferanten_namen(): array {
     try { foreach (all("SELECT LOWER(TRIM(firma)) AS f FROM kunden WHERE firma IS NOT NULL AND firma<>''") as $kk) $kundenNamen[(string)$kk['f']] = true; } catch (\Throwable $e) {}
     $partnerSql = (function_exists('column_exists') && column_exists('lieferanten', 'ist_partner') ? " AND COALESCE(ist_partner,0)=0" : '')
                 . (function_exists('column_exists') && column_exists('lieferanten', 'kunde_id') ? " AND kunde_id IS NULL" : '');
-    foreach (all("SELECT firma, lieferantennummer, COALESCE(kategorien,'') AS kat FROM lieferanten WHERE firma IS NOT NULL AND firma<>''" . $partnerSql) as $l) {
+    $aliasSql = (function_exists('column_exists') && column_exists('lieferanten', 'kunden_alias')) ? "COALESCE(kunden_alias,'')" : "''";
+    foreach (all("SELECT firma, lieferantennummer, COALESCE(kategorien,'') AS kat, $aliasSql AS alias FROM lieferanten WHERE firma IS NOT NULL AND firma<>''" . $partnerSql) as $l) {
         if (isset($kundenNamen[mb_strtolower(trim((string)$l['firma']))])) continue;
         $kat = array_filter(array_map('trim', explode(',', (string)$l['kat'])));
         if ($kat && !array_diff($kat, ['labor'])) continue;   // Labore dürfen genannt werden
         $f = trim((string)$l['firma']);
         if (preg_match('/bulkify|maniso/i', $f)) continue;
-        foreach (array_unique([$f, trim(preg_replace($rechtsform, '', $f))]) as $x)
-            if (mb_strlen($x) >= 4 && !preg_match('/^(extern|externer lieferant|unbekannt|test|lieferant)$/i', $x)) $n[] = $x;
+        // Fable-3 T3.4 (13.11.2026): nur der VOLLE Firmenname oder ein ausdrücklich gepflegter Alias (lieferanten.kunden_alias),
+        // nie ein einzelnes Wort daraus („Vita GmbH“ ersetzt „Vita GmbH“, nicht „Vita“). Paketdienste werden nie ersetzt.
+        if (kunde_filter_paketdienst($f)) continue;
+        $ohneRf = trim((string) preg_replace($rechtsform, '', $f));
+        $mitRechtsform = $ohneRf !== $f;
+        if (mb_strlen($f) >= 4 && ($mitRechtsform || preg_match('/\S\s+\S/u', $f)) && !preg_match('/^(extern|externer lieferant|unbekannt|test|lieferant)$/i', $f)) $n[] = $f;
+        foreach (array_filter(array_map('trim', explode(',', (string)($l['alias'] ?? '')))) as $al)
+            if (mb_strlen($al) >= 3 && !kunde_filter_paketdienst($al)) $n[] = $al;
     }
     $n = array_values(array_unique($n));
     usort($n, fn($a, $b) => mb_strlen($b) <=> mb_strlen($a));

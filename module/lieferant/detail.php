@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    'strasse','hausnummer','plz','ort','land','ust_id',
                    'waehrung','zahlungsart','zahlungsziel_tage','lieferzeit_tage','mindestbestellwert','notiz',
                    'keine_anfragen','ist_partner','shop_login','shop_passwort',
-                   'bank_inhaber','bank_name','bank_land','bank_iban','bank_swift','bank_konto','bank_adresse','bank_waehrung','bank_zwischenbank','bank_notiz'];
+                   'bank_inhaber','bank_name','bank_land','bank_iban','bank_swift','bank_konto','bank_adresse','bank_waehrung','bank_zwischenbank','bank_notiz', 'kunden_alias'];
         $vals = array_map($f, $felder);
         $vals[array_search('gesperrt', $felder)]        = isset($_POST['gesperrt']) ? 1 : 0;
         $vals[array_search('keine_anfragen', $felder)]  = isset($_POST['keine_anfragen']) ? 1 : 0;
@@ -459,6 +459,7 @@ if (!$neu) {
         </select>
       </div>
       <div class="bx-field"><label>Webseite</label><input type="text" name="webseite" value="<?= $v('webseite') ?>" placeholder="https://…"></div>
+      <div class="bx-field"><label>Weitere Namen (für Kunden ersetzt) <?= bx_hint('Kurz- oder Markennamen dieses Lieferanten, die in Mails, Belegen und im Portal nie beim Kunden erscheinen dürfen (Komma getrennt). Der volle Firmenname wird immer ersetzt, einzelne Wörter daraus nicht.') ?></label><input type="text" name="kunden_alias" value="<?= $v('kunden_alias') ?>" placeholder="z. B. GS Capsules, GSC"></div>
       <div class="bx-field"><label>Lieferant sperren <?= bx_hint('gesperrte Lieferanten werden bei Preisanfragen/Bestellungen nicht mehr vorgeschlagen') ?></label>
         <div class="bx-check" style="padding-top:8px">
           <input type="checkbox" name="gesperrt" id="f_gesperrt" value="1" <?= $gesperrt?'checked':'' ?>>

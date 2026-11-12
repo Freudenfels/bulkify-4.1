@@ -104,3 +104,5 @@ Im Reiter Preise steht der Block „Fertigprodukte anfragen“. Er erscheint, we
 - **Liste:** Rezepturen der Formen (`fertig_rezeptur_kandidaten()`), die aus offenen Aufträgen oben. Kunde, Anzahl offener Aufträge, Stand (angefragt/bepreist), Suche.
 - **Anfragen:** Angehakte Rezepturen gehen mit `aktion=fertig_anfragen` an `fertig_anfragen_stellen()`. Je Rezeptur entsteht eine Anfrage, dazu eine Sammel-Mail.
 - **Im Portal:** Der Lieferant sieht nur diese Rezepturen, mit Zusammensetzung.
+
+**Mail-Filter nur voller Name/Alias (13.11.2026, Fable-3 T3.4):** Neues Feld „Weitere Namen (für Kunden ersetzt)“ (`kunden_alias`): Kurz- oder Markennamen, die Kunden nie sehen dürfen.

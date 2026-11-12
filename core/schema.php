@@ -2225,7 +2225,8 @@ function init_schema(): void {
     ensure_column('lieferanten', 'labor_angebotsnr', "VARCHAR(80) NULL");        // Angebotsnummer des Labors (aufs Formular)
     ensure_column('lieferanten', 'labor_erste_proben', "TINYINT(1) NOT NULL DEFAULT 0");   // „Sind das Ihre ersten Proben?“ – Standard nein
     ensure_column('lieferanten', 'labor_bericht_an', "VARCHAR(10) NOT NULL DEFAULT 'bulkify'");   // Berichtsempfänger: bulkify | kunde
-    ensure_column('lieferanten', 'labor_umfang', "TEXT NULL");                   // Standard-Untersuchungsumfang (bis 3 Zeilen, je Probe änderbar)
+    ensure_column('lieferanten', 'labor_umfang', "TEXT NULL");
+    ensure_column('lieferanten', 'kunden_alias', "VARCHAR(500) NULL");   // Fable-3 T3.4: weitere Namen, die der Kunde nie sieht (Komma getrennt)                   // Standard-Untersuchungsumfang (bis 3 Zeilen, je Probe änderbar)
     $pdo->exec("CREATE TABLE IF NOT EXISTS labor_versand (
         id INT AUTO_INCREMENT PRIMARY KEY,
         lieferant_id INT NOT NULL,

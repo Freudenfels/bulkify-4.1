@@ -693,3 +693,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
 
 **Produktionsdaten beim Kunden (13.11.2026, Fable-3 T3.3):** `auftrag_kunde_datum_frei($a)`: Daten rund um die Produktion sieht der Kunde erst, wenn der Auftrag versandbereit oder versendet ist. `auftrag_fortschritt_kunde()` lässt einen Untertext-Teil mit Datum ganz weg („Rest erwartet am …“ ohne hängenden Satzrest).
+
+**Mail-Filter nur voller Name/Alias (13.11.2026, Fable-3 T3.4):** Neue Spalte `lieferanten.kunden_alias` (VARCHAR 500) für den Kunden-Filter.
