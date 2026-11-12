@@ -52,3 +52,13 @@ Der Kunde sieht **nie die Live-Tabellen**, sondern eine **eingefrorene, freigege
 - `core/ki.md` – die API-Anbindung und die KI-Einstellungen.
 - `core/coa_lesen.md` – die textbasierte Variante ohne KI (Fallback, kostenlos, aber nur bei echtem PDF-Text).
 - `core/pdf_spec.md` – daraus entstehen die eigenen Spezifikations- und CoA-PDFs.
+
+## Rückfall: Wirkstoff aus der Analysetabelle (12.11.2026)
+Anlass: Bei der ActiHyal-CoA (Natriumhyaluronat) hat die KI „Assay [Sodium Hyaluronate] NLT 95,0 %“ nur als Analysewert („Gehalt (Natriumhyaluronat)“) geliefert, die Liste `wirkstoffe` blieb leer. Am Rohstoff kam deshalb kein Wirkstoffgehalt an.
+
+`spec_ki_wirkstoffe_aus_werte($werte)` leitet in diesem Fall die Wirkstoffe aus Zeilen wie `Gehalt (X)`, `Assay [X]`, `Content of X` oder `Reinheit (X)` ab:
+- Name = X, Gehalt = unterer Spezifikationswert in % (NLT/≥/min bzw. Anfang einer Spanne).
+- Ohne Spezifikation zählt das Ergebnis.
+- Reine Höchstwerte (NMT/≤) sind keine Gehalte und werden übersprungen.
+
+Der Rückfall greift in `spec_ki_lesen()` (neue Auslesungen) und in `spec_ki_wirkstoffe()` (auch für schon gespeicherte KI-Ergebnisse, z. B. „Angehakte Felder übernehmen“).

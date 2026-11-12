@@ -1289,6 +1289,12 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
             <?php endforeach; ?>
             </tbody>
           </table></div>
+          <?php // Wirkstoffe aus dem Dokument sichtbar machen (12.11.2026) – bei Bedarf aus der Analysetabelle abgeleitet.
+                $kvW = (array)($kiVorschlag['wirkstoffe'] ?? []); if (!$kvW) $kvW = spec_ki_wirkstoffe_aus_werte((array)($kiVorschlag['werte'] ?? []));
+                if ($kvW): ?>
+          <div style="margin-top:10px;font-size:13px">Wirkstoffgehalt laut Dokument: <strong><?= h(implode(', ', array_map(fn($w) => $w['name'] . ($w['gehalt_prozent'] !== null ? ' ' . rtrim(rtrim(number_format((float)$w['gehalt_prozent'], 2, ',', '.'), '0'), ',') . ' %' : ''), $kvW))) ?></strong>
+            <span class="muted">– wird mit „Angehakte Felder übernehmen“ in den Reiter Wirkstoff &amp; Qualität übernommen (fehlende ergänzt).</span></div>
+          <?php endif; ?>
           <div class="bx-row" style="margin-top:10px"><button class="btn btn-primary" type="submit">Angehakte Felder übernehmen</button></div>
         </form>
         <?php endif; ?>

@@ -236,3 +236,6 @@ Nico: „Hier bitte Anfrage mit einbauen, damit ich Preise anfragen kann.“ Der
 - **Bestand korrigieren** ist jetzt ein sichtbarer Knopf statt eines kleinen grauen Klapptexts (weiter nur Admin, mit Grund).
 - Knopf **Bestand einbuchen (Lager-App)** öffnet den Wareneingang der Lager-App mit vorgewähltem Artikel.
 - Aus dem Warenlager kommt man direkt in diesen Reiter (`&tab=lager`).
+
+## KI-Vorschlag zeigt den Wirkstoffgehalt (12.11.2026)
+Unter der Stammdaten-Tabelle des KI-Vorschlags steht jetzt „Wirkstoffgehalt laut Dokument: …“. Die Angabe kommt aus der KI-Liste oder als Rückfall aus der Analysetabelle (`spec_ki_wirkstoffe_aus_werte`). „Angehakte Felder übernehmen“ ergänzt fehlende Wirkstoffe im Reiter „Wirkstoff & Qualität“.

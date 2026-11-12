@@ -140,6 +140,7 @@ function spec_ki_lesen(string $pfad): array {
             'gehalt_prozent' => ($g === null || $g === '') ? null : (float) str_replace(',', '.', (string)$g),
         ];
     }
+    if (!$wirkstoffe) $wirkstoffe = spec_ki_wirkstoffe_aus_werte($werte);   // KI hat den Assay nur in die Tabelle geschrieben
     // Charakteristische Kennwerte (Assay-Spanne, Extraktverhältnis, pH, Dichte …) – ohne Sicherheits-Grenzwerte.
     $kennwerte = [];
     foreach ((array)($d['kennwerte'] ?? []) as $k) {
@@ -455,9 +456,35 @@ function spec_ki_grenzwerte(int $item_id, array $ergebnis, bool $ueberschreiben 
 // $ueberschreiben=true: alle bisherigen Wirkstoffe löschen und neu setzen.
 // $gehaltAktualisieren=true: vorhandene Wirkstoffe behalten, aber ihren Gehalt aus dem Dokument AKTUALISIEREN
 //   (so werden beim CoA-/Spec-Upload ALLE Wirkstoffgehalte aus dem Dokument übernommen, nicht nur fehlende).
+// Rückfall (Nico 12.11.2026, ActiHyal-CoA): Liefert die KI keine Liste „wirkstoffe“, obwohl die Analysetabelle eine Zeile
+// „Gehalt (X)“ / „Assay [X]“ / „Content of X“ mit %-Angabe hat, wird der Wirkstoff daraus abgeleitet: Name = X, Gehalt =
+// unterer Spezifikationswert (NLT/≥/min bzw. Anfang einer Spanne); ohne Spezifikation das Ergebnis. Reine Höchstwerte (NMT/≤)
+// sind keine Gehalte und werden übersprungen.
+function spec_ki_wirkstoffe_aus_werte(array $werte): array {
+    $zahl = function (string $s): ?float { return preg_match('/(\d+(?:[.,]\d+)?)/u', $s, $m) ? (float) str_replace(',', '.', $m[1]) : null; };
+    $out = [];
+    foreach ($werte as $z) {
+        $p = trim((string)($z['parameter'] ?? ''));
+        if (!preg_match('/^(?:gehalt|assay|content|wirkstoffgehalt|reinheit|purity)\s*(?:of\s+)?[\(\[:]?\s*([^\)\]]+?)\s*[\)\]]?$/iu', $p, $m)) continue;
+        $name = trim((string) preg_replace('/^(?:content\s+of|gehalt\s+(?:an|von))\s+/iu', '', trim($m[1])));
+        if ($name === '' || mb_strlen($name) > 80 || preg_match('/^(gesamt|total|trocken|dry)/iu', $name)) continue;
+        $spec = trim((string)($z['spezifikation'] ?? '')); $erg = trim((string)($z['ergebnis'] ?? ''));
+        $g = null;
+        if ($spec !== '' && mb_strpos($spec, '%') !== false) {
+            if (preg_match('/(NMT|≤|<=|max)/iu', $spec) && !preg_match('/(NLT|≥|>=|min|\d\s*[-–]\s*\d)/iu', $spec)) continue;   // nur Höchstwert
+            $g = $zahl($spec);
+        } elseif ($spec === '' && mb_strpos($erg, '%') !== false) {
+            $g = $zahl($erg);
+        }
+        if ($g === null || $g <= 0 || $g > 100) continue;
+        $out[] = ['name' => mb_substr($name, 0, 120), 'gehalt_prozent' => $g];
+    }
+    return $out;
+}
 function spec_ki_wirkstoffe(int $item_id, array $ergebnis, bool $ueberschreiben = false, bool $gehaltAktualisieren = false): int {
     if ($item_id <= 0) return 0;
     $ws = (array)($ergebnis['wirkstoffe'] ?? []);
+    if (!$ws) $ws = spec_ki_wirkstoffe_aus_werte((array)($ergebnis['werte'] ?? []));   // Rückfall aus der Analysetabelle
     if (!$ws) return 0;
     if ($ueberschreiben) q("DELETE FROM item_wirkstoff WHERE item_id=?", [$item_id]);
     $n = 0; $sort = (int) scalar("SELECT COALESCE(MAX(sort),-1)+1 FROM item_wirkstoff WHERE item_id=?", [$item_id]);
