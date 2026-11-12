@@ -2343,9 +2343,9 @@ function erp_la_scan(string $code, string $wer = ''): array {
     $info = ['code' => la_code($id), 'bestellung' => (string)$a['bestellung_nr'], 'charge' => (string)$a['charge_nr'], 'mhd' => (string)($a['mhd'] ?? ''),
              'netto' => (float)$a['netto_kg'], 'stueck' => $a['stueck'] !== null ? (float)$a['stueck'] : null, 'artikel' => (string)$a['bezeichnung']];
     if ($a['status'] === 'storniert') return ['ok' => false, 'art' => 'storniert', 'meldung' => 'Dieser Aufkleber wurde vom Lieferanten storniert – Gebinde nicht buchen, bitte klären.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
-    // 13.11.2026: auf eine stornierte oder schon als geliefert abgeschlossene Bestellung wird nicht gebucht.
+    // 13.11.2026: auf eine stornierte Bestellung wird nicht gebucht. Fable-3 T1.6: eine schon „geliefert“ geschlossene Bestellung (98-%-Regel)
+    // nimmt aktive Aufkleber weiter an – das letzte Gebinde und jede Überlieferung werden gebucht. Sperre nur: Bestellung oder Aufkleber storniert.
     if ((string)$a['b_status'] === 'storniert') return ['ok' => false, 'art' => 'storniert', 'meldung' => 'Die Bestellung ' . $a['bestellung_nr'] . ' ist storniert – Gebinde nicht buchen, bitte klären.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
-    if ((string)$a['b_status'] === 'geliefert' && $a['status'] === 'aktiv') return ['ok' => false, 'art' => 'schon', 'meldung' => 'Die Bestellung ' . $a['bestellung_nr'] . ' ist schon als geliefert abgeschlossen – nicht gebucht, bitte im Dashboard klären.', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
     if ($a['status'] === 'erfasst') return ['ok' => false, 'art' => 'schon', 'meldung' => 'Schon erfasst (' . (string)$a['erfasst_am'] . ').', 'info' => $info, 'stand' => la_stand($bid), 'bestellung_id' => $bid];
 
     // Artikel: an der Position, sonst Bulk-Artikel der Auftrags-Rezeptur.
