@@ -36,3 +36,6 @@ Im Panel **Analysenwerte je Charge** gibt es **Werte vorschlagen**: Das hochgela
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 bulkify-CoA: Lieferant nur als Nummer (neutralisiert), Methode ohne Lieferantennamen.
+
+## Kein Lieferant im CoA (13.11.2026)
+`build_coa_pdf()` zeigt keine Lieferantennummer mehr (Kunde sieht nie, wer produziert).

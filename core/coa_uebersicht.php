@@ -104,8 +104,7 @@ function coa_uebersicht_daten(int $charge_id): ?array {
         }
         $mikro = array_merge($mikro, $mikroZ);
         $quellen[] = ['zutat' => (string)$z['name'], 'mg' => (float)$z['menge_mg'], 'anteil' => $anteil,
-                      'chargen' => implode(', ', array_map(fn($ch) => (string)$ch['charge_nr']
-                          . (trim((string)($ch['lieferant_nr'] ?? '')) !== '' ? ' (' . kunde_text_neutral(trim((string)$ch['lieferant_nr'])) . ')' : ''), $chs)) ?: '–',
+                      'chargen' => implode(', ', array_map(fn($ch) => (string)$ch['charge_nr'], $chs)) ?: '–',   // 13.11.2026: ohne Lieferantennummer
                       'basis' => $quelleTxt ? (isset($quelleTxt['Grenzwert']) && count($quelleTxt) === 1 ? 'Spezifikation' : (isset($quelleTxt['Grenzwert']) ? 'Analyse + Spezifikation' : 'Analyse der Charge')) : 'keine Werte'];
     }
     // Bewertung je Parameter: „konform", wenn der berechnete Wert (Obergrenze) den NEM-Höchstgehalt einhält. Der Zahlenwert

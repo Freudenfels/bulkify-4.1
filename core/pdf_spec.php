@@ -321,7 +321,7 @@ function build_spec_pdf(int $item_id, bool $nur_freigegeben = false): ?string {
 // Analysenzertifikat (CoA) zu einer Charge – aus den erfassten Analysewerten.
 // ---------------------------------------------------------------------------
 function build_coa_pdf(int $charge_id): ?string {
-    // Lieferant nur als interne Lieferantennummer (wie auf dem Lager-Etikett) – nie der Name.
+    // Lieferant steht seit 13.11.2026 gar nicht mehr auf dem CoA (auch keine Lieferantennummer).
     $c = one("SELECT c.*, i.name AS item_name, i.spec_nr, i.spec_version, i.herkunftsland, i.allergene, l.lieferantennummer AS lieferant_nr
               FROM charge c JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id WHERE c.id=?", [$charge_id]);
     if (!$c) return null;
@@ -343,7 +343,7 @@ function build_coa_pdf(int $charge_id): ?string {
         ['Charge', (string)($c['charge_nr'] ?: '–')],
         ['Mindesthaltbar bis', $fmtD($c['mhd'] ?? '')],
     ];
-    if (trim((string)($c['lieferant_nr'] ?? '')) !== '') $kopf[] = ['Lieferant', kunde_text_neutral(trim((string)$c['lieferant_nr']))];   // nur Nummer, nie Firma
+    // 13.11.2026: kein Hinweis auf den Lieferanten im CoA – auch nicht die Lieferantennummer (Kunde sieht nie, wer produziert).
     if (!empty($c['herkunftsland'])) $kopf[] = ['Herkunft', (string)$c['herkunftsland']];
     $kopf[] = ['Spezifikation', trim((string)($c['spec_nr'] ?? '') . '  ' . (string)($c['spec_version'] ?? '')) ?: '–'];
     $y = spec_grid($p, $y, $kopf);
