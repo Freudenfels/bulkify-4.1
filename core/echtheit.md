@@ -34,3 +34,6 @@ Ein QR bestätigt „diese Angaben hat bulkify für diese Charge veröffentlicht
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 Methode der Analysewerte ohne Lieferantennamen.
+
+## Grundcharge beim Kunden (13.11.2026)
+Charge immer über `kunde_charge_anzeige()` (core/kunde_charge.php): nur die Grundcharge (2775), keine Buchstaben, kein Herstellungsdatum.

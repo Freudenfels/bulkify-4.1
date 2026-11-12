@@ -11,7 +11,7 @@ $fuerKunde = !empty($fuerKunde);
 if ($fuerKunde && !empty($D['fwChargen'])) {
     $fwG = [];
     foreach ($D['fwChargen'] as $c0) {
-        $b0 = (string) preg_replace('/\.[A-Z]{1,2}$/', '', trim((string)$c0['charge_nr']));
+        $b0 = kunde_charge_anzeige((string)$c0['charge_nr']);   // zentrale Funktion (core/kunde_charge.php)
         if (!isset($fwG[$b0])) { $c0['charge_nr'] = $b0; $fwG[$b0] = $c0; continue; }
         $fwG[$b0]['menge'] = (float)$fwG[$b0]['menge'] + (float)$c0['menge'];
         if ($c0['mhd'] && (!$fwG[$b0]['mhd'] || (string)$c0['mhd'] < (string)$fwG[$b0]['mhd'])) $fwG[$b0]['mhd'] = $c0['mhd'];

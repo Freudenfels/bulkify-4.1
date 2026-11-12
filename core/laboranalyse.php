@@ -152,7 +152,8 @@ function laboranalysen_fuer_kunde(int $kunde_id): array {
            -- Vorrang: ein gemessenes CoA (Laboranalyse) derselben Charge/Bestellung verdrängt die berechnete Übersicht
            AND NOT (COALESCE(d.hochgeladen_von,'')='coa_ueb' AND EXISTS (SELECT 1 FROM dokument d2 WHERE d2.objekt_typ='auftrag'
                     AND d2.objekt_id=d.objekt_id AND d2.typ='analyse' AND d2.kunde_sichtbar=1 AND COALESCE(d2.hochgeladen_von,'')<>'coa_ueb'
-                    AND (d2.charge_nr IS NULL OR d2.charge_nr='' OR d2.charge_nr=d.charge_nr)))
+                    AND (d2.charge_nr IS NULL OR d2.charge_nr='' OR d2.charge_nr=d.charge_nr   -- 13.11.2026: über die Grundcharge (2775 / 2775.A)
+                         OR d2.charge_nr LIKE CONCAT(d.charge_nr, '.%') OR d.charge_nr LIKE CONCAT(d2.charge_nr, '.%'))))
         ORDER BY datum DESC, produkt ASC, id DESC", [$kunde_id, $kunde_id, $kunde_id]);
 }
 

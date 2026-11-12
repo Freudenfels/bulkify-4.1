@@ -45,9 +45,11 @@ function coa_fertig_gemessen_vorhanden(int $charge_id): bool {
     if (charge_coa_hat_analysewerte($charge_id)) return true;
     $c = one("SELECT c.charge_nr, COALESCE(c.auftrag_id, pa.auftrag_id) AS aid FROM charge c LEFT JOIN produktionsauftrag pa ON pa.id=c.pa_id WHERE c.id=?", [$charge_id]);
     if (!$c || empty($c['aid'])) return false;
-    return (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse'
-                         AND COALESCE(hochgeladen_von,'') <> 'coa_ueb' AND (charge_nr IS NULL OR charge_nr='' OR charge_nr=?)",
-                        [(int)$c['aid'], (string)$c['charge_nr']]) > 0;
+    // 13.11.2026: Vergleich über die Grundcharge – ein gemessenes CoA zu 2775 (oder 2775.A) gilt für 2775.A, .B, ...
+    require_once __DIR__ . '/kunde_charge.php';
+    foreach (all("SELECT charge_nr FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' AND COALESCE(hochgeladen_von,'') <> 'coa_ueb'", [(int)$c['aid']]) as $d)
+        if (trim((string)$d['charge_nr']) === '' || kunde_charge_gleich((string)$d['charge_nr'], (string)$c['charge_nr'])) return true;
+    return false;
 }
 
 // Daten der Übersicht (auch für Tests/Anzeige ohne PDF).
@@ -155,10 +157,12 @@ function build_coa_uebersicht_pdf(int $charge_id): ?string {
         $y = spec_h($p, $y, $titel);
     };
     spec_wasserzeichen($p);
-    $y = spec_kopf($p, 'INFORMATIONSDOKUMENT', 'zum Produkt · ' . $d['name'] . ' · Charge ' . (string)($c['charge_nr'] ?: '–'));
+    // 13.11.2026: Kunde sieht nur die Grundcharge und KEIN Herstellungsdatum (Nico 12.11.2026).
+    require_once __DIR__ . '/kunde_charge.php';
+    $kCharge = kunde_charge_anzeige((string)($c['charge_nr'] ?? ''));
+    $y = spec_kopf($p, 'INFORMATIONSDOKUMENT', 'zum Produkt · ' . $d['name'] . ' · Charge ' . ($kCharge !== '' ? $kCharge : '–'));
 
-    $kopf = [['Produkt', $d['name']], ['Charge', (string)($c['charge_nr'] ?: '–')], ['Mindesthaltbar bis', $fmtD($c['mhd'] ?? '')],
-             ['Herstellungsdatum', $fmtD($d['herstellung'])]];
+    $kopf = [['Produkt', $d['name']], ['Charge', $kCharge !== '' ? $kCharge : '–'], ['Mindesthaltbar bis', $fmtD($c['mhd'] ?? '')]];
     if (!empty($d['rezeptur']['nummer'])) $kopf[] = ['Rezeptur', (string)$d['rezeptur']['nummer']];
     if ($d['form'] !== '') $kopf[] = ['Darreichungsform', function_exists('form_plural') ? ucfirst(form_plural($d['form'])) : $d['form']];
     $y = spec_grid($p, $y, $kopf);

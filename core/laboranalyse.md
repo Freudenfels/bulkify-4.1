@@ -81,3 +81,6 @@ sobald ein gemessenes CoA (Laboranalyse) derselben Bestellung/Charge sichtbar is
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 laboranalysen_fuer_kunde() ohne Unterlagen eines Herstellers/Lieferanten (reine Labore erlaubt).
+
+## Grundcharge beim Kunden (13.11.2026)
+Charge immer über `kunde_charge_anzeige()` (core/kunde_charge.php): nur die Grundcharge (2775), keine Buchstaben, kein Herstellungsdatum.

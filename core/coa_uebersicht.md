@@ -55,3 +55,6 @@ Lieferantennummer, z. B. „LS-VC-D1 (L-2690)“ – nie der Lieferantenname (wi
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 Lieferantennummer neutralisiert.
+
+## Grundcharge beim Kunden (13.11.2026)
+Charge immer über `kunde_charge_anzeige()` (core/kunde_charge.php): nur die Grundcharge (2775), keine Buchstaben, kein Herstellungsdatum.

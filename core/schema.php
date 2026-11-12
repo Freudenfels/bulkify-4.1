@@ -4,6 +4,7 @@
 // Nie Spalten loeschen. Alles UTF-8 (utf8mb4).
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/zeit_ort.php';   // heute_ort(): Tag in Europe/Berlin (13.11.2026)
+require_once __DIR__ . '/kunde_charge.php';   // kunde_charge_anzeige(): Grundcharge beim Kunden (13.11.2026)
 require_once __DIR__ . '/charge_norm.php';
 require_once __DIR__ . '/rohstoff_alternative.php';   // Alternative zu einer Rohstoff-Anfrage (Dashboard + Kundenportal)
 require_once __DIR__ . '/pa_ablauf.php';   // Produktion ein Weg (11.11.2026): Unter-Chargen, Teilmengen, Kartons – gemeinsam mit der Werk-App
@@ -12563,21 +12564,25 @@ function fertigware_qm_freigabe_nach(int $charge_id, string $wer = '', bool $mit
         }
         $aid = (int)($c['auftrag_id'] ?: ($pa['auftrag_id'] ?? 0));
         require_once __DIR__ . '/coa_uebersicht.php';
-        $schonDa = $aid > 0 && (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' AND hochgeladen_von='coa_ueb' AND charge_nr=?", [$aid, (string)$c['charge_nr']]) > 0;
+        // 13.11.2026: EIN Informationsdokument je Grundcharge (2775), nicht je Buchstabe (2775.A/.B = Produktionstage).
+        $kBasis = kunde_charge_anzeige((string)$c['charge_nr']);
+        $schonDa = false;
+        if ($aid > 0) foreach (all("SELECT charge_nr FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='analyse' AND hochgeladen_von='coa_ueb'", [$aid]) as $dq)
+            if (kunde_charge_gleich((string)$dq['charge_nr'], $kBasis)) { $schonDa = true; break; }
         // Schalter app_meta coa_uebersicht_auto (Standard 0): erst nach dem Gegenlesen des Muster-CoA durch QM (Tabea) einschalten.
         if ((string) meta_get('coa_uebersicht_auto', '0') === '1' && $aid > 0 && !$schonDa && !coa_fertig_gemessen_vorhanden($charge_id)) {
             $pdf = build_coa_uebersicht_pdf($charge_id);
             // Rechnerisch über einem NEM-Höchstgehalt: Dokument entsteht, bleibt aber für den Kunden unsichtbar + Hinweis ans Team.
             $cud = coa_uebersicht_daten($charge_id);
             $sicht = empty($cud['ueberschritten']) ? 1 : 0;
-            if (!$sicht) log_aktivitaet('auftrag', $aid, 'system', 'Informationsdokument zu Charge ' . $c['charge_nr'] . ' NICHT freigegeben: rechnerisch über einem NEM-Höchstgehalt – bitte prüfen.', 'qm', 'auftrag', $aid);
+            if (!$sicht) log_aktivitaet('auftrag', $aid, 'system', 'Informationsdokument zu Charge ' . $kBasis . ' NICHT freigegeben: rechnerisch über einem NEM-Höchstgehalt – bitte prüfen.', 'qm', 'auftrag', $aid);
             if ($pdf) {
                 if (!is_dir(BX_UPLOADS)) @mkdir(BX_UPLOADS, 0775, true);
                 $fn = 'coa_uebersicht_' . $charge_id . '_' . bin2hex(random_bytes(5)) . '.pdf';
                 if (@file_put_contents(BX_UPLOADS . '/' . $fn, $pdf) !== false) {
                     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von,charge_nr,dok_datum)
                        VALUES ('auftrag',?,'analyse',?,?,?,?,'coa_ueb',?,CURDATE())",
-                      [$aid, 'Informationsdokument zum Produkt · Charge ' . $c['charge_nr'], $fn, 'Informationsdokument_' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)$c['charge_nr']) . '.pdf', $sicht, (string)$c['charge_nr']]);
+                      [$aid, 'Informationsdokument zum Produkt · Charge ' . $kBasis, $fn, 'Informationsdokument_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $kBasis) . '.pdf', $sicht, $kBasis]);
                     $out['coa'] = (int) insert_id();
                 }
             }

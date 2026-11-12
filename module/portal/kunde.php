@@ -1334,7 +1334,7 @@ $auftraege = array_values(array_filter($auftraege, function ($a) {
 // Fertigware-Chargen je Bestellung (Charge-Nr steht auf dem Produkt, deshalb sichtbar fuer den Kunden).
 // Nico 12.11.2026: Der Kunde sieht nur die GRUNDCHARGE (2775) – die Buchstaben (2775.A/.B) stehen nur für unsere Produktionstage.
 // 'roh' behält die Buchstaben-Chargen für die Suche (der Kunde liest 2775.A vom Stempel ab und findet trotzdem).
-$kundeChargeBasis = fn(string $nr): string => (string) preg_replace('/\.[A-Z]{1,2}$/', '', trim($nr));
+$kundeChargeBasis = fn(string $nr): string => kunde_charge_anzeige($nr);   // zentrale Funktion (core/kunde_charge.php, 13.11.2026)
 $auftragChargen = [];
 if ($auftraege) {
     $aids = array_map(fn($a) => (int)$a['id'], $auftraege);
@@ -4783,7 +4783,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <tr>
           <td style="white-space:nowrap"><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
           <td><?= h($l['titel'] ?: ($l['produkt'] ?: 'Laboranalyse')) ?></td>
-          <td><?= $l['charge_nr'] ? h($l['charge_nr']) : '<span class="muted">–</span>' ?></td>
+          <td><?= $l['charge_nr'] ? h(kunde_charge_anzeige((string)$l['charge_nr'])) : '<span class="muted">–</span>' ?></td>
           <td><?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '<span class="muted">–</span>' ?></td>
           <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h($url) ?>" target="_blank" rel="noopener">Ansehen / Download</a></td>
         </tr>
@@ -5409,7 +5409,16 @@ portal_head('Kundenportal · ' . $k['firma']);
       $fpChg = []; $fpStat = [];
       foreach ($fp as $r) {
           $iid = (int)$r['item_id'];
-          $fpChg[$iid] = all("SELECT charge_nr, menge_verfuegbar, mhd, energetisiert_am FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd, id", [$iid]);
+          // 13.11.2026: Bestand je GRUNDCHARGE zusammengefasst (2775.A + 2775.B = 2775), frühestes MHD.
+          $fpG = [];
+          foreach (all("SELECT charge_nr, menge_verfuegbar, mhd, energetisiert_am FROM charge WHERE item_id=? AND status='frei' AND menge_verfuegbar>0 ORDER BY (mhd IS NULL), mhd, id", [$iid]) as $cg) {
+              $gk = kunde_charge_anzeige((string)$cg['charge_nr']);
+              if (!isset($fpG[$gk])) { $cg['charge_nr'] = $gk; $fpG[$gk] = $cg; continue; }
+              $fpG[$gk]['menge_verfuegbar'] = (float)$fpG[$gk]['menge_verfuegbar'] + (float)$cg['menge_verfuegbar'];
+              if ($cg['mhd'] && (!$fpG[$gk]['mhd'] || (string)$cg['mhd'] < (string)$fpG[$gk]['mhd'])) $fpG[$gk]['mhd'] = $cg['mhd'];
+              if (empty($fpG[$gk]['energetisiert_am']) && !empty($cg['energetisiert_am'])) $fpG[$gk]['energetisiert_am'] = $cg['energetisiert_am'];
+          }
+          $fpChg[$iid] = array_values($fpG);
           $fpStat[$iid] = lager2_verkaufsstatistik($iid, 8);   // Verkaufsgeschwindigkeit + Reichweite (letzte 8 Wochen)
       }
       $fpNf = fn($x) => number_format((float)$x, (floor((float)$x) == (float)$x ? 0 : 2), ',', '.');

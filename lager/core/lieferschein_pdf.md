@@ -23,3 +23,6 @@ Versandart „Selbstabholung“ im Kopf (Soll-Kette 7, 04.11.2026).
 Packstücke (Soll-Kette 7b, 04.11.2026): Unter den Positionen ein Block „Packstücke“ – je Palette „Palette i von n“ mit Kartonzahl, Summe und Gewicht, darunter die Kartons (Nr., Produkt, Charge, Menge); Kartons/Pakete ohne Palette folgen gesammelt. Neu `lg_paletten_etikett_pdf($versand_id)`: ein Etikett 100×150 mm je Palette (Empfänger, Inhalt nach Produkt/Charge gruppiert, Gewicht, Code128 `<Sendungsnr>-P01`).
 
 **Pflicht-Hinweis (06.11.2026):** Über „Erstellt am …“ steht `pdf_hinweis_maschinell()` (aus core/lib/minipdf.php). Paletten-Etiketten und Lager-Etiketten tragen ihn nicht (Etikett, kein Dokument).
+
+## Grundcharge beim Kunden (13.11.2026)
+Charge immer über `kunde_charge_anzeige()` (core/kunde_charge.php): nur die Grundcharge (2775), keine Buchstaben, kein Herstellungsdatum.

@@ -3,6 +3,7 @@
 // Design wie die Karton-Etiketten (Charcoal/Grau, Arial via MiniPDF). Weltweit: Land wird ausgeschrieben.
 //   lg_lieferschein_pdf(int $versand_id): ?string  -> PDF-Bytes oder null.
 require_once __DIR__ . '/../../core/lib/minipdf.php';
+require_once __DIR__ . '/../../core/kunde_charge.php';   // Kunde sieht nur die Grundcharge (13.11.2026)
 
 // Ein paar gaengige Laendercodes ausschreiben; sonst bleibt der Code stehen.
 function lg_land_name(string $code): string {
@@ -93,6 +94,15 @@ function lg_lieferschein_pdf(int $versand_id): ?string {
     $pdf->text($cMng, $ty, 'Menge', 8, false, $muted);
     $ty += $mm(8);
 
+    // 13.11.2026: Kunde sieht nur die Grundcharge – Zeilen gleichen Produkts und gleicher Grundcharge (2775.A + 2775.B) werden eine.
+    $posK = [];
+    foreach ($pos as $p) {
+        $p['charge_nr'] = kunde_charge_anzeige((string)($p['charge_nr'] ?? ''));
+        $kKey = (int)($p['kartons'] ?? 0) > 0 ? 'kt' . count($posK) : mb_strtolower((string)($p['bezeichnung'] ?? '')) . '|' . (string)($p['einheit'] ?? '') . '|' . $p['charge_nr'];
+        if (isset($posK[$kKey])) { $posK[$kKey]['menge'] = (float)$posK[$kKey]['menge'] + (float)($p['menge'] ?? 0); continue; }
+        $posK[$kKey] = $p;
+    }
+    $pos = array_values($posK);
     $i = 0;
     foreach ($pos as $p) {
         $i++;
@@ -125,7 +135,7 @@ function lg_lieferschein_pdf(int $versand_id): ?string {
             $lbl = ($x['art'] === 'karton' ? 'Karton ' : 'Paket ') . (int)$x['nr'];
             $pdf->text($lx + $einzug, $ty, $lbl, 9.5, true, $dark);
             $pdf->text($lx + $einzug + $mm(22), $ty, $pdf->fit((string)($x['bezeichnung'] ?? ''), $cChg - $lx - $einzug - $mm(24), 9.5, false), 9.5, false, $dark);
-            $pdf->text($cChg, $ty, $pdf->fit((string)($x['charge_nr'] ?? ''), $cMng - $cChg - $mm(2), 9.5, false), 9.5, false, $dark);
+            $pdf->text($cChg, $ty, $pdf->fit(kunde_charge_anzeige((string)($x['charge_nr'] ?? '')), $cMng - $cChg - $mm(2), 9.5, false), 9.5, false, $dark);
             if ($x['menge'] !== null) $pdf->text($cMng, $ty, rtrim(rtrim(number_format((float)$x['menge'], 3, ',', '.'), '0'), ',') . ' Pkg', 9.5, true, $dark);
             $ty += $mm(5.4);
         };
@@ -188,7 +198,7 @@ function lg_paletten_etikett_pdf(int $versand_id): ?string {
         $kinder = array_values(array_filter($pst, fn($x) => (int)$x['parent_id'] === (int)$pp['id']));
         $pdf->text($lx, $y, 'Inhalt: ' . count($kinder) . ' Karton(s)', 8, false, $muted); $y += $mm(5.5);
         $grp = [];   // gleiche Produkt/Charge zusammenfassen
-        foreach ($kinder as $kd) { $k = (string)$kd['bezeichnung'] . '|' . (string)$kd['charge_nr']; $grp[$k] = ($grp[$k] ?? ['b' => (string)$kd['bezeichnung'], 'c' => (string)$kd['charge_nr'], 'm' => 0.0, 'n' => 0]); $grp[$k]['m'] += (float)$kd['menge']; $grp[$k]['n']++; }
+        foreach ($kinder as $kd) { $kdC = kunde_charge_anzeige((string)$kd['charge_nr']); $k = (string)$kd['bezeichnung'] . '|' . $kdC; $grp[$k] = ($grp[$k] ?? ['b' => (string)$kd['bezeichnung'], 'c' => $kdC, 'm' => 0.0, 'n' => 0]); $grp[$k]['m'] += (float)$kd['menge']; $grp[$k]['n']++; }
         foreach ($grp as $g) {
             if ($y > $mm(120)) break;
             foreach (array_slice($pdf->wrap($g['b'] !== '' ? $g['b'] : '–', $tw, 11, true), 0, 2) as $ln) { $pdf->text($lx, $y, $ln, 11, true, $dark); $y += $mm(4.8); }

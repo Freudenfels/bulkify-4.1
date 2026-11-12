@@ -100,7 +100,7 @@ function charge_echt_daten(string $token): ?array {
         'gesperrt'  => false,
         'ist_coa'   => $istCoa,
         'name'      => $anzName,
-        'charge_nr' => (string) ($c['charge_nr'] ?? ''),
+        'charge_nr' => function_exists('kunde_charge_anzeige') ? kunde_charge_anzeige((string) ($c['charge_nr'] ?? '')) : (string) ($c['charge_nr'] ?? ''),   // 13.11.2026: Grundcharge
         'mhd'       => $c['mhd'] ?? null,
         'herkunft'  => (string) ($c['herkunftsland'] ?? ''),
         'spec'      => trim((string) ($c['spec_nr'] ?? '') . ' ' . (string) ($c['spec_version'] ?? '')),
@@ -173,6 +173,16 @@ function produkt_echt_daten(string $token): ?array {
                              OR c.item_id IN (SELECT id FROM item WHERE produkt_id=?) )
                         ORDER BY c.mhd DESC, c.id DESC", [(int) $pr['id'], (int) $pr['id']]);
     } catch (\Throwable $e) { $chargen = []; }
+    // 13.11.2026: Kunde sieht nur die Grundcharge – eine Zeile je Grundcharge (erster Nachweis-Link, frühestes MHD).
+    if (function_exists('kunde_charge_anzeige')) {
+        $cg = [];
+        foreach ($chargen as $ch) {
+            $gk = kunde_charge_anzeige((string)($ch['charge_nr'] ?? ''));
+            if (!isset($cg[$gk])) { $ch['charge_nr'] = $gk; $cg[$gk] = $ch; continue; }
+            if (!empty($ch['mhd']) && (empty($cg[$gk]['mhd']) || (string)$ch['mhd'] < (string)$cg[$gk]['mhd'])) $cg[$gk]['mhd'] = $ch['mhd'];
+        }
+        $chargen = array_values($cg);
+    }
 
     $formLbl = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks',
                 'pulver'=>'Pulver','granulat'=>'Granulat','fluessig'=>'Flüssig','gel'=>'Gel','gummi'=>'Fruchtgummi'][$pr['darreichungsform'] ?? ''] ?? '';
