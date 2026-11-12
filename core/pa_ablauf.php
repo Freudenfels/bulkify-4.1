@@ -10,7 +10,7 @@ require_once __DIR__ . '/zeit_ort.php';   // heute_ort() (13.11.2026)
 // nächsten Buchstaben“). Gleicher Bulk am selben Tag = gleicher Buchstabe.
 // Im Lager gibt es je Unter-Charge GENAU EINE Fertigware-Charge; jede Teilmenge erhöht deren Menge.
 
-const PA_SCHEMA_VERSION = '4';
+const PA_SCHEMA_VERSION = '5';
 
 function pa_meta(string $k, ?string $set = null): string {
     if ($set !== null) { q("INSERT INTO app_meta (k,v) VALUES (?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)", [$k, $set]); return $set; }
@@ -40,7 +40,8 @@ function pa_schema(): void {
             bulk_charge_id INT NULL,                   -- genau EINE Bulk-Charge (Lager-Charge) …
             prod_charge_id INT NULL,                   -- … oder EIN Eimer/Sack (prod_charge) bei Eigenproduktion
             linie VARCHAR(40) NULL,
-            status VARCHAR(12) NOT NULL DEFAULT 'laeuft',   -- laeuft | fertig
+            status VARCHAR(12) NOT NULL DEFAULT 'laeuft',   -- laeuft | fertig (| nachtrag: nur während der Nachtrag-Buchung)
+            tag DATE NULL,                             -- Produktionstag (Europe/Berlin), 13.11.2026
             fertig_charge_id INT NULL,                 -- Fertigware-Charge im Lager (eine je Unter-Charge)
             kapsel_mg DECIMAL(10,2) NULL,              -- Ø-Kapselgewicht aus den Stichproben
             kapseln_bulk DECIMAL(14,0) NULL,           -- Kapselzahl der Unter-Charge aus dem Sackgewicht (Gegenprobe)
@@ -95,6 +96,8 @@ function pa_schema(): void {
             KEY pa (pa_id, unter_charge_id)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         if (!pa_spalte_da('produktion_verbrauch', 'teilmenge_id')) { try { q("ALTER TABLE produktion_verbrauch ADD COLUMN teilmenge_id INT NULL"); } catch (\Throwable $e) {} }
+        // 13.11.2026 (Fable-3 T1.4): Produktionstag je Unter-Charge – ein Nachtrag für gestern gehört zu gestern, nicht zum Anlagezeitpunkt.
+        if (!pa_spalte_da('pa_unter_charge', 'tag')) { try { q("ALTER TABLE pa_unter_charge ADD COLUMN tag DATE NULL AFTER status"); } catch (\Throwable $e) {} }
         pa_meta('pa_ablauf_schema', PA_SCHEMA_VERSION);
     } catch (\Throwable $e) { error_log('pa_schema: ' . $e->getMessage()); }
 }
@@ -170,6 +173,7 @@ function pa_aktuelle_unter_charge(int $pa_id): ?array {
 // Produktionstag (Europe/Berlin) – heute bzw. der Tag einer Unter-Charge: letzte Teilmenge (datum), sonst Anlage (UTC -> Berlin).
 function pa_tag_heute(): string { return heute_ort(); }
 function pa_uc_tag(array $uc): string {
+    if (!empty($uc['tag'])) return substr((string)$uc['tag'], 0, 10);   // 13.11.2026: eigene Spalte (Nachtrag = gewähltes Datum)
     $d = (string) scalar("SELECT MAX(datum) FROM pa_teilmenge WHERE unter_charge_id=?", [(int)$uc['id']]);
     if ($d !== '') return substr($d, 0, 10);
     try { return (new DateTime((string)$uc['angelegt'] . ' UTC'))->setTimezone(new DateTimeZone('Europe/Berlin'))->format('Y-m-d'); }
@@ -214,22 +218,73 @@ function pa_starten(int $pa_id, array $d, string $von): array {
         pa_ereignis($pa_id, (int)$akt['id'], 'wiederanlauf', 'Wiederanlauf ' . $akt['charge_nr'] . ': Linie leer bestätigt, Stempel auf Charge ' . $akt['charge_nr'] . ' / MHD ' . date('d.m.Y', strtotime((string)$akt['mhd'])) . ' eingestellt.', (string)($d['linie'] ?? ''), (string)$d['foto_linie'], (string)$d['foto_stempel'], $von);
         return ['ok' => true, 'unter_charge_id' => (int)$akt['id'], 'charge_nr' => (string)$akt['charge_nr'], 'mhd' => (string)$akt['mhd'], 'neu' => false];
     }
-    if ($akt) pa_unter_charge_schliessen((int)$akt['id'], $von, ((int)$akt['bulk_charge_id'] === $bulk && (int)$akt['prod_charge_id'] === $eimer) ? 'neuer Produktionstag' : 'Chargenwechsel');
     $charge = trim((string)($d['charge_nr'] ?? '')) ?: $v['charge_nr'];
     $grund = trim((string)($d['abweichung_grund'] ?? ''));
     if ($charge !== $v['charge_nr'] && $grund === '') return ['ok' => false, 'msg' => 'Andere Charge als vorgegeben (' . $v['charge_nr'] . ') nur mit Grund.'];
+    // 13.11.2026 (Fable-3 T1.4): erst prüfen, dann schließen. Ein Nachtrag schließt die laufende Unter-Charge nie (eigene Unter-Charge
+    // mit Status „nachtrag“, pa_nachtrag_buchen() schließt oder verwirft sie).
+    if ($akt && !$nachtrag) pa_unter_charge_schliessen((int)$akt['id'], $von, ((int)$akt['bulk_charge_id'] === $bulk && (int)$akt['prod_charge_id'] === $eimer) ? 'neuer Produktionstag' : 'Chargenwechsel');
+    if ($nachtrag) $akt = null;
     $mhd = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($d['mhd'] ?? '')) ? (string)$d['mhd'] : $v['mhd'];
     q("INSERT INTO pa_unter_charge (pa_id, buchstabe, charge_nr, charge_vorgabe, mhd, bulk_charge_id, prod_charge_id, linie, status, abweichung_grund, angelegt, angelegt_von)
-       VALUES (?,?,?,?,?,?,?,?, 'laeuft', ?,?,?)",
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
       [$pa_id, $v['buchstabe'], mb_substr($charge, 0, 60), $charge !== $v['charge_nr'] ? $v['charge_nr'] : null, $mhd, $bulk ?: null, $eimer ?: null,
-       mb_substr((string)($d['linie'] ?? ''), 0, 40) ?: null, $grund ?: null, gmdate('Y-m-d H:i:s'), $von ?: null]);
+       mb_substr((string)($d['linie'] ?? ''), 0, 40) ?: null, $nachtrag ? 'nachtrag' : 'laeuft', $grund ?: null, gmdate('Y-m-d H:i:s'), $von ?: null]);
     $uc = insert_id();
+    if (pa_spalte_da('pa_unter_charge', 'tag')) q("UPDATE pa_unter_charge SET tag=? WHERE id=?", [$tag, $uc]);   // Produktionstag (13.11.2026)
     $bulkTxt = $bulk ? 'Bulk-Charge ' . (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#',id)) FROM charge WHERE id=?", [$bulk]) : ($eimer ? 'Eimer ' . (string) scalar("SELECT CONCAT(nummer, COALESCE(sub_kennung,'')) FROM prod_charge WHERE id=?", [$eimer]) : 'ohne Bulk-Scan');
     pa_ereignis($pa_id, $uc, $akt ? 'chargenwechsel' : 'start', ($akt ? 'Chargenwechsel: ' : 'Start: ') . 'Unter-Charge ' . $charge . ' (' . $bulkTxt . '), MHD ' . date('d.m.Y', strtotime($mhd)) . ($nachtrag ? '. Nachgetragen im Dashboard (ohne Fotos).' : '. Linie leer bestätigt, Stempel eingestellt.'), (string)($d['linie'] ?? ''), (string)($d['foto_linie'] ?? ''), (string)($d['foto_stempel'] ?? ''), $von);
     if ($grund !== '') { pa_ereignis($pa_id, $uc, 'abweichung', 'Charge abweichend von der Vorgabe ' . $v['charge_nr'] . ': ' . $grund, '', '', '', $von);
-        pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $charge . ' statt ' . $v['charge_nr'] . ')', 'Grund: ' . $grund . ' · ' . $von, $von); }
-    if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
-    return ['ok' => true, 'unter_charge_id' => $uc, 'charge_nr' => $charge, 'mhd' => $mhd, 'neu' => true];
+        if (!$nachtrag) pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $charge . ' statt ' . $v['charge_nr'] . ')', 'Grund: ' . $grund . ' · ' . $von, $von); }
+    if (!$nachtrag && (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
+    return ['ok' => true, 'unter_charge_id' => $uc, 'charge_nr' => $charge, 'mhd' => $mhd, 'neu' => true, 'vorgabe' => $v['charge_nr'], 'grund' => $grund];
+}
+
+// Teilmenge nachtragen (Dashboard), EIN Weg für jedes Datum (13.11.2026, Fable-3 T1.4).
+// - Gleicher Bulk am gewählten Tag = dieselbe Unter-Charge (laufend oder schon fertig), sonst eine neue mit dem gewählten Tag (Spalte tag).
+// - Die laufende Unter-Charge eines anderen Tages bleibt unberührt.
+// - Schlägt die Buchung fehl, wird die eben angelegte Unter-Charge samt Start-Ereignis verworfen: kein Buchstabe verbraucht.
+// - Gelingt sie: Nachtrag für heute ohne laufende Unter-Charge läuft weiter (wie bisher), sonst wird die Nachtrag-Unter-Charge abgeschlossen.
+// $d: bulk_charge_id, datum, charge_nr ('' = Vorgabe), grund, mhd. $o: Optionen für pa_teilmenge_buchen (rueckstell, foto, mitarbeiter, geliefert).
+function pa_nachtrag_buchen(int $pa_id, float $menge, array $d, array $o, string $von): array {
+    pa_schema();
+    $tag = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($d['datum'] ?? '')) ? (string)$d['datum'] : pa_tag_heute();
+    if ($tag > pa_tag_heute()) return ['ok' => false, 'msg' => 'Ein Nachtrag geht nicht in die Zukunft.'];
+    $bulk = (int)($d['bulk_charge_id'] ?? 0);
+    $charge = trim((string)($d['charge_nr'] ?? ''));
+    $uc = null;
+    foreach (all("SELECT * FROM pa_unter_charge WHERE pa_id=? AND COALESCE(bulk_charge_id,0)=? AND COALESCE(prod_charge_id,0)=0 AND status IN ('laeuft','fertig') ORDER BY status='laeuft' DESC, id DESC", [$pa_id, $bulk]) as $u)
+        if (pa_uc_tag($u) === $tag) { $uc = $u; break; }
+    if ($uc && $charge !== '' && $charge !== (string)$uc['charge_nr'])
+        return ['ok' => false, 'msg' => 'Gleicher Bulk am selben Tag = gleiche Charge ' . $uc['charge_nr'] . '. Ein neuer Buchstabe kommt nur bei anderem Bulk oder anderem Tag.'];
+    $neu = null;
+    if (!$uc) {
+        $neu = pa_starten($pa_id, ['bulk_charge_id' => $bulk, 'nachtrag' => true, 'datum' => $tag, 'charge_nr' => $charge,
+                                   'abweichung_grund' => (string)($d['grund'] ?? ''), 'mhd' => (string)($d['mhd'] ?? '')], $von);
+        if (empty($neu['ok'])) return $neu;
+        $uc = pa_unter_charge((int)$neu['unter_charge_id']);
+    }
+    $r = pa_teilmenge_buchen($pa_id, (int)$uc['id'], $menge, ['art' => 'nachtrag', 'datum' => $tag, 'von' => $von, 'nachtrag_komplett' => true] + $o);
+    $r['unter_charge_id'] = (int)$uc['id'];
+    if ($neu) {
+        if (empty($r['ok'])) { pa_nachtrag_verwerfen((int)$uc['id']); $r['unter_charge_id'] = 0; return $r; }
+        $laeuft = (int) scalar("SELECT COUNT(*) FROM pa_unter_charge WHERE pa_id=? AND status='laeuft'", [$pa_id]);
+        if ($tag === pa_tag_heute() && $laeuft === 0) q("UPDATE pa_unter_charge SET status='laeuft' WHERE id=?", [(int)$uc['id']]);
+        else pa_unter_charge_schliessen((int)$uc['id'], $von, 'Nachtrag ' . date('d.m.Y', strtotime($tag)));
+        if (($neu['grund'] ?? '') !== '') pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $neu['charge_nr'] . ' statt ' . $neu['vorgabe'] . ')', 'Grund: ' . $neu['grund'] . ' · ' . $von, $von);
+        if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
+    } elseif (!empty($r['ok']) && (string)$uc['status'] === 'fertig' && function_exists('pa_protokoll_ablegen')) {
+        pa_protokoll_ablegen((int)$uc['id']);   // Chargenprotokoll der schon abgeschlossenen Unter-Charge neu ablegen
+    }
+    return $r;
+}
+// Eine eben für einen Nachtrag angelegte Unter-Charge wieder entfernen (nur Status „nachtrag“ und ohne gebuchte Teilmenge).
+function pa_nachtrag_verwerfen(int $uc_id): void {
+    $uc = pa_unter_charge($uc_id);
+    if (!$uc || (string)$uc['status'] !== 'nachtrag') return;
+    if ((int) scalar("SELECT COUNT(*) FROM pa_teilmenge WHERE unter_charge_id=?", [$uc_id]) > 0) { q("UPDATE pa_unter_charge SET status='fertig', abgeschlossen_am=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $uc_id]); return; }
+    q("DELETE FROM pa_ereignis WHERE unter_charge_id=?", [$uc_id]);
+    q("DELETE FROM pa_unter_charge WHERE id=? AND status='nachtrag'", [$uc_id]);
 }
 function pa_unter_charge_schliessen(int $uc_id, string $von = '', string $anlass = ''): void {
     $uc = pa_unter_charge($uc_id);

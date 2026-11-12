@@ -47,3 +47,13 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 
 ## Datum in Ortszeit (13.11.2026)
 `pa_tag_heute()` = `heute_ort()` (core/zeit_ort.php). MHD-Vorgabe ab heute in Berlin, Wareneingang der Fertigcharge = Produktionstag (Berlin, beim Nachtrag das gewählte Datum).
+
+## Nachtrag mit anderem Datum (13.11.2026, Fable-3 T1.4)
+- Neue Spalte `pa_unter_charge.tag` (DATE): der Produktionstag der Unter-Charge (Europe/Berlin). `pa_uc_tag()` nimmt sie zuerst; alte Unter-Chargen ohne Tag wie bisher (letzte Teilmenge, sonst Anlagezeit).
+- `pa_starten()` setzt den Tag (Werk-App: heute, Nachtrag: das gewählte Datum). Erst wird geprüft (Charge-Abweichung nur mit Grund), dann geschlossen. Ein Nachtrag schließt die laufende Unter-Charge **nie**; er legt seine eigene mit Status `nachtrag` an.
+- **`pa_nachtrag_buchen($pa_id, $menge, $d, $o, $von)`** ist der einzige Nachtrag-Weg:
+  - gleicher Bulk am gewählten Tag = dieselbe Unter-Charge (laufend oder schon fertig, dann wird das Chargenprotokoll neu abgelegt),
+  - sonst neue Unter-Charge mit dem gewählten Tag,
+  - Buchung schlägt fehl: `pa_nachtrag_verwerfen()` löscht die eben angelegte Unter-Charge samt Start-Ereignis – kein Buchstabe verbraucht, die laufende Unter-Charge bleibt offen,
+  - Buchung gelingt: Nachtrag für heute ohne laufende Unter-Charge läuft weiter (wie bisher), sonst wird die Nachtrag-Unter-Charge abgeschlossen; eine Charge-Abweichung geht erst jetzt als Aufgabe ans Büro,
+  - Datum in der Zukunft: abgelehnt.

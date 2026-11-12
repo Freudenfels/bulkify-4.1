@@ -70,21 +70,12 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     $charge = trim((string)($_POST['charge_nr'] ?? ''));
     $datumN = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST['datum'] ?? '')) ? (string)$_POST['datum'] : pa_tag_heute();
     if ($charge !== '' && $charge === trim((string)($_POST['charge_vorschlag'] ?? ''))) $charge = '';   // unveränderter Vorschlag = System vergibt
-    $akt = pa_aktuelle_unter_charge($id);
-    $uc = 0;
-    if ($akt && (int)$akt['bulk_charge_id'] === $bulk && pa_uc_tag($akt) === $datumN) {
-        // Gleicher Bulk am selben Tag = gleiche Unter-Charge. Neuer Tag oder anderer Bulk = nächster Buchstabe (Nico 12.11.2026).
-        if ($charge !== '' && $charge !== (string)$akt['charge_nr']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode('Gleicher Bulk am selben Tag = gleiche Charge ' . $akt['charge_nr'] . '. Ein neuer Buchstabe kommt mit anderem Bulk oder an einem anderen Produktionstag.') . '&nachtragen=1#nachtragen'); exit; }
-        $uc = (int)$akt['id'];
-    }
-    if (!$uc) {
-        $r0 = pa_starten($id, ['bulk_charge_id' => $bulk, 'nachtrag' => true, 'datum' => $datumN, 'charge_nr' => $charge, 'abweichung_grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')], $wer);
-        if (!$r0['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r0['msg']) . '&nachtragen=1#nachtragen'); exit; }
-        $uc = (int)$r0['unter_charge_id'];
-    }
+    // 13.11.2026 (Fable-3 T1.4): ein Weg für jedes Datum – pa_nachtrag_buchen() findet bzw. legt die Unter-Charge des gewählten Tages an,
+    // lässt die laufende Unter-Charge in Ruhe und verwirft bei einem Fehler alles (kein Buchstabe verbraucht).
     $foto = pa_foto_speichern($_FILES['foto'] ?? [], 'nachtrag' . $id);
-    $r = pa_teilmenge_buchen($id, $uc, $menge, ['art' => 'nachtrag', 'datum' => (string)($_POST['datum'] ?? ''), 'mitarbeiter' => (string)($_POST['mitarbeiter'] ?? ''),
-        'rueckstell' => (int) zahl_lesen((string)($_POST['rueckstell'] ?? '0'), true), 'foto' => $foto, 'geliefert' => !empty($_POST['geliefert']), 'von' => $wer, 'nachtrag_komplett' => true]);
+    $r = pa_nachtrag_buchen($id, $menge, ['bulk_charge_id' => $bulk, 'datum' => $datumN, 'charge_nr' => $charge, 'grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')],
+        ['mitarbeiter' => (string)($_POST['mitarbeiter'] ?? ''), 'rueckstell' => (int) zahl_lesen((string)($_POST['rueckstell'] ?? '0'), true), 'foto' => $foto, 'geliefert' => !empty($_POST['geliefert'])], $wer);
+    $uc = (int)($r['unter_charge_id'] ?? 0);
     if ($r['ok'] && !empty($_POST['geliefert']) && !empty($r['charge_id'])) {
         // Schon geliefert (wie Easy Production): die nachgetragene Menge gleich per Lieferschein wieder ausbuchen – kein Phantombestand.
         q("UPDATE charge SET menge_verfuegbar=GREATEST(0, menge_verfuegbar-?), status=IF(menge_verfuegbar<=0.0001,'leer',status) WHERE id=?", [$menge, (int)$r['charge_id']]);

@@ -197,3 +197,5 @@ Nico: „Ich will dann auf das Produkt kommen und sehen, wann es bestellt wurde.
 
 ## Ein Weg für Teilmengen (13.11.2026)
 Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App, Werk-App außerhalb Abfüllen/Verpacken) sind entfernt; ihre POST-Aktionen buchen nichts mehr und verweisen auf den geführten Ablauf. Gebucht wird nur über `pa_teilmenge_buchen()` (Werk-App Abfüllen/Verpacken, Dashboard „Teilmenge nachtragen“).
+
+**Teilmenge nachtragen (13.11.2026, Fable-3 T1.4):** Das Formular ruft nur noch `pa_nachtrag_buchen()` (core/pa_ablauf.php). Ein Nachtrag für gestern, während heute eine Unter-Charge läuft, legt eine eigene Unter-Charge mit dem gewählten Tag an und schließt die laufende nicht. Schlägt die Buchung fehl, bleibt nichts zurück (kein Buchstabe verbraucht).
