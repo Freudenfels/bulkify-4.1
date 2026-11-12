@@ -52,6 +52,10 @@ function mitarbeiter_mail_speichern(int $benutzer_id, array $p): void {
 function crm_mail_senden(int $benutzer_id, string $to, string $betreff, string $text): string {
     $to = trim($to);
     if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) return 'Keine gültige Empfängeradresse.';
+    // Fable-3 T3.5 (13.11.2026): Mails an Kunden laufen durch denselben Filter wie im Dashboard (core/mail.php) – Lieferantennamen
+    // ersetzt, interne Hinweise raus, eigene Chargen nur als Grundcharge.
+    require_once __DIR__ . '/../../core/kunde_neutral.php';
+    if (kunde_ist_mailadresse($to)) { $betreff = kunde_position_text($betreff); $text = kunde_position_text($text); }
     if (function_exists('bx_testumgebung') && bx_testumgebung()) {   // Testumgebung: nur ans Test-Postfach
         [$to, $betreff] = bx_test_mail_umleiten($to, $betreff);
         if ($to === '') return '';

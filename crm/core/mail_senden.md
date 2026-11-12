@@ -16,3 +16,5 @@ Absender-Name/-Adresse, SMTP (Host/Port/Secure/User/Pass), Signatur.
 Auf der Kontakt-/Kundenseite hat „Antwort vorschlagen" einen **Senden**-Knopf (nur wenn ein Mailkonto
 hinterlegt ist und der Vorgang eine E-Mail-Adresse hat). Senden ist eine bewusste Aktion (Rückfrage),
 die gesendete Antwort landet im Verlauf. Reply-To = die eigene Adresse.
+
+**CRM-Mails gefiltert (13.11.2026, Fable-3 T3.5):** `crm_mail_senden()` lädt core/kunde_neutral.php; geht die Mail an eine Kundenadresse (`kunde_ist_mailadresse()`), laufen Betreff und Text durch `kunde_position_text()` – derselbe Filter wie im Dashboard (Lieferantennamen ersetzt, interne Hinweise raus, eigene Chargen als Grundcharge).

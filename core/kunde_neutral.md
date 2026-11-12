@@ -29,3 +29,5 @@ Zusatz: Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft, gle
 **Grundcharge (13.11.2026, Fable-3 T3.2):** `kunde_text_neutral()` kürzt am Ende auch eigene Chargen auf die Grundcharge (`kunde_charge_text()`) – gilt damit für Dokument-Titel im Portal, Mails an Kunden und Beleg-Texte. Der Download-Dateiname nimmt `kunde_charge_anzeige()`.
 
 **Mail-Filter nur voller Name/Alias (13.11.2026, Fable-3 T3.4):** `kunde_lieferanten_namen()` liefert nur noch den vollen Firmennamen (mit Rechtsform, oder ein Name aus mindestens zwei Wörtern) und die ausdrücklich gepflegten Aliase (`lieferanten.kunden_alias`, Komma getrennt). Der Name ohne Rechtsform als einzelnes Wort („Vita“ aus „Vita GmbH“) wird nicht mehr ersetzt. Paketdienste und Spediteure (`kunde_filter_paketdienst()`: DHL, UPS, DPD, GLS, FedEx, TNT, Hermes, Deutsche Post, Schenker, Dachser, Kühne, Rhenus …) werden nie ersetzt.
+
+**CRM-Mails gefiltert (13.11.2026, Fable-3 T3.5):** Ohne Dashboard-Helfer lauffähig: `kn_tabelle_da()`/`kn_spalte_da()` fallen auf information_schema zurück, damit das CRM denselben Filter laden kann.

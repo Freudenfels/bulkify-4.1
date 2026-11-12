@@ -83,6 +83,17 @@ function kunde_pdf_neutral(string $pdf): string {
 }
 
 // Firmennamen der Lieferanten (ohne bulkify/Maniso, ohne Labore), lange zuerst, je Anfrage einmal.
+// Tabelle/Spalte vorhanden? Dashboard-Helfer, sonst information_schema – damit auch das CRM den Filter laden kann (Fable-3 T3.5).
+function kn_tabelle_da(string $t): bool {
+    if (function_exists('table_exists')) return table_exists($t);
+    static $c = []; if (isset($c[$t])) return $c[$t];
+    try { return $c[$t] = (int) scalar("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?", [$t]) > 0; } catch (\Throwable $e) { return $c[$t] = false; }
+}
+function kn_spalte_da(string $t, string $col): bool {
+    if (function_exists('column_exists')) return column_exists($t, $col);
+    static $c = []; $k = $t . '.' . $col; if (isset($c[$k])) return $c[$k];
+    try { return $c[$k] = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?", [$t, $col]) > 0; } catch (\Throwable $e) { return $c[$k] = false; }
+}
 // Paketdienste/Spediteure nennen wir dem Kunden offen (Versand per DHL) – nie ersetzen (Fable-3 T3.4).
 function kunde_filter_paketdienst(string $name): bool {
     return (bool) preg_match('/(?<![\p{L}])(dhl|ups|dpd|gls|fedex|tnt|hermes|deutsche post|post ag|schenker|dachser|kühne|kuehne|rhenus|trans-o-flex|go!\s*express|db schenker|raben|geodis)(?![\p{L}])/iu', $name);
@@ -91,15 +102,15 @@ function kunde_lieferanten_namen(): array {
     static $n = null;
     if ($n !== null) return $n;
     $n = [];
-    if (!function_exists('table_exists') || !table_exists('lieferanten')) return $n;
+    if (!function_exists('scalar') || !kn_tabelle_da('lieferanten')) return $n;
     $rechtsform = '/[\s,]+(gmbh(\s*&\s*co\.?\s*kg)?|ag|kg|ohg|ug|gbr|e\.?\s?k\.?|ltd\.?|limited|llc|inc\.?|co\.?,?\s*ltd\.?|s\.?r\.?l\.?|b\.?v\.?|sp\.?\s*z\s*o\.?\s*o\.?|s\.?a\.?|corp\.?|company)\.?$/iu';
     // Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft oder gleicher Firmenname), nie ersetzen –
     // sonst stünde im Portal dieses Kunden „bulkify“ statt seines eigenen Namens.
     $kundenNamen = [];
     try { foreach (all("SELECT LOWER(TRIM(firma)) AS f FROM kunden WHERE firma IS NOT NULL AND firma<>''") as $kk) $kundenNamen[(string)$kk['f']] = true; } catch (\Throwable $e) {}
-    $partnerSql = (function_exists('column_exists') && column_exists('lieferanten', 'ist_partner') ? " AND COALESCE(ist_partner,0)=0" : '')
-                . (function_exists('column_exists') && column_exists('lieferanten', 'kunde_id') ? " AND kunde_id IS NULL" : '');
-    $aliasSql = (function_exists('column_exists') && column_exists('lieferanten', 'kunden_alias')) ? "COALESCE(kunden_alias,'')" : "''";
+    $partnerSql = (kn_spalte_da('lieferanten', 'ist_partner') ? " AND COALESCE(ist_partner,0)=0" : '')
+                . (kn_spalte_da('lieferanten', 'kunde_id') ? " AND kunde_id IS NULL" : '');
+    $aliasSql = kn_spalte_da('lieferanten', 'kunden_alias') ? "COALESCE(kunden_alias,'')" : "''";
     foreach (all("SELECT firma, lieferantennummer, COALESCE(kategorien,'') AS kat, $aliasSql AS alias FROM lieferanten WHERE firma IS NOT NULL AND firma<>''" . $partnerSql) as $l) {
         if (isset($kundenNamen[mb_strtolower(trim((string)$l['firma']))])) continue;
         $kat = array_filter(array_map('trim', explode(',', (string)$l['kat'])));
@@ -140,7 +151,7 @@ function kunde_position_text(?string $t): string {
 // gehört: Firmen-Adresse, Portal-Benutzer (benutzer.kunde_id und kunde_portal_user), CRM-Kontakte eines Kunden (crm_kontakt.kunde_id).
 // Mehrere Adressen in einem Feld („a@x.de; b@x.de“) und „Name <mail>“ werden zerlegt – trifft eine, gilt die ganze Mail als Kundenmail.
 function kunde_ist_mailadresse(string $email): bool {
-    if (!function_exists('table_exists')) return false;
+    if (!function_exists('scalar')) return false;
     preg_match_all('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', $email, $m);
     $liste = array_values(array_unique(array_map(fn($x) => mb_strtolower(trim($x)), $m[0] ?? [])));
     if (!$liste) return false;
@@ -152,7 +163,7 @@ function kunde_ist_mailadresse(string $email): bool {
     ];
     foreach ($quellen as [$t, $c, $wo]) {
         try {
-            if (!table_exists($t) || !column_exists($t, $c) || ($wo !== '' && !column_exists($t, 'kunde_id'))) continue;
+            if (!kn_tabelle_da($t) || !kn_spalte_da($t, $c) || ($wo !== '' && !kn_spalte_da($t, 'kunde_id'))) continue;
             // Feld kann mehrere Adressen enthalten: LIKE je Adresse, plus genauer Treffer.
             foreach ($liste as $e) {
                 $like = '%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], $e) . '%';
