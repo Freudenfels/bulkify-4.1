@@ -7920,6 +7920,47 @@ function bestellung_stornieren(int $bestellung_id, string $wer = 'Team', string 
 // mit verknüpfter Charge wird nicht storniert (erst „Verknüpfung lösen“ bzw. „Rest storniert“). Danach rechnet die Bestellung neu:
 // sind alle Positionen storniert und nichts geliefert, ist die Bestellung storniert; sonst schließt sie sich ggf. (webe_bestellung_stand).
 // $lieferant_informieren=false: keine Portal-Nachricht, keine Mail; Grund ist immer Pflicht.
+// Bestellposition gesperrt für „Bestellung bearbeiten“ (Fable-3 T2.6, 13.11.2026)? '' = frei, sonst der Grund.
+// Storniert (rest_storniert_am) oder geliefert (Liefermenge > 0 bzw. eine eingebuchte Charge hängt daran) = nicht mehr änderbar.
+function bestellung_position_gesperrt(array $bp): string {
+    if (!empty($bp['rest_storniert_am'])) return !empty($bp['pos_storno_grund']) ? 'storniert' : 'Rest storniert';
+    if ((float)($bp['geliefert_menge'] ?? 0) > 0) return 'geliefert';
+    if ((int) scalar("SELECT COUNT(*) FROM charge WHERE bestellung_position_id=?", [(int)$bp['id']]) > 0) return 'Charge eingebucht';
+    return '';
+}
+// Lagerartikel-Positionen einer Bestellung speichern (Fable-3 T2.6): aktualisieren statt löschen und neu anlegen.
+// $zeilen: je Zeile ['id' (0 = neu), 'item_id', 'menge', 'ek', 'auftrag_id']. Gesperrte Positionen (storniert/geliefert) bleiben
+// unverändert und werden nie gelöscht; Storno, Liefermenge, Chargen- und Dokument-Verknüpfung bleiben so erhalten. Eine aus dem
+// Formular entfernte Position wird nur gelöscht, wenn nichts an ihr hängt (keine Lieferanten-Charge, kein Dokument), sonst bleibt sie.
+// Bulk-/Freitext-Positionen (item_id NULL) fasst die Funktion nicht an. Rückgabe ['behalten' => Anzahl nicht löschbarer Positionen].
+function bestellung_positionen_speichern(int $bestellung_id, array $zeilen): array {
+    $alt = [];
+    foreach (all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NOT NULL", [$bestellung_id]) as $p) $alt[(int)$p['id']] = $p;
+    $gesehen = []; $behalten = 0;
+    foreach (array_values($zeilen) as $i => $z) {
+        $iid = (int)($z['item_id'] ?? 0); if ($iid <= 0) continue;
+        $pid = (int)($z['id'] ?? 0);
+        $einh = scalar("SELECT einheit FROM item WHERE id=?", [$iid]);
+        $aid = ($z['auftrag_id'] ?? '') !== '' && (int)$z['auftrag_id'] > 0 ? (int)$z['auftrag_id'] : null;
+        if ($pid > 0 && isset($alt[$pid])) {
+            $gesehen[$pid] = true;
+            if (bestellung_position_gesperrt($alt[$pid]) !== '') continue;   // gesperrt: nie ändern
+            q("UPDATE bestellung_position SET item_id=?, menge=?, ek_preis=?, einheit=?, auftrag_id=?, sort=? WHERE id=? AND bestellung_id=?",
+              [$iid, (float)$z['menge'], (float)$z['ek'], $einh, $aid, $i, $pid, $bestellung_id]);
+        } else {
+            q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?)",
+              [$bestellung_id, $iid, (float)$z['menge'], (float)$z['ek'], $einh, $aid, $i]);
+        }
+    }
+    foreach ($alt as $pid => $p) {
+        if (isset($gesehen[$pid]) || bestellung_position_gesperrt($p) !== '') continue;   // gesperrte bleiben immer
+        $haengt = (int) scalar("SELECT COUNT(*) FROM bestellung_charge WHERE bestellung_position_id=?", [$pid])
+                + (int) scalar("SELECT COUNT(*) FROM dokument WHERE bestellung_position_id=?", [$pid]);
+        if ($haengt > 0) { $behalten++; continue; }
+        q("DELETE FROM bestellung_position WHERE id=? AND bestellung_id=?", [$pid, $bestellung_id]);
+    }
+    return ['behalten' => $behalten];
+}
 function bestellung_position_stornieren(int $bp_id, string $wer = 'Team', string $grund = '', bool $lieferant_informieren = true): array {
     $p = one("SELECT bp.*, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '') AS pname, (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_ch
               FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id WHERE bp.id=?", [$bp_id]);

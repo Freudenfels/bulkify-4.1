@@ -225,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Leere Bestellung verhindern: ohne Position sieht der Lieferant im Portal nichts (BE-xxxx „–").
     // Zählt eingehende Lagerartikel-Positionen + (beim Bearbeiten) erhaltene Bulk-/Freitext-Positionen.
     $neuePosEin = 0; foreach (($_POST['p_item'] ?? []) as $iid) if ((int)$iid > 0) $neuePosEin++;
-    $bulkDa = (!$neu && (int)$id > 0) ? (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL", [(int)$id]) : 0;
+    $bulkDa = (!$neu && (int)$id > 0) ? (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=? AND (item_id IS NULL OR rest_storniert_am IS NOT NULL OR geliefert_menge>0)", [(int)$id]) : 0;   // + gesperrte Positionen (Fable-3 T2.6)
     if ($neuePosEin + $bulkDa === 0) {
         header('Location: ?p=bestellung&id=' . ($neu ? 'neu' : (int)$id) . '&fehler=' . urlencode('Bitte mindestens eine Position (Artikel + Menge) hinzufügen, bevor die Bestellung gespeichert wird.')); exit;
     }
@@ -243,20 +243,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         q("UPDATE bestellung SET lieferant_id=?,notiz=?,hinweis_lieferant=? WHERE id=?", [$lief, trim($_POST['notiz'] ?? ''), trim((string)($_POST['hinweis_lieferant'] ?? '')) ?: null, (int)$id]);
     }
-    // Positionen synchronisieren – NUR Lagerartikel-Positionen; Bulk-Freitext (item_id NULL) bleibt erhalten
-    q("DELETE FROM bestellung_position WHERE bestellung_id=? AND item_id IS NOT NULL", [(int)$id]);
-    $pi = $_POST['p_item'] ?? []; $pm = $_POST['p_menge'] ?? []; $pe = $_POST['p_ek'] ?? []; $pa = $_POST['p_auftrag'] ?? [];
-    foreach ($pi as $i => $iid) {
-        $iid = (int)$iid; if ($iid <= 0) continue;
-        $menge = zahl_lesen((string)($pm[$i] ?? '0'), true);   // „7.000" = 7000 (Teil 8, deutsche Eingabe)
-        $ek = zahl_lesen((string)($pe[$i] ?? '0'));
-        $einh = scalar("SELECT einheit FROM item WHERE id=?", [$iid]);
-        $aid = ($pa[$i] ?? '') !== '' ? (int)$pa[$i] : null;
-        q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?)",
-          [(int)$id, $iid, $menge, $ek, $einh, $aid, $i]);
-    }
+    // Positionen synchronisieren (Fable-3 T2.6): aktualisieren statt löschen + neu anlegen – Storno, Liefermenge und Chargen-Verknüpfung
+    // bleiben erhalten, gesperrte Positionen (storniert/geliefert) ändert das Formular nie. Bulk-Freitext (item_id NULL) bleibt unberührt.
+    $pi = $_POST['p_item'] ?? []; $pm = $_POST['p_menge'] ?? []; $pe = $_POST['p_ek'] ?? []; $pa = $_POST['p_auftrag'] ?? []; $pid = $_POST['p_id'] ?? [];
+    $zeilen = [];
+    foreach ($pi as $i => $iid) $zeilen[] = ['id' => (int)($pid[$i] ?? 0), 'item_id' => (int)$iid,
+        'menge' => zahl_lesen((string)($pm[$i] ?? '0'), true),   // „7.000" = 7000 (Teil 8, deutsche Eingabe)
+        'ek' => zahl_lesen((string)($pe[$i] ?? '0')), 'auftrag_id' => (string)($pa[$i] ?? '')];
+    $rS = bestellung_positionen_speichern((int)$id, $zeilen);
     if ($bxDoppelt) bestellung_doppelt_vermerken([(int)$id], $bxDoppelt);
-    header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
+    header('Location: ?p=bestellung&id=' . $id . '&ok=1' . ($rS['behalten'] ? '&fehler=' . urlencode($rS['behalten'] . ' Position(en) nicht gelöscht: daran hängen Chargen oder Dokumente des Lieferanten.') : '')); exit;
 }
 
 $b = $neu ? ['status'=>'offen'] : one("SELECT * FROM bestellung WHERE id=?", [(int)$id]);
@@ -653,9 +649,19 @@ if (!$neu) {
     <table class="bx-table">
       <thead><tr><th style="width:34%">Artikel</th><th>Für Auftrag <?= bx_hint('Wofür wird das bestellt? Beim Wareneingang wird die Charge automatisch diesem Auftrag zugeordnet. „Lager / allgemein" = Vorrat.') ?></th><th style="width:120px">Menge</th><th style="width:120px">EK / Einheit</th><th class="bx-num">Summe</th><th></th></tr></thead>
       <tbody id="prows">
-        <?php $pr = $positionen ?: [['item_id'=>'','menge'=>'','ek_preis'=>'','auftrag_id'=>'']]; foreach ($pr as $p): ?>
+        <?php $pr = $positionen ?: [['id'=>0,'item_id'=>'','menge'=>'','ek_preis'=>'','auftrag_id'=>'']]; foreach ($pr as $p):
+          $pSperre = !empty($p['id']) ? bestellung_position_gesperrt($p) : '';
+          if ($pSperre !== ''):   // Fable-3 T2.6: storniert/geliefert = nur Anzeige, wird beim Speichern nicht verändert ?>
+        <tr class="prow-fest" title="Gesperrt: <?= h($pSperre) ?>">
+          <td><?= h((string)(scalar("SELECT name FROM item WHERE id=?", [(int)$p['item_id']]) ?: '–')) ?> <span class="muted" style="font-size:12px">(<?= h($pSperre) ?>)</span></td>
+          <td class="muted"><?= !empty($p['auftrag_id']) ? h((string)(scalar("SELECT nummer FROM auftrag WHERE id=?", [(int)$p['auftrag_id']]) ?: '')) : 'Lager / allgemein' ?></td>
+          <td class="bx-num"><?= h(rtrim(rtrim(number_format((float)$p['menge'],3,',','.'),'0'),',')) ?></td>
+          <td class="bx-num"><?= h(preis_anzeige((float)$p['ek_preis'])) ?></td>
+          <td class="bx-num">–</td><td></td>
+        </tr>
+        <?php continue; endif; ?>
         <tr class="prow">
-          <td><select name="p_item[]" class="pitem rscombo" data-ph="Artikel suchen (Name, Synonym) …"><?= pos_options($items, $p['item_id']) ?></select></td>
+          <td><input type="hidden" name="p_id[]" value="<?= (int)($p['id'] ?? 0) ?>"><select name="p_item[]" class="pitem rscombo" data-ph="Artikel suchen (Name, Synonym) …"><?= pos_options($items, $p['item_id']) ?></select></td>
           <td><select name="p_auftrag[]" class="pauf"><?= auftrag_options($auftraege, $p['auftrag_id'] ?? '') ?></select></td>
           <td><input type="text" inputmode="decimal" class="pmenge" name="p_menge[]" value="<?= h($p['menge']!==''&&$p['menge']!==null ? rtrim(rtrim(number_format((float)$p['menge'],3,',','.'),'0'),',') : '') ?>"></td>
           <td><input type="text" inputmode="decimal" class="pek" name="p_ek[]" value="<?= h($p['ek_preis']!==''&&$p['ek_preis']!==null ? rtrim(rtrim(number_format((float)$p['ek_preis'],6,',',''),'0'),',') : '') ?>"></td>
@@ -694,7 +700,7 @@ function psum(){
 (function(){
   document.getElementById('addP').addEventListener('click',function(){
     var tr=document.createElement('tr'); tr.className='prow';
-    tr.innerHTML='<td><select name="p_item[]" class="pitem rscombo" data-ph="Artikel suchen (Name, Synonym) …">'+OPT+'</select></td>'
+    tr.innerHTML='<td><input type="hidden" name="p_id[]" value="0"><select name="p_item[]" class="pitem rscombo" data-ph="Artikel suchen (Name, Synonym) …">'+OPT+'</select></td>'
       +'<td><select name="p_auftrag[]" class="pauf">'+OPTA+'</select></td>'
       +'<td><input type="text" inputmode="decimal" class="pmenge" name="p_menge[]"></td>'
       +'<td><input type="text" inputmode="decimal" class="pek" name="p_ek[]"></td>'
