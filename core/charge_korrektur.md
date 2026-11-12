@@ -23,3 +23,6 @@ Abendpaket Block B (11.11.2026). Eine Funktion für alle Wege: Chargenseite im D
 - `charge_korr_dialog($charge, $dlgId, $hidden, $vorbelegt, $was, $titel, $knopf)` – das Pop-up.
 
 Nur Admin, die Prüfung macht der Aufrufer (`has_role('admin')` bzw. `lg_ist_admin()`).
+
+## Leere Menge abgelehnt (13.11.2026)
+`charge_menge_korrigieren()` nimmt die rohe Eingabe (Text) und liest sie selbst (`charge_korr_menge_lesen()`): leer oder keine Zahl = abgelehnt mit Meldung, nichts gebucht (vorher wurde leer zu 0 und die Charge „leer“). Alle Wege (Dashboard Chargen, Rohstoff, Verpackung, Datenprüfung, Lager-App) geben den Text durch.

@@ -29,7 +29,7 @@ if ($chId) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'menge_korr') {
         if (!has_role('admin')) { header('Location: ?p=chargen&id=' . $chId . '&kfehler=' . rawurlencode('Nur Admin darf Mengen korrigieren.')); exit; }
         $beleg = charge_korr_beleg_speichern($_FILES['korr_beleg'] ?? [], $chId);
-        $r = charge_menge_korrigieren($chId, (string)($_POST['korr_was'] ?? ''), zahl_lesen((string)($_POST['korr_menge'] ?? ''), true),
+        $r = charge_menge_korrigieren($chId, (string)($_POST['korr_was'] ?? ''), (string)($_POST['korr_menge'] ?? ''),
                                       (string)($_POST['korr_grund'] ?? ''), (string)($_POST['korr_notiz'] ?? ''), $wer, $beleg);
         header('Location: ?p=chargen&id=' . $chId . ($r['ok'] ? '&kok=' . rawurlencode(trim($r['meldung'] . ' ' . $r['hinweis'])) : '&kfehler=' . rawurlencode($r['meldung']))); exit;
     }

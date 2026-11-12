@@ -212,7 +212,7 @@ function bestellung_abgleich_aktion(string $aktion, int $bestellung_id, int $bp_
         $ok = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE id=? AND bestellung_id=?", [$bp_id, $bestellung_id]) === 1
            && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND bestellung_position_id IS NULL", [$charge_id]) === 1;
         if (!$ok) return ['ok' => false, 'msg' => 'Charge oder Position nicht (mehr) passend - nichts geändert.'];
-        $k = charge_menge_korrigieren($charge_id, (string)($_POST['korr_was'] ?? 'ursprung'), zahl_lesen((string)($_POST['korr_menge'] ?? ''), true),
+        $k = charge_menge_korrigieren($charge_id, (string)($_POST['korr_was'] ?? 'ursprung'), (string)($_POST['korr_menge'] ?? ''),
                                       (string)($_POST['korr_grund'] ?? ''), (string)($_POST['korr_notiz'] ?? ''), $wer, charge_korr_beleg_speichern($_FILES['korr_beleg'] ?? [], $charge_id));
         if (!$k['ok'] && !str_starts_with((string)$k['meldung'], 'Keine Änderung')) return ['ok' => false, 'msg' => $k['meldung']];
         $r = bestellung_abgleich_aktion('verknuepfen', $bestellung_id, $bp_id, $charge_id);

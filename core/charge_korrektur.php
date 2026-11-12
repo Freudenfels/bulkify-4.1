@@ -32,8 +32,27 @@ function charge_korr_mz(float $x): string { return rtrim(rtrim(number_format($x,
 
 // Korrektur buchen. $was 'ursprung'|'verfuegbar', $neu = neue Menge in der Einheit der Charge.
 // Rückgabe ['ok','meldung','hinweis'(Gebinde/Bestellung),'differenz'].
-function charge_menge_korrigieren(int $charge_id, string $was, float $neu, string $grund, string $notiz, string $von, string $beleg = ''): array {
+// Eingabe der neuen Menge lesen (Nachbesserung 13.11.2026): leer oder keine Zahl = null (abgelehnt), sonst deutsche Lesart wie alle
+// Mengenfelder („12.500“ = 12500, „12,5“ = 12,5, „12.5“ = 12,5). Dashboard: zahl_lesen(); Lager-App ohne schema.php: erp_menge_parse().
+function charge_korr_menge_lesen(string $roh): ?float {
+    $t = trim($roh);
+    if ($t === '' || !preg_match('/^-?\s*\d[\d.,\s]*$/u', $t)) return null;
+    if (function_exists('zahl_lesen')) return (float) zahl_lesen($t, true);
+    if (function_exists('erp_menge_parse')) return (float) erp_menge_parse($t);
+    $t = str_replace(' ', '', $t);
+    if (strpos($t, ',') !== false) $t = str_replace(',', '.', str_replace('.', '', $t));
+    elseif (preg_match('/^-?[1-9]\d{0,2}(\.\d{3})+$/', $t)) $t = str_replace('.', '', $t);
+    return (float) $t;
+}
+// $neu: Zahl ODER die rohe Eingabe aus dem Formular (empfohlen) - dann lehnt die Funktion leere/ungültige Eingaben selbst ab,
+// statt sie als 0 zu buchen (vorher: leer = 0 = Charge „leer“).
+function charge_menge_korrigieren(int $charge_id, string $was, float|string $neu, string $grund, string $notiz, string $von, string $beleg = ''): array {
     charge_korr_schema();
+    if (is_string($neu)) {
+        $neuL = charge_korr_menge_lesen($neu);
+        if ($neuL === null) return ['ok' => false, 'meldung' => 'Bitte eine gültige Menge eingeben - leer oder Text wird nicht gebucht.'];
+        $neu = $neuL;
+    }
     if (!in_array($was, ['ursprung', 'verfuegbar'], true)) return ['ok' => false, 'meldung' => 'Bitte wählen: Ursprungsmenge oder verfügbare Menge.'];
     if (!isset(charge_korr_gruende()[$grund])) return ['ok' => false, 'meldung' => 'Bitte einen Grund wählen.'];
     $notiz = mb_substr(trim($notiz), 0, 500);

@@ -273,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'charg
     $cid = (int)($_POST['charge_id'] ?? 0);
     if ($cid && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id]) === 1) {
         if ((string)($_POST['korr_grund'] ?? '') === '') { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=grund'); exit; }
-        $r = charge_menge_korrigieren($cid, (string)($_POST['korr_was'] ?? 'verfuegbar'), zahl_lesen((string)($_POST['menge'] ?? ''), true),
+        $r = charge_menge_korrigieren($cid, (string)($_POST['korr_was'] ?? 'verfuegbar'), (string)($_POST['menge'] ?? ''),
                                       (string)$_POST['korr_grund'], (string)($_POST['grund'] ?? ''), (string)(current_user()['name'] ?? 'Team'));
         if ($r['ok']) log_aktivitaet('item', (int)$id, 'team', 'Bestandskorrektur Charge #' . $cid . ': ' . $r['meldung'] . ($r['hinweis'] ? ' ' . $r['hinweis'] : ''), 'notiz');
         else { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&korrfehler=' . rawurlencode($r['meldung'])); exit; }
