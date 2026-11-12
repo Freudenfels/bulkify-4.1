@@ -582,8 +582,12 @@ function bx_busy_script(): string {
         // Failsafe: falls eine Navigation doch abgebrochen wird, verschwindet es nach 15s von selbst.
         . "function overlay(){try{if(document.getElementById('bxOverlay'))return;var o=document.createElement('div');o.id='bxOverlay';o.innerHTML='<div class=\\\"bxo-spin\\\" aria-hidden=\\\"true\\\"></div>';document.body.appendChild(o);requestAnimationFrame(function(){o.className='an';});setTimeout(function(){var x=document.getElementById('bxOverlay');if(x)x.remove();},15000);}catch(e){}}"
         . "function weg(){try{var l=document.getElementById('bxLadebalken');if(l)l.remove();var o=document.getElementById('bxOverlay');if(o)o.remove();}catch(e){}}"
+        // Bubble-Phase + defaultPrevented (Nico 12.11.2026, „Preise freigeben“ drehte minutenlang): Vorher lief der Kringel in der
+        // Capture-Phase VOR dem onsubmit-confirm() des Formulars – bei „Abbrechen“ (oder unterdrücktem Dialog) wurde nichts
+        // gesendet, der Knopf blieb aber gesperrt und drehte endlos. Jetzt nur, wenn das Absenden wirklich stattfindet.
+        . "var nav=false;"
         . "document.addEventListener('submit',function(e){"
-        . "var f=e.target;if(!f||f.hasAttribute('data-no-busy'))return;"
+        . "var f=e.target;if(!f||e.defaultPrevented||f.hasAttribute('data-no-busy'))return;"
         . "var b=e.submitter||f.querySelector('button[type=submit],input[type=submit],button:not([type])');"
         . "var t=(b&&(b.getAttribute('formtarget')))||f.getAttribute('target');if(t==='_blank')return;"
         . "if(f.__busy)return;f.__busy=true;ladebalken();"
@@ -592,11 +596,14 @@ function bx_busy_script(): string {
         . "if(b.tagName==='BUTTON'){b.dataset.busyLabel=b.innerHTML;var tx=b.getAttribute('data-busy');b.innerHTML='<span class=\\\"bx-spin\\\" aria-hidden=\\\"true\\\"></span>'+(tx!==null?tx:b.dataset.busyLabel);}"
         . "b.classList.add('is-busy');b.setAttribute('aria-busy','true');"
         . "setTimeout(function(){b.disabled=true;},0);}"
-        . "},true);"
+        // Rückfall: Hat nach 8 s keine Navigation begonnen (z. B. Absenden von anderem Skript abgebrochen), Knopf wieder frei.
+        . "setTimeout(function(){if(nav)return;f.__busy=false;var l=document.getElementById('bxLadebalken');if(l)l.remove();"
+        . "if(b&&b.dataset.busyOn){b.disabled=false;b.classList.remove('is-busy');b.removeAttribute('aria-busy');if(b.dataset.busyLabel!==undefined){b.innerHTML=b.dataset.busyLabel;delete b.dataset.busyLabel;}delete b.dataset.busyOn;}},8000);"
+        . "},false);"
         // Jede ECHTE Navigation loest 'beforeunload' aus (Formular, Link, Zeilenklick per location.href,
         // Zurueck/Vor). Downloads, neuer Tab (target=_blank) und reine #-Anker entladen die Seite NICHT
         // -> dort erscheint bewusst kein Overlay.
-        . "window.addEventListener('beforeunload',function(){overlay();ladebalken();});"
+        . "window.addEventListener('beforeunload',function(){nav=true;overlay();ladebalken();});"
         // Zurueck-Navigation (bfcache): Overlay/Balken + Knopf zuruecksetzen, sonst haengt alles.
         . "window.addEventListener('pageshow',function(ev){if(!ev.persisted)return;weg();"
         . "var b=document.querySelector('.btn.is-busy');if(b){b.disabled=false;b.classList.remove('is-busy');b.removeAttribute('aria-busy');"

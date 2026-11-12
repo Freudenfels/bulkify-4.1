@@ -449,9 +449,10 @@ if ($kannZurueck) $kopfBtn = '<form method="post" style="display:inline;margin-r
 if ($kannPreisSperren) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Preise für den Kunden sperren? Das Angebot verschwindet dann aus seinem Portal, bis du die Preise wieder freigibst.\');">'
     . '<input type="hidden" name="aktion" value="preise_sperren">'
     . '<button class="btn btn-ghost" type="submit">Preise sperren</button></form>' . $kopfBtn;
-if ($kannPreisFreigeben) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px" onsubmit="return confirm(\'Der Kunde wird damit die Preise dieses Angebots im Portal sehen. Jetzt freigeben?\');">'
+// Eigener Bestätigungsdialog (data-confirm, wie „An Kunden senden“) statt Browser-confirm() – Nico 12.11.2026: Knopf drehte minutenlang.
+if ($kannPreisFreigeben) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px">'
     . '<input type="hidden" name="aktion" value="preise_freigeben">'
-    . '<button class="btn btn-primary" type="submit">Preise freigeben</button></form>' . $kopfBtn;
+    . '<button class="btn btn-primary" type="submit" data-confirm="Der Kunde sieht damit das geänderte Angebot inkl. Preise im Portal und bekommt eine Mail. Jetzt freigeben?" data-confirm-ok="Ja, freigeben">Preise freigeben</button></form>' . $kopfBtn;
 if ($kannSenden) $kopfBtn = '<form method="post" style="display:inline;margin-right:8px">'
     . '<input type="hidden" name="aktion" value="senden">'
     . '<button class="btn btn-primary" type="submit" data-confirm="Angebot jetzt an den Kunden senden? Der Kunde wird damit das Angebot inkl. Preise im Portal sehen.">An Kunden senden</button></form>' . $kopfBtn;
@@ -1260,7 +1261,7 @@ function posRecalc(){
       // Element mit data-confirm="...". Nach dem OK wird das Formular mit demselben Button abgeschickt. ?>
 <script>
 (function(){
-  function dialog(text, onOk){
+  function dialog(text, onOk, okText){
     var ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(18,20,23,.5);display:flex;align-items:center;justify-content:center;padding:16px';
     var p=document.createElement('div');
@@ -1268,7 +1269,7 @@ function posRecalc(){
     var t=document.createElement('div'); t.textContent=text; t.style.cssText='font-size:15px;line-height:1.45;margin-bottom:18px';
     var row=document.createElement('div'); row.style.cssText='display:flex;gap:10px;justify-content:flex-end';
     var no=document.createElement('button'); no.className='btn btn-ghost'; no.type='button'; no.textContent='Abbrechen';
-    var yes=document.createElement('button'); yes.className='btn btn-primary'; yes.type='button'; yes.textContent='Ja, senden';
+    var yes=document.createElement('button'); yes.className='btn btn-primary'; yes.type='button'; yes.textContent=okText||'Ja, senden';
     row.appendChild(no); row.appendChild(yes); p.appendChild(t); p.appendChild(row); ov.appendChild(p); document.body.appendChild(ov);
     yes.focus();
     function zu(){ try{ov.remove();}catch(e){} document.removeEventListener('keydown',esc,true); }
@@ -1287,7 +1288,7 @@ function posRecalc(){
       var f=b.form||b.closest('form'); if(!f) return;
       if(f.requestSubmit) f.requestSubmit(b.type==='submit'?b:undefined);   // erhaelt den Submitter (z. B. und_senden)
       else { if(b.name){var h=document.createElement('input');h.type='hidden';h.name=b.name;h.value=b.value;f.appendChild(h);} f.submit(); }
-    });
+    }, b.getAttribute('data-confirm-ok'));   // eigener OK-Text je Knopf (z. B. „Ja, freigeben“)
   }, true);
 })();
 </script>

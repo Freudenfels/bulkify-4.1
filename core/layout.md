@@ -86,3 +86,8 @@ Unter der Gruppe **Anfragen** steht neu `rohstoff_unterlagen` („Rohstoff-Unter
 Nach `<main>`: einmaliges Pop-up „Es gibt schon eine offene Bestellung“ (`core/bestellung_doppelt.php`), wenn die Sitzung `bx_doppelt` trägt (Sofortfix 11.11.2026).
 
 `render_footer()` gibt oben auf der Seite den Hinweis „Preis abgelaufen - Summe unsicher“ aus, wenn auf der Seite mit einem abgelaufenen Preis gerechnet wurde (Block D, 11.11.2026).
+
+## Lade-Kringel nur bei echtem Absenden (12.11.2026)
+`bx_busy_script()` lauscht jetzt in der **Bubble-Phase** und prüft `e.defaultPrevented`. Vorher lief er in der Capture-Phase vor dem `onsubmit="return confirm(...)"` eines Formulars. Bei „Abbrechen“ oder einem unterdrückten Dialog wurde nichts gesendet, der Knopf blieb aber gesperrt und drehte endlos (Nico: „Preise freigeben dreht seit Minuten“).
+
+Rückfall: Hat 8 Sekunden nach dem Klick keine Navigation begonnen (`beforeunload` setzt `nav`), wird der Knopf wieder freigegeben. Lange Anfragen (z. B. KI) sind davon nicht betroffen, weil die Navigation dort schon begonnen hat.

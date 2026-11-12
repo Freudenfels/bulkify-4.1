@@ -230,3 +230,6 @@ Rohstoffkosten: Kennzeichen „Unterlagen fehlen“ beim gewählten Lieferanten 
 ## Im Bearbeiten-Modus bleiben (12.11.2026)
 Nico: „Wenn ich die Tabelle bearbeite und speichere, lande ich in der Übersicht. Ich will die Tabelle speichern und sehen, wie sich der Gesamtpreis ändert.“
 Kommt das Speichern aus dem Bearbeiten-Modus (`?edit=1`), behält jede Weiterleitung `&edit=1` (Variable `$editQ`). Das gilt für Positionen speichern, Kopf speichern, Rezeptur/Rohstoff/Dienstleistung hinzufügen, Positionen zurücksetzen und Rezeptur verknüpfen. Man bleibt also in der Tabelle bei `#positionen` und sieht die neuen Summen. „Speichern & an Kunden senden“ geht weiter in die Übersicht.
+
+## Preise freigeben: eigener Dialog, kein Dauer-Kringel (12.11.2026)
+„Preise freigeben“ fragt jetzt über den eigenen Dialog (`data-confirm`, Knopf „Ja, freigeben“ über `data-confirm-ok`) statt über `confirm()` des Browsers. Vorher drehte der Knopf minutenlang, ohne dass etwas passierte: Der Lade-Kringel (`bx_busy_script` in core/layout.php) startete schon vor der Rückfrage. Wurde sie abgebrochen oder vom Browser unterdrückt, ging nichts raus. Die Ursache ist in core/layout.php behoben.
