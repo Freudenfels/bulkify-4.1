@@ -17,3 +17,5 @@ Kommt `premix=1` mit einer Fertigprodukt-Anfrage an einer Kapsel-/Tabletten-Reze
 
 ## Premix (Teil 7, 10.11.2026)
 Bei der ersten Premix-Anfrage wird der Premix-Artikel der Rezeptur angelegt („Premix · <Rezeptur>“). In die Notiz kommt die Zusammensetzung: je Rohstoff mg je Einheit und Anteil in % der Mischung, dazu „Bitte CoA/Spezifikation mitschicken“. Das Portal zeigt die Rezeptur zusätzlich als Tabelle, CoA oder Spezifikation je Rohstoff ist bei der Abgabe Pflicht.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

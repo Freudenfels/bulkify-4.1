@@ -35,13 +35,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // F3/F4: Schritt hinzufügen (nachträglich) mit optionalen internen Kosten je Stück.
     if ($aktion === 'schritt_add') {
-        $kosten = trim((string)($_POST['kosten'] ?? '')) !== '' ? (float) str_replace(',', '.', str_replace('.', '', (string)$_POST['kosten'])) : null;
+        $kosten = trim((string)($_POST['kosten'] ?? '')) !== '' ? zahl_lesen((string)$_POST['kosten']) : null;
         dl_schritt_add($id, (string)($_POST['name'] ?? ''), $kosten, (string)(current_user()['name'] ?? ''));
         header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1#schritte'); exit;
     }
     // F3/F4: Schritt umbenennen + interne Kosten bearbeiten.
     if ($aktion === 'schritt_edit') {
-        $kosten = trim((string)($_POST['kosten'] ?? '')) !== '' ? (float) str_replace(',', '.', str_replace('.', '', (string)$_POST['kosten'])) : null;
+        $kosten = trim((string)($_POST['kosten'] ?? '')) !== '' ? zahl_lesen((string)$_POST['kosten']) : null;
         dl_schritt_edit((int)($_POST['schritt_id'] ?? 0), $id, (string)($_POST['name'] ?? ''), $kosten);
         header('Location: ?p=dl_auftrag&id=' . $id . '&ok=1#schritte'); exit;
     }

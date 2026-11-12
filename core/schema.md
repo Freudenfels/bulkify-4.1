@@ -689,3 +689,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **Unterwegs = `bp_rest_sql()` (13.11.2026, Fable-3 T2.7):** `bulk_position_basis_sql()` (Bulk-Bedarf, Deckung am Auftrag) nutzt jetzt `bp_rest_sql()`; stornierte Positionen und stornierte Reste zählen dort nicht mehr als unterwegs. Die bisher kopierten Inline-Formeln (schema.php, bestellung_doppelt.php, auftrag/detail.php, lager/bestand_liste.php) rufen ebenfalls `bp_rest_sql()`. Nur die Unterprogramme behalten ihre gleichlautende Kopie (core/wareneingang_bestellung.php ohne schema.php, Lager-App `erp_bp_rest_sql()`).
 
 **Stornieren nur mit Grund (13.11.2026, Fable-3 T2.8):** `bestellung_stornieren()` verlangt auf jedem Weg einen Grund (auch der alte Weg aus der Bestellliste `module/einkauf/liste.php`).
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

@@ -46,3 +46,5 @@ Rechnungen-Liste ([rechnungen_liste.md](rechnungen_liste.md)).
 - **Leistung aus Katalog wählen:** Neben „+ Position (frei)" gibt es eine Auswahl **„Leistung aus dem Katalog"** (aktive Dienstleistungen via `bu_dienstleistungen_katalog()` in `buchhaltung/core/erp.php`, nur lesend). „+ als Position" legt eine vorausgefüllte Positionszeile an (Artikelnummer aus `dienstleistung.nummer`, Bezeichnung, Beschreibung, Einheit, VK netto aus `vk_cent`, USt aus `mwst_satz`). So muss man nicht alles frei tippen.
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

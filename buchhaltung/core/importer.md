@@ -23,3 +23,5 @@ Kundenschreibzugriff nur ueber die Naht: `erp_kunde_anlegen()` (einzige Schreibs
 
 ## Upload entkoppelt (Timeout-Fix, 2026-10-06)
 Upload speichert nur (imp_datei_hinzufuegen = schnell, KEINE KI). KI danach pro Datei: imp_ki_item(id) + Endpunkt ?p=import_bulk&batch=&kiitem=ID (JSON). Prueffen-Schritt startet einen JS-Auto-Durchlauf (ein Request je Datei, Fortschrittsbalken) ueber imp_ungelesen(); pro Zeile zusaetzlich manueller Button (aktion ki_item). So kein Sammel-Timeout bei vielen Dateien, und ein scheiternder Einzel-Call blockiert die anderen nicht. imp_auto_verknuepfen laeuft beim Betreten des Verknuepfen-Schritts.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

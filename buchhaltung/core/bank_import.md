@@ -17,3 +17,5 @@ eigener Zahlungsweg.
 - Listen: `bank_batches`, `bank_zeilen`, `bank_batch_loeschen` (entfernt nur NICHT gebuchte Posten).
 
 Seite: `?p=buchen`.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

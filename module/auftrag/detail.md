@@ -382,3 +382,5 @@ Alle drei Wege stehen im Verlauf.
 
 ## Doppelbestell-Warnung Express (13.11.2026)
 Express-Bestellung (fehlende Rohstoffe) und Express-Zukauf (Bulk und Fertigware/Zukauf fertig) zeigen vor dem Anlegen das Doppelbestell-Pop-up. Geprüft werden offene Bestellungen der Artikel, des Produkts (Bulk) und des Fertigware-Artikels.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

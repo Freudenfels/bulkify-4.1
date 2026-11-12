@@ -21,3 +21,5 @@ Unter jeder offenen Nachbestellung steht ein Info-Block, damit der Preis ohne Su
 - **Preis-Herkunft je Pkg:** Preise aus früheren Angeboten (Staffel), Preis des Vorauftrags, zuletzt berechnet laut Rechnung, Kundenpreis (Herstellung + Verpackung), EK ca. (Füllung + Verpackung wie in der Preismatrix) mit Marge; Marge unter dem Mindestwert rot.
 - **Frühere Aufträge:** die letzten 6 Aufträge des Kunden für dieses Produkt mit Menge und Preis/Pkg; Packungsgröße/Behälter nur, wenn sie abweichen.
 Daten kommen aus `nachbestellung_entscheidung()` (core/nachbestellung.php), nur lesend.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

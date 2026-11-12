@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erste
         'datum'            => trim((string)($_POST['datum'] ?? '')),
         'leistung_datum'   => trim((string)($_POST['leistung_datum'] ?? '')),
         'zahlungsziel_tage'=> ($_POST['zahlungsziel_tage'] ?? '') !== '' ? (int)$_POST['zahlungsziel_tage'] : '',
-        'ust_prozent'      => ($_POST['ust_prozent'] ?? '') !== '' ? (float) str_replace(',', '.', (string)$_POST['ust_prozent']) : '',
+        'ust_prozent'      => ($_POST['ust_prozent'] ?? '') !== '' ? zahl_lesen((string)$_POST['ust_prozent']) : '',
         'text'             => (string)($_POST['text'] ?? ''),
         'freigeben'        => !empty($_POST['freigeben']),
         'ersteller'        => $akteur,

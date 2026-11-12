@@ -16,3 +16,5 @@ Ein kleines JS rechnet USt/Brutto/Fälligkeit live mit.
 **Gespeichert** werden am Beleg zusätzlich: `datum`, `zahlungsziel_tage`, `faellig`, `leistung_datum`, `text`, `kunde_sichtbar` (neue Spalten) + eine `beleg_position` (passt die Zeilensumme nicht exakt zum Netto, z. B. Sub-Cent-Preise, wird eine Pauschal-Zeile Menge 1 = Netto gesetzt). Anzeige dieser Felder in `beleg/detail.php`.
 
 Hinweis: Regel-Rechnungen entstehen weiterhin automatisch mit dem Auftrag (`auftrag_aus_angebot`); diese Seite ist für Auftraege **ohne** automatische Rechnung (v3-Importe, Hand-Aufträge) bzw. wenn man Datum/Zahlungsziel bewusst setzen will.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

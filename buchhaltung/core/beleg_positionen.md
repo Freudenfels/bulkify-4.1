@@ -25,3 +25,5 @@
 Automatisch: `rechnung_aus_auftrag()` (finanz.php) ruft `beleg_positionen_aus_angebot()` nach dem Anlegen
 auf – neue Rechnungen aus einem Auftrag bekommen die Aufschlüsselung also direkt (falls im Angebot vorhanden).
 UI: Buttons + manueller Editor in `module/beleg/detail.php` (Panel „Positionen").
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

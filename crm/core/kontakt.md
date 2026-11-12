@@ -19,3 +19,5 @@ Jede Berührung eine Zeile in `crm_verlauf` (Notiz, Anruf, WhatsApp, Mail, Treff
 `kontakt_zu_kunde()` legt im Dashboard einen Kunden an – über `core/erp.php`, die einzige Schreibstelle. Der Kontakt **bleibt bestehen** und zeigt danach per `kunde_id` dorthin, damit der Verlauf nicht verloren geht.
 
 Die Kundennummer vergibt das Dashboard selbst beim ersten Speichern; das CRM fasst dessen Nummernkreis nicht an.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

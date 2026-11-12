@@ -111,10 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ba
                     'artikelnr' => trim((string)($p['artikelnr'] ?? '')),
                     'bez'       => $bez,
                     'besch'     => trim((string)($p['beschreibung'] ?? '')),
-                    'menge'     => (float) str_replace(',', '.', (string)($p['menge'] ?? 1)) ?: 1,
+                    'menge'     => zahl_lesen((string)($p['menge'] ?? 1), true) ?: 1,
                     'einheit'   => trim((string)($p['einheit'] ?? 'Stk.')) ?: 'Stk.',
-                    'preis'     => (float) str_replace(',', '.', (string)($p['einzelpreis'] ?? $p['preis'] ?? 0)),
-                    'ust'       => (float) str_replace(',', '.', (string)($p['ust'] ?? $ustStdV)),
+                    'preis'     => zahl_lesen((string)($p['einzelpreis'] ?? $p['preis'] ?? 0)),
+                    'ust'       => zahl_lesen((string)($p['ust'] ?? $ustStdV)),
                 ];
             }
             if ($prefill) $kiInfo = count($prefill) . ' Position(en) erkannt – bitte alles prüfen und ggf. anpassen, dann Rechnung erstellen.';

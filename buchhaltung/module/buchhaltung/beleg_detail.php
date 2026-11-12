@@ -15,8 +15,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
             'lieferant_name' => $_POST['lieferant_name'] ?? '',
             'beleg_nummer'   => $_POST['beleg_nummer'] ?? '',
             'datum'          => $_POST['datum'] ?? null,
-            'netto'          => str_replace(',', '.', (string)($_POST['netto'] ?? '0')),
-            'ust_prozent'    => str_replace(',', '.', (string)($_POST['ust_prozent'] ?? '0')),
+            'netto'          => (string) betrag_lesen($_POST['netto'] ?? '0'),   // 13.11.2026: „21.687,75“ = 21687,75
+            'ust_prozent'    => (string) zahl_lesen((string)($_POST['ust_prozent'] ?? '0')),
             'waehrung'       => $_POST['waehrung'] ?? 'EUR',
             'kategorie'      => $_POST['kategorie'] ?? '',
             'notiz'          => $_POST['notiz'] ?? '',

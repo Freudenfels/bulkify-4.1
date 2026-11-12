@@ -21,9 +21,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'gutsc
     foreach (($_POST['p_bez'] ?? []) as $i => $bez) {
         $bez = trim((string)$bez);
         if ($bez === '') continue;
-        $menge = (float) str_replace(',', '.', $_POST['p_menge'][$i] ?? '0');
-        $preis = (float) str_replace(',', '.', $_POST['p_preis'][$i] ?? '0');
-        $mwst  = (float) str_replace(',', '.', $_POST['p_mwst'][$i] ?? '0');
+        $menge = zahl_lesen((string)($_POST['p_menge'][$i] ?? '0'), true);
+        $preis = zahl_lesen((string)($_POST['p_preis'][$i] ?? '0'));
+        $mwst  = zahl_lesen((string)($_POST['p_mwst'][$i] ?? '0'));
         if ($menge <= 0) $menge = 1;
         $positionen[] = [
             'artikelnr'   => trim((string)($_POST['p_artikelnr'][$i] ?? '')),
@@ -84,10 +84,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ex
                     'artikelnr' => trim((string)($p['artikelnr'] ?? $p['artikelnummer'] ?? '')),
                     'bez'       => $bez,
                     'besch'     => trim((string)($p['beschreibung'] ?? '')),
-                    'menge'     => (float) str_replace(',', '.', (string)($p['menge'] ?? 1)) ?: 1,
+                    'menge'     => zahl_lesen((string)($p['menge'] ?? 1), true) ?: 1,
                     'einheit'   => trim((string)($p['einheit'] ?? 'Stk.')) ?: 'Stk.',
-                    'preis'     => (float) str_replace(',', '.', (string)($p['einzelpreis'] ?? $p['preis'] ?? 0)),
-                    'ust'       => (float) str_replace(',', '.', (string)($p['ust'] ?? $ustStdV)),
+                    'preis'     => zahl_lesen((string)($p['einzelpreis'] ?? $p['preis'] ?? 0)),
+                    'ust'       => zahl_lesen((string)($p['ust'] ?? $ustStdV)),
                 ];
             }
             if ($prefill) $kiInfo = count($prefill) . ' Position(en) erkannt – prüfe die Werte und entferne, was NICHT storniert werden soll.';

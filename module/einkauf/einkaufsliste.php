@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'freib
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorsorglich') {
     $iid = (int)($_POST['item_id'] ?? 0);
     $raw = preg_replace('/[^0-9.,]/', '', trim((string)($_POST['menge'] ?? '')));
-    $menge = $raw !== '' ? (float) str_replace(',', '.', str_replace('.', '', $raw)) : 0.0;
+    $menge = $raw !== '' ? zahl_lesen($raw, true) : 0.0;   // Menge (13.11.2026: „12.5“ = 12,5, „12.000“ = 12000)
     $online = ($_POST['modus'] ?? '') === 'online';
     $direkt = ($_POST['modus'] ?? '') === 'direkt';   // „Direkt bestellt (Telefon/Mail)": mit Lieferant, ohne Mail, gilt als bestätigt
     $sup = $online ? null : ((int)($_POST['lieferant_id'] ?? 0) ?: null);
@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
     $onZahlart  = array_key_exists((string)($_POST['on_zahlart'] ?? ''), bestellung_zahlarten()) ? (string)$_POST['on_zahlart'] : '';
     $onWaehr    = strtoupper(preg_replace('/[^A-Za-z]/', '', (string)($_POST['on_waehrung'] ?? 'EUR'))) ?: 'EUR';
     $onPreisRaw = preg_replace('/[^0-9.,]/', '', trim((string)($_POST['on_preis'] ?? '')));
-    $onPreis    = $onPreisRaw !== '' ? (float) str_replace(',', '.', str_replace('.', '', $onPreisRaw)) : 0.0;
+    $onPreis    = $onPreisRaw !== '' ? betrag_lesen($onPreisRaw) : 0.0;   // Betrag (13.11.2026: „12.50“ = 12,50)
     if ($online && $onHaendler === '') { header('Location: ?p=einkaufsliste&onlinefehler=1'); exit; }   // Preis optional (netto, kommt sonst mit der Rechnung)
     if ($direkt && !$sup) { header('Location: ?p=einkaufsliste&direktfehler=1'); exit; }
     if (!$online && !$direkt && ($pgGrund = lieferant_portal_grund((int)$sup, $iid, null)) !== '') { header('Location: ?p=einkaufsliste&vorsorgportal=' . urlencode($pgGrund)); exit; }
@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $onZahlart  = array_key_exists((string)($_POST['on_zahlart'] ?? ''), bestellung_zahlarten()) ? (string)$_POST['on_zahlart'] : '';
     $onWaehr    = strtoupper(preg_replace('/[^A-Za-z]/', '', (string)($_POST['on_waehrung'] ?? 'EUR'))) ?: 'EUR';
     $onPreisRaw = preg_replace('/[^0-9.,]/', '', trim((string)($_POST['on_preis'] ?? '')));
-    $onPreis    = $onPreisRaw !== '' ? (float) str_replace(',', '.', str_replace('.', '', $onPreisRaw)) : 0.0;
+    $onPreis    = $onPreisRaw !== '' ? betrag_lesen($onPreisRaw) : 0.0;   // Betrag (13.11.2026: „12.50“ = 12,50)
     if ($online && $onHaendler === '') {   // Online-Pflicht: nur wo (Händler). Preis optional – netto, sonst später über die Rechnung (Buchhaltung)
         header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&onlinefehler=1'); exit;
     }
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $ovMenge = function(string $key) use ($mengeMap): ?float {
         $r = preg_replace('/[^0-9.,]/', '', trim((string)($mengeMap[$key] ?? '')));
         if ($r === '') return null;
-        $f = (float) str_replace(',', '.', str_replace('.', '', $r));
+        $f = zahl_lesen((string)$r, true);   // Menge (13.11.2026)
         return $f > 0 ? $f : null;
     };
     // Zeilen-Info je Schlüssel (Etikett: etikett:<item>:<auftrag>, sonst item:<item>)

@@ -42,7 +42,7 @@ function mahn_init(): void {
 
 // Konfiguration aus app_meta mit sinnvollen Defaults. frist = Tage überfällig, ab denen die Stufe greift.
 function mahn_config(): array {
-    $f = fn($k, $d) => (float) str_replace(',', '.', (string) meta_get($k, (string)$d));
+    $f = fn($k, $d) => zahl_lesen((string) meta_get($k, (string)$d));
     $i = fn($k, $d) => (int) meta_get($k, (string)$d);
     $t = fn($k, $d) => (string) meta_get($k, $d);
     return [

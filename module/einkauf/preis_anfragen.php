@@ -15,7 +15,7 @@ $rez_id  = (int)($_POST['rezeptur_id'] ?? 0);
 $art     = (string)($_POST['art'] ?? '');
 $lids  = array_values(array_filter(array_map('intval', (array)($_POST['anf_lieferant'] ?? [])), fn($x) => $x > 0));
 // Tausenderpunkt (10.000) entfernen, Komma bleibt Dezimaltrenner.
-$menge = (float) str_replace(',', '.', str_replace('.', '', (string)($_POST['anf_menge'] ?? '0')));
+$menge = zahl_lesen((string)($_POST['anf_menge'] ?? '0'), true);   // Menge (13.11.2026: „12.5“ = 12,5)
 $notiz = trim((string)($_POST['anf_notiz'] ?? ''));
 $coa   = isset($_POST['anf_coa']);
 $incoterm   = (string)($_POST['anf_incoterm'] ?? '');

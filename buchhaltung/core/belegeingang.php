@@ -80,7 +80,7 @@ function be_ki_auslesen(string $pfad): array {
     $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'max_tokens' => 1200, 'zweck' => 'beleg-eingang']);
     if (empty($r['ok'])) return ['ok' => false, 'fehler' => (string)($r['fehler'] ?? 'Beleg konnte nicht gelesen werden.'), 'daten' => [], 'roh' => ''];
     $d = is_array($r['daten'] ?? null) ? $r['daten'] : [];
-    $num  = fn($x) => (float) str_replace(',', '.', (string)$x);
+    $num  = fn($x) => betrag_lesen($x);   // Beträge/Prozent (13.11.2026: „21.687,75“ = 21687,75)
     $gilt = fn($s) => (is_string($s) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) ? $s : null;
     $brutto = $num($d['brutto'] ?? 0); $netto = $num($d['netto'] ?? 0); $ustP = $num($d['ust_prozent'] ?? 0);
     if ($brutto <= 0 && $netto > 0) $brutto = round($netto * (1 + $ustP / 100), 2);
@@ -107,7 +107,7 @@ function be_anlegen(array $d): int {
     $netto = round((float)($d['netto'] ?? 0), 2);
     $ustP  = (float)($d['ust_prozent'] ?? 0);
     $ust   = round($netto * $ustP / 100, 2);
-    $brutto = isset($d['brutto']) && $d['brutto'] !== '' ? round((float)$d['brutto'], 2) : round($netto + $ust, 2);
+    $brutto = isset($d['brutto']) && $d['brutto'] !== '' ? round(betrag_lesen($d['brutto']), 2) : round($netto + $ust, 2);
     q("INSERT INTO bu_beleg_eingang
         (quelle,datei,orig_name,mime,status,belegart,lieferant_name,beleg_nummer,datum,netto,ust_prozent,ust_betrag,brutto,waehrung,kategorie,notiz,ki_json,ki_ok,erfasst_von)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -125,7 +125,7 @@ function be_update(int $id, array $d): void {
     $netto = round((float)($d['netto'] ?? $r['netto']), 2);
     $ustP  = (float)($d['ust_prozent'] ?? $r['ust_prozent']);
     $ust   = round($netto * $ustP / 100, 2);
-    $brutto = isset($d['brutto']) && $d['brutto'] !== '' ? round((float)$d['brutto'], 2) : round($netto + $ust, 2);
+    $brutto = isset($d['brutto']) && $d['brutto'] !== '' ? round(betrag_lesen($d['brutto']), 2) : round($netto + $ust, 2);
     q("UPDATE bu_beleg_eingang SET belegart=?, lieferant_name=?, beleg_nummer=?, datum=?, netto=?, ust_prozent=?,
           ust_betrag=?, brutto=?, waehrung=?, kategorie=?, notiz=?, status=? WHERE id=?",
       [(string)($d['belegart'] ?? $r['belegart']), trim((string)($d['lieferant_name'] ?? $r['lieferant_name'])) ?: null,

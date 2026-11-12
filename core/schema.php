@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/gewicht.php';   // gewicht_lesen(), gewicht_feld(), tara_aus_id() – eine Regel für Gewichte (13.11.2026)
+require_once __DIR__ . '/zahl_lesen.php';   // zahl_lesen(), betrag_lesen() – eine Regel für Dashboard, CRM, Buchhaltung (13.11.2026)
 // Schema + additive Migrationen bulkify 4.1
 // Regel: erst CREATE (frisch installierbar), dann additive Migrationen via ensure_column().
 // Nie Spalten loeschen. Alles UTF-8 (utf8mb4).
@@ -7302,32 +7303,7 @@ function anfrage_art_fuer_item(?int $item_id): string {
 // 1,250.5 = 1250,5). Bei Mengenfeldern gilt zusätzlich: „250.000" ist die deutsche Schreibweise für
 // 250000 – ein Punkt vor genau drei Ziffern trennt dort Tausender, keine Nachkommastellen.
 // Bei Preisen bleibt „0.045" bewusst 0,045.
-function zahl_lesen(string $roh, bool $mengenfeld = false, string $sprache = 'de'): float {
-    // Chinesische/japanische Eingabe liefert oft Vollbreiten-Zeichen („０．０５“) oder „。“ als Punkt (Nico 11.11.2026:
-    // Lieferantenpreise kamen als 0 an). Vorher in normale Ziffern umwandeln, dann Währungszeichen/Einheiten
-    // wie „€“, „¥“, „/粒“ entfernen – übrig bleiben nur Ziffern, Punkt, Komma und Minus.
-    if (function_exists('mb_convert_kana')) $roh = mb_convert_kana($roh, 'a', 'UTF-8');
-    $roh = str_replace(['。', '、', '，', '．', '－'], ['.', ',', ',', '.', '-'], $roh);
-    $roh = str_replace(["\xc2\xa0", ' ', "'", '_'], '', $roh);
-    $s = preg_match('/-?(?:\d[\d.,]*|(?<!\p{L})[.,]\d+)/u', $roh, $zm) ? $zm[0] : '';
-    if ($s === '') return 0.0;
-    $punkt = strpos($s, '.') !== false;
-    $komma = strpos($s, ',') !== false;
-    // Welches Zeichen trennt in dieser Sprache die Tausender? Deutsch der Punkt, sonst das Komma.
-    $tausender = $sprache === 'de' ? '.' : ',';
-    // Eine Tausendergruppe beginnt nie mit einer Null: „0.045" ist ein Wert, keine 45.
-    $muster = '/^-?[1-9]\d{0,2}(' . preg_quote($tausender, '/') . '\d{3})+$/';
-    if ($punkt && $komma) {
-        $dez = strrpos($s, ',') > strrpos($s, '.') ? ',' : '.';
-        $s = str_replace($dez === ',' ? '.' : ',', '', $s);
-        $s = str_replace($dez, '.', $s);
-    } elseif ($mengenfeld && preg_match($muster, $s)) {
-        $s = str_replace($tausender, '', $s);
-    } elseif ($komma) {
-        $s = str_replace(',', '.', $s);
-    }
-    return (float) $s;
-}
+// zahl_lesen() steht seit 13.11.2026 in core/zahl_lesen.php (eine Regel für Dashboard, CRM und Buchhaltung).
 
 // Einheit als Wort – in der Ein- oder Mehrzahl, je nach Menge, und in der Sprache des Lesers.
 // „250.000 Kapseln", aber „Preis je Kapsel". Chinesisch kennt keine Mehrzahl.

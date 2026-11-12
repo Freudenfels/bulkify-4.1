@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
         $bulkChargeNrs = [];   // für den Log: aus welcher Bulk-Charge wurde abgefüllt
         foreach ($items as $k => $iid) {
             $iid = (int)$iid; if ($iid <= 0) continue;
-            $m = (float) str_replace(['.', ','], ['', '.'], (string)($mengen[$k] ?? '0'));
+            $m = zahl_lesen((string)($mengen[$k] ?? '0'), true);   // Menge (13.11.2026)
             if ($m <= 1e-9) continue;
             $e = (string)($einh[$k] ?? 'Stk');
             $chg = (int)($charges[$k] ?? 0);

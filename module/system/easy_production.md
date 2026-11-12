@@ -46,3 +46,5 @@ Eigene Fertigware (Einlagern aus der Produktion: `produktion_teilmenge_einbuchen
 Gilt vor dem Absatz „QM-Gate Fertigware" oben: Easy Production bucht die Kundenmenge jetzt als **frei** ein (wie Werk-App und
 Dashboard, die schon seit der Soll-Kette frei buchen). Keine Quarantäne mehr beim Einbuchen eigener Fertigware. Rückstellmuster
 bleiben als eigene Charge `…-RM` gesperrt. Die Kontrolle vor dem Versand kommt mit der Prüfliste (Handbuch 4.13).
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

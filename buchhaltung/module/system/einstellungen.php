@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'gobd_
 }
 // --- POST: Mahnwesen ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'mahn_set') {
-    $num = fn($k, $d='0') => (string) (float) str_replace(',', '.', trim((string)($_POST[$k] ?? $d)));
+    $num = fn($k, $d='0') => (string) zahl_lesen(trim((string)($_POST[$k] ?? $d)));   // 13.11.2026: zentrale Lesart
     $int = fn($k, $d='0') => (string) max(0, (int)($_POST[$k] ?? $d));
     meta_set('mahn_aktiv', !empty($_POST['mahn_aktiv']) ? '1' : '0');
     meta_set('mahn_zins', $num('mahn_zins'));

@@ -16,3 +16,5 @@ Kontingente entstehen jetzt auch **aus einem Angebot** (`angebot.jahresvertrag=1
 
 ## Kontingent löschen (2026-10-06)
 Je Zeile ein Admin-Button „löschen" (Aktion `loeschen` → `kontingent_loeschen($id)`, core/schema.php). Blocker: nicht stornierte Aufträge mit `auftrag.kontingent_id` (aktive Abrufe) → Meldung „zuerst stornieren/entfernen". Ohne Blocker: stornierte Abrufe werden entkoppelt (kontingent_id=NULL), die Kontingent-Dokumente (signierter Vertrag) mitgelöscht, dann die Kontingent-Zeile. Nötig u. a., weil ein Kontingent ein Produkt blockiert (siehe produkt_loeschen).
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

@@ -6,3 +6,5 @@ VERBATIM aus dem Dashboard-core/schema.php übernommen (bewusste Doppelung, da d
 `zahlung_loeschen($zahlung_id,$beleg_id,$akteur)`: löscht eine einzelne (Fehl-)Zahlung und zieht den Belegstatus (offen/teilbezahlt/bezahlt) neu. Button „×" je Zahlung in der Zahlungseingänge-Tabelle (nur admin/finance).
 
 **DL-Rechnung je Service (S-18):** `dl_rechnung_aus_auftrag()` rechnet nur die Service-Gruppe des DL-Auftrags ab (Anker `auftrag.angebot_position_id`, Service + zugehörige Material-Positionen), nicht mehr alle Positionen des Angebots – genau wie im Dashboard (`core/dienstleistung.php`). Legacy-Aufträge ohne Position rechnen weiter alles ab. Ein DL-Angebot mit zwei Services ergab vorher zwei Rechnungen über je die volle Summe.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

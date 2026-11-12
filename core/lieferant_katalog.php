@@ -86,10 +86,10 @@ function katalog_einlesen(int $lieferant_id, string $pfad, ?int $dokument_id = n
            $art, $form, mb_substr(trim((string)($z['cas'] ?? '')), 0, 30) ?: null,
            mb_substr(trim((string)($z['spezifikation'] ?? '')), 0, 190) ?: null,
            mb_substr(trim((string)($z['herkunft'] ?? '')), 0, 120) ?: null,
-           ($z['preis'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$z['preis']) : null,
+           ($z['preis'] ?? '') !== '' ? zahl_lesen((string)$z['preis']) : null,   // Preis (13.11.2026)
            mb_substr(trim((string)($z['waehrung'] ?? 'EUR')), 0, 3) ?: 'EUR',
            mb_substr(trim((string)($z['einheit'] ?? '')), 0, 20) ?: null,
-           ($z['menge_ab'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$z['menge_ab']) : null,
+           ($z['menge_ab'] ?? '') !== '' ? zahl_lesen((string)$z['menge_ab'], true) : null,   // Menge (13.11.2026: „1.000“ = 1000)
            mb_substr(trim((string)($z['notiz'] ?? '')), 0, 500) ?: null,
            gmdate('Y-m-d H:i:s')]);
         // Preis-Gültigkeit aus dem Dokument (11.11.2026), nur wenn die KI ein Datum gefunden hat.

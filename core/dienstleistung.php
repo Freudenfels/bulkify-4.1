@@ -833,7 +833,7 @@ function dienstleistung_laden(int $id): ?array {
 function dienstleistung_cent(string $eingabe): int {
     $eingabe = trim($eingabe);
     if ($eingabe === '') return 0;
-    return (int) round(((float) str_replace(',', '.', $eingabe)) * 100);
+    return (int) round(betrag_lesen($eingabe) * 100);   // 13.11.2026: „1.250,00“ = 1250 €
 }
 // Cent -> Euro-Anzeige (ohne Währungszeichen), deutsche Schreibweise.
 function dienstleistung_eur(int $cent): string {

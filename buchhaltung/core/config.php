@@ -30,6 +30,7 @@ foreach ($__kandidaten as $__pfad) {
 }
 unset($__kandidaten, $__ausUmgebung, $__pfad);
 // Testumgebung test.bulkify.pro (Paket 12.11.2026): gemeinsame Datei des Dashboards (eigenständig, ohne Schema)
+require_once __DIR__ . '/../../core/zahl_lesen.php';   // zahl_lesen(), betrag_lesen() – eine Regel mit dem Dashboard (13.11.2026)
 if (is_file(__DIR__ . '/../../core/testumgebung.php')) { require_once __DIR__ . '/../../core/testumgebung.php'; bx_test_start(); }
 
 foreach (['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS', 'DB_PORT'] as $__k) {

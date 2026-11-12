@@ -6,15 +6,9 @@ require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/erp.php';
 require_once __DIR__ . '/ui.php';
 
-// Eine getippte Zahl einlesen, egal ob "4800", "4.800" oder "4800,50".
-function zahl_lesen(string $roh): ?float {
-    $roh = trim($roh);
-    if ($roh === '') return null;
-    $roh = preg_replace('/[^0-9,.\-]/', '', $roh);
-    if (str_contains($roh, ',') && str_contains($roh, '.')) $roh = str_replace('.', '', $roh);
-    $roh = str_replace(',', '.', $roh);
-    return is_numeric($roh) ? (float)$roh : null;
-}
+// Getippte Beträge („4800“, „4.800“, „4800,50“) liest die zentrale betrag_lesen_null() aus core/zahl_lesen.php (13.11.2026,
+// Fable-3 T2.9 – vorher eine eigene zahl_lesen() mit anderer Regel: „4.800“ war 4,8).
+require_once __DIR__ . '/../../core/zahl_lesen.php';
 
 function kontakt_anlegen(array $d, int $uid = 0): int {
     $jetzt = gmdate('Y-m-d H:i:s');
@@ -27,7 +21,7 @@ function kontakt_anlegen(array $d, int $uid = 0): int {
        mb_substr(trim((string)($d['telefon'] ?? '')), 0, 60) ?: null,
        mb_substr(trim((string)($d['whatsapp'] ?? '')), 0, 60) ?: null,
        array_key_exists((string)($d['quelle'] ?? ''), $quellen) ? $d['quelle'] : 'sonstiges',
-       zahl_lesen((string)($d['wert_eur'] ?? '')),
+       betrag_lesen_null((string)($d['wert_eur'] ?? '')),
        trim((string)($d['notiz'] ?? '')) ?: null,
        $uid ?: null, $jetzt]);
     $id = insert_id();
@@ -62,7 +56,7 @@ function kontakt_speichern(int $id, array $d): void {
        mb_substr(trim((string)($d['whatsapp'] ?? '')), 0, 60) ?: null,
        array_key_exists((string)($d['quelle'] ?? ''), $quellen) ? $d['quelle'] : 'sonstiges',
        $phase,
-       zahl_lesen((string)($d['wert_eur'] ?? '')),
+       betrag_lesen_null((string)($d['wert_eur'] ?? '')),
        trim((string)($d['notiz'] ?? '')) ?: null,
        $besitzer ?: null,
        gmdate('Y-m-d H:i:s'),

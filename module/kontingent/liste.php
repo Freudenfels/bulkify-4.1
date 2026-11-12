@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $kunde  = (int)($_POST['kunde_id'] ?? 0);
         $prod   = (int)($_POST['produkt_id'] ?? 0);
         $menge  = max(0, (int)($_POST['gesamt_menge'] ?? 0));
-        $vk     = round((float) str_replace(',', '.', (string)($_POST['vk_stueck'] ?? '0')), 4);
+        $vk     = round(zahl_lesen((string)($_POST['vk_stueck'] ?? '0')), 4);
         $minab  = max(0, (int)($_POST['min_abruf'] ?? 0));
         if ($kunde <= 0 || $prod <= 0 || $menge <= 0) { header('Location: ?p=kontingente&fehler=' . urlencode('Kunde, Produkt und Menge sind Pflicht.')); exit; }
         q("INSERT INTO kontingent (kunde_id,produkt_id,gesamt_menge,vk_stueck,min_abruf,gueltig_von,gueltig_bis,notiz,status)

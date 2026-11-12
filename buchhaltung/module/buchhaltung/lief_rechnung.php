@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
         header('Location: ?p=lief_rechnung&id=' . $id . ($g ? '&dateiok=1' : '&dateifehler=1')); exit;
     }
     if ($aktion === 'zahlung') {
-        $betrag = (float) str_replace(',', '.', (string)($_POST['betrag'] ?? '0'));
+        $betrag = betrag_lesen($_POST['betrag'] ?? '0');   // 13.11.2026: eine Betrags-Lesart
         $u = current_user();
         kr_zahlung_buchen($id, $betrag, $_POST['datum'] ?? date('Y-m-d'), $_POST['art'] ?? '', $_POST['notiz'] ?? '', $u['name'] ?? 'team');
         header('Location: ?p=lief_rechnung&id=' . $id . '&gebucht=1'); exit;

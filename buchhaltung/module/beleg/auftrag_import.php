@@ -60,8 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'anleg
     $d['produkt_name']       = mb_substr(trim((string)($_POST['produkt_name'] ?? $d['produkt_name'])), 0, 190);
     $d['menge']              = max(0, (int)($_POST['menge'] ?? $d['menge']));
     $d['stueck_je_packung']  = max(0, (int)($_POST['stueck'] ?? $d['stueck_je_packung']));
-    $d['vk_stueck']          = round((float)str_replace(',', '.', (string)($_POST['vk_stueck'] ?? $d['vk_stueck'])), 4);
-    $d['gesamt_netto']       = round((float)str_replace(',', '.', (string)($_POST['gesamt_netto'] ?? $d['gesamt_netto'])), 2);
+    $d['vk_stueck']          = round(zahl_lesen((string)($_POST['vk_stueck'] ?? $d['vk_stueck'])), 4);   // Preis je Stück (Preis-Lesart)
+    $d['gesamt_netto']       = round(betrag_lesen($_POST['gesamt_netto'] ?? $d['gesamt_netto']), 2);   // Betrag (13.11.2026)
     $status = in_array(($_POST['status'] ?? ''), ['offen','in_produktion','erledigt'], true) ? $_POST['status'] : 'erledigt';
 
     $r = auftrag_aus_import($kid, $d, $status);

@@ -94,7 +94,7 @@ function kr_kurs_aktuell(string $cur): float {
     $cur = strtoupper($cur);
     if ($cur === 'EUR') return 1.0;
     $fix = meta_get('kurs_' . strtolower($cur) . '_fix', null);
-    if ($fix !== null && (float) str_replace(',', '.', (string)$fix) > 0) return (float) str_replace(',', '.', (string)$fix);
+    if ($fix !== null && zahl_lesen((string)$fix) > 0) return zahl_lesen((string)$fix);   // Kurs: Punkt = Dezimal („1.085“)
     $key = 'kurs_' . strtolower($cur) . '_auto';
     $ts  = (int) meta_get($key . '_ts', '0');
     $val = (float) meta_get($key, '0');
@@ -114,7 +114,7 @@ function kr_kurs_cached(string $cur): array {
     $cur = strtoupper($cur);
     if ($cur === 'EUR') return ['wert' => 1.0, 'stand' => '', 'quelle' => 'eur'];
     $fix = meta_get('kurs_' . strtolower($cur) . '_fix', null);
-    if ($fix !== null && (float) str_replace(',', '.', (string)$fix) > 0) return ['wert' => (float) str_replace(',', '.', (string)$fix), 'stand' => '', 'quelle' => 'manuell'];
+    if ($fix !== null && zahl_lesen((string)$fix) > 0) return ['wert' => zahl_lesen((string)$fix), 'stand' => '', 'quelle' => 'manuell'];
     $val = (float) meta_get('kurs_' . strtolower($cur) . '_auto', '0');
     if ($val > 0) return ['wert' => $val, 'stand' => (string) meta_get('kurs_' . strtolower($cur) . '_auto_stand', ''), 'quelle' => 'auto'];
     return ['wert' => kr_kurs_fallback($cur), 'stand' => '', 'quelle' => 'standard'];
@@ -160,11 +160,11 @@ function kr_faellig(?string $datum, $ziel): ?string {
 function kr_rechnung_anlegen(array $d): int {
     kreditor_init();
     $waehrung = strtoupper(trim((string)($d['waehrung'] ?? 'EUR'))) ?: 'EUR';
-    $kurs = ($waehrung === 'EUR') ? 1.0 : (float) str_replace(',', '.', (string)($d['fx_kurs'] ?? 0));
+    $kurs = ($waehrung === 'EUR') ? 1.0 : zahl_lesen((string)($d['fx_kurs'] ?? 0));   // Kurs: „1.085“ = 1,085
     if ($kurs <= 0) $kurs = 1.0;
-    $fwNetto = round((float) str_replace(',', '.', (string)($d['netto'] ?? 0)), 2); // Betrag in Rechnungswährung
+    $fwNetto = round(betrag_lesen($d['netto'] ?? 0), 2); // Betrag in Rechnungswährung
     $netto = round($fwNetto * $kurs, 2);                                            // in EUR
-    $ustP  = (float) str_replace(',', '.', (string)($d['ust_prozent'] ?? 0));
+    $ustP  = zahl_lesen((string)($d['ust_prozent'] ?? 0));
     $ust   = round($netto * $ustP / 100, 2);
     $brutto = round($netto + $ust, 2);
     $datum = $d['datum'] ?? date('Y-m-d');
@@ -188,11 +188,11 @@ function kr_rechnung_update(int $id, array $d): void {
     $r = one("SELECT * FROM lieferant_rechnung WHERE id=?", [$id]);
     if (!$r || $r['status'] === 'storniert') return;
     $waehrung = strtoupper(trim((string)($d['waehrung'] ?? $r['waehrung'] ?? 'EUR'))) ?: 'EUR';
-    $kurs = ($waehrung === 'EUR') ? 1.0 : (float) str_replace(',', '.', (string)($d['fx_kurs'] ?? $r['fx_kurs'] ?? 0));
+    $kurs = ($waehrung === 'EUR') ? 1.0 : zahl_lesen((string)($d['fx_kurs'] ?? $r['fx_kurs'] ?? 0));
     if ($kurs <= 0) $kurs = 1.0;
-    $fwNetto = round((float) str_replace(',', '.', (string)($d['netto'] ?? $r['fw_netto'] ?? $r['netto'])), 2);
+    $fwNetto = round(betrag_lesen($d['netto'] ?? $r['fw_netto'] ?? $r['netto']), 2);
     $netto = round($fwNetto * $kurs, 2);
-    $ustP  = (float) str_replace(',', '.', (string)($d['ust_prozent'] ?? $r['ust_prozent']));
+    $ustP  = zahl_lesen((string)($d['ust_prozent'] ?? $r['ust_prozent']));
     $ust   = round($netto * $ustP / 100, 2);
     $brutto = round($netto + $ust, 2);
     $datum = $d['datum'] ?? $r['datum'];

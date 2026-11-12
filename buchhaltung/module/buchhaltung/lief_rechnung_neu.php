@@ -42,7 +42,7 @@ if ($aktion === 'ki_auslesen') {
 
 if ($aktion === 'er_save') {
     $lid = (int)($_POST['lieferant_id'] ?? 0);
-    $netto = (float) str_replace(',', '.', (string)($_POST['netto'] ?? '0'));
+    $netto = betrag_lesen($_POST['netto'] ?? '0');   // 13.11.2026: eine Betrags-Lesart
     if (!$lid)           $fehler = 'Bitte einen Lieferanten wählen.';
     elseif ($netto <= 0) $fehler = 'Bitte einen Netto-Betrag größer 0 eingeben.';
     else {

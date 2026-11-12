@@ -128,9 +128,9 @@ function beleg_positionen_manuell_setzen(int $beleg_id, array $zeilen): int {
     foreach ($zeilen as $z) {
         $bez = trim((string)($z['bezeichnung'] ?? ''));
         if ($bez === '') continue;
-        $menge = (float) str_replace(',', '.', (string)($z['menge'] ?? '1')); if ($menge <= 0) $menge = 1;
-        $preis = (float) str_replace(',', '.', (string)($z['preis'] ?? '0'));
-        $ust   = (float) str_replace(',', '.', (string)($z['ust'] ?? '0'));
+        $menge = zahl_lesen((string)($z['menge'] ?? '1'), true); if ($menge <= 0) $menge = 1;
+        $preis = zahl_lesen((string)($z['preis'] ?? '0'));
+        $ust   = zahl_lesen((string)($z['ust'] ?? '0'));
         $clean[] = [trim((string)($z['artikelnr'] ?? '')) ?: null, $bez, trim((string)($z['beschreibung'] ?? '')) ?: null,
                     $menge, trim((string)($z['einheit'] ?? '')) ?: null, (int) round($preis * 100), $ust];
     }

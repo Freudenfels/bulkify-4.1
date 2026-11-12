@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($a === 'auto_verknuepfen') { $n = imp_auto_verknuepfen($batch); header('Location: ?p=import_bulk&batch=' . $batch . '&step=verknuepfen&auto=' . $n); exit; }
     if ($a === 'zahlung_add') {
-        imp_zahlung_add((int)($_POST['item'] ?? 0), (float) str_replace(',', '.', (string)($_POST['betrag'] ?? '0')), $_POST['datum'] ?? null, $_POST['art'] ?? '');
+        imp_zahlung_add((int)($_POST['item'] ?? 0), betrag_lesen($_POST['betrag'] ?? '0'), $_POST['datum'] ?? null, $_POST['art'] ?? '');
         header('Location: ?p=import_bulk&batch=' . $batch . '&step=zahlungen'); exit;
     }
     if ($a === 'zahlung_del') { imp_zahlung_del((int)($_POST['zid'] ?? 0)); header('Location: ?p=import_bulk&batch=' . $batch . '&step=zahlungen'); exit; }

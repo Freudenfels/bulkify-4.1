@@ -135,7 +135,7 @@ function imp_ki_auslesen(string $pfad): array {
     $r = ki_datei_frage($pfad, $prompt, ['json' => true, 'max_tokens' => 3000, 'zweck' => 'bulk-import']);
     if (empty($r['ok'])) return ['ok' => false, 'daten' => [], 'roh' => ''];
     $d = is_array($r['daten'] ?? null) ? $r['daten'] : [];
-    $num = fn($x) => (float) str_replace(',', '.', (string)$x);
+    $num = fn($x) => betrag_lesen($x);   // 13.11.2026: eine Betrags-Lesart
     $gilt = fn($s) => (is_string($s) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) ? $s : null;
     $art = strtolower(trim((string)($d['art'] ?? 'unklar'))); if (!in_array($art, ['rechnung', 'angebot'], true)) $art = 'unklar';
     $brutto = $num($d['brutto'] ?? 0); $netto = $num($d['netto'] ?? 0); $ustP = $num($d['ust_prozent'] ?? 0);
@@ -145,7 +145,7 @@ function imp_ki_auslesen(string $pfad): array {
     foreach ((array)($d['positionen'] ?? []) as $p) {
         $typ = strtolower(trim((string)($p['typ'] ?? 'produkt'))); if (!in_array($typ, ['produkt', 'verpackung', 'etikett'], true)) $typ = 'produkt';
         $pos[] = ['typ' => $typ, 'gruppe' => (int)($p['gruppe'] ?? 1) ?: 1, 'bezeichnung' => trim((string)($p['bezeichnung'] ?? '')),
-                  'menge' => $num($p['menge'] ?? 0), 'einheit' => trim((string)($p['einheit'] ?? '')), 'preis' => $num($p['preis'] ?? 0)];
+                  'menge' => zahl_lesen((string)($p['menge'] ?? 0), true), 'einheit' => trim((string)($p['einheit'] ?? '')), 'preis' => zahl_lesen((string)($p['preis'] ?? 0))];
     }
     return ['ok' => true, 'roh' => json_encode($d, JSON_UNESCAPED_UNICODE), 'daten' => [
         'art' => $art, 'kunde_name' => trim((string)($d['kunde_name'] ?? '')), 'nummer' => trim((string)($d['nummer'] ?? '')),
@@ -209,9 +209,9 @@ function imp_item(int $id): ?array { return $id ? one("SELECT * FROM bu_imp_item
 function imp_pos(int $item_id): array { return all("SELECT * FROM bu_imp_pos WHERE imp_item_id=? ORDER BY sort, id", [$item_id]); }
 function imp_item_update(int $id, array $d): void {
     $it = imp_item($id); if (!$it || $it['status'] === 'uebernommen') return;
-    $netto = round((float) str_replace(',', '.', (string)($d['netto'] ?? $it['netto'])), 2);
-    $ustP = (float) str_replace(',', '.', (string)($d['ust_prozent'] ?? $it['ust_prozent']));
-    $brutto = isset($d['brutto']) && $d['brutto'] !== '' ? round((float) str_replace(',', '.', (string)$d['brutto']), 2) : round($netto * (1 + $ustP / 100), 2);
+    $netto = round(betrag_lesen($d['netto'] ?? $it['netto']), 2);
+    $ustP = zahl_lesen((string)($d['ust_prozent'] ?? $it['ust_prozent']));
+    $brutto = isset($d['brutto']) && $d['brutto'] !== '' ? round(betrag_lesen($d['brutto']), 2) : round($netto * (1 + $ustP / 100), 2);
     q("UPDATE bu_imp_item SET art=?, nummer=?, datum=?, netto=?, ust_prozent=?, ust_betrag=?, brutto=?, waehrung=?, angebot_ref=? WHERE id=?",
       [(string)($d['art'] ?? $it['art']), trim((string)($d['nummer'] ?? $it['nummer'])) ?: null, $d['datum'] ?? $it['datum'],
        $netto, $ustP, round($netto * $ustP / 100, 2), $brutto, strtoupper((string)($d['waehrung'] ?? $it['waehrung'])),

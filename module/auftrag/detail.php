@@ -19,8 +19,8 @@ $auftragIstGewicht = function(int $aid): bool {
 };
 // de-formatierte Eingabe („1.860" / „588,69") -> Basiszahl; bei Gewicht kg -> g.
 $mengeInBasis = function(string $raw, bool $gewicht): float {
-    $v = (float) str_replace(['.', ' ', ','], ['', '', '.'], trim($raw));
-    return $gewicht ? $v * 1000.0 : $v;
+    // 13.11.2026 (Fable-3 T2.9): kg-Feld = Gewicht (gewicht_lesen, „1.5“ kg = 1,5 kg), sonst Menge (zahl_lesen, „1.860“ = 1860).
+    return $gewicht ? gewicht_lesen($raw) * 1000.0 : zahl_lesen($raw, true);
 };
 
 // Express-Bestellung (nur Admin): überspringt Einkaufsbedarf/-liste und bestellt direkt beim Lieferanten.
@@ -397,7 +397,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 // das noch keine echte v4-Rechnung hat. Der Kunde sieht den Zahlstatus im Portal.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'bezahlt_setzen') {
     $d = trim((string)($_POST['bezahlt_am'] ?? '')); $d = preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) ? $d : date('Y-m-d');
-    $betr = trim((string)($_POST['bezahlt_betrag'] ?? '')); $betr = $betr !== '' ? (float) str_replace(['.', ','], ['', '.'], $betr) : null;
+    $betr = trim((string)($_POST['bezahlt_betrag'] ?? '')); $betr = $betr !== '' ? betrag_lesen($betr) : null;   // Betrag (13.11.2026: „1500.50“ = 1500,50)
     q("UPDATE auftrag SET bezahlt_am=?, bezahlt_betrag=? WHERE id=?", [$d, $betr, $id]);
     header('Location: ?p=auftrag&id=' . $id . '&bezahltok=1'); exit;
 }
@@ -777,7 +777,7 @@ $bulkEinh = $istFuellG ? 'kg' : 'Stk';                       // Eingabe-Einheit 
 $bulkLes  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? ' <span style="font-weight:normal">(' . gewicht_lesbar((float)$v, 'g') . ')</span>' : '';
 $bulkMng  = fn($v) => $istFuellG && function_exists('gewicht_lesbar') ? gewicht_lesbar((float)$v, 'g') : number_format((int)$v, 0, ',', '.') . ' Stk';
 // Prefill-Wert eines Bulk-Mengenfelds: Pulver in kg (g/1000, lesbar), sonst Stück (ganzzahlig mit Tausenderpunkt).
-$bulkInput = fn($g) => $istFuellG ? rtrim(rtrim(number_format((float)$g / 1000, 3, ',', '.'), '0'), ',') : number_format((int)$g, 0, ',', '.');
+$bulkInput = fn($g) => $istFuellG ? gewicht_feld((float)$g / 1000) : number_format((int)$g, 0, ',', '.');   // kg ohne Tausenderpunkt (gewicht_lesen)
 $bulkTaus  = $istFuellG ? '' : 'data-tausender';               // Tausender-JS ist ganzzahlig -> bei kg (Dezimal) weglassen
 $bulkInM   = $istFuellG ? 'decimal' : 'numeric';
 // Bestellungen (bei welchem Lieferanten, welcher Status) – verknüpft über die Position.

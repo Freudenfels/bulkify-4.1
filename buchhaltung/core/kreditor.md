@@ -47,3 +47,5 @@ Wareneingang→Rechnung. Robust gegen Schema-Drift: Lieferanten-Prefill liest pe
 
 ## Datei an Eingangsrechnung (neu)
 lieferant_rechnung hat datei/orig_name/mime (Original-Rechnung, relativ zu BX_UPLOADS). kr_rechnung_anlegen nimmt datei/orig_name/mime; kr_datei_setzen() hängt nachträglich eine Datei an. Ablage/KI über core/belegeingang.php (be_datei_speichern/be_ki_auslesen).
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

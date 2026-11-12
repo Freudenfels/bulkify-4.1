@@ -10,3 +10,5 @@ Eigener Beleg-Posteingang fuer den Steuerberater (Tabelle `bu_beleg_eingang`, vi
 - Export Steuerberater: `be_export_csv($von,$bis)` (Excel-CSV UTF-8+BOM) und `be_export_zip()` (CSV + alle Belegdateien).
 - `bu_zip($files)`: eigener ZIP-Writer (Store/ohne Kompression) — OHNE ZipArchive-Extension (die fehlt hier). Validiert gegen Python zipfile.
 - E-Mail (GERUEST): `be_mail_bereit()/be_mail_abholen()` holen Anhaenge per IMAP (braucht php-imap + app_meta belege_imap_host/user/pass[/port/ssl]). Noch nicht aktiv/getestet.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

@@ -59,3 +59,5 @@ Ein Weg mit abgelaufenem Rohstoffpreis zeigt „unsicher: Preis abgelaufen“ st
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
 
 **Abgelaufene Preise (Block D, 11.11.2026):** Im Reiter Beschaffung tragen abgelaufene Zukauf-/Premix-Staffeln den Badge „abgelaufen“. Rohstoffpreise zeigen „abgelaufen seit …“ statt „günstigster“.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

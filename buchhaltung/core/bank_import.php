@@ -60,17 +60,8 @@ function bank_num(string $s): ?float {
     if ($s === '') return null;
     $neg = (strpos($s, '-') !== false) || (bool) preg_match('/^\(.*\)$/', $s) || (bool) preg_match('/-\s*$/', $s);
     $s = preg_replace('/[^0-9.,]/', '', $s);
-    if ($s === '') return null;
-    $hatK = strpos($s, ',') !== false; $hatP = strpos($s, '.') !== false;
-    if ($hatK && $hatP) {
-        // letztes Trennzeichen ist das Dezimaltrennzeichen
-        if (strrpos($s, ',') > strrpos($s, '.')) { $s = str_replace('.', '', $s); $s = str_replace(',', '.', $s); }
-        else                                     { $s = str_replace(',', '', $s); }
-    } elseif ($hatK) {
-        $s = str_replace(',', '.', $s);
-    } // nur '.' -> unverändert (Dezimalpunkt)
-    if (!is_numeric($s)) return null;
-    $v = (float) $s;
+    if ($s === '' || !preg_match('/\d/', $s)) return null;
+    $v = betrag_lesen($s);   // 13.11.2026 (Fable-3 T2.9): eine Betrags-Lesart
     return $neg ? -abs($v) : $v;
 }
 

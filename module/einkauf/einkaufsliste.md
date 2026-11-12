@@ -121,3 +121,5 @@ Anlass: Beim „Vorsorglich bestellen“ bei Wellgreen kam „keinen aktiven Acc
 - Suchfeld über dem Lieferanten (automatisches Such-Dropdown, core/layout.php): Getippter Text ohne Klick auf einen Vorschlag wird beim Verlassen des Felds übernommen, wenn er eindeutig ist (exakter Name oder genau ein Treffer). Vorher kam dann ein leerer Lieferant beim Server an. Ohne Lieferant heißt die Meldung jetzt „Den Lieferanten im Suchfeld aus der Liste anklicken“.
 
 **Unterlagen-Sperre = Entwurf (13.11.2026, Fable-3 T2.1):** Greift beim Bestellen die Unterlagen-Sperre, setzt `bestellung_als_entwurf()` die Bestellung auf Entwurf zurück (Status „offen“, ohne Bestelldatum) – wie bei „Vorsorglich bestellen“. Meldung „nur als Entwurf angelegt“ und Status stimmen überein; der Bedarf gilt nicht als bestellt.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.

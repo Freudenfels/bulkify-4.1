@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=nachbestellungen&ok=' . (int)$r['auftrag_id']); exit;
     }
     if ($aktion === 'preis_anpassen') {
-        $vk = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['vk_neu'] ?? '0'));
+        $vk = zahl_lesen((string)($_POST['vk_neu'] ?? '0'));   // Preis (13.11.2026: „0.85“ = 0,85)
         $r = nachbestellung_preis_anpassen($id, $vk, trim((string)($_POST['grund'] ?? '')));
         header('Location: ?p=nachbestellungen' . (isset($r['fehler']) ? '&fehler=' . urlencode($r['fehler']) : '&preisok=1')); exit;
     }

@@ -53,8 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fremd
 // Reservierung für einen Auftrag setzen/ändern (manuell, am Item). Menge mit Tausenderpunkt -> Dezimal.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'res_setzen' && !$neu) {
     $aid = (int)($_POST['auftrag_id'] ?? 0);
-    $raw = str_replace(['.', ' '], '', trim((string)($_POST['menge'] ?? '')));
-    $men = (float) str_replace(',', '.', $raw);
+    $men = zahl_lesen((string)($_POST['menge'] ?? ''), true);   // Menge (13.11.2026: „12.5“ = 12,5)
     $r = item_reservierung_setzen((int)$id, $aid, $men);
     if ($r['ok'] && $aid) {
         $anr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]);

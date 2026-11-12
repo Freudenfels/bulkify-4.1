@@ -40,8 +40,8 @@ if ($istPost && !$neu) {
     if ($aktion === 'zk_preis_add') {
         $lid   = ($_POST['zk_lieferant'] ?? '') !== '' ? (int)$_POST['zk_lieferant'] : null;
         $lname = trim((string)($_POST['zk_lieferant_name'] ?? ''));
-        $preis = (float) str_replace(',', '.', (string)($_POST['zk_preis'] ?? '0'));   // Preis: Komma als Dezimaltrenner (0,0228)
-        $mab   = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['zk_menge_ab'] ?? '0'));   // Menge: Tausenderpunkt (60.000)
+        $preis = zahl_lesen((string)($_POST['zk_preis'] ?? '0'));   // Preis: Komma als Dezimaltrenner (0,0228)
+        $mab   = zahl_lesen((string)($_POST['zk_menge_ab'] ?? '0'), true);   // Menge: Tausenderpunkt (60.000)
         $inco  = array_key_exists($_POST['zk_incoterm'] ?? '', incoterm_liste()) ? $_POST['zk_incoterm'] : null;
         $vers  = array_key_exists($_POST['zk_versandart'] ?? '', versandart_liste()) ? $_POST['zk_versandart'] : null;
         $zkEinh = ($_POST['zk_einheit'] ?? '') === 'packung' ? 'packung' : (($_POST['zk_einheit'] ?? '') === 'kg' ? 'kg' : 'kapsel');
@@ -55,7 +55,7 @@ if ($istPost && !$neu) {
         $kpk = (int)($_POST['kp_kunde'] ?? 0);
         $kpm = trim((string)($_POST['kp_menge'] ?? '')) !== '' ? max(0, (int) str_replace('.', '', (string)$_POST['kp_menge'])) : null;
         $kpa = trim((string)($_POST['kp_anzahl'] ?? '')) !== '' ? max(0, (int) str_replace('.', '', (string)$_POST['kp_anzahl'])) : null;
-        $kpp = (float) str_replace(',', '.', (string)($_POST['kp_preis'] ?? '0'));
+        $kpp = zahl_lesen((string)($_POST['kp_preis'] ?? '0'));
         $kpn = trim((string)($_POST['kp_notiz'] ?? ''));
         if ($kpk > 0 && $kpp > 0) {
             $kpEx = $kpm ? (int) scalar("SELECT id FROM produkt_kundenpreis WHERE produkt_id=? AND kunde_id=? AND menge_pro_vpe=? AND COALESCE(anzahl_vpe,0)=? LIMIT 1", [$pid, $kpk, $kpm, (int)($kpa ?? 0)]) : 0;

@@ -42,3 +42,5 @@ Die KI liest, was in der Liste steht – sie prüft nicht, ob der Lieferant den 
 - `katalog_preis_vorschlag()` hat den Parameter `gueltig_bis`.
 - Die KI-Anweisung kennt das Feld `gueltig_bis` und liest es nur, wenn es im Dokument steht.
 - Bei der Übernahme geht das Datum an `lieferant_preis`.
+
+**Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
