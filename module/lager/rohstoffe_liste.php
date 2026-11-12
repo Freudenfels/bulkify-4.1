@@ -72,7 +72,7 @@ if ($ids) {
     }
 }
 
-$preis = fn($r) => number_format((float)$r['ek_preis'], (float)$r['ek_preis'] < 1 ? 4 : 2, ',', '.') . ' €/' . h($r['preis_bezug']);
+$preis = fn($r) => h(preis_anzeige((float)$r['ek_preis'], 'EUR', (string)$r['preis_bezug']));   // 13.11.2026: unter 0,01 € je 1.000
 $statusBadge = fn($r) => (int)$r['gesperrt'] === 1 ? bx_badge('gesperrt','err') : bx_badge('aktiv','ok');
 $katBadge = fn($r) => bx_badge($KAT[$r['kategorie']] ?? $r['kategorie']);
 
@@ -128,7 +128,7 @@ $preisAb = function ($r) use ($liefMin, $liefAbg) {
     if ($lm > 0) $min = ($min > 0) ? min($min, $lm) : $lm;
     if ($min <= 0) return '<span class="muted">–</span>';
     $abg = $liefAbg[(int)$r['id']] ?? (!empty($r['ek_abgelaufen_seit']) ? (string)$r['ek_abgelaufen_seit'] : '');   // Block D: nie still
-    return 'ab ' . number_format($min, $min < 1 ? 4 : 2, ',', '.') . ' €/' . h($r['preis_bezug'])
+    return 'ab ' . h(preis_anzeige($min, 'EUR', (string)$r['preis_bezug']))
          . ($abg !== '' ? ' <span class="badge badge-err" title="Preis abgelaufen - Summe unsicher">abgelaufen seit ' . h(date('d.m.Y', strtotime($abg))) . '</span>' : '');
 };
 // Kompakte Verfügbarkeits-Marker: grün = vorhanden, grau = nicht.

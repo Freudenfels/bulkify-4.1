@@ -43,3 +43,6 @@ Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache de
 
 ## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
 Bereich „Labels / Aufkleber“ (core/lief_aufkleber_ui.php): Herstelldatum, Aufkleber drucken, Nachdruck, Storno, PDF; Versanddaten mit Anzahl Pakete.
+
+## Preise (13.11.2026)
+Stückpreis über `preis_anzeige()` (unter 0,01 je 1.000), Summen aus dem genauen Preis.

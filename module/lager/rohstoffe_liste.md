@@ -35,3 +35,6 @@ Neben „Preis ab“ steht unsere Mindestmenge (`item.moq_menge` + Einheit), die
 **Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).
 
 **Günstigster EK (Block D, 11.11.2026):** nur aus gültigen Preisen ohne gesperrte Lieferanten. Gibt es nur abgelaufene, wird der letzte mit dem Badge „abgelaufen seit …“ gezeigt (auch beim Auto-EK aus abgelaufenem Preis).
+
+## Preis-Anzeige (13.11.2026)
+EK-Spalten über `preis_anzeige()`: unter 0,01 € als „x,xx € / 1.000 <Einheit>“, sonst bis 4 Stellen.

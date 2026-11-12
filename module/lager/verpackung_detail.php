@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'eksta
     q("DELETE FROM pack_ek_staffel WHERE item_id=?", [(int)$id]);
     $mab = $_POST['ek_menge_ab'] ?? []; $ekp = $_POST['ek_preis'] ?? []; $elf = $_POST['ek_lieferant'] ?? [];
     foreach ($mab as $i => $mv) {
-        $mengeab = (int)$mv; $preis = (float)str_replace(',', '.', $ekp[$i] ?? '0');
+        $mengeab = (int)$mv; $preis = round(preis_eingabe_lesen((string)($ekp[$i] ?? '0'), (string)(($_POST['ek_basis'] ?? [])[$i] ?? '1')), 6);   // 13.11.2026: Text + je 1.000 Stk, 6 Stellen
         $lief = ($elf[$i] ?? '') !== '' ? (int)$elf[$i] : null;
         if ($preis > 0) q("INSERT INTO pack_ek_staffel (item_id,menge_ab,ek_preis,lieferant_id) VALUES (?,?,?,?)", [(int)$id, $mengeab, $preis, $lief]);
     }
@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vksta
     q("DELETE FROM pack_vk_staffel WHERE item_id=?", [(int)$id]);
     $mab = $_POST['vk_menge_ab'] ?? []; $vkp = $_POST['vk_preis'] ?? [];
     foreach ($mab as $i => $mv) {
-        $preis = (float)str_replace(',', '.', $vkp[$i] ?? '0');
+        $preis = round(preis_eingabe_lesen((string)($vkp[$i] ?? '0'), (string)(($_POST['vk_basis'] ?? [])[$i] ?? '1')), 6);   // 13.11.2026: Text + je 1.000 Stk
         if ($preis > 0) q("INSERT INTO pack_vk_staffel (item_id,menge_ab,vk_preis) VALUES (?,?,?)", [(int)$id, (int)$mv, $preis]);
     }
     header('Location: ?p=verpackung&id=' . $id . '&tab=verkauf&gespeichert=1'); exit;
@@ -486,7 +486,7 @@ if (!$neu) {
           <tr>
             <td><select name="ek_lieferant[]"><option value="">– keiner –</option><?php foreach ($lieferanten as $lf): ?><option value="<?= (int)$lf['id'] ?>" <?= (int)($er['lieferant_id']??0)===(int)$lf['id']?'selected':'' ?>><?= h($lf['firma']) ?></option><?php endforeach; ?></select></td>
             <td class="bx-num"><input type="number" min="0" step="1" name="ek_menge_ab[]" value="<?= h((string)$er['menge_ab']) ?>" style="max-width:160px;text-align:right"></td>
-            <td class="bx-num"><input type="number" min="0" step="0.0001" name="ek_preis[]" value="<?= $er['ek_preis']!=='' ? (float)$er['ek_preis'] : '' ?>" style="max-width:140px;text-align:right"></td>
+            <td class="bx-num" style="white-space:nowrap"><input type="text" inputmode="decimal" name="ek_preis[]" value="<?= $er['ek_preis']!=='' ? h(rtrim(rtrim(number_format((float)$er['ek_preis'], 6, ',', ''), '0'), ',')) : '' ?>" style="max-width:120px;text-align:right"><select name="ek_basis[]" style="width:auto;margin-left:4px"><option value="1">je Stk</option><option value="1000">je 1.000 Stk</option></select></td>
           </tr>
           <?php endforeach; ?>
         </tbody>
@@ -510,7 +510,7 @@ if (!$neu) {
           <?php $vrows = $vkstaffel ?: [['menge_ab'=>'','vk_preis'=>'']]; foreach ($vrows as $vr): ?>
           <tr>
             <td class="bx-num"><input type="number" min="0" step="1" name="vk_menge_ab[]" value="<?= h((string)$vr['menge_ab']) ?>" style="max-width:160px;text-align:right"></td>
-            <td class="bx-num"><input type="number" min="0" step="0.0001" name="vk_preis[]" value="<?= $vr['vk_preis']!=='' ? (float)$vr['vk_preis'] : '' ?>" style="max-width:140px;text-align:right"></td>
+            <td class="bx-num" style="white-space:nowrap"><input type="text" inputmode="decimal" name="vk_preis[]" value="<?= $vr['vk_preis']!=='' ? h(rtrim(rtrim(number_format((float)$vr['vk_preis'], 6, ',', ''), '0'), ',')) : '' ?>" style="max-width:120px;text-align:right"><select name="vk_basis[]" style="width:auto;margin-left:4px"><option value="1">je Stk</option><option value="1000">je 1.000 Stk</option></select></td>
           </tr>
           <?php endforeach; ?>
         </tbody>
@@ -566,14 +566,14 @@ if (!$neu) {
     var tr = document.createElement('tr');
     tr.innerHTML = ekLiefCell
       + '<td class="bx-num"><input type="number" min="0" step="1" name="ek_menge_ab[]" style="max-width:160px;text-align:right"></td>'
-      + '<td class="bx-num"><input type="number" min="0" step="0.0001" name="ek_preis[]" style="max-width:140px;text-align:right"></td>';
+      + '<td class="bx-num" style="white-space:nowrap"><input type="text" inputmode="decimal" name="ek_preis[]" style="max-width:120px;text-align:right"><select name="ek_basis[]" style="width:auto;margin-left:4px"><option value="1">je Stk</option><option value="1000">je 1.000 Stk</option></select></td>';
     document.getElementById('ekrows').appendChild(tr);
   });
   var vkAdd = document.getElementById('vkAdd');
   if (vkAdd) vkAdd.addEventListener('click', function(){
     var tr = document.createElement('tr');
     tr.innerHTML = '<td class="bx-num"><input type="number" min="0" step="1" name="vk_menge_ab[]" style="max-width:160px;text-align:right"></td>'
-      + '<td class="bx-num"><input type="number" min="0" step="0.0001" name="vk_preis[]" style="max-width:140px;text-align:right"></td>';
+      + '<td class="bx-num" style="white-space:nowrap"><input type="text" inputmode="decimal" name="vk_preis[]" style="max-width:120px;text-align:right"><select name="vk_basis[]" style="width:auto;margin-left:4px"><option value="1">je Stk</option><option value="1000">je 1.000 Stk</option></select></td>';
     document.getElementById('vkrows').appendChild(tr);
   });
   var etAdd = document.getElementById('etAdd');

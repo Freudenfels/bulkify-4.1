@@ -35,3 +35,6 @@ Die Einheiten laufen in der Anzeige jetzt über `lp_einheit()` in der Sprache de
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 Kennzeichen „Unterlagen fehlen“ am Preis mit Link auf „Fehlende Unterlagen“.
+
+## 6 Stellen (13.11.2026)
+Preisfelder werden mit bis zu 6 Nachkommastellen vorbelegt, damit Sub-Cent-Preise beim erneuten Speichern erhalten bleiben.

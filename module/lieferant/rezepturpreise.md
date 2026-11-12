@@ -45,3 +45,6 @@ Je Zeile gibt es die Spalte „Gültig bis“ mit Datumsfeld im gemeinsamen Form
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 Kennzeichen „Unterlagen fehlen“ am Fertigprodukt-Preis (Rohstoff-Unterlagen + Spezifikation des Gesamtprodukts) mit Link auf „Fehlende Unterlagen“.
+
+## 6 Stellen (13.11.2026)
+Preisfelder werden mit bis zu 6 Nachkommastellen vorbelegt, damit Sub-Cent-Preise beim erneuten Speichern erhalten bleiben.

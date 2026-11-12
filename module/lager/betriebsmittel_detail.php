@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
         $letzte     = $f('letzte_pruefung') !== '' ? $f('letzte_pruefung') : null;
         $bestand    = $f('bestand_menge') !== '' ? (float)str_replace(',', '.', $_POST['bestand_menge']) : 0;
         $mindest    = $f('mindestbestand') !== '' ? (float)str_replace(',', '.', $_POST['mindestbestand']) : null;
-        $ek         = $f('ek_preis') !== '' ? (float)str_replace(',', '.', $_POST['ek_preis']) : 0;
+        $ek         = $f('ek_preis') !== '' ? round(preis_eingabe_lesen((string)$_POST['ek_preis'], (string)($_POST['ek_basis'] ?? '1')), 6) : 0;   // 13.11.2026: 6 Stellen, je 1.000
         $lief       = $f('haupt_lieferant_id') !== '' ? (int)$_POST['haupt_lieferant_id'] : null;
         $einheit    = $f('einheit') !== '' ? $f('einheit') : 'Stk';
         if ($neu) {
@@ -76,7 +76,7 @@ if (!$neu) {
     echo '<div class="bx-cards">';
     echo '<div class="bx-card"><div class="k">Kategorie</div><div class="v">' . h($KAT[$it['kategorie']] ?? $it['kategorie']) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Bestand</div><div class="v">' . rtrim(rtrim(number_format((float)($it['bestand_menge'] ?? 0), 3, ',', '.'), '0'), ',') . ' ' . h($it['einheit'] ?: 'Stk') . '</div></div>';
-    echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . number_format((float)($it['ek_preis'] ?? 0), 2, ',', '.') . ' €</div></div>';
+    echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . h(preis_anzeige((float)($it['ek_preis'] ?? 0), 'EUR', (string)($it['preis_bezug'] ?? '') ?: 'Stk')) . '</div></div>';
     if ($pruef) {
         $kind = $pruef['stufe'] === 'faellig' ? 'err' : ($pruef['stufe'] === 'bald' ? 'warn' : ($pruef['stufe'] === 'offen' ? 'warn' : 'ok'));
         $txt  = $pruef['datum'] ? date('d.m.Y', strtotime($pruef['datum'])) . ' (' . $pruef['label'] . ')' : $pruef['label'];
@@ -104,7 +104,7 @@ if (!$neu) {
         <?php foreach ($lieferanten as $lf): ?><option value="<?= $lf['id'] ?>" <?= (int)($it['haupt_lieferant_id'] ?? 0) === (int)$lf['id'] ? 'selected' : '' ?>><?= h($lf['firma']) ?></option><?php endforeach; ?>
       </select>
     </div>
-    <div class="bx-field"><label>EK-Preis (€)</label><input type="number" step="0.0001" name="ek_preis" value="<?= h(($it['ek_preis'] ?? '') !== '' && ($it['ek_preis'] ?? null) !== null ? rtrim(rtrim(number_format((float)$it['ek_preis'], 4, '.', ''), '0'), '.') : '') ?>" placeholder="0,00"></div>
+    <div class="bx-field"><label>EK-Preis (€)</label><div class="bx-row" style="gap:6px;flex-wrap:nowrap"><input type="text" inputmode="decimal" name="ek_preis" value="<?= h(($it['ek_preis'] ?? '') !== '' && ($it['ek_preis'] ?? null) !== null ? rtrim(rtrim(number_format((float)$it['ek_preis'], 6, ',', ''), '0'), ',') : '') ?>" placeholder="0,00" style="width:110px"><select name="ek_basis" style="width:auto"><option value="1">je Stk</option><option value="1000">je 1.000 Stk</option></select></div></div>
   </div>
   <div class="bx-field"><label>Notiz (intern)</label><textarea name="notiz"><?= $v('notiz') ?></textarea></div>
   </div>

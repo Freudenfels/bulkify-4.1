@@ -30,3 +30,6 @@
 
 ## Reiter Lager (12.11.2026)
 Neuer Reiter **Lager** (vorher gab es auf der Verpackungsseite gar keinen Bestand): Kacheln Bestand frei, Quarantäne, Chargen, Blinker; Tabelle der Chargen mit Bestand mit **Ort** (Blinker/Kiste/Platz, `core/lager_ort.php`) und **Bestand korrigieren** (nur Admin, Grund Pflicht, `charge_menge_korrigieren()` wie Rohstoffseite und Lager-App; Aktion `charge_bestand_korr`). Der Reiter steht außerhalb des Hauptformulars (nie Formular im Formular), der Haupt-Speichern-Knopf ist dort ausgeblendet. Aus dem Warenlager öffnet ein Klick direkt diesen Reiter.
+
+## Preise 6 Stellen (13.11.2026)
+EK- und VK-Staffel: Textfeld mit Auswahl „je Stk“ / „je 1.000 Stk“ (`preis_eingabe_lesen()`), gespeichert mit 6 Nachkommastellen. 2,95 je 1.000 Stk = 0,00295 je Stk.

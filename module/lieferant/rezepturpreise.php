@@ -119,7 +119,7 @@ $intervall = lieferant_preis_intervall($lid);
 $standMax  = null; foreach ($rows as $r) if ($r['stand'] && (!$standMax || $r['stand'] > $standMax)) $standMax = $r['stand'];
 $alter     = $standMax ? (int) floor((time() - strtotime((string)$standMax)) / 86400) : null;
 $veraltet  = $rows && ($alter === null || $alter > $intervall);
-$num = fn($x) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',');
+$num = fn($x) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format((float)$x, 6, ',', '.'), '0'), ',');   // 13.11.2026: 6 Stellen (Sub-Cent bleibt beim Speichern erhalten)
 
 lp_head('bulkify – ' . lp_t('rez_preise_menu'));
 lp_shell_start('lieferant_rezepturpreise');

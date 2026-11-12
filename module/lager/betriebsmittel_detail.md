@@ -20,3 +20,6 @@ Kartons, Verbrauchsgüter, Inventar, Maschinen, Sonstiges.
 Angezeigt wird das im **Warenlager** (`bestand_liste.php`) über die Typ-Reiter.
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+## Preis 6 Stellen (13.11.2026)
+EK-Preis als Textfeld mit „je Stk“ / „je 1.000 Stk“ (`preis_eingabe_lesen()`), 6 Nachkommastellen; Kachel zeigt `preis_anzeige()` (unter 0,01 € je 1.000 Stk).

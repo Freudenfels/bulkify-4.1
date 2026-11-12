@@ -63,7 +63,7 @@ $rows      = lieferant_preisliste_fuer($lid);
 $veraltet  = lieferant_preise_veraltet($lid);
 $alter     = lieferant_preise_alter_tage($lid);
 $intervall = lieferant_preis_intervall($lid);
-$num = fn($x) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',');
+$num = fn($x) => $x === null || $x === '' ? '' : rtrim(rtrim(number_format((float)$x, 6, ',', '.'), '0'), ',');   // 13.11.2026: 6 Stellen (Sub-Cent bleibt beim Speichern erhalten)
 // Gehalt lesbar (wie in „Mein Katalog"): Wert + Einheit.
 $gehEinh = ['prozent'=>'%','ie_g'=>'I.E./g','ie_kg'=>'I.E./kg','mg_g'=>'mg/g','ug_g'=>'µg/g'];
 $gehaltTxt = function($w) use ($gehEinh): string {
