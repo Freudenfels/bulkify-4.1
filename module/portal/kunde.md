@@ -488,3 +488,5 @@ Nico: „Grundcharge ist 2775, die Buchstaben stehen nur für verschiedene Tage.
 
 ## Original-Rechnung und Dokumenttitel neutral (13.11.2026)
 `rechnung_datei` liefert über `kunde_datei_ausliefern()` aus: Dateiname „Rechnung_<Nummer>“, PDF-Metadaten leer. Titel hochgeladener Auftragsdokumente laufen durch `kunde_text_neutral()`.
+
+**Grundcharge (13.11.2026, Fable-3 T3.2):** Knopf „Laboranalyse …“ mit Grundcharge; Titel der Laboranalysen und Suchtreffer laufen durch `kunde_text_neutral()` (Lieferantennamen ersetzt, eigene Chargen gekürzt).

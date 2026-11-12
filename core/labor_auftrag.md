@@ -41,3 +41,5 @@ Lieferanten mit Kategorie `labor` und `labor_formular` (Schlüssel aus `labor_fo
   - `auftrag.labor_versendet_am` = heute, falls noch leer. Der Auftrag steht damit auf „Probe beim Labor“, im Portal „läuft“.
   - einen Eintrag im Aktivitätsverlauf.
 - `labor_versand_liste()` liefert die zuletzt erstellten Formulare.
+
+**Grundcharge (13.11.2026, Fable-3 T3.2):** Die Probenbezeichnung auf dem Laborauftrag nennt nur die Grundcharge.

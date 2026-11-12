@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/kunde_charge.php';   // Grundcharge beim Kunden (13.11.2026)
 // Der Kunde sieht nie, wer wirklich produziert (Paket 12.11.2026 Teil 3, Entscheidung Nico).
 // Zentrale Schutz-Stelle für ALLES, was an den Kunden geht (Kundenportal, Downloads, Mails an Kunden):
 //  - kunde_dok_gesperrt(): Unterlagen des Lieferanten/Herstellers gehen nie an den Kunden (Original-CoA/Spec, alles was
@@ -56,7 +57,7 @@ function kunde_dateiname(array $d, string $bezug = ''): string {
         elseif ($ot === 'produkt')  $bezug = (string) scalar("SELECT COALESCE(NULLIF(kundenname,''), name) FROM produkt WHERE id=?", [$oid]);
         elseif ($ot === 'item')     $bezug = (string) scalar("SELECT name FROM item WHERE id=?", [$oid]);
     }
-    $teile = array_filter([kunde_dok_typname((string)($d['typ'] ?? '')), kunde_dateiname_teil(kunde_text_neutral($bezug)), kunde_dateiname_teil((string)($d['charge_nr'] ?? ''))]);
+    $teile = array_filter([kunde_dok_typname((string)($d['typ'] ?? '')), kunde_dateiname_teil(kunde_text_neutral($bezug)), kunde_dateiname_teil(kunde_charge_anzeige((string)($d['charge_nr'] ?? '')))]);
     return implode('_', $teile) . '.' . preg_replace('/[^a-z0-9]/', '', $ext);
 }
 // Anzeige-Titel für den Kunden (statt Original-Dateiname).
@@ -115,7 +116,7 @@ function kunde_text_neutral(?string $t, string $ersatz = 'bulkify'): string {
         if (mb_stripos($t, $name) === false) continue;
         $t = preg_replace('/(?<![\p{L}\p{N}])' . preg_quote($name, '/') . '(?![\p{L}\p{N}])/iu', $ersatz, $t);
     }
-    return $t;
+    return kunde_charge_text($t);   // Fable-3 T3.2: eigene Chargen nur als Grundcharge
 }
 // Positions-/Belegtext für den Kunden: Lieferantennamen ersetzen und interne Hinweise auf Zukauf entfernen
 // („Handelsware“ verrät, dass bulkify nicht selbst produziert).

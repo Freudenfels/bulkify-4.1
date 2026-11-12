@@ -20,3 +20,5 @@
 ## Pulver (St-13)
 Bei Pulver/Granulat steht „300 g je Packung" (über `inhalt_je_packung_txt()`) statt „300 Stück je Packung". Der Laufzettel zeigt zusätzlich „gesamt 600 kg" statt „600.000 Stk", die Spalte heißt „mg je Portion" und die Rückfall-Gesamtmengen der Zutaten rechnen mit Portionen (Füllgewicht / mg je Portion).
 **Charge auf dem Lieferschein (St-06):** gedruckt wird die FERTIGWARE-Charge des Auftrags (`auftrag_fertigware_chargen`), nie Lieferanten-/Rohstoff-Chargen, die am Auftrag hängen (Wareneingang). Gleiches in `pdf_auftrag.php`.
+
+**Grundcharge (13.11.2026, Fable-3 T3.2):** Der Chargen-Hinweis auf dem Lieferschein (Dashboard und Portal) nennt nur die Grundcharge, eine Zeile je Grundcharge.

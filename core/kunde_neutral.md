@@ -25,3 +25,5 @@ Zusatz: Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft, gle
 
 ## Kunden-Mail erkennen (13.11.2026)
 `kunde_ist_mailadresse()` prüft jede Adresse, die zu einem Kunden gehört: Firmen-Adresse, Portal-Benutzer (benutzer, kunde_portal_user), CRM-Kontakte mit Kunde. Mehrere Adressen in einem Feld und „Name <mail>“ werden zerlegt; trifft eine, läuft die ganze Mail durch den Lieferanten-Filter.
+
+**Grundcharge (13.11.2026, Fable-3 T3.2):** `kunde_text_neutral()` kürzt am Ende auch eigene Chargen auf die Grundcharge (`kunde_charge_text()`) – gilt damit für Dokument-Titel im Portal, Mails an Kunden und Beleg-Texte. Der Download-Dateiname nimmt `kunde_charge_anzeige()`.

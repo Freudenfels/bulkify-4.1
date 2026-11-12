@@ -103,7 +103,8 @@ function labor_probe_vorschlag(int $auftrag_id, string $umfang = ''): array {
     if ($name === '') $name = (string)($a['produkt'] ?? '');
     $rv = [];
     foreach (auftrag_fertigware_chargen($auftrag_id) as $c) {
-        $t = 'Charge ' . (string)$c['charge_nr'] . (!empty($c['mhd']) ? "\nMHD " . date('d.m.Y', strtotime((string)$c['mhd'])) : '');
+        // Fable-3 T3.2: Probenbezeichnung mit der Grundcharge (der Kunde ist Auftraggeber des Labors).
+        $t = 'Charge ' . kunde_charge_anzeige((string)$c['charge_nr']) . (!empty($c['mhd']) ? "\nMHD " . date('d.m.Y', strtotime((string)$c['mhd'])) : '');
         if (!in_array($t, $rv, true)) $rv[] = $t;
         if (count($rv) >= 2) break;
     }

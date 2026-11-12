@@ -27,6 +27,13 @@ if (!function_exists('kunde_charge_anzeige')) {
         if ($eigen === null) $eigen = kunde_charge_eigen($nr);
         return $eigen ? $m[1] : $nr;
     }
+    // Freitext (Dokument-Titel, Mails): eigene Chargen mit Buchstaben („Laboranalyse 2775.A“) auf die Grundcharge kürzen (Fable-3 T3.2).
+    function kunde_charge_text(?string $t): string {
+        $t = (string)$t;
+        if ($t === '' || !preg_match('/\.[A-Za-z]{1,2}\b/', $t)) return $t;
+        return (string) preg_replace_callback('/(?<![\p{L}\p{N}.\-])([\p{L}\p{N}\-]*\d[\p{L}\p{N}\-]*)\.([A-Za-z]{1,2})(?![\p{L}\p{N}])/u',
+            fn($m) => kunde_charge_eigen($m[0]) ? $m[1] : $m[0], $t);
+    }
     // Gehören zwei Chargen-Nummern beim Kunden zur selben Grundcharge?
     function kunde_charge_gleich(?string $a, ?string $b): bool {
         return kunde_charge_anzeige($a) === kunde_charge_anzeige($b);

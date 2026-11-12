@@ -4779,7 +4779,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <?php foreach ($ordLabs as $l): $url = $portalLink('analyse_datei') . '&id=' . (int)$l['id']; $bf = laboranalyse_befund_label($l['befund'] ?? null); ?>
         <tr>
           <td style="white-space:nowrap"><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '<span class="muted">–</span>' ?></td>
-          <td><?= h($l['titel'] ?: ($l['produkt'] ?: 'Laboranalyse')) ?></td>
+          <td><?= h(kunde_text_neutral((string)($l['titel'] ?: ($l['produkt'] ?: 'Laboranalyse')))) ?></td>
           <td><?= $l['charge_nr'] ? h(kunde_charge_anzeige((string)$l['charge_nr'])) : '<span class="muted">–</span>' ?></td>
           <td><?= $bf[0] !== '' ? bx_badge($bf[0], $bf[1]) : '<span class="muted">–</span>' ?></td>
           <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="<?= h($url) ?>" target="_blank" rel="noopener">Ansehen / Download</a></td>
@@ -5091,7 +5091,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <a class="bx-panel" href="<?= h($r['href']) ?>" style="display:block;text-decoration:none;color:inherit;margin-bottom:10px">
         <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
           <div>
-            <?= bx_badge($r['typ'], $r['bfarbe']) ?> <strong style="margin-left:6px"><?= h($r['titel']) ?></strong>
+            <?= bx_badge($r['typ'], $r['bfarbe']) ?> <strong style="margin-left:6px"><?= h(kunde_text_neutral((string)$r['titel'])) ?></strong>
             <div class="muted" style="font-size:13px;margin-top:2px"><?= h($r['sub']) ?><?= $r['datum'] ? ' · ' . h(fmt_zeit($r['datum'], 'd.m.Y')) : '' ?></div>
           </div>
           <span class="muted" style="font-size:18px">&#8250;</span>
@@ -5378,7 +5378,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <?= $xEt ? $dkBtn($portalLink('etikett_datei') . '&aid=' . $xid, auftrag_design_label($xid) . '-Design') : '' ?>
           <?= $xVorl ? $dkBtn($portalLink('druckvorlage') . '&aid=' . $xid, 'Etikett-Druckvorlage') : '' ?>
           <?= $xPb ? '<a class="btn btn-ghost btn-sm" href="' . h($portalLink('produktionsbericht') . '&aid=' . $xid) . '">Produktionsbericht</a>' : '' ?>
-          <?php foreach ($xAna as $l) echo $dkBtn($portalLink('analyse_datei') . '&id=' . (int)$l['id'], ($l['quelle'] ?? '') === 'coa_ueb' ? 'Informationsdokument zum Produkt' : 'Laboranalyse' . ($l['charge_nr'] ? ' ' . $l['charge_nr'] : '')); ?>
+          <?php foreach ($xAna as $l) echo $dkBtn($portalLink('analyse_datei') . '&id=' . (int)$l['id'], ($l['quelle'] ?? '') === 'coa_ueb' ? 'Informationsdokument zum Produkt' : 'Laboranalyse' . ($l['charge_nr'] ? ' ' . kunde_charge_anzeige((string)$l['charge_nr']) : '')); ?>
         </div>
       </div>
     <?php endforeach; ?>
@@ -5390,7 +5390,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <tbody>
         <?php foreach ($dkProdLabs as $l): ?>
           <tr><td><?= $l['datum'] ? h(fmt_zeit($l['datum'] . ' 00:00:00', 'd.m.Y')) : '' ?></td><td><?= h((string)$l['produkt']) ?></td>
-              <td><?= h((string)($l['titel'] ?: 'Laboranalyse')) ?></td>
+              <td><?= h(kunde_text_neutral((string)($l['titel'] ?: 'Laboranalyse'))) ?></td>
               <td style="text-align:right"><?= $dkBtn($portalLink('analyse_datei') . '&id=' . (int)$l['id'], 'Ansehen') ?></td></tr>
         <?php endforeach; ?>
         </tbody>

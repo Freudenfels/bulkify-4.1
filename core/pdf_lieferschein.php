@@ -54,7 +54,8 @@ function lieferschein_pdf_bauen(int $beleg_id): ?string {
         $chargen = array_values(array_filter(auftrag_fertigware_chargen((int)$a['id']), fn($c) => trim((string)($c['charge_nr'] ?? '')) !== ''));
         if ($chargen) {
             $teile = [];
-            foreach ($chargen as $c) $teile[] = $c['charge_nr'] . ($c['mhd'] ? ' (MHD ' . date('d.m.Y', strtotime((string)$c['mhd'])) . ')' : '');
+            // Fable-3 T3.2: der Kunde sieht nur die Grundcharge (eine Zeile je Grundcharge).
+            foreach ($chargen as $c) { $tx = kunde_charge_anzeige((string)$c['charge_nr']) . ($c['mhd'] ? ' (MHD ' . date('d.m.Y', strtotime((string)$c['mhd'])) . ')' : ''); if (!in_array($tx, $teile, true)) $teile[] = $tx; }
             $hinweis = 'Charge: ' . implode(', ', $teile);
         }
     }

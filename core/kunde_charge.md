@@ -8,3 +8,5 @@ unsere Produktionstage. Genutzt von: Lieferschein und Palettenetikett (Lager-App
 Ohne Abhängigkeiten, auch in der Lager-App ladbar. Geladen von `core/schema.php`.
 
 **Nur eigene Chargen (13.11.2026, Fable-3 T3.1):** `kunde_charge_anzeige($nr, $eigen = null)` kürzt nur, wenn die Charge aus einem eigenen Produktionsauftrag stammt (`kunde_charge_eigen()`: Charge mit `pa_id` oder Unter-Charge mit dieser Nummer). Fremd- und Lieferantenchargen („AB-12.C“, „LOT.EU“) bleiben unverändert, zwei Fremd-Lose werden im Portal nicht mehr zu einem zusammengefasst. Kleinbuchstaben („2775.a“) werden bei eigenen Chargen auch gekürzt. Weiß der Aufrufer es schon, gibt er `$eigen` mit.
+
+**Grundcharge (13.11.2026, Fable-3 T3.2):** Neu `kunde_charge_text($t)`: kürzt eigene Chargen in Freitext („Laboranalyse 2775.A“ → „Laboranalyse 2775“), Fremdchargen bleiben.
