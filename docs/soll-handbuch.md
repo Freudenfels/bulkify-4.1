@@ -44,6 +44,7 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
    - **Unterlagen des Lieferanten gehen nie an den Kunden** (Original-CoA/Spec, alles vom Lieferanten Hochgeladene oder einem Hersteller Zugeordnete) – der Kunde bekommt das bulkify-Dokument (Spezifikation, CoA, CoA-Übersicht) oder „auf Anfrage“. Externe Laborberichte eines reinen Labors sind erlaubt.
    - **Dateien an Kunden** haben neutrale Namen (`CoA_<Produkt>_<Charge>.pdf`), PDF-Metadaten (Autor/Ersteller/Programm) werden geleert.
    - **Schutz im Code:** `core/kunde_neutral.php` ist die eine Stelle (Sperre, Dateiname, Metadaten, Lieferantennamen in Freitext -> „bulkify“, „Handelsware“ raus). Jede neue Kundenseite und jeder neue Download benutzt sie.
+   - **Lieferantennummer statt Name (Regel Nico 13.11.2026):** Auf Dokumenten und Etiketten steht der Lieferant immer als **Lieferantennummer (L-xxxx), nie als Name** und nie mit Adresse. So sieht das Team, woher etwas kommt; ein Kunde, der ein Dokument bekommt oder im Lager vorbeikommt, erkennt den Lieferanten nicht. Gilt für Kundendokumente (CoA: Zeile „Lieferant“, Informationsdokument: Quellcharge „(L-xxxx)“) und für alles, was im Lager klebt oder liegt (Lager-/Karton-/Gebinde-Etikett, Gebindeaufkleber „Supplier no.“, Chargenprotokoll, Produktionsbericht). Der Kunden-Filter (`kunde_text_neutral()`, Mail-Filter) ersetzt Lieferantennummern nie. Interne Bildschirmseiten (Bestellung, Lieferant, Charge, Einkauf) zeigen weiter den Namen.
 10. **Konventionen:** keine Emojis; "Stk" statt "Stück"; Tausenderpunkt in Anzeigen, deutsch-sicheres Zahlenparsing bei Eingaben (`erp_menge_parse()`/`zahl_lesen()`, nie `intval` auf Mengen, keine `type=number`-Felder für Mengen); Dropdowns mit mehr als 10 Einträgen als Suchfeld; Zeiten in UTC speichern, in Ortszeit zeigen; MySQL Strict-Mode; erst Testkopie, dann live; ein Fix = ein Commit.
 
 ---
@@ -166,6 +167,7 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
 
 - **Gebindeaufkleber des Lieferanten (gebaut 12.11.2026, plan-lieferant-gebindeaufkleber.md):** Im Lieferantenportal an der bestätigten Bestellung (und an der Bestellseite im Dashboard, z. B. für Direkt-Bestellungen und Nachdruck) gibt es den Bereich **„Labels / Aufkleber“**.
   - Je Position und Charge (aus „Chargen & Dokumente“): Charge, **Herstelldatum**, MHD; Knopf „Aufkleber drucken“ mit Netto je Gebinde (Pflicht), Brutto und Stück je Gebinde (optional), Anzahl und Format (A4 mit 1 oder 2 Aufklebern, 100 x 150 mm). Liste der gedruckten Aufkleber mit Nachdruck und Storno.
+  - Lieferant auf dem Aufkleber nur als **„Supplier no.: L-xxxx“** – kein Firmenname, keine Adresse (der Aufkleber klebt bei uns im Lager; Regel Nico 13.11.2026).
   - Aufkleber auf Englisch, Produktname deutsch und kundenneutral: Specifications, Formula-Tabelle (nur Bulk/Premix aus unserer Rezeptur, mg und %), Batch, Production/Expiry, Net/Gross, Qty, PO-Nr., Shelf life/Storage (Standard „24 months, store cool and dry, protected from light“, am Artikel überschreibbar), Manufacturer + Adresse + Origin als Text (kein Lieferantenlogo), Ship to = Produktionsadresse aus den Firmenstammdaten (Einstellungen, Feld „Produktions- bzw. Lieferadresse“, Standard Maniso GmbH, II. Hüllenweg 29, 26676 Barßel, Germany). Keine Bag-Nummer, kein „x of n“.
   - **QR enthält nur den Code** „BX<Nr>-<Prüfziffer>“ (HMAC mit Schlüssel aus app_meta) – keine Klartextdaten, keine Preise; erfundene Codes werden abgewiesen.
   - **Versand:** Beim Melden „versendet“ wird die Anzahl Pakete aus den nicht stornierten Aufklebern vorgeschlagen; weicht die Netto-Summe mehr als 10 % von der Bestellmenge ab, nur ein Hinweis.
@@ -388,6 +390,8 @@ Regeln: Eine Aufgabe verschwindet, sobald die Ursache behoben ist (automatisch) 
 ---
 
 ## 7. Lager-Sicht
+
+- **Lieferant auf allem im Lager nur als Nummer (Regel Nico 13.11.2026):** Etiketten, Aufkleber, Chargenprotokoll und Produktionsbericht zeigen die Lieferantennummer (L-xxxx), nie den Namen (siehe Regel 10a).
 
 - **Menü der Lager-App (gebaut 08.11.2026):** eine flache Liste ohne Gruppen, groß und mit Icons (Tablet/Handy):
   1. **Übersicht**

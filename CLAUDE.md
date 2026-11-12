@@ -41,6 +41,7 @@ Es hat Vorrang vor älteren MDs; neue Anweisungen von Nico gehen vor und werden 
 4. **Zeit:** immer UTC speichern, Anzeige via `fmt_zeit()` → Europe/Berlin.
 5. **Verifizieren:** `php -l` + kurzer curl-Test (Admin-Autologin nur localhost). **Nie pauschale DELETEs in der DB** (es wird parallel gearbeitet).
 6. **Demo-Seeding ist AUS** (`app_meta seed_demo_off=1`) – die Demo-Seeds legen sonst beim Seitenaufruf wieder Daten an.
+7. **Lieferant auf Dokumenten und Etiketten nur als Lieferantennummer (L-xxxx), nie Name/Adresse** (Kundendokumente und alles im Lager; Regel Nico 13.11.2026). Interne Bildschirmseiten dürfen den Namen zeigen. `kunde_text_neutral()` ersetzt L-Nummern nie.
 
 ## Git-Rhythmus (Multi-PC & parallele Code-Chats)
 Pull am Start, commit+push nach jedem **fertigen, getesteten** Schritt. Einzige gemeinsame Wahrheit = GitHub.
