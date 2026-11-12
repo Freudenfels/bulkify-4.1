@@ -110,6 +110,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'bestellt' && !$neu) {
         // Paket 12.11.2026 Teil 4: Bestellen erst mit vollständigen Unterlagen des Lieferanten; Ausnahme nur Admin mit Grund.
         // Zentral (13.11.2026): bestellung_als_bestellt_markieren() prüft die Unterlagen (Admin-Ausnahme mit Grund) und mailt.
+        // Fable-3 T2.3: Ausnahme nach Telefonbestellung = „direkt bestellt (ohne Nachricht)“ – keine Mail, gilt als bestätigt.
+        if ((string)($_POST['lu_weg'] ?? '') === 'direkt') {
+            $fD = bestellung_direkt_abschliessen((int)$id, null, null, '', (string)(current_user()['name'] ?? ''), trim((string)($_POST['lu_grund'] ?? '')));
+            header('Location: ?p=bestellung&id=' . $id . ($fD === '' ? '&ok=1' : '&fehler=' . urlencode($fD) . '#unterlagen')); exit;
+        }
         $rB = bestellung_als_bestellt_markieren((int)$id, trim((string)($_POST['lu_grund'] ?? '')), (string)(current_user()['name'] ?? ''));
         if (!$rB['ok']) { header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode($rB['msg']) . '#unterlagen'); exit; }
         $f = (string)$rB['msg'];
@@ -385,7 +390,7 @@ if (!$neu) {
         if ($luSperre === '') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
         else {   // Paket 12.11.2026 Teil 4: grau mit Grund + Link zur Liste; Admin kann mit Pflicht-Grund trotzdem bestellen
             echo '<button class="btn btn-ghost btn-sm" type="button" disabled title="' . h($luSperre) . '">als bestellt markieren</button> <a href="#unterlagen" style="font-size:12px">Unterlagen fehlen</a> ';
-            if (has_role('admin')) echo '<form method="post" style="display:inline" onsubmit="return this.lu_grund.value.trim().length > 0;"><input type="hidden" name="aktion" value="bestellt"><input type="text" name="lu_grund" required placeholder="Grund für die Ausnahme" style="width:200px"> <button class="btn btn-ghost btn-sm" type="submit" title="Nur Admin: trotz fehlender Unterlagen bestellen (wird im Verlauf vermerkt)">trotzdem bestellen</button></form> ';
+            if (has_role('admin')) echo '<form method="post" style="display:inline" onsubmit="return this.lu_grund.value.trim().length > 0;"><input type="hidden" name="aktion" value="bestellt"><input type="text" name="lu_grund" required placeholder="Grund für die Ausnahme" style="width:200px"> <select name="lu_weg" title="Nach einer Telefonbestellung: direkt bestellt, ohne Nachricht an den Lieferanten"><option value="senden">an Lieferanten senden</option><option value="direkt">direkt bestellt (ohne Nachricht)</option></select> <button class="btn btn-ghost btn-sm" type="submit" title="Nur Admin: trotz fehlender Unterlagen bestellen (wird im Verlauf vermerkt)">trotzdem bestellen</button></form> ';
         }
     }
     if ($b['status'] === 'gesendet' && (int)($b['bestaetigt'] ?? 0) !== 1)

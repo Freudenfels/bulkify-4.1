@@ -105,3 +105,5 @@ Bereich „Labels / Aufkleber“ wie im Portal (Direkt-Bestellungen, Nachdruck);
 Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artikel zeigen das Pop-up (`bestellung_doppelt_treffer()`), weiter nur mit Bestätigung, die im Verlauf steht.
 
 **Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** Team-Bestätigung ruft `bestellung_bestaetigen(…, 'team', lu_grund)`; das Formular zeigt bei fehlenden Unterlagen dem Admin ein Pflicht-Feld „Grund“, sonst ist der Knopf gesperrt.
+
+**Ausnahme nach Telefonbestellung (13.11.2026, Fable-3 T2.3):** „trotzdem bestellen“ (Admin, Unterlagen fehlen) hat eine Auswahl: „an Lieferanten senden“ (wie bisher, `bestellung_als_bestellt_markieren()`, Mail „Neue Bestellung“) oder „direkt bestellt (ohne Nachricht)“ (`bestellung_direkt_abschliessen()` mit dem Grund: bestellt + bestätigt, keine Mail). So bekommt der Lieferant nach dem Telefonat keine zweite Bestellung per Mail.
