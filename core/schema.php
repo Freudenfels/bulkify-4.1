@@ -4778,33 +4778,29 @@ function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
     if (!$rid) return null;
     $df = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rid]);
     if (!in_array($df, ['kapsel','tablette','softgel','stick','gummi','gel'], true)) return null;
-    $best = null;
-    // Quelle A: Fremdfertigungs-Angebot an der Rezeptur (nur Stueck-Preise). Passende Staffel, sonst Basis.
-    if (table_exists('rezeptur_lief_angebot')) {
-        $abgR = [];
-        // Stück-Preise: die Rezeptur ist bereits eine Stück-Form, daher jede Zeile akzeptieren, die KEINE
-        // Gewichts-/Volumeneinheit ist (so fallen „Stk.", „pcs", „Kapseln" etc. nicht durch eine zu enge Liste).
-        // 13.11.2026: nur gültige Preise je Lieferant (lp_je_lieferant_gueltig); gibt es nur abgelaufene, wird mit dem letzten
-        // gerechnet und auf der Seite markiert („Preis abgelaufen - Summe unsicher“, nie still).
-        $rows = lp_je_lieferant_gueltig(all("SELECT lieferant_id, preis, menge, gueltig_bis FROM rezeptur_lief_angebot
+    // Fable-3 T4.1 (13.11.2026): alle Kandidaten aus Quelle A und B zusammen, über ALLE Lieferanten erst die gültigen Preise
+    // (lp_gueltig_auswahl); abgelaufene nur, wenn es keinen gültigen gibt – dann markiert („Preis abgelaufen“, nie still).
+    $kand = [];
+    // Quelle A: Fremdfertigungs-Angebot an der Rezeptur (nur Stück-Preise: jede Zeile ohne Gewichts-/Volumeneinheit).
+    if (table_exists('rezeptur_lief_angebot'))
+        foreach (all("SELECT lieferant_id, preis, menge, gueltig_bis FROM rezeptur_lief_angebot
                      WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))
-                       AND (einheit IS NULL OR einheit='' OR LOWER(TRIM(einheit)) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm','mg'))",
-                    [$rid]), $abgR, ['rezeptur', $rid]);
-        $passend = null; $basis = null;
-        foreach ($rows as $r) {
-            $m = (float)$r['menge']; $p = (float)$r['preis'];
-            if ($basis === null || $p < $basis) $basis = $p;
-            if ($einheiten > 0 && $m > 0 && $m > $einheiten) continue;   // hoehere Staffel gilt noch nicht
-            if ($passend === null || $p < $passend) $passend = $p;
-        }
-        $a = $passend ?? $basis;
-        if ($a !== null && ($best === null || $a < $best)) $best = $a;
-    }
-    // Quelle B: angenommene Fertigprodukt-Angebote je Produkt dieser Rezeptur (produkt_lieferant_preis, je Stueck).
+                       AND (einheit IS NULL OR einheit='' OR LOWER(TRIM(einheit)) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm','mg'))", [$rid]) as $r)
+            $kand[] = ['menge' => (float)$r['menge'], 'preis' => (float)$r['preis'], 'gueltig_bis' => $r['gueltig_bis']];
+    // Quelle B: angenommene Fertigprodukt-Angebote je AKTIVEM Produkt dieser Rezeptur (inaktive Produkte zählen nicht).
     if (table_exists('produkt_lieferant_preis'))
-        foreach (all("SELECT id FROM produkt WHERE rezeptur_id=?", [$rid]) as $pr)
-            foreach (produkt_lieferant_preise((int)$pr['id'], $einheiten) as $p)
-                if ((float)$p > 0 && ($best === null || (float)$p < $best)) $best = (float)$p;
+        foreach (all("SELECT id FROM produkt WHERE rezeptur_id=? AND COALESCE(status,'')<>'inaktiv'", [$rid]) as $pr)
+            foreach (produkt_lieferant_preis_zeilen((int)$pr['id']) as $r)
+                $kand[] = ['menge' => (float)$r['menge_ab'], 'preis' => (float)$r['preis'], 'gueltig_bis' => $r['gueltig_bis']];
+    $passend = null; $basis = null;
+    foreach (lp_gueltig_auswahl($kand, ['rezeptur', $rid])['rows'] as $r) {
+        $m = (float)$r['menge']; $p = (float)$r['preis'];
+        if ($p <= 0) continue;
+        if ($basis === null || $p < $basis) $basis = $p;
+        if ($einheiten > 0 && $m > 0 && $m > $einheiten) continue;   // höhere Staffel gilt noch nicht
+        if ($passend === null || $p < $passend) $passend = $p;
+    }
+    $best = $passend ?? $basis;
     // (Früher Quelle C: roher lieferant_angebot-Preis. Entfernt – ein über eine Preisanfrage abgegebener
     //  Fremdfertigungspreis wird jetzt als FREIGEGEBENER Preis in rezeptur_lief_angebot gespiegelt (Quelle A),
     //  mit Freigabe-Gate für Änderungen. So kalkulieren wir nie mit einem noch nicht freigegebenen Preis.)
@@ -5021,8 +5017,8 @@ function rezeptur_zukauf_ek_packung(int $rid, int $stueck, int $packungen = 0): 
         if (!table_exists('rezeptur_lief_angebot')) return null;
         $bedarf = (float)$stueck / 1000 * max(1, $packungen);   // Gesamtmenge in kg bzw. l
         $passend = null; $basis = null;
-        $abgR = [];   // 13.11.2026: nur gültige Preise je Lieferant, abgelaufene markiert (nie still)
-        foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, preis, menge, gueltig_bis, LOWER(TRIM(COALESCE(einheit,''))) AS e FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$rid]), $abgR, ['rezeptur', $rid]) as $r) {
+        // Fable-3 T4.1: über ALLE Lieferanten erst gültige Preise, abgelaufene nur ohne gültigen (dann markiert, nie still).
+        foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, preis, menge, gueltig_bis, LOWER(TRIM(COALESCE(einheit,''))) AS e FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$rid]), ['rezeptur', $rid])['rows'] as $r) {
             $e = (string)$r['e'];
             if (in_array($e, ['kg', 'kilogramm', 'l', 'liter'], true))      { $pkg = (float)$r['preis'];        $m = (float)$r['menge']; }
             elseif (in_array($e, ['g', 'gramm', 'ml'], true))              { $pkg = (float)$r['preis'] * 1000; $m = (float)$r['menge'] / 1000; }
@@ -10912,19 +10908,29 @@ function item_lieferant_preise(int $item_id, float $menge = 0, ?array &$abgelauf
 }
 // Zukauf-Preise je Lieferant für ein Fertigprodukt (produkt_lieferant_preis), passend zur Stückzahl.
 // Rückgabe: [lieferant_id => preis_je_einheit]. Nur EUR. Gleiche Staffel-Logik wie item_lieferant_preise.
-function produkt_lieferant_preise(int $produkt_id, float $stueck = 0): array {
+// Zukaufpreise eines Produkts als Zeilen je Einheit (Fable-3 T4.1: eine Umrechnungsstelle für produkt_lieferant_preise und den
+// Fremd-EK). Preis je PACKUNG (St-24) -> je Einheit (Preis / Einheiten je Packung, Staffel × Einheiten je Packung).
+// Rückgabe: [['lieferant_id','menge_ab','preis','gueltig_bis'], …] nach menge_ab aufsteigend, ohne Gültigkeitsauswahl.
+function produkt_lieferant_preis_zeilen(int $produkt_id): array {
     if ($produkt_id <= 0 || !table_exists('produkt_lieferant_preis')) return [];
-    $out = [];
-    $ep = null;
-    foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, einheit, gueltig_bis FROM produkt_lieferant_preis
+    $ep = null; $out = [];
+    foreach (all("SELECT lieferant_id, menge_ab, preis, einheit, gueltig_bis FROM produkt_lieferant_preis
                   WHERE produkt_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))
-                  ORDER BY menge_ab ASC", [$produkt_id]), ['produkt', $produkt_id])['rows'] as $r) {
-        $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
-        // Preis je PACKUNG (St-24) -> je Einheit umrechnen (Preis / Einheiten je Packung, Staffel × Einheiten je Packung).
+                  ORDER BY menge_ab ASC", [$produkt_id]) as $r) {
+        $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
         if (in_array(strtolower(trim((string)$r['einheit'])), ['packung', 'pkg', 'pkg.', 'packungen'], true)) {
             if ($ep === null) $ep = max(1, (int) scalar("SELECT einheiten_pro_packung FROM produkt WHERE id=?", [$produkt_id]));
             $pr = $pr / $ep; $ma = $ma * $ep;
         }
+        $out[] = ['lieferant_id' => (int)$r['lieferant_id'], 'menge_ab' => $ma, 'preis' => $pr, 'gueltig_bis' => $r['gueltig_bis']];
+    }
+    usort($out, fn($a, $b) => $a['menge_ab'] <=> $b['menge_ab']);
+    return $out;
+}
+function produkt_lieferant_preise(int $produkt_id, float $stueck = 0): array {
+    $out = [];
+    foreach (lp_gueltig_auswahl(produkt_lieferant_preis_zeilen($produkt_id), ['produkt', $produkt_id])['rows'] as $r) {
+        $lid = (int)$r['lieferant_id']; $ma = (float)$r['menge_ab']; $pr = (float)$r['preis'];
         if ($stueck <= 0 || $ma <= $stueck + 1e-9) $out[$lid] = $pr;   // größter passender Staffelwert gewinnt
         elseif (!isset($out[$lid])) $out[$lid] = $pr;                  // alle Staffeln > Menge -> kleinste als Fallback
     }
