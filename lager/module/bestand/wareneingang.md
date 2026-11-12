@@ -135,3 +135,6 @@ Reihenfolge: Lieferschein scannen · Sendungsnummer · Aus Liste wählen (Zähle
 
 ## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
 Kachel „Lieferanten-Aufkleber scannen“ (AJAX la_scan/la_abschluss), Stand „x von y erfasst“, Abschluss auch unvollständig; Sendungsnummer- und R-Code-Feld erkennen BX-Codes.
+
+## Feste Felder im Dark Mode (12.11.2026)
+Felder aus der Bestellposition, die nicht änderbar sind (Klasse `we-fest`: Artikel, Warenart, Einheit), hatten ein festes Hellgrau (`#f2f4f0`). Im Dark Mode waren sie dadurch weiß mit heller Schrift. Jetzt nutzen sie die Theme-Farben `var(--line-2)` und `var(--muted)`.

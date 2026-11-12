@@ -723,7 +723,7 @@ if ($gebucht):
   .we-liste.zu{max-height:none;overflow:visible}
   .we-listitem[hidden],#weListeAndere[hidden],#weListeSuche[hidden]{display:none}
   .we-bpinfo{flex:1 1 100%;font-size:13px;margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .we-fest{background:#f2f4f0 !important;pointer-events:none}
+  .we-fest{background:var(--line-2,#f2f4f0) !important;color:var(--muted) !important;pointer-events:none}   /* Theme-Farbe statt festem Hellgrau (Dark Mode, 12.11.2026) */
   .we-kachel-haupt{border-color:var(--gruen,#1D9E75) !important}
   @media (max-width:640px){.we-listitem{flex-wrap:wrap}.we-li-lief{max-width:none}}
   .we-listnamen{font-size:13px;margin-top:2px}
