@@ -60,11 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
     $onPreis    = $onPreisRaw !== '' ? (float) str_replace(',', '.', str_replace('.', '', $onPreisRaw)) : 0.0;
     if ($online && $onHaendler === '') { header('Location: ?p=einkaufsliste&onlinefehler=1'); exit; }   // Preis optional (netto, kommt sonst mit der Rechnung)
     if ($direkt && !$sup) { header('Location: ?p=einkaufsliste&direktfehler=1'); exit; }
-    if (!$online && !$direkt && !lieferant_portalfaehig((int)$sup, $iid, null)) { header('Location: ?p=einkaufsliste&vorsorgportal=1'); exit; }
+    if (!$online && !$direkt && ($pgGrund = lieferant_portal_grund((int)$sup, $iid, null)) !== '') { header('Location: ?p=einkaufsliste&vorsorgportal=' . urlencode($pgGrund)); exit; }
     if ($iid > 0 && $menge > 0 && scalar("SELECT id FROM item WHERE id=?", [$iid])) {
         $bid = bestellung_erstellen([['item_id'=>$iid, 'menge'=>$menge, 'auftrag_id'=>0]], [], $sup, date('Y-m-d'));
         if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         if ($bid && !$online && ($luS = lu_bestellen_sperre($bid)) !== '') {   // Unterlagen fehlen: nur Entwurf, nicht senden
+            // Wirklich als Entwurf (offen, ohne Bestelldatum) – bestellung_erstellen() mit Datum legt sonst „bestellt" an.
+            q("UPDATE bestellung SET bestellart='lieferant', status='offen', bestelldatum=NULL, notiz=CONCAT_WS(' · ', NULLIF(TRIM(notiz),''), 'Vorsorglich') WHERE id=?", [$bid]);
             header('Location: ?p=bestellung&id=' . $bid . '&fehler=' . urlencode('Als Entwurf angelegt, nicht gesendet. ' . $luS) . '#unterlagen'); exit;
         }
         if ($bid) {
@@ -128,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $onlineBulk = [];   // Online-Weg: Bulk bleibt im EINEN Beleg (eine reale Einkaufsquittung)
     $bulkMengeMap = [];  // produkt_id => angehobene Wunschmenge
     $skipPortal = 0;     // Lieferanten-Weg: Zeilen ohne portalfähigen Lieferanten (kein Account/Preis) -> übersprungen
+    $skipGruende = [];   // echter Grund je übersprungener Zeile (lieferant_portal_grund), höchstens 3 für die Meldung
     foreach ($sel as $key) {
         // Beim Online-Kauf landet alles in EINER Bestellung ohne Lieferant (sup=0). Beim Lieferanten-Weg
         // zählt der je Zeile gewählte Lieferant – und nur, wenn er portalfähig ist (Account + Preis).
@@ -137,7 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         elseif (strncmp($key, 'nach:', 5) === 0)  $itemIdKey = (int)substr($key, 5);
         elseif (strncmp($key, 'item:', 5) === 0 && isset($info[$key])) $itemIdKey = (int)$info[$key]['item_id'];
         elseif (strncmp($key, 'etikett:', 8) === 0 && isset($info[$key])) $itemIdKey = (int)$info[$key]['item_id'];
-        if ($direkt ? $sup <= 0 : (!$online && !lieferant_portalfaehig((int)$sup, $itemIdKey, $produktIdKey))) { $skipPortal++; continue; }
+        if ($direkt ? $sup <= 0 : (!$online && ($pgGrund = lieferant_portal_grund((int)$sup, $itemIdKey, $produktIdKey)) !== '')) {
+            $skipPortal++; if (!$direkt && count($skipGruende) < 3) $skipGruende[$pgGrund] = true; continue;
+        }
         if (strncmp($key, 'bulk:', 5) === 0) {
             $pid = (int)substr($key, 5);
             if (isset($bulkIds[$pid])) {
@@ -206,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
             $n++; $finalLief($bid); bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         }
     }
-    header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal : '') . ($luEntwurf ? '&lu_entwurf=' . implode(',', $luEntwurf) : '')); exit;
+    header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal . ($skipGruende ? '&skipgr=' . urlencode(implode(' ', array_keys($skipGruende))) : '') : '') . ($luEntwurf ? '&lu_entwurf=' . implode(',', $luEntwurf) : '')); exit;
 }
 
 $aggAlle = bedarf_aggregiert(false);
@@ -305,7 +310,7 @@ $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit =
 render_header('einkaufsliste', 'Bestellen');
 bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von drei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung), „Direkt bestellt" (Telefon/Mail – sofort bestellt und bestätigt, keine Mail) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Alles landet unter „Bestellt".',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
-if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (Händler gespeichert, Preis falls angegeben)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : 'Lieferant ohne aktiven Account/Preis. Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
+if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (Händler gespeichert, Preis falls angegeben)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : (trim((string)($_GET['skipgr'] ?? '')) !== '' ? h(trim((string)$_GET['skipgr'])) : 'Lieferant ohne aktiven Account/Preis.') . ' Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
 if (!empty($_GET['lu_entwurf'])) {   // Paket 12.11.2026 Teil 4: nicht gesendet, weil Unterlagen des Lieferanten fehlen
     $luL = [];
     foreach (array_filter(array_map('intval', explode(',', (string)$_GET['lu_entwurf']))) as $luB) {
@@ -315,7 +320,11 @@ if (!empty($_GET['lu_entwurf'])) {   // Paket 12.11.2026 Teil 4: nicht gesendet,
     if ($luL) echo '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px">Nicht gesendet, nur als Entwurf angelegt – Unterlagen des Lieferanten fehlen: ' . implode(', ', $luL) . '. Die Liste der fehlenden Unterlagen steht an der Bestellung; der Lieferant sieht sie im Portal.</div>';
 }
 if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Online bestellt" fehlt Händler/Quelle. Bitte die Positionen erneut anhaken und den Händler angeben.</div>';
-if (isset($_GET['vorsorgportal'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Dieser Lieferant hat keinen aktiven Account oder keinen Preis – über das Portal nicht bestellbar. Bitte „Direkt bestellt (Telefon/Mail)" oder „Online bestellt" nutzen.</div>';
+if (isset($_GET['vorsorgportal'])) {   // echter Grund (Account ODER Preis) aus lieferant_portal_grund()
+    $vpGrund = trim((string)$_GET['vorsorgportal']); if ($vpGrund === '' || $vpGrund === '1') $vpGrund = 'Dieser Lieferant hat keinen Portal-Zugang oder keinen Preis für den Artikel.';
+    echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Nicht bestellt – nichts gespeichert. ' . h($vpGrund)
+       . ' Über das Portal geht es erst mit Preis (am Artikel oder an der Rezeptur). Sonst „Direkt bestellt (Telefon/Mail)" nutzen.</div>';
+}
 if (isset($_GET['direktfehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Direkt bestellt" bitte einen Lieferanten wählen.</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
 if (isset($_GET['bwok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['bwok']) . ' Der Bedarf steht jetzt im passenden Reiter.</div>';

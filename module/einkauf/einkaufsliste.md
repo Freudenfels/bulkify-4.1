@@ -111,3 +111,10 @@ Der Block „warten auf die Festlegung des Wegs“ zeigt je Auftrag Links zu Auf
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 Fehlen Unterlagen des Lieferanten, wird die Bestellung nur als Entwurf angelegt (nicht gesendet, keine Mail); Hinweis mit Links. Gilt auch für „Vorsorglich“ und „Direkt bestellt“.
+
+## Portal-Prüfung mit echtem Grund (12.11.2026)
+Anlass: Beim „Vorsorglich bestellen“ bei Wellgreen kam „keinen aktiven Account oder keinen Preis“. Wellgreen hat aber einen Account; es fehlte nur der Preis am Artikel.
+- `lieferant_portal_grund()` (core/schema.php) liefert den **echten Grund** als Satz: Zugang fehlt **oder** Preis für genau diesen Artikel fehlt. `lieferant_portalfaehig()` ist nur noch die Ja/Nein-Kurzform davon.
+- **Preis an der Rezeptur zählt mit:** Bei einem Lagerartikel mit Rezeptur (Bulk/Premix) gilt auch der Preis des Lieferanten an der Rezeptur (`rezeptur_lief_angebot`, „Fertigprodukt (Bulk)“).
+- Meldung „Vorsorglich“: `?vorsorgportal=<Grund>` zeigt „Nicht bestellt – nichts gespeichert.“ plus den Grund. In der Bestellliste stehen bei übersprungenen Zeilen bis zu drei Gründe (`&skipgr=`).
+- Fehlen bei „Vorsorglich über Lieferant“ die Unterlagen (Paket 12.11. Teil 4), wird die Bestellung jetzt wirklich als **Entwurf** angelegt (Status offen, ohne Bestelldatum). Vorher stand sie als „bestellt“ da.

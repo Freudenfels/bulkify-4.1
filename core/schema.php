@@ -10394,11 +10394,30 @@ function bestellung_zahlarten(): array {
 // Darf dieser Lieferant eine Bestellung über sein Portal bekommen? Nur mit aktivem Account UND einem
 // hinterlegten Preis (für das Item bzw. – bei Bulk/Fertigware – für das Produkt). Sonst: „Online bestellt".
 function lieferant_portalfaehig(int $lieferant_id, ?int $item_id = null, ?int $produkt_id = null): bool {
-    if ($lieferant_id <= 0 || !lieferant_hat_zugang($lieferant_id)) return false;
-    if ($item_id)    return array_key_exists($lieferant_id, item_lieferant_preise($item_id));
-    if ($produkt_id) return array_key_exists($lieferant_id, produkt_lieferant_preise($produkt_id))
-                         || array_key_exists($lieferant_id, produkt_fremd_lieferant_preise($produkt_id));
-    return true;   // freie Position ohne Item/Produkt: Account reicht
+    return lieferant_portal_grund($lieferant_id, $item_id, $produkt_id) === '';
+}
+// Warum nicht portalfähig? '' = portalfähig, sonst ein Satz mit dem echten Grund (Account ODER Preis, nie beides in
+// einem Satz – Nico 12.11.2026: „Wellgreen hat keinen Account?" stimmte nicht, es fehlte nur der Artikelpreis).
+// Lagerartikel mit Rezeptur (Bulk-/Premix-Artikel): der Preis des Lieferanten steht oft an der Rezeptur
+// (rezeptur_lief_angebot, „Fertigprodukt (Bulk)") statt am Artikel – der zählt auch.
+function lieferant_portal_grund(int $lieferant_id, ?int $item_id = null, ?int $produkt_id = null): string {
+    if ($lieferant_id <= 0) return 'Für „Über Lieferant (Portal)" bitte einen Lieferanten wählen.';
+    $firma = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lieferant_id]) ?: 'Dieser Lieferant';
+    if (!lieferant_hat_zugang($lieferant_id)) return $firma . ' hat keinen aktiven Zugang zum Lieferantenportal.';
+    if ($item_id) {
+        if (array_key_exists($lieferant_id, item_lieferant_preise($item_id))) return '';
+        $rid = (int) scalar("SELECT rezeptur_id FROM item WHERE id=?", [$item_id]);
+        if ($rid > 0 && array_key_exists($lieferant_id, rezeptur_fremd_lieferant_preise($rid))) return '';
+        $name = (string) scalar("SELECT name FROM item WHERE id=?", [$item_id]);
+        return $firma . ' hat einen Portal-Zugang, aber für „' . $name . '" ist kein Preis von ' . $firma . ' hinterlegt.';
+    }
+    if ($produkt_id) {
+        if (array_key_exists($lieferant_id, produkt_lieferant_preise($produkt_id))
+            || array_key_exists($lieferant_id, produkt_fremd_lieferant_preise($produkt_id))) return '';
+        $name = (string) scalar("SELECT name FROM produkt WHERE id=?", [$produkt_id]);
+        return $firma . ' hat einen Portal-Zugang, aber für „' . $name . '" ist kein Preis von ' . $firma . ' hinterlegt.';
+    }
+    return '';   // freie Position ohne Item/Produkt: Account reicht
 }
 
 // Effektiver EK-Stückpreis einer Bestellposition in Lieferantenwährung: der gespeicherte ek_preis, sonst
