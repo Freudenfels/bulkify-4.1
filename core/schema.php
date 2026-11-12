@@ -7896,7 +7896,7 @@ function bestellung_stornieren(int $bestellung_id, string $wer = 'Team', string 
     if ((string)$b['status'] === 'storniert') return ['ok'=>false, 'msg'=>'Bestellung ist bereits storniert.'];
     if ((string)$b['status'] === 'geliefert' || !empty($b['angekommen_am'])) return ['ok'=>false, 'msg'=>'Bereits (teil)geliefert – nicht stornierbar.'];
     $grund = trim($grund);
-    if (!$lieferant_informieren && $grund === '') return ['ok'=>false, 'msg'=>'Ohne Nachricht an den Lieferanten bitte einen Grund angeben.'];
+    if ($grund === '') return ['ok'=>false, 'msg'=>'Bitte einen Grund für die Stornierung angeben.'];   // Fable-3 T2.8: Grund ist auf jedem Weg Pflicht
     $wer = trim($wer) ?: 'Team';
     q("UPDATE bestellung SET status='storniert', notiz=CONCAT(COALESCE(notiz,''), ' | Storniert', ?, ' – ', ?) WHERE id=?",
       [($grund !== '' ? ' (' . mb_substr($grund, 0, 180) . ')' : '') . ($lieferant_informieren ? '' : ' ohne Nachricht an den Lieferanten'), $wer, $bestellung_id]);
@@ -7915,11 +7915,6 @@ function bestellung_stornieren(int $bestellung_id, string $wer = 'Team', string 
     bedarf_bump();
     return ['ok'=>true, 'mail'=>$mail, 'msg'=>'Bestellung ' . (string)$b['nummer'] . ' storniert' . ($mail ? ', Lieferant informiert' : (!$lieferant_informieren ? ' – ohne Nachricht an den Lieferanten' : '')) . '.'];
 }
-// Einzelne Bestellposition stornieren (Nico 12.11.2026): die Position bleibt stehen (nichts gelöscht), ihre offene Menge zählt
-// nicht mehr als unterwegs (rest_storniert_am + pos_storno_grund). Geht auch an einer schon eingegangenen Bestellung. Eine Position
-// mit verknüpfter Charge wird nicht storniert (erst „Verknüpfung lösen“ bzw. „Rest storniert“). Danach rechnet die Bestellung neu:
-// sind alle Positionen storniert und nichts geliefert, ist die Bestellung storniert; sonst schließt sie sich ggf. (webe_bestellung_stand).
-// $lieferant_informieren=false: keine Portal-Nachricht, keine Mail; Grund ist immer Pflicht.
 // Bestellposition gesperrt für „Bestellung bearbeiten“ (Fable-3 T2.6, 13.11.2026)? '' = frei, sonst der Grund.
 // Storniert (rest_storniert_am) oder geliefert (Liefermenge > 0 bzw. eine eingebuchte Charge hängt daran) = nicht mehr änderbar.
 function bestellung_position_gesperrt(array $bp): string {
@@ -7961,6 +7956,11 @@ function bestellung_positionen_speichern(int $bestellung_id, array $zeilen): arr
     }
     return ['behalten' => $behalten];
 }
+// Einzelne Bestellposition stornieren (Nico 12.11.2026): die Position bleibt stehen (nichts gelöscht), ihre offene Menge zählt
+// nicht mehr als unterwegs (rest_storniert_am + pos_storno_grund). Geht auch an einer schon eingegangenen Bestellung. Eine Position
+// mit verknüpfter Charge wird nicht storniert (erst „Verknüpfung lösen“ bzw. „Rest storniert“). Danach rechnet die Bestellung neu:
+// sind alle Positionen storniert und nichts geliefert, ist die Bestellung storniert; sonst schließt sie sich ggf. (webe_bestellung_stand).
+// $lieferant_informieren=false: keine Portal-Nachricht, keine Mail; Grund ist immer Pflicht.
 function bestellung_position_stornieren(int $bp_id, string $wer = 'Team', string $grund = '', bool $lieferant_informieren = true): array {
     $p = one("SELECT bp.*, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '') AS pname, (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_ch
               FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id WHERE bp.id=?", [$bp_id]);

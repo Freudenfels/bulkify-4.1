@@ -30,3 +30,5 @@ Bestellnummer und Auftrag (AB) je Zeile sind anklickbar (neue Spalte „Auftrag�
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 Kennzeichen „Unterlagen fehlen“ an offenen Bestellungen (Link auf die Liste an der Bestellung).
+
+**Storno aus der Liste (13.11.2026, Fable-3 T2.8):** läuft über `bestellung_stornieren()`; ohne Grund kommt die Meldung „Bitte einen Grund für die Stornierung angeben.“

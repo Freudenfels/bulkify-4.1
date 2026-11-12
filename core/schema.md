@@ -687,3 +687,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **`bestellung_position_gesperrt($bp)` / `bestellung_positionen_speichern($id, $zeilen)` (13.11.2026, Fable-3 T2.6):** gesperrt = storniert (`rest_storniert_am`) oder geliefert (Liefermenge > 0 bzw. eingebuchte Charge). Speichern aktualisiert vorhandene Positionen per ID, legt neue an, ändert gesperrte nie und löscht entfernte nur, wenn nichts an ihnen hängt.
 
 **Unterwegs = `bp_rest_sql()` (13.11.2026, Fable-3 T2.7):** `bulk_position_basis_sql()` (Bulk-Bedarf, Deckung am Auftrag) nutzt jetzt `bp_rest_sql()`; stornierte Positionen und stornierte Reste zählen dort nicht mehr als unterwegs. Die bisher kopierten Inline-Formeln (schema.php, bestellung_doppelt.php, auftrag/detail.php, lager/bestand_liste.php) rufen ebenfalls `bp_rest_sql()`. Nur die Unterprogramme behalten ihre gleichlautende Kopie (core/wareneingang_bestellung.php ohne schema.php, Lager-App `erp_bp_rest_sql()`).
+
+**Stornieren nur mit Grund (13.11.2026, Fable-3 T2.8):** `bestellung_stornieren()` verlangt auf jedem Weg einen Grund (auch der alte Weg aus der Bestellliste `module/einkauf/liste.php`).
