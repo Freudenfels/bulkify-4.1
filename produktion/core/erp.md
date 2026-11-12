@@ -124,3 +124,5 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `erp_rollen_abbuchen()` bucht alle G
 **Kein Etikett-Ersatz mehr (Block E, 11.11.2026):** `erp_etikett_entnehmen()` hat keinen 'alternativ'-Ersatz mehr. Fehlt Kundenetikett-Bestand, ist Etikettieren blockiert, Werk-App und Dashboard rechnen gleich. Neutrale Produkte (`erp_etikett_item_id` = generisch) bleiben unverändert. Früher über den Ersatz gebuchte generische Etiketten zählen weiter.
 
 **Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Neu: `pr_menge_einheit_lesen($s, $einheit)`, `erp_charge_einheit()`, `erp_gebinde_einheit()`.
+
+**Ortszeit (13.11.2026, Fable-3 T1.7):** `erp_mhd_standard()` rechnet ab heute in Europe/Berlin (`heute_ort()`), nicht UTC.

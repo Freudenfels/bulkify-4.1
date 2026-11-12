@@ -1511,7 +1511,7 @@ function erp_charge_naechste_nr(int $pa_id): string {
 function erp_mhd_standard(): string {
     $monate = (int) (scalar("SELECT v FROM app_meta WHERE k='mhd_monate_standard'") ?: 18);
     if ($monate <= 0) $monate = 18;
-    return date('Y-m-d', strtotime(date('Y-m-d') . ' +' . $monate . ' months'));
+    return (new DateTime(heute_ort(), new DateTimeZone('Europe/Berlin')))->modify('+' . $monate . ' months')->format('Y-m-d');   // 13.11.2026: Ortszeit
 }
 function erp_produkt_lageritem(int $produkt_id): ?int {
     $id = scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [$produkt_id]);

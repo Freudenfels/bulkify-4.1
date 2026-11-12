@@ -3603,8 +3603,9 @@ function charge_naechste_nr(int $pa_id): string {
 function mhd_standard(?string $ab = null): string {
     $monate = (int) meta_get('mhd_monate_standard', 18);
     if ($monate <= 0) $monate = 18;
-    $basis = $ab ?: date('Y-m-d');
-    return date('Y-m-d', strtotime($basis . ' +' . $monate . ' months'));
+    // 13.11.2026 (Fable-3 T1.7): Basis = heute in Europe/Berlin (heute_ort), nicht UTC.
+    $basis = ($ab && strtotime($ab)) ? date('Y-m-d', strtotime($ab)) : heute_ort();
+    return (new DateTime($basis, new DateTimeZone('Europe/Berlin')))->modify('+' . $monate . ' months')->format('Y-m-d');
 }
 
 // Wie viel Fertigware zu einem Produktionsauftrag schon als Charge(n) gebucht ist (Summe über .A, .B, .C …).
@@ -3835,8 +3836,8 @@ function produktion_teilmenge_einbuchen(int $pa_id, float $menge, ?string $mhd =
     // Soll-Kette 5 (Nico 04.11.2026): eigene Fertigware ist nach der Produktion SOFORT frei (kein QM-Gate mehr) und steht in Lager 1
     // zum Bewegen/Versand. Bericht + CoA für den Kunden: CoA je Fertigcharge sofort, Produktionsbericht, sobald die ganze Menge da ist.
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, ?, ?)",
-      [$charge_nr, $item_id, $menge, $menge, $mhd, 'Aus Produktion ' . $pa['nummer'] . ($notiz !== '' ? ' – ' . mb_substr($notiz, 0, 200) : ''), $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
+       VALUES (?,?,?,?, 'Stk', ?, ?, 'frei', ?, ?, ?, ?)",
+      [$charge_nr, $item_id, $menge, $menge, $mhd, heute_ort(), 'Aus Produktion ' . $pa['nummer'] . ($notiz !== '' ? ' – ' . mb_substr($notiz, 0, 200) : ''), $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
     $cidNeu = (int) insert_id();
     fertigware_qm_freigabe_nach($cidNeu, '', produktion_rest($pa_id) <= 0.0001, 'Produktionsabschluss');
     return ['ok'=>true, 'msg'=>'', 'charge_id'=>$cidNeu, 'charge_nr'=>$charge_nr];
