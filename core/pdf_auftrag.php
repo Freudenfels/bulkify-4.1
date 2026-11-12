@@ -60,7 +60,7 @@ function auftrag_pdf_bauen(int $auftrag_id): ?string {
         $hinweis = 'Charge: ' . implode(', ', $teile);
     }
 
-    $statusLbl = match ((string)($a['status'] ?? '')) {
+    $statusLbl = match (auftrag_status_kunde($a)) {   // 13.11.2026: zentrale Regel „versandbereit“
         'in_produktion' => 'in Produktion', 'erledigt' => 'versandbereit', 'versendet' => 'versendet',
         'offen' => 'in Bearbeitung', default => 'bestätigt',
     };

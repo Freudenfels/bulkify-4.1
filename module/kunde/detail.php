@@ -190,7 +190,7 @@ $colsAuf = [
     'menge'        => ['label'=>'Menge','num'=>true],
     'gesamt_netto' => ['label'=>'Netto','num'=>true,'render'=>fn($r)=> $eur($r['gesamt_netto'])],
     'rechnung_nr'  => ['label'=>'Rechnung','render'=>fn($r)=> $r['rechnung_nr']?h($r['rechnung_nr']):'<span class="muted">–</span>'],
-    'status'       => ['label'=>'Status','render'=>fn($r)=> $aufBadge($r['status'])],
+    'status'       => ['label'=>'Status','render'=>fn($r)=> $aufBadge(auftrag_status_kunde($r))],   // 13.11.2026: „versandbereit“ zentral
 ];
 $colsRe = [
     'nummer' => ['label'=>'Nummer'],

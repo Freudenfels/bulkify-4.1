@@ -41,7 +41,8 @@ $kartAuftragId = 0; $bestStatusLbl = ''; $bestStatusKind = 'info';
 if ($a['status'] === 'bestaetigt') {
     $auRow = one("SELECT id, status FROM auftrag WHERE angebot_id=? ORDER BY id DESC LIMIT 1", [(int)$a['id']]);
     $kartAuftragId = (int)($auRow['id'] ?? 0);
-    $bestStatusLbl = match ((string)($auRow['status'] ?? '')) {
+    $auSt = $auRow ? auftrag_status_kunde($auRow) : '';   // 13.11.2026: „versandbereit“ erst, wenn wirklich fertig (zentrale Regel)
+    $bestStatusLbl = match ($auSt) {
         'in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','offen'=>'bestellt', default=>'bestätigt' };
     $bestStatusKind = ($auRow['status'] ?? '') === 'versendet' ? 'ok' : 'info';
 }
