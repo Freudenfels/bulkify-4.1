@@ -31,3 +31,6 @@ Zusatz: Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft, gle
 **Mail-Filter nur voller Name/Alias (13.11.2026, Fable-3 T3.4):** `kunde_lieferanten_namen()` liefert nur noch den vollen Firmennamen (mit Rechtsform, oder ein Name aus mindestens zwei Wörtern) und die ausdrücklich gepflegten Aliase (`lieferanten.kunden_alias`, Komma getrennt). Der Name ohne Rechtsform als einzelnes Wort („Vita“ aus „Vita GmbH“) wird nicht mehr ersetzt. Paketdienste und Spediteure (`kunde_filter_paketdienst()`: DHL, UPS, DPD, GLS, FedEx, TNT, Hermes, Deutsche Post, Schenker, Dachser, Kühne, Rhenus …) werden nie ersetzt.
 
 **CRM-Mails gefiltert (13.11.2026, Fable-3 T3.5):** Ohne Dashboard-Helfer lauffähig: `kn_tabelle_da()`/`kn_spalte_da()` fallen auf information_schema zurück, damit das CRM denselben Filter laden kann.
+
+
+**Lieferantennummern nie ersetzen (Regel Nico 13.11.2026):** `kunde_text_neutral()` (und damit der Kunden-Mail-Filter, Belege, Portal) maskiert Lieferantennummern (L-2841) vor dem Ersetzen und setzt sie danach unverändert wieder ein. Ein Lieferant, dessen Firma wie eine Nummer aussieht („L-2841“), steht nicht in der Ersetzungsliste.

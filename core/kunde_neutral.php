@@ -117,6 +117,7 @@ function kunde_lieferanten_namen(): array {
         if ($kat && !array_diff($kat, ['labor'])) continue;   // Labore dürfen genannt werden
         $f = trim((string)$l['firma']);
         if (preg_match('/bulkify|maniso/i', $f)) continue;
+        if (preg_match('/^L-\d+$/i', $f)) continue;   // eine Lieferantennummer ist nie ein Name zum Ersetzen (13.11.2026)
         // Fable-3 T3.4 (13.11.2026): nur der VOLLE Firmenname oder ein ausdrücklich gepflegter Alias (lieferanten.kunden_alias),
         // nie ein einzelnes Wort daraus („Vita GmbH“ ersetzt „Vita GmbH“, nicht „Vita“). Paketdienste werden nie ersetzt.
         if (kunde_filter_paketdienst($f)) continue;
@@ -134,10 +135,14 @@ function kunde_lieferanten_namen(): array {
 function kunde_text_neutral(?string $t, string $ersatz = 'bulkify'): string {
     $t = (string)$t;
     if ($t === '') return $t;
+    // Regel Nico 13.11.2026: Lieferantennummern (L-2841) stehen bewusst auf Dokumenten – nie ersetzen. Vor dem Ersetzen maskieren.
+    $lnr = [];
+    $t = (string) preg_replace_callback('/(?<![\p{L}\p{N}])L-\d{3,6}(?![\p{N}])/u', function ($m) use (&$lnr) { $lnr[] = $m[0]; return "\x01" . (count($lnr) - 1) . "\x01"; }, $t);
     foreach (kunde_lieferanten_namen() as $name) {
         if (mb_stripos($t, $name) === false) continue;
         $t = preg_replace('/(?<![\p{L}\p{N}])' . preg_quote($name, '/') . '(?![\p{L}\p{N}])/iu', $ersatz, $t);
     }
+    if ($lnr) $t = (string) preg_replace_callback('/\x01(\d+)\x01/', fn($m) => $lnr[(int)$m[1]] ?? $m[0], $t);
     return kunde_charge_text($t);   // Fable-3 T3.2: eigene Chargen nur als Grundcharge
 }
 // Positions-/Belegtext für den Kunden: Lieferantennamen ersetzen und interne Hinweise auf Zukauf entfernen
