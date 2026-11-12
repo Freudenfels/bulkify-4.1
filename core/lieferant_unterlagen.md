@@ -13,3 +13,6 @@ Entscheidung Nico 11.11.2026:
 Der Stand wird immer frisch berechnet – erledigte Punkte verschwinden sofort.
 
 Funktionen: `lu_fehlt`, `lu_position_fehlt`, `lu_bestellung_fehlt`, `lu_bestellen_sperre`, `lu_ausnahme`, `lu_ausnahme_setzen`, `lu_badge`, `lu_offen_lieferant`, `lu_panel`, `lu_upload`, `lu_upload_post`, `lu_upload_nachlauf`.
+
+## Upload nur an eigene offene Unterlagen (13.11.2026)
+`lu_upload_erlaubt()`: Ein Lieferant darf nur zu Artikeln/Rezepturen hochladen, die in seiner offenen Unterlagen-Liste stehen (Aufgabenliste + fehlende Unterlagen seiner laufenden Bestellungen). Sonst abgelehnt und im Verlauf des Lieferanten protokolliert. Uploads des Teams (intern) bleiben frei.

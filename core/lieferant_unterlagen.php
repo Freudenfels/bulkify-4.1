@@ -191,11 +191,32 @@ function lu_panel(int $lieferant_id, string $ziel, string $sprache = 'de', ?arra
 }
 
 // POST aus lu_panel verarbeiten. Rückgabe ['ok'=>bool, 'did'=>int]. KI-Auswertung danach (wie beim Preisangebot).
+// Darf dieser Lieferant zu diesem Artikel / dieser Rezeptur eine Unterlage hochladen? (Nachbesserung 13.11.2026)
+// Nur, was in SEINER offenen Unterlagen-Liste steht: Aufgabenliste (Anfragen, Preise, Fertigprodukt-Preise) plus die fehlenden
+// Unterlagen seiner laufenden Bestellungen. Sonst könnte ein Lieferant über lu_item/lu_rez Dateien an fremde Artikel hängen.
+function lu_upload_erlaubt(int $lieferant_id, string $art, int $item_id, int $rezeptur_id): bool {
+    if ($lieferant_id <= 0) return false;
+    $liste = lu_offen_lieferant($lieferant_id);
+    foreach (all("SELECT id FROM bestellung WHERE lieferant_id=? AND status NOT IN ('geliefert','storniert') ORDER BY id DESC LIMIT 200", [$lieferant_id]) as $b)
+        foreach (lu_bestellung_fehlt((int)$b['id']) as $f) $liste[] = $f;
+    foreach ($liste as $f) {
+        if ($art === 'roh' && $f['art'] === 'roh' && (int)$f['item_id'] === $item_id) return true;
+        if ($art === 'produkt' && $f['art'] === 'produkt' && (int)$f['rezeptur_id'] === $rezeptur_id) return true;
+    }
+    return false;
+}
 function lu_upload_post(int $lieferant_id, string $von = 'lieferant'): array {
     $art = (string)($_POST['lu_art'] ?? '') === 'produkt' ? 'produkt' : 'roh';
     $iid = (int)($_POST['lu_item'] ?? 0); $rid = (int)($_POST['lu_rez'] ?? 0);
     if ($art === 'roh' && $iid <= 0) return ['ok' => false, 'did' => 0];
     if ($art === 'produkt' && $rid <= 0) return ['ok' => false, 'did' => 0];
+    if ($von !== 'team' && !lu_upload_erlaubt($lieferant_id, $art, $iid, $rid)) {   // Team (intern) darf weiter frei ablegen
+        if (function_exists('log_aktivitaet')) {
+            try { log_aktivitaet('lieferant', $lieferant_id, 'lieferant',
+                                 'Unterlagen-Upload abgelehnt: ' . ($art === 'roh' ? 'Artikel #' . $iid : 'Rezeptur #' . $rid) . ' steht nicht in der offenen Unterlagen-Liste dieses Lieferanten', 'status'); } catch (\Throwable $e) {}
+        }
+        return ['ok' => false, 'did' => 0, 'abgelehnt' => true];
+    }
     $did = lu_upload($lieferant_id, 'lu_datei', $art, $iid, $rid, (string)($_POST['lu_typ'] ?? 'spec'), $von);
     return ['ok' => $did > 0, 'did' => $did];
 }
