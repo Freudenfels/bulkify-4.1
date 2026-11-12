@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $u = lg_benutzer();
         $beleg = charge_korr_beleg_speichern($_FILES['korr_beleg'] ?? [], $id);
         $roh = (string)($_POST['korr_menge'] ?? '');
-        $neu = (float) str_replace(',', '.', str_replace('.', '', $roh));   // deutsche Schreibweise: Punkt = Tausender
+        $neu = erp_menge_parse($roh);   // 13.11.2026: gemeinsamer Mengen-Parser („12.5“ = 12,5, „12.500“ = 12500, „0,5“ = 0,5)
         $r = charge_menge_korrigieren($id, (string)($_POST['korr_was'] ?? 'verfuegbar'), $neu, (string)($_POST['korr_grund'] ?? ''),
                                       (string)($_POST['korr_notiz'] ?? ''), (string)($u['name'] ?? 'Lager'), $beleg);
         flash(trim($r['meldung'] . ' ' . ($r['hinweis'] ?? '')), $r['ok'] ? 'ok' : 'warn');

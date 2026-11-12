@@ -68,3 +68,6 @@ Unter „Dokumente“ stehen zuerst CoA und Spezifikation aus der Bestellpositio
 **Menge korrigieren (Block B, 11.11.2026):** nur Admin (Stift nur für Admin). Formular mit Art (verfügbar / Ursprung), neuer Menge, Pflicht-Grund, Notiz und Beleg. Bucht über dieselbe Funktion wie das Dashboard (`core/charge_korrektur.php`): Korrekturbewegung, Verlauf, Gebinde, die Bestellung rechnet neu.
 
 **Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.
+
+## Menge korrigieren: Lesart (13.11.2026)
+Die Eingabe läuft über `erp_menge_parse()` wie alle Mengenfelder der Lager-App: „12.5“ = 12,5, „0.5“ = 0,5, „12.500“ = 12.500, „1.234,5“ = 1.234,5.
