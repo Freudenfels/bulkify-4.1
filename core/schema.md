@@ -672,3 +672,6 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 
 ## Bestellwege mit Unterlagen-Sperre (13.11.2026)
 `bestellung_direkt_abschliessen()` gibt jetzt einen Text zurück ('' = abgeschlossen, sonst Grund der Sperre). Neu `bestellung_als_bestellt_markieren()` für „als bestellt markieren“ (Sperre + Mail).
+
+## Kundensicht des Fortschritts (13.11.2026)
+`auftrag_fortschritt_kunde($steps, $a)`: Mit Auftrag kein Produktionsdatum beim Kunden. Daten nur bei Bestätigt, Abgeschlossen und Versendet; Untertexte ohne Datum. Bei Fremdproduktion (`auftrag_ist_fremdproduktion()`: Zukauf fertig, Handelsware oder Bulk extern festgelegt) nur Hauptpunkte: Bestätigt, In Produktion, Laboranalyse, Abgeschlossen, Versendet und rote Punkte zum Handeln. Auftrags-PDF: Charge als Grundcharge.

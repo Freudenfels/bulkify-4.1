@@ -50,7 +50,13 @@ function auftrag_pdf_bauen(int $auftrag_id): ?string {
     $hinweis = '';
     if ($chargen) {
         $teile = [];
-        foreach ($chargen as $c) $teile[] = $c['charge_nr'] . ($c['mhd'] ? ' (MHD ' . date('d.m.Y', strtotime((string)$c['mhd'])) . ')' : '');
+        // 13.11.2026: nur die Grundcharge (2775.A + 2775.B = 2775), frühestes MHD (kunde_charge_anzeige).
+        $grund = [];
+        foreach ($chargen as $c) {
+            $gk = kunde_charge_anzeige((string)$c['charge_nr']);
+            if (!isset($grund[$gk]) || ($c['mhd'] && (!$grund[$gk] || (string)$c['mhd'] < (string)$grund[$gk]))) $grund[$gk] = $c['mhd'] ?: ($grund[$gk] ?? null);
+        }
+        foreach ($grund as $gk => $mhd) $teile[] = $gk . ($mhd ? ' (MHD ' . date('d.m.Y', strtotime((string)$mhd)) . ')' : '');
         $hinweis = 'Charge: ' . implode(', ', $teile);
     }
 

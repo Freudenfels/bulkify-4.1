@@ -1546,7 +1546,7 @@ if (!function_exists('portal_auftrag_track')) {
             $f = auftrag_fortschritt($a);
             $GLOBALS['bx_portal_energ'][(int)$a['id']] = $f['energ'];
             $out = [];
-            foreach (auftrag_fortschritt_kunde($f['steps']) as [$status, $fertigTxt, $state, $datum, $sub]) {
+            foreach (auftrag_fortschritt_kunde($f['steps'], $a) as [$status, $fertigTxt, $state, $datum, $sub]) {   // 13.11.2026: kein Produktionsdatum, Fremdproduktion nur Hauptpunkte
                 $dok = null;
                 if ($fertigTxt === 'Laboranalyse abgeschlossen' && $state === 'done')
                     $dok = auftrag_labortest_status((int)$a['id'], isset($a['produkt_id']) ? (int)$a['produkt_id'] : null)['dok_id'] ?? null;

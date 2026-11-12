@@ -6681,7 +6681,20 @@ function auftrag_status_kunde(array $a): string {
 
 // Kundensicht der neuen Kette (für das Portal, noch nicht eingebaut): interne Einkaufs-Stände der Etiketten (nicht bestellt / bestellt / auf Lager) sieht der Kunde
 // nur als „Etikettierung"; „Etiketten Daten fehlen" sieht er rot mit Upload-Link. Interne Untertexte (Liefertermin, abgefüllt) entfallen.
-function auftrag_fortschritt_kunde(array $steps): array {
+// Fremdproduktion (13.11.2026): extern produziert – Fertigware zugekauft (Zukauf-Art „fertig“, Handelsware) oder Bulk extern
+// (Produktionsart „fremd“, festgelegt). Dann sieht der Kunde nur Hauptpunkte (auftrag_fortschritt_kunde()).
+function auftrag_ist_fremdproduktion(int $auftrag_id): bool {
+    if ($auftrag_id <= 0) return false;
+    if (auftrag_zukauf_fertig($auftrag_id)) return true;
+    $pa = one("SELECT produktionsart, art_festgelegt_am FROM produktionsauftrag WHERE auftrag_id=? AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$auftrag_id]);
+    return $pa && (string)$pa['produktionsart'] === 'fremd' && !empty($pa['art_festgelegt_am']);
+}
+// $a (13.11.2026): mit Auftrag gelten zusätzlich
+//  - Fremdproduktion: nur Hauptpunkte – Bestätigt, In Produktion (bis versandbereit), Laboranalyse, Abgeschlossen, dazu rote
+//    Punkte, bei denen der Kunde etwas tun muss. Kein „Rohstoff bestellt/angekommen“, keine Untertexte.
+//  - Kein Produktionsdatum (Nico 12.11.2026): Daten nur bei „Bestätigt“, „Abgeschlossen“ und „Versendet“, an allen
+//    Produktionsschritten und Teilmengen kein Datum, auch nicht im Untertext.
+function auftrag_fortschritt_kunde(array $steps, ?array $a = null): array {
     // Daten für den Kunden (11.11.2026): „Bestätigt" ist das früheste Datum - ein früheres Ereignis (Ware schon vor der
     // Bestätigung da) zeigt das Bestätigungsdatum. Liegt ein Datum vor dem des vorigen Schritts, zeigt der Kunde keins.
     $best = !empty($steps[0][3]) ? substr((string)$steps[0][3], 0, 10) : null; $prevK = $best;
@@ -6701,7 +6714,24 @@ function auftrag_fortschritt_kunde(array $steps): array {
         if (is_string($s[4]) && $s[1] !== 'Produziert' && preg_match('/abgefüllt|erwartet|Kunde hat/u', $s[4])) $s[4] = null;
     }
     unset($s);
-    return $steps;
+    if ($a === null) return $steps;
+    // Kein Produktionsdatum beim Kunden: Datum nur am ersten Schritt (Bestätigt) und an „Abgeschlossen“.
+    foreach ($steps as $i => &$s) {
+        if ($i === 0 || in_array($s[1], ['Abgeschlossen', 'Versendet'], true)) continue;
+        $s[3] = null;
+        if (is_string($s[4])) { $s[4] = trim((string) preg_replace('/\s*(?:am|seit|vom|bis|ab)?\s*\d{1,2}\.\d{1,2}\.(?:\d{2,4})?/u', '', $s[4])) ?: null; }
+    }
+    unset($s);
+    if (!auftrag_ist_fremdproduktion((int)($a['id'] ?? 0))) return $steps;
+    $abg = false; foreach ($steps as $s) if ($s[1] === 'Abgeschlossen' && $s[2] === 'done') $abg = true;
+    $out = [];
+    foreach ($steps as $i => $s) {
+        if ($i === 0 || in_array($s[1], ['Abgeschlossen', 'Versendet'], true) || $s[2] === 'err') { $out[] = $s; continue; }
+        if ($s[1] === 'Produziert') { $out[] = ['In Produktion', 'Produziert', $abg ? 'done' : 'current', null, null]; continue; }
+        if ($s[1] === 'Laboranalyse abgeschlossen') { $s[4] = null; $out[] = $s; continue; }
+        // alles andere (Rohstoff, Etikettiert, Verpackt, Qualitätsprüfung) fällt bei Fremdproduktion weg
+    }
+    return $out;
 }
 
 // Aktueller Stand für Listen als [Text, state]: ein roter Punkt hat Vorrang (z. B. „Etiketten Daten fehlen"), sonst der
