@@ -304,7 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'verp_id'=>(int)($_POST['add_verp_id'] ?? 0), 'deckel_id'=>(int)($_POST['add_deckel_id'] ?? 0), 'etikett_id'=>(int)($_POST['add_etikett_id'] ?? 0)];
         } elseif ($aktion === 'add_rohstoff') {
             $iid = (int)($_POST['add_rohstoff_id'] ?? 0);
-            $mng = zahl_lesen((string)($_POST['add_menge'] ?? '0'), true);
+            $mng = (float)($_POST['add_menge'] ?? 0);   // 13.11.2026 (Fable-3 T1.3): type="number" sendet immer Punkt – nie den Mengen-Parser („2.125“ wäre 2125)
             if ($iid) angebot_gruppe_anhaengen((int)$id, angebot_rohstoff_zeile($iid, $mng, trim($_POST['add_einheit'] ?? ''), $kid));
         } else { // add_dienstleistung
             // Aus dem DL-Katalog gewählt? Dann über dl_position_add – das setzt dienstleistung_id (für den späteren
@@ -318,7 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $bez = trim($_POST['add_bez'] ?? '');
             if ($bez !== '') {
                 $preis = (float)str_replace(',', '.', $_POST['add_preis'] ?? '0');
-                $mng = zahl_lesen((string)($_POST['add_menge'] ?? '1'), true) ?: 1;
+                $mng = (float)($_POST['add_menge'] ?? 1) ?: 1;   // 13.11.2026 (Fable-3 T1.3): type="number" sendet immer Punkt – nie den Mengen-Parser („2.125“ wäre 2125)
                 $mwst = ($_POST['add_mwst'] ?? '') !== '' ? mwst_normalisieren((float)str_replace(',', '.', $_POST['add_mwst'])) : angebot_ust_satz($kid);
                 angebot_gruppe_anhaengen((int)$id, [['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>trim($_POST['add_besch'] ?? ''), 'menge'=>$mng, 'einheit'=>trim($_POST['add_einheit'] ?? ''), 'preis_cent'=>(int)round($preis*100), 'preis_e4'=>(int)round($preis*10000), 'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'manuell']]);
             }

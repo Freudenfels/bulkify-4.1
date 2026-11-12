@@ -33,8 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fuell
         $stk = (int)$stk;
         if ($stk > 0) q("INSERT INTO pack_kapazitaet (item_id,kapselgroesse_id,stueck) VALUES (?,?,?)", [(int)$id, (int)$kgid, $stk]);
     }
-    $mfg = trim($_POST['max_fuellgewicht_g'] ?? '') !== '' ? zahl_lesen((string)($_POST['max_fuellgewicht_g']), true) : null;
-    $vol = trim($_POST['volumen_ml'] ?? '') !== '' ? zahl_lesen((string)($_POST['volumen_ml']), true) : null;
+    $mfg = trim($_POST['max_fuellgewicht_g'] ?? '') !== '' ? (float)$_POST['max_fuellgewicht_g'] : null;
+    $vol = trim($_POST['volumen_ml'] ?? '') !== '' ? (float)$_POST['volumen_ml'] : null;   // 13.11.2026 (Fable-3 T1.3): type="number" sendet immer Punkt – nie den Mengen-Parser („2.125“ wäre 2125)
     q("UPDATE item SET max_fuellgewicht_g=?, volumen_ml=? WHERE id=?", [$mfg, $vol, (int)$id]);
     header('Location: ?p=verpackung&id=' . $id . '&tab=fuell&gespeichert=1'); exit;
 }

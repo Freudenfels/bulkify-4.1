@@ -249,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'preise_save') {
     meta_set('tablette_hilfsstoff_ek_kg', (string)zahl_lesen((string)($_POST['tablette_hilfsstoff_ek_kg'] ?? '8')));
     meta_set('fluessig_portion_ml', (string)(float)str_replace(',', '.', $_POST['fluessig_portion_ml'] ?? '10'));
     meta_set('fluessig_basis_ek_l', (string)(float)str_replace(',', '.', $_POST['fluessig_basis_ek_l'] ?? '3'));
-    meta_set('gummi_gewicht_mg', (string)zahl_lesen((string)($_POST['gummi_gewicht_mg'] ?? '3000'), true));
+    meta_set('gummi_gewicht_mg', (string)(float)($_POST['gummi_gewicht_mg'] ?? 3000));   // 13.11.2026 (Fable-3 T1.3): type="number" sendet immer Punkt – nie den Mengen-Parser („2.125“ wäre 2125)
     meta_set('gummi_basis_ek_kg', (string)zahl_lesen((string)($_POST['gummi_basis_ek_kg'] ?? '4')));
     meta_set('gel_portion_ml', (string)(float)str_replace(',', '.', $_POST['gel_portion_ml'] ?? '15'));
     meta_set('gel_basis_ek_l', (string)(float)str_replace(',', '.', $_POST['gel_basis_ek_l'] ?? '5'));

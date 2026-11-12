@@ -23,3 +23,5 @@ Angezeigt wird das im **Warenlager** (`bestand_liste.php`) über die Typ-Reiter.
 
 ## Preis 6 Stellen (13.11.2026)
 EK-Preis als Textfeld mit „je Stk“ / „je 1.000 Stk“ (`preis_eingabe_lesen()`), 6 Nachkommastellen; Kachel zeigt `preis_anzeige()` (unter 0,01 € je 1.000 Stk).
+
+**Zahlenfelder des Browsers (13.11.2026, Fable-3 T1.3):** Felder mit `type="number"` senden immer den Punkt als Dezimaltrenner. Sie werden mit `(float)` gelesen, nie mit dem deutschen Mengen-Parser (sonst würde „2,125“ zu 2125). Hier: Bestand und Mindestbestand.

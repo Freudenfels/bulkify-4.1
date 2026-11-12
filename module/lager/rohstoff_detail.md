@@ -239,3 +239,5 @@ Nico: „Hier bitte Anfrage mit einbauen, damit ich Preise anfragen kann.“ Der
 
 ## KI-Vorschlag zeigt den Wirkstoffgehalt (12.11.2026)
 Unter der Stammdaten-Tabelle des KI-Vorschlags steht jetzt „Wirkstoffgehalt laut Dokument: …“. Die Angabe kommt aus der KI-Liste oder als Rückfall aus der Analysetabelle (`spec_ki_wirkstoffe_aus_werte`). „Angehakte Felder übernehmen“ ergänzt fehlende Wirkstoffe im Reiter „Wirkstoff & Qualität“.
+
+**Zahlenfelder des Browsers (13.11.2026, Fable-3 T1.3):** Felder mit `type="number"` senden immer den Punkt als Dezimaltrenner. Sie werden mit `(float)` gelesen, nie mit dem deutschen Mengen-Parser (sonst würde „2,125“ zu 2125). Hier: Fremdlager umbuchen (`fl_menge`) und „ab Menge“ eines Lieferantenpreises (`lp_menge_ab`).

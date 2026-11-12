@@ -233,3 +233,5 @@ Kommt das Speichern aus dem Bearbeiten-Modus (`?edit=1`), behält jede Weiterlei
 
 ## Preise freigeben: eigener Dialog, kein Dauer-Kringel (12.11.2026)
 „Preise freigeben“ fragt jetzt über den eigenen Dialog (`data-confirm`, Knopf „Ja, freigeben“ über `data-confirm-ok`) statt über `confirm()` des Browsers. Vorher drehte der Knopf minutenlang, ohne dass etwas passierte: Der Lade-Kringel (`bx_busy_script` in core/layout.php) startete schon vor der Rückfrage. Wurde sie abgebrochen oder vom Browser unterdrückt, ging nichts raus. Die Ursache ist in core/layout.php behoben.
+
+**Zahlenfelder des Browsers (13.11.2026, Fable-3 T1.3):** Felder mit `type="number"` senden immer den Punkt als Dezimaltrenner. Sie werden mit `(float)` gelesen, nie mit dem deutschen Mengen-Parser (sonst würde „2,125“ zu 2125). Hier: Rohstoff-Menge (`add_menge` bei „Rohstoff hinzufügen“) und Menge eines Freitext-Zuschlags.

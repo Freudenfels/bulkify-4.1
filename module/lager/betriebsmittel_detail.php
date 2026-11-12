@@ -32,8 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'speic
         $elektrisch = isset($_POST['elektrisch']) ? 1 : 0;
         $intervall  = $f('pruef_intervall_monate') !== '' ? (int)$_POST['pruef_intervall_monate'] : ($elektrisch ? 12 : null);
         $letzte     = $f('letzte_pruefung') !== '' ? $f('letzte_pruefung') : null;
-        $bestand    = $f('bestand_menge') !== '' ? zahl_lesen((string)($_POST['bestand_menge']), true) : 0;
-        $mindest    = $f('mindestbestand') !== '' ? zahl_lesen((string)($_POST['mindestbestand']), true) : null;
+        $bestand    = $f('bestand_menge') !== '' ? (float)$_POST['bestand_menge'] : 0;
+        $mindest    = $f('mindestbestand') !== '' ? (float)$_POST['mindestbestand'] : null;   // 13.11.2026 (Fable-3 T1.3): type="number" sendet immer Punkt – nie den Mengen-Parser („2.125“ wäre 2125)
         $ek         = $f('ek_preis') !== '' ? round(preis_eingabe_lesen((string)$_POST['ek_preis'], (string)($_POST['ek_basis'] ?? '1')), 6) : 0;   // 13.11.2026: 6 Stellen, je 1.000
         $lief       = $f('haupt_lieferant_id') !== '' ? (int)$_POST['haupt_lieferant_id'] : null;
         $einheit    = $f('einheit') !== '' ? $f('einheit') : 'Stk';
