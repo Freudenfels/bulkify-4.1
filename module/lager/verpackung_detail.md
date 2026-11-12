@@ -27,3 +27,6 @@
 **Verkauf-Sicht (Rollen):** Der Reiter **Verkauf** (VK-Aufschlag + VK-Staffel) wird nur angezeigt, wenn `darf_verkauf()` (core/auth.php) wahr ist – Produktionsmitarbeiter (Werk-Bereich) sehen ihn NICHT (EK/Einkauf bleibt). Beim Speichern durch eine Produktionsrolle wird `vk_aufschlag_prozent` NICHT auf null gesetzt, sondern der vorhandene Wert erhalten.
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+## Reiter Lager (12.11.2026)
+Neuer Reiter **Lager** (vorher gab es auf der Verpackungsseite gar keinen Bestand): Kacheln Bestand frei, Quarantäne, Chargen, Blinker; Tabelle der Chargen mit Bestand mit **Ort** (Blinker/Kiste/Platz, `core/lager_ort.php`) und **Bestand korrigieren** (nur Admin, Grund Pflicht, `charge_menge_korrigieren()` wie Rohstoffseite und Lager-App; Aktion `charge_bestand_korr`). Der Reiter steht außerhalb des Hauptformulars (nie Formular im Formular), der Haupt-Speichern-Knopf ist dort ausgeblendet. Aus dem Warenlager öffnet ein Klick direkt diesen Reiter.

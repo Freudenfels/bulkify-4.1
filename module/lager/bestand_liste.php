@@ -119,7 +119,8 @@ $unterwegsCell = fn($r) => (float)($r['unterwegs'] ?? 0) > 0
     : '<span class="muted">–</span>';
 $detailUrl = function($r) {
     if (ist_betriebsmittel_kat($r['kategorie'])) return '?p=betriebsmittel&id=' . $r['id'];
-    return $r['kategorie'] === 'verpackung' ? '?p=verpackung&id=' . $r['id'] : '?p=rohstoff&id=' . $r['id'];
+    // Aus dem Warenlager direkt in den Reiter „Lager“ (Bestand, Chargen, Ort/Blinker, Bestand korrigieren) – Nico 12.11.2026.
+    return ($r['kategorie'] === 'verpackung' ? '?p=verpackung&id=' : '?p=rohstoff&id=') . $r['id'] . '&tab=lager';
 };
 $pruefRender = function($r) {
     if (empty($r['elektrisch'])) return '<span class="muted">–</span>';

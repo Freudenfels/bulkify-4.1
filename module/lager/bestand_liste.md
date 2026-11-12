@@ -35,3 +35,6 @@ Der Mengen-Helfer `$mng($x,$e)` zeigt Bestände mit Charge-Einheit `g`/`ml` jetz
 Eigener Reiter „Etiketten“ (`?p=lager&kat=etikett`): Verpackungs-Artikel mit `verpackung_rolle=etikett`. Der Reiter „Verpackung“ zeigt Etiketten nicht mehr (nur noch Behälter, Deckel, Beutel usw.). „Alle“ unverändert.
 
 **Schalter „Inaktive/gesperrte anzeigen“ (Block C, 11.11.2026):** standardmäßig aus, Gesperrte/Inaktive sind ausgeblendet (Lieferanten: offene Bewerbungen bleiben sichtbar; Kunden: Registrierungen bis Freigabe bleiben sichtbar).
+
+## Klick öffnet den Reiter „Lager“ (12.11.2026)
+Ein Klick auf eine Zeile öffnet den Artikel direkt im Reiter **Lager** (`&tab=lager`): Bestand, Quarantäne, Chargen, **Ort je Charge (Blinker/Kiste/Platz)** und **Bestand korrigieren** (Admin, mit Grund). Vorher öffnete sich der Reiter Stammdaten, Bestand und Blinker waren nicht zu sehen. Verpackungen hatten bis dahin gar keinen Reiter „Lager“.

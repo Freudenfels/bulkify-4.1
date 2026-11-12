@@ -6,6 +6,7 @@ require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/anfrage_ui.php';   // Preisanfrage-Popup + Status-Badge
 require_once BX_ROOT . '/core/rohstoff_moq.php';  // eigene MOQ (unsere Mindestmenge)
 require_once BX_ROOT . '/core/preis_gueltig.php'; // „gültig bis" je Lieferantenpreis
+require_once BX_ROOT . '/core/lager_ort.php';     // Ort je Charge (Blinker/Kiste/Platz) aus der Lager-App, Reiter Lager
 
 // Labels aus der zentralen Quelle (Block K): fertig = Bulkware, verkaufsfertig = Fertigprodukt. Keys unverändert
 // (nur die für einen Warenlager-Artikel gültigen Kategorien; leerkapsel ist ein Rohstoff mit Form kapselhuelle).
@@ -1325,17 +1326,22 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
     <div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="<?= $bestand_qua_je?'color:var(--warn)':'' ?>"><?= $bestand_qua_je ? $bestandWert($bestand_qua_je) : '<span class="muted">0</span>' ?></div></div>
     <div class="bx-card"><div class="k">Reserviert</div><div class="v" style="<?= $reserviert_gesamt>$bestand_frei+1e-9?'color:var(--warn)':'' ?>"><?= $reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
     <div class="bx-card"><div class="k">Chargen</div><div class="v"><?= count($charges) ?></div></div>
+    <?php $lgOrt = lager_ort_je_charge(array_column($charges, 'id')); $lgBl = lager_blinker_fuer_item((int)$id); ?>
+    <div class="bx-card"><div class="k">Blinker</div><div class="v" style="font-size:<?= count($lgBl) > 2 ? '14px' : '' ?>"><?= $lgBl ? h(implode(', ', $lgBl)) : '<span class="muted">keiner</span>' ?></div></div>
   </div>
   <div class="bx-panel">
-    <h2>Chargen <?= bx_hint('Wareneingang bucht neue Chargen; Rohstoffe starten in Quarantäne') ?></h2>
+    <div class="bx-row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Chargen <?= bx_hint('Wareneingang bucht neue Chargen; Rohstoffe starten in Quarantäne. Ort = Blinker, Kiste oder Lagerplatz aus der Lager-App. Bestand korrigieren nur Admin, mit Grund.') ?></h2>
+      <a class="btn btn-ghost btn-sm" target="_blank" href="/lager/?p=eingang&amp;item=<?= (int)$id ?>">Bestand einbuchen (Lager-App)</a>
+    </div>
     <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Wareneingang</th><th>Status</th><th>CoA-Freigabe</th><th></th></tr></thead>
+      <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Wareneingang</th><th>Status</th><th>Ort</th><th>CoA-Freigabe</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$charges): ?><tr><td colspan="8" class="muted">Noch keine Chargen. Über „Wareneingang" buchen.</td></tr><?php endif; ?>
-      <?php if (isset($_GET['coafrei'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">CoA-Freigabe aktualisiert.</td></tr><?php endif; ?>
-      <?php if (isset($_GET['korrok'])): ?><tr><td colspan="8" class="badge-ok" style="padding:8px 12px">Charge-Bestand korrigiert. Der Bedarf/die Einkaufsliste rechnet neu.</td></tr><?php endif; ?>
-      <?php if (($_GET['korrfehler'] ?? '') === 'grund'): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b">Bitte einen Grund für die Bestandskorrektur angeben.</td></tr>
-      <?php elseif (isset($_GET['korrfehler'])): ?><tr><td colspan="8" style="padding:8px 12px;color:#8f231b"><?= ($_GET['korrfehler'] ?? '') === '1' ? 'Nur Admins dürfen Bestand/Charge ändern.' : h((string)$_GET['korrfehler']) ?></td></tr><?php endif; ?>
+      <?php if (!$charges): ?><tr><td colspan="9" class="muted">Noch keine Chargen – kein Bestand. Über „Bestand einbuchen (Lager-App)“ oben rechts oder den Wareneingang buchen.</td></tr><?php endif; ?>
+      <?php if (isset($_GET['coafrei'])): ?><tr><td colspan="9" class="badge-ok" style="padding:8px 12px">CoA-Freigabe aktualisiert.</td></tr><?php endif; ?>
+      <?php if (isset($_GET['korrok'])): ?><tr><td colspan="9" class="badge-ok" style="padding:8px 12px">Charge-Bestand korrigiert. Der Bedarf/die Einkaufsliste rechnet neu.</td></tr><?php endif; ?>
+      <?php if (($_GET['korrfehler'] ?? '') === 'grund'): ?><tr><td colspan="9" style="padding:8px 12px;color:#8f231b">Bitte einen Grund für die Bestandskorrektur angeben.</td></tr>
+      <?php elseif (isset($_GET['korrfehler'])): ?><tr><td colspan="9" style="padding:8px 12px;color:#8f231b"><?= ($_GET['korrfehler'] ?? '') === '1' ? 'Nur Admins dürfen Bestand/Charge ändern.' : h((string)$_GET['korrfehler']) ?></td></tr><?php endif; ?>
       <?php foreach ($charges as $c): $coaFrei = (int)($c['coa_freigegeben'] ?? 0) === 1; ?>
         <tr>
           <td><?= h($c['charge_nr'] ?: '–') ?></td>
@@ -1344,6 +1350,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
           <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
           <td><?= $c['wareneingang'] ? h(date('d.m.Y',strtotime($c['wareneingang']))) : '' ?></td>
           <td><?= match($c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'gesperrt'=>bx_badge('gesperrt','err'),default=>bx_badge(status_text($c['status']))} ?></td>
+          <td style="font-size:13px"><?= lager_ort_zelle($lgOrt[(int)$c['id']] ?? [], (int)$c['id']) ?></td>
           <td>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
               <?= $coaFrei ? bx_badge('freigegeben','ok') : bx_badge('nicht freigegeben','warn') ?>
@@ -1360,7 +1367,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
             <a class="btn btn-ghost btn-sm" target="_blank" href="?p=coa_bulkify&id=<?= (int)$c['id'] ?>" title="Analysenzertifikat im bulkify-Layout – das geht an den Kunden">&#8681; CoA</a>
             <?php if (has_role('admin')): ?>
             <details style="margin-top:6px;text-align:left">
-              <summary class="muted" style="cursor:pointer;font-size:11px">Bestand korrigieren</summary>
+              <summary class="btn btn-ghost btn-sm" style="cursor:pointer;list-style:none">Bestand korrigieren</summary>
               <form method="post" style="margin:6px 0 0;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
                 <input type="hidden" name="aktion" value="charge_bestand_korr">
                 <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">

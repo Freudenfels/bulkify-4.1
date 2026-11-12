@@ -230,3 +230,9 @@ Siehe `core/preis_gueltig.md`.
 
 ## Preis anfragen oben im Kopf (12.11.2026)
 Nico: „Hier bitte Anfrage mit einbauen, damit ich Preise anfragen kann.“ Der Knopf „Preis anfragen“ stand bisher nur im Reiter **Einkauf** und war beim Öffnen der Seite nicht zu sehen. Jetzt steht er zusätzlich oben neben „Zurück zur Liste“. Er öffnet dasselbe Pop-up (`bxAnfrageOeffnen`, core/anfrage_ui.php): Lieferanten wählen, Menge, Notiz, CoA/Spec, Lieferbedingung. Nach dem Senden landet man im Reiter Einkauf mit der Meldung „n Preisanfrage(n) verschickt“.
+
+## Reiter Lager: Ort und Blinker (12.11.2026)
+- Neue Kachel **Blinker** (alle Blinker-Codes an Chargen dieses Artikels) und Spalte **Ort** je Charge: Blinker, Kiste mit Fach, Lagerplatz – aus der Lager-App über `core/lager_ort.php`, mit Link „Lager-App“ zur Charge (klingeln, umlagern).
+- **Bestand korrigieren** ist jetzt ein sichtbarer Knopf statt eines kleinen grauen Klapptexts (weiter nur Admin, mit Grund).
+- Knopf **Bestand einbuchen (Lager-App)** öffnet den Wareneingang der Lager-App mit vorgewähltem Artikel.
+- Aus dem Warenlager kommt man direkt in diesen Reiter (`&tab=lager`).

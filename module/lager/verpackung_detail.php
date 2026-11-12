@@ -2,12 +2,29 @@
 // Verpackung anlegen & bearbeiten (Item mit kategorie=verpackung)
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
+require_once BX_ROOT . '/core/lager_ort.php';   // Reiter „Lager“: Ort je Charge (Blinker/Kiste/Platz) aus der Lager-App
 
 $VART = ['dose'=>'Dose','flasche'=>'Flasche','blister'=>'Blister','beutel'=>'Beutel/Doypack','stick'=>'Stick','karton'=>'Karton','etikett'=>'Etikett'];
 $id  = $_GET['id'] ?? 'neu';
 $neu = ($id === 'neu' || !is_numeric($id));
 
 $fehler = '';
+// Bestand einer Charge korrigieren (nur Admin, mit Grund) – dieselbe Funktion wie Rohstoffseite, Chargenseite und Lager-App
+// (core/charge_korrektur.php). Reiter „Lager“ (Nico 12.11.2026: Bestand im Warenlager nicht anpassbar).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'charge_bestand_korr' && is_numeric($id)) {
+    $zur = '?p=verpackung&id=' . (int)$id . '&tab=lager';
+    if (!has_role('admin')) { header('Location: ' . $zur . '&korrfehler=' . rawurlencode('Nur Admins dürfen Bestand ändern.')); exit; }
+    require_once BX_ROOT . '/core/charge_korrektur.php';
+    $cid = (int)($_POST['charge_id'] ?? 0);
+    if ($cid && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND item_id=?", [$cid, (int)$id]) === 1) {
+        if ((string)($_POST['korr_grund'] ?? '') === '') { header('Location: ' . $zur . '&korrfehler=' . rawurlencode('Bitte einen Grund für die Bestandskorrektur wählen.')); exit; }
+        $r = charge_menge_korrigieren($cid, (string)($_POST['korr_was'] ?? 'verfuegbar'), zahl_lesen((string)($_POST['menge'] ?? ''), true),
+                                      (string)$_POST['korr_grund'], (string)($_POST['grund'] ?? ''), (string)(current_user()['name'] ?? 'Team'));
+        if (!$r['ok']) { header('Location: ' . $zur . '&korrfehler=' . rawurlencode($r['meldung'])); exit; }
+        log_aktivitaet('item', (int)$id, 'team', 'Bestandskorrektur Charge #' . $cid . ': ' . $r['meldung'] . ($r['hinweis'] ? ' ' . $r['hinweis'] : ''), 'notiz');
+    }
+    header('Location: ' . $zur . '&korrok=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fuell_save' && is_numeric($id)) {
     // Füllmengen speichern: Kapseln je Größe + Pulver-Füllgewicht (g) + Flüssig-Volumen (ml)
     seed_kapselgroesse_if_empty();
@@ -189,6 +206,7 @@ if (!$neu) {
     <a href="#" data-tab="ek">Einkauf</a>
     <?php if (darf_verkauf()): ?><a href="#" data-tab="verkauf">Verkauf</a><?php endif; ?>
     <?php if (!$neu): ?>
+    <a href="#" data-tab="lager">Lager</a>
     <a href="#" data-tab="fuell" data-only="primaer">Füllmengen</a>
     <a href="#" data-tab="etipreis" data-only="primaer">Etikettenpreise</a>
     <a href="#" data-tab="dok">Dokumente (PPWR)</a>
@@ -292,6 +310,71 @@ if (!$neu) {
     <a class="btn btn-ghost" href="?p=verpackungen">Abbrechen</a>
   </div>
 </form>
+
+<?php if (!$neu):
+    // Reiter „Lager“ (12.11.2026): Bestand, Chargen, Ort (Blinker/Kiste/Platz), Bestand korrigieren – außerhalb des Hauptformulars (nie Formular im Formular).
+    $vpCh  = all("SELECT c.*, l.firma AS lieferant_firma FROM charge c LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+                  WHERE c.item_id=? AND (c.menge_verfuegbar > 0 OR c.status='quarantaene') ORDER BY c.status, c.mhd", [(int)$id]);
+    $vpOrt = lager_ort_je_charge(array_column($vpCh, 'id'));
+    $vpBl  = lager_blinker_fuer_item((int)$id);
+    $vpZ   = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $vpSum = function(string $st) use ($vpCh, $vpZ) { $je = [];
+        foreach ($vpCh as $c) if ((string)$c['status'] === $st) $je[(string)$c['einheit']] = ($je[(string)$c['einheit']] ?? 0) + (float)$c['menge_verfuegbar'];
+        if (!$je) return '<span class="muted">0</span>';
+        return h(implode(' + ', array_map(fn($e, $m) => $vpZ($m) . ' ' . ($e !== '' ? $e : 'Stk'), array_keys($je), $je))); };
+?>
+<section data-panel="lager" hidden>
+  <?php if (isset($_GET['korrok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Bestand korrigiert. Der Bedarf/die Einkaufsliste rechnet neu.</div><?php endif; ?>
+  <?php if (isset($_GET['korrfehler'])): ?><div class="bx-panel" style="padding:12px 16px;color:#8f231b"><?= h((string)$_GET['korrfehler']) ?></div><?php endif; ?>
+  <div class="bx-cards">
+    <div class="bx-card"><div class="k">Bestand (frei)</div><div class="v"><?= $vpSum('frei') ?></div></div>
+    <div class="bx-card"><div class="k">Quarantäne</div><div class="v"><?= $vpSum('quarantaene') ?></div></div>
+    <div class="bx-card"><div class="k">Chargen</div><div class="v"><?= count($vpCh) ?></div></div>
+    <div class="bx-card"><div class="k">Blinker</div><div class="v"><?= $vpBl ? h(implode(', ', $vpBl)) : '<span class="muted">keiner</span>' ?></div></div>
+  </div>
+  <div class="bx-panel">
+    <div class="bx-row" style="justify-content:space-between;align-items:center">
+      <h2 style="margin:0">Chargen <?= bx_hint('Ort = Blinker, Kiste oder Lagerplatz aus der Lager-App. Bestand korrigieren nur Admin, mit Grund – wird als Korrekturbewegung gebucht.') ?></h2>
+      <a class="btn btn-ghost btn-sm" target="_blank" href="/lager/?p=eingang&amp;item=<?= (int)$id ?>">Bestand einbuchen (Lager-App)</a>
+    </div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Charge</th><th class="bx-num">Verfügbar</th><th>MHD</th><th>Lieferant</th><th>Status</th><th>Ort</th><th></th></tr></thead>
+      <tbody>
+      <?php if (!$vpCh): ?><tr><td colspan="7" class="muted">Kein Bestand. Über „Bestand einbuchen (Lager-App)“ oben rechts oder den Wareneingang buchen.</td></tr><?php endif; ?>
+      <?php foreach ($vpCh as $c): ?>
+        <tr>
+          <td><?= h($c['charge_nr'] ?: '–') ?></td>
+          <td class="bx-num"><?= h($vpZ($c['menge_verfuegbar'])) . ' ' . h((string)($c['einheit'] ?: 'Stk')) ?></td>
+          <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime((string)$c['mhd']))) : '<span class="muted">–</span>' ?></td>
+          <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : '<span class="muted">–</span>' ?></td>
+          <td><?= match((string)$c['status']){'frei'=>bx_badge('frei','ok'),'quarantaene'=>bx_badge('Quarantäne','warn'),'gesperrt'=>bx_badge('gesperrt','err'),default=>bx_badge(status_text((string)$c['status']))} ?></td>
+          <td style="font-size:13px"><?= lager_ort_zelle($vpOrt[(int)$c['id']] ?? [], (int)$c['id']) ?></td>
+          <td class="bx-num">
+            <?php if (has_role('admin')): ?>
+            <details style="text-align:left">
+              <summary class="btn btn-ghost btn-sm" style="cursor:pointer;list-style:none">Bestand korrigieren</summary>
+              <form method="post" style="margin:6px 0 0;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+                <input type="hidden" name="aktion" value="charge_bestand_korr">
+                <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
+                <div style="display:flex;gap:4px;align-items:center">
+                  <input type="text" name="menge" value="<?= h($vpZ($c['menge_verfuegbar'])) ?>" style="width:100px;padding:4px 6px;text-align:right" inputmode="decimal" title="Neue verfügbare Menge">
+                  <span class="muted" style="font-size:11px"><?= h((string)($c['einheit'] ?: 'Stk')) ?></span>
+                </div>
+                <select name="korr_was" data-norscombo style="width:200px;padding:4px 6px"><option value="verfuegbar">nur verfügbar (Schwund, Bruch)</option><option value="ursprung">Ursprung falsch eingebucht</option></select>
+                <select name="korr_grund" required data-norscombo style="width:200px;padding:4px 6px"><option value="">Grund wählen</option><option value="einbuchfehler">Einbuchfehler</option><option value="lieferschein">Lieferschein abweichend</option><option value="schwund">Schwund</option><option value="bruch">Bruch</option><option value="sonstiges">Sonstiges</option></select>
+                <input type="text" name="grund" placeholder="Notiz" style="width:200px;padding:4px 6px" title="Notiz zur Korrektur (bei Sonstiges Pflicht)">
+                <button class="btn btn-primary btn-sm" type="submit">setzen</button>
+              </form>
+            </details>
+            <?php endif; ?>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+<?php endif; ?>
 
 <?php if (!$neu): ?>
 <section data-panel="fuell" hidden>
@@ -522,7 +605,7 @@ if (!$neu) {
         p.hidden = (p.getAttribute('data-panel') !== tab);
       });
       // Haupt-Speichern nur auf Formular-Reitern zeigen, nicht bei Reitern mit eigenem Speichern-Button
-      if (haupt) haupt.style.display = (tab === 'fuell' || tab === 'dok' || tab === 'etipreis') ? 'none' : '';
+      if (haupt) haupt.style.display = (tab === 'fuell' || tab === 'dok' || tab === 'etipreis' || tab === 'lager') ? 'none' : '';
     });
   });
   // Reiter aus der URL öffnen (?tab=…), z. B. nach Dokument-Upload
