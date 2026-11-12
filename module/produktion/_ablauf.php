@@ -46,7 +46,13 @@ $vorgabeA = pa_vorgabe($id, (int)($bulkWahl[0]['id'] ?? 0));
       <td class="bx-num"><?= $nfA(pa_uc_menge((int)$u['id'])) ?></td>
       <td style="white-space:normal;font-size:13px"><?php foreach ($tmU as $t): ?><div><?= h(date('d.m.', strtotime((string)($t['datum'] ?: $t['angelegt'])))) ?> · <?= $nfA($t['menge']) ?> Stk<?= $t['umfang'] === 'vor_etikett' ? ' (vor Etikett)' : '' ?><?= $t['art'] === 'nachtrag' ? ' · nachgetragen' : '' ?><?= $t['mitarbeiter'] ? ' · ' . h((string)$t['mitarbeiter']) : '' ?><?= $t['geliefert'] ? ' · schon geliefert' : '' ?></div><?php endforeach; ?></td>
       <td class="bx-num"><?= $kU ?></td>
-      <td><?= $u['status'] === 'laeuft' ? bx_badge('läuft', 'info') : bx_badge('fertig', 'ok') ?></td>
+      <td><?= $u['status'] === 'laeuft' ? bx_badge('läuft', 'info') : bx_badge('fertig', 'ok') ?>
+        <?php if ($pa['status'] !== 'erledigt'): ?>
+        <form method="post" style="margin:6px 0 0" <?= $u['status'] === 'laeuft' ? 'onsubmit="return confirm(\'Unter-Charge ' . h((string)$u['charge_nr']) . ' abschließen? Weitere Teilmengen mit demselben Bulk laufen dann unter einem neuen Buchstaben.\');"' : '' ?>>
+          <input type="hidden" name="aktion" value="<?= $u['status'] === 'laeuft' ? 'uc_schliessen' : 'uc_oeffnen' ?>"><input type="hidden" name="uc_id" value="<?= (int)$u['id'] ?>">
+          <button class="btn btn-ghost btn-sm" type="submit"><?= $u['status'] === 'laeuft' ? 'abschließen' : 'wieder öffnen' ?></button>
+        </form>
+        <?php endif; ?></td>
       <td><?php if (function_exists('pa_protokoll_pdf')): ?><a href="?p=chargenprotokoll&uc=<?= (int)$u['id'] ?>" target="_blank" rel="noopener">PDF</a><?php endif; ?></td>
     </tr>
   <?php endforeach; ?>

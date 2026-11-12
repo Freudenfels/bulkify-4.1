@@ -179,3 +179,10 @@ Vor Produktionsbeginn öffnen „Verkürzter Weg“ und „voller Produktionsweg
 
 ## Material anklickbar (12.11.2026)
 Alle Materialnamen auf der Seite führen per Klick zum Artikel, und zwar in den Reiter **Lager** (`core/item_link.php`). Das gilt für „Material“ (Komponenten), „Wartet auf Material“, „Materialbedarf“ inkl. Kapselhülle und „Entnommene Materialien“. Bei „Teilmenge nicht gebucht“ hängen die fehlenden Artikel als `&teilitems=` an der Umleitung (`pa_teilitems_q()`). Unter der Meldung steht dann „Material öffnen: …“ mit Link und aktuellem freiem Bestand.
+
+## Unter-Charge abschließen, Packungen produziert / Soll (12.11.2026)
+- **Kachel „Packungen“** zeigt jetzt *produziert / Soll*, z. B. **902** / 9.000 (`produktion_gebucht()`). Vorher stand nur das Soll da.
+- **Unter-Charge abschließen / wieder öffnen** (Tabelle „Unter-Chargen und Teilmengen“, `_ablauf.php`): Knopf je Zeile, solange der PA nicht erledigt ist. Nico: „Status läuft – keine Ahnung, wie ich den Status ändern kann.“
+  - **Abschließen** macht dasselbe wie Chargenwechsel oder Ende in der Werk-App: `pa_unter_charge_schliessen()` mit Gegenprobe, Chargenprotokoll-PDF und Ereignis. Eine weitere Teilmenge bekommt danach einen neuen Buchstaben.
+  - **Wieder öffnen** geht nur, wenn keine andere Unter-Charge läuft. Das Ereignis „wiederanlauf“ wird vermerkt.
+  - Aktionen `uc_schliessen` und `uc_oeffnen`.

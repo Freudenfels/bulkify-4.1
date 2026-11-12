@@ -12,6 +12,28 @@ function pa_teilitems_q(array $r): string {
 $id = (int)($_GET['id'] ?? 0);
 
 // Nächste offene Station als erledigt markieren (zentrale Logik in core/schema.php)
+// Unter-Charge im Dashboard abschließen / wieder öffnen (Nico 12.11.2026: „Status läuft – keine Ahnung, wie ich den ändere“).
+// Abschließen = wie Chargenwechsel/Ende in der Werk-App (pa_unter_charge_schliessen: Gegenprobe, Protokoll, Ereignis).
+// Wieder öffnen nur, wenn keine andere Unter-Charge dieses PA läuft (es läuft immer höchstens eine).
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['uc_schliessen', 'uc_oeffnen'], true)) {
+    $wer = (string)(current_user()['name'] ?? 'Team');
+    $ucId = (int)($_POST['uc_id'] ?? 0);
+    $ucR = $ucId ? one("SELECT * FROM pa_unter_charge WHERE id=? AND pa_id=?", [$ucId, $id]) : null;
+    $msg = '';
+    if (!$ucR) $msg = 'Unter-Charge nicht gefunden.';
+    elseif ($_POST['aktion'] === 'uc_schliessen') {
+        if ((string)$ucR['status'] !== 'fertig') pa_unter_charge_schliessen($ucId, $wer, 'im Dashboard abgeschlossen');
+    } else {
+        $andere = (int) scalar("SELECT COUNT(*) FROM pa_unter_charge WHERE pa_id=? AND status='laeuft' AND id<>?", [$id, $ucId]);
+        if ($andere > 0) $msg = 'Es läuft schon eine andere Unter-Charge. Bitte die zuerst abschließen.';
+        else {
+            q("UPDATE pa_unter_charge SET status='laeuft', abgeschlossen_am=NULL WHERE id=?", [$ucId]);
+            pa_ereignis($id, $ucId, 'wiederanlauf', 'Unter-Charge ' . $ucR['charge_nr'] . ' im Dashboard wieder geöffnet.', '', '', '', $wer);
+        }
+    }
+    header('Location: ?p=produktionsauftrag&id=' . $id . ($msg !== '' ? '&teilfehler=' . urlencode($msg) : '&nachok=' . urlencode('Unter-Charge ' . ($ucR['charge_nr'] ?? '') . ($_POST['aktion'] === 'uc_schliessen' ? ' abgeschlossen.' : ' wieder geöffnet.'))) . '#unterchargen'); exit;
+}
+
 // Ein Weg (11.11.2026): Teilmenge nachtragen (ersetzt Easy Production) – gleiche Buchung wie in der Werk-App (core/pa_ablauf.php).
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachtragen') {
     $wer = (string)(current_user()['name'] ?? 'Team');
@@ -448,7 +470,9 @@ $karte = fn(string $k, string $v, string $stil = '') => '<div class="bx-card"' .
 echo '<div class="bx-cards">';
 echo $karte($prodKarteLabel, '<span style="font-size:17px;font-weight:600">' . $prodName . '</span>' . $prodKarteZusatz, 'flex:2 1 280px');
 if ($groesseLbl !== '') echo $karte('Kapsel/Tablette', h($groesseLbl));
-echo $karte('Packungen', number_format((int)$pa['menge'], 0, ',', '.'));
+// Packungen: produziert / Soll (Nico 12.11.2026) – wie „Produziert / offen“ unten, aber oben auf einen Blick.
+$pkGeb = produktion_gebucht($id);
+echo $karte('Packungen <span class="muted" style="font-weight:400">produziert / Soll</span>', ($pkGeb > 0 ? '<strong>' . number_format($pkGeb, 0, ',', '.') . '</strong> / ' : '<span class="muted">0 /</span> ') . number_format((int)$pa['menge'], 0, ',', '.'));
 if ($istFuellGewicht) {
     // Füllgewicht je Packung (g) und Gesamt-Füllgewicht (als kg, wenn >= 1 kg).
     if ($einhProP > 0)  echo $karte('Füllmenge je Packung', number_format($einhProP, 0, ',', '.') . ' g');
