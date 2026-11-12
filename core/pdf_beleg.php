@@ -72,10 +72,15 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
 
     // VK je Einheit in e4 (Euro x 10.000) fuer Sub-Cent (z. B. Bulk 0,0250). preis_e4 fehlt bei Belegen -> Fallback
     // auf ganze Cent (preis_cent*100), dann identisch wie bisher. So stimmen Angebots-PDFs mit Sub-Cent-Preisen.
-    $posE4    = fn($p) => (isset($p['preis_e4']) && $p['preis_e4'] !== null && $p['preis_e4'] !== '') ? (int)$p['preis_e4'] : (int)($p['preis_cent'] ?? 0) * 100;
+    // 'preis_genau' (Euro als Kommazahl, Nachbesserung 13.11.2026): Einkaufspreise unter 0,01 € (Leerkapseln 0,00295 €) – Zeile
+    // und Summe rechnen mit dem genauen Preis, erst die Zeilensumme wird auf Cent gerundet; Anzeige bis 6 Nachkommastellen.
+    $hatGenau = fn($p) => isset($p['preis_genau']) && $p['preis_genau'] !== null && $p['preis_genau'] !== '';
+    $posE4    = fn($p) => $hatGenau($p) ? (float)$p['preis_genau'] * 10000
+                        : ((isset($p['preis_e4']) && $p['preis_e4'] !== null && $p['preis_e4'] !== '') ? (int)$p['preis_e4'] : (int)($p['preis_cent'] ?? 0) * 100);
     $posNetto = fn($p) => (int) round((float)($p['menge'] ?? 0) * $posE4($p) / 100);
-    // VK-String: ganze Cent -> 2 Nachkomma, Sub-Cent -> bis 4 (ohne Null-Schwanz).
+    // VK-String: ganze Cent -> 2 Nachkomma, Sub-Cent -> bis 4, unter 0,01 € bis 6 (ohne Null-Schwanz).
     $posVkStr = function($p) use ($posE4) { $v = $posE4($p) / 10000;
+        if ($v > 0 && $v < 0.01) return rtrim(rtrim(number_format($v, 6, ',', '.'), '0'), ',');
         return abs($v * 100 - round($v * 100)) <= 1e-9 ? number_format($v, 2, ',', '.') : rtrim(number_format($v, 4, ',', '.'), '0'); };
 
     // Logo (JPEG) laden, falls vorhanden
@@ -203,7 +208,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $p->textRight($cMengeR, $by, beleg_num((float) $pos['menge']), 8, false, $INK);
         $p->text($cEinh, $by, $p->fit((string) ($pos['einheit'] ?? ''), $einhW, 8, false), 8, false, $INK);
         if (!$lieferschein) {
-            $p->textRight($cPreisR, $by, ((isset($pos['preis_e4']) && $pos['preis_e4'] !== null && $pos['preis_e4'] !== '') ? $posVkStr($pos) : beleg_eur((int) $pos['preis_cent'], '')), 8, false, $INK);
+            $p->textRight($cPreisR, $by, (($hatGenau($pos) || (isset($pos['preis_e4']) && $pos['preis_e4'] !== null && $pos['preis_e4'] !== '')) ? $posVkStr($pos) : beleg_eur((int) $pos['preis_cent'], '')), 8, false, $INK);
             $p->textRight($cGesR, $by, beleg_eur((int) ($pos['gesamt_cent'] ?? $posNetto($pos)), ''), 9, true, $INK);
         }
         $y += 15;

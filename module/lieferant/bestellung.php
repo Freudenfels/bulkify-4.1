@@ -155,7 +155,7 @@ if (!$b):
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$p['menge'], 3, ',', '.'), '0'), ',') ?></td>
             <td><?= h(lp_einheit($p['einheit'] ?? '', (float)$p['menge'])) ?></td>
             <?php $ekEff = bestellposition_ek($p, (int)$lid); ?>
-            <td class="bx-num"><?= $money($ekEff, 4) ?></td>
+            <td class="bx-num"><?= h(preis_anzeige($ekEff, $waehrung, lp_einheit($p['einheit'] ?? '', 1) ?: 'Stk')) ?></td>
             <td class="bx-num"><?= $money((float)$p['menge'] * $ekEff, 2) ?></td></tr>
       <?php endforeach; ?>
         <tr style="font-weight:600"><td colspan="4"><?= h(lp_t('summe')) ?></td><td class="bx-num"><?= $money($summe, 2) ?></td></tr>

@@ -39,6 +39,7 @@ function bestellung_pdf_bauen(int $bestellung_id): ?string {
             'einheit'     => (string)($p['einheit'] ?? ''),
             'preis_cent'  => (int) round($ekEff * 100),
             'ek_cent'     => (int) round($ekEff * 100),
+            'preis_genau' => $ekEff,                         // Nachbesserung 13.11.2026: Sub-Cent (Leerkapseln) genau, Summe erst am Ende auf Cent
             'mwst_satz'   => 0.0,                            // Einkauf: der Lieferant stellt die Steuer selbst
         ];
     }
