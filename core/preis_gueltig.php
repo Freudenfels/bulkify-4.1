@@ -129,7 +129,17 @@ function pg_abgelaufen_merken(string $typ, int $id, string $datum): void {
 }
 // Hinweis für die Seite: „Preis abgelaufen seit …, Summe unsicher" mit den betroffenen Artikeln/Produkten/Rezepturen (verlinkt).
 // Leer, wenn auf dieser Seite kein abgelaufener Preis gerechnet wurde. Ausgabe in core/layout.php (render_footer) oben auf der Seite.
+// Über eine Weiterleitung retten (13.11.2026, z. B. Express-Bestellung): die in DIESEM Aufruf gemerkten abgelaufenen Preise in die
+// Sitzung legen; pg_abgelaufen_hinweis() zeigt sie auf der nächsten Seite einmal mit an.
+function pg_abgelaufen_weitergeben(): void {
+    if (empty($GLOBALS['pg_abgelaufen']) || session_status() !== PHP_SESSION_ACTIVE) return;
+    $_SESSION['pg_abgelaufen_flash'] = array_merge((array)($_SESSION['pg_abgelaufen_flash'] ?? []), $GLOBALS['pg_abgelaufen']);
+}
 function pg_abgelaufen_hinweis(): string {
+    if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['pg_abgelaufen_flash'])) {
+        foreach ((array)$_SESSION['pg_abgelaufen_flash'] as $e) pg_abgelaufen_merken((string)$e['typ'], (int)$e['id'], (string)$e['datum']);
+        unset($_SESSION['pg_abgelaufen_flash']);
+    }
     $l = $GLOBALS['pg_abgelaufen'] ?? [];
     if (!$l) return '';
     $teile = [];

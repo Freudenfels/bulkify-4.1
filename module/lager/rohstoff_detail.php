@@ -402,7 +402,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === '') {
             $vals[] = (int)$id;
             q("UPDATE item SET $set WHERE id=?", $vals);
             // EK von Hand geändert -> gilt als gepflegt, Lieferantenpreise überschreiben ihn nicht mehr. 0 = wieder automatisch.
-            if (abs((float)$vals[array_search('ek_preis', $felder)] - $ekAlt) > 1e-9) { try { q("UPDATE item SET ek_auto=0 WHERE id=?", [(int)$id]); } catch (Throwable $e) {} }
+            if (abs((float)$vals[array_search('ek_preis', $felder)] - $ekAlt) > 1e-9) { try { q("UPDATE item SET ek_auto=0, ek_abgelaufen_seit=NULL WHERE id=?", [(int)$id]);   /* 13.11.2026: Hand-EK = kein „abgelaufen“-Kennzeichen mehr */ } catch (Throwable $e) {} }
         }
         item_ek_aus_lieferantenpreis((int)$id);
         // Preis schwankt (Nico 11.11.2026, z. B. Whey): Haken + Standard-Gültigkeit in Tagen - nur wenn das Feld im Formular war.

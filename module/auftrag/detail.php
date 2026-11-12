@@ -33,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     if ($bxDoppelt && empty($_POST['doppelt_ok'])) bestellung_doppelt_stopp($bxDoppelt, '?p=auftrag&id=' . $id);
     $bid = auftrag_express_bestellung($id, (int)($_POST['lieferant_id'] ?? 0));
     if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
+    if (function_exists('pg_abgelaufen_weitergeben')) pg_abgelaufen_weitergeben();   // 13.11.2026: Hinweis „Preis abgelaufen“ nicht verlieren
     if ($bid) { header('Location: ?p=bestellung&id=' . $bid . '&ok=1'); exit; }
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Nichts zu bestellen – alles auf Lager oder der Lieferant bietet die fehlenden Rohstoffe nicht.')); exit;
 }
@@ -51,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     if ($bxDoppelt && empty($_POST['doppelt_ok'])) bestellung_doppelt_stopp($bxDoppelt, '?p=auftrag&id=' . $id);
     $bid = auftrag_express_bulk_bestellung($id, (int)($_POST['lieferant_id'] ?? 0));
     if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
+    if (function_exists('pg_abgelaufen_weitergeben')) pg_abgelaufen_weitergeben();   // 13.11.2026: Hinweis „Preis abgelaufen“ nicht verlieren
     if ($bid) { header('Location: ?p=bestellung&id=' . $bid . '&ok=1'); exit; }
     header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Kein Zukaufpreis für dieses Produkt bei dem Lieferanten hinterlegt.')); exit;
 }
@@ -831,7 +833,7 @@ if ($istAdmin && $pa) {
 // Fertigprodukt-Zukauf (Bulk): Zukaufpreise + Anfrage-Möglichkeit für das Produkt des Auftrags.
 if ($istAdmin && !empty($a['produkt_id'])) {
     $prodRezId = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$a['produkt_id']]);
-    $zukaufPreise = all("SELECT z.lieferant_id, z.menge_ab, z.preis, z.waehrung, z.einheit, z.groesse, z.incoterm, z.versandart,
+    $zukaufPreise = all("SELECT z.lieferant_id, z.menge_ab, z.preis, z.waehrung, z.einheit, z.groesse, z.incoterm, z.versandart, z.gueltig_bis,
                                 COALESCE(l.firma, z.lieferant_name, '') AS firma
                          FROM produkt_lieferant_preis z LEFT JOIN lieferanten l ON l.id=z.lieferant_id
                          WHERE z.produkt_id=? ORDER BY z.preis, z.menge_ab", [(int)$a['produkt_id']]);
@@ -1499,7 +1501,7 @@ if (!$pa && !empty($a['produkt_id']) && produkt_ist_handelsware((int)$a['produkt
   <?php if ($zukaufPreise): $nzH = fn($x, $n = 4) => rtrim(rtrim(number_format((float)$x, $n, ',', '.'), '0'), ','); ?>
   <div class="bx-tablewrap"><table class="bx-table">
     <thead><tr><th>Lieferant</th><th class="bx-num">ab Menge</th><th class="bx-num">EK je Einheit</th></tr></thead>
-    <tbody><?php foreach (array_slice($zukaufPreise, 0, 6) as $z): ?><tr><td><?= h($z['firma'] ?: '–') ?></td><td class="bx-num"><?= (float)$z['menge_ab'] > 0 ? $nzH($z['menge_ab'], 3) : '–' ?></td><td class="bx-num"><?= $nzH($z['preis']) ?> <?= h($z['waehrung'] ?: 'EUR') ?><?= $z['einheit'] ? ' / ' . h($z['einheit']) : '' ?></td></tr><?php endforeach; ?></tbody>
+    <tbody><?php foreach (array_slice($zukaufPreise, 0, 6) as $z): ?><tr><td><?= h($z['firma'] ?: '–') ?><?= (!empty($z['gueltig_bis']) && (string)$z['gueltig_bis'] < date('Y-m-d')) ? ' <span class="badge badge-err" title="Preis abgelaufen - Summe unsicher">abgelaufen seit ' . h(date('d.m.Y', strtotime((string)$z['gueltig_bis']))) . '</span>' : '' ?></td><td class="bx-num"><?= (float)$z['menge_ab'] > 0 ? $nzH($z['menge_ab'], 3) : '–' ?></td><td class="bx-num"><?= $nzH($z['preis']) ?> <?= h($z['waehrung'] ?: 'EUR') ?><?= $z['einheit'] ? ' / ' . h($z['einheit']) : '' ?></td></tr><?php endforeach; ?></tbody>
   </table></div>
   <?php else: ?><div class="muted" style="font-size:13px">Noch kein Zukaufpreis hinterlegt (Produkt → Lieferanten-Preise).</div><?php endif; ?>
   <div style="margin-top:10px"><a class="btn btn-ghost btn-sm" href="?p=einkaufsliste">Bestellen über den Einkauf</a></div>

@@ -117,6 +117,7 @@ Sobald ein Auftrag neu ist, fragt das System aktiv (Auftrag erscheint in "Zu erl
   - **Umgesetzt (11.11.2026, Abendpaket Block D):**
     - **Hinweis auf der Seite:** Rechnet eine Seite mit einem abgelaufenen Preis, steht oben „Preis abgelaufen - Summe unsicher“ mit den betroffenen Artikeln. Das gilt für Beschaffungsweg, Kalkulation, Zukauf, VK, Express-Bestellung und den Auftrag.
     - **Auto-EK:** Er wird nie aus einem abgelaufenen Preis gesetzt (Kennzeichen „aus abgelaufenem Preis“).
+    - **Seit 13.11.2026 auch:** Fremdfertigungs-EK je Einheit und Zukauf-EK je Packung (speisen VK, Preismatrix, Angebot), Express-Zukauf (Hinweis übersteht die Weiterleitung), Zukaufpreise am Auftrag (Zeile markiert). Die Kopie für den bedruckten Behälter übernimmt „gültig bis“ und „Stand“ des Originals. Das Kennzeichen „aus abgelaufenem Preis“ verschwindet, wenn der EK von Hand gesetzt wird oder keine Preise mehr da sind.
     - **Bald ablaufend:** Bald ablaufende Rohstoff-, Zukauf- und Fremdfertigungspreise in offenen Angeboten melden sich täglich per Cron.
 - Ein Angebot gilt standardmäßig nicht länger als der kürzeste EK-Preis darin. Ein späteres Datum ergibt nur einen Hinweis.
 - Ein abgelaufenes Angebot kann der Kunde nicht annehmen, nur eine Aktualisierung anfragen.
@@ -571,3 +572,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 12.11.2026 | Gebindeaufkleber des Lieferanten (4.4/4.5): Portal + Dashboard „Labels / Aufkleber“, PDF mit QR (HMAC, A4 1/2, 100 x 150), Paketzahl beim Versand, Lager-Scan ein Scan = ein Gebinde, Abschluss mit Meldung/Aufgabe, Chargen-Abgleich gegen CoA | Nico / Claude Code |
 | 12.11.2026 | Produktion 4.5a: neuer Buchstabe auch an jedem neuen Produktionstag (gleicher Bulk am selben Tag = gleicher Buchstabe); Unter-Charge im Dashboard abschließen/wieder öffnen | Nico / Claude Code |
 | 12.11.2026 | Einkauf: Stornieren mit Pflicht-Grund; Position stornieren (bleibt sichtbar, zählt nicht mehr als unterwegs, auch an eingegangener Bestellung). Portal-Lieferanten werden immer informiert (Schalter „Lieferant informieren“ am 13.11. wieder entfernt, „ohne Nachricht“ nur intern für Datenpflege) | Nico / Claude Code |
+| 13.11.2026 | Nachbesserung Fable-Prüfung 2: abgelaufene Preise auch in Fremd-/Zukauf-EK, Express, Behälter-Kopie, Zukauf-Tabelle (4.2 „nie still“ gilt jetzt überall) | Nico / Claude Code |

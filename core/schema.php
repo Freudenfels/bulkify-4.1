@@ -4777,12 +4777,15 @@ function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
     $best = null;
     // Quelle A: Fremdfertigungs-Angebot an der Rezeptur (nur Stueck-Preise). Passende Staffel, sonst Basis.
     if (table_exists('rezeptur_lief_angebot')) {
+        $abgR = [];
         // Stück-Preise: die Rezeptur ist bereits eine Stück-Form, daher jede Zeile akzeptieren, die KEINE
         // Gewichts-/Volumeneinheit ist (so fallen „Stk.", „pcs", „Kapseln" etc. nicht durch eine zu enge Liste).
-        $rows = all("SELECT preis, menge FROM rezeptur_lief_angebot
+        // 13.11.2026: nur gültige Preise je Lieferant (lp_je_lieferant_gueltig); gibt es nur abgelaufene, wird mit dem letzten
+        // gerechnet und auf der Seite markiert („Preis abgelaufen - Summe unsicher“, nie still).
+        $rows = lp_je_lieferant_gueltig(all("SELECT lieferant_id, preis, menge, gueltig_bis FROM rezeptur_lief_angebot
                      WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0
                        AND (einheit IS NULL OR einheit='' OR LOWER(TRIM(einheit)) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm','mg'))",
-                    [$rid]);
+                    [$rid]), $abgR, ['rezeptur', $rid]);
         $passend = null; $basis = null;
         foreach ($rows as $r) {
             $m = (float)$r['menge']; $p = (float)$r['preis'];
@@ -5014,7 +5017,8 @@ function rezeptur_zukauf_ek_packung(int $rid, int $stueck, int $packungen = 0): 
         if (!table_exists('rezeptur_lief_angebot')) return null;
         $bedarf = (float)$stueck / 1000 * max(1, $packungen);   // Gesamtmenge in kg bzw. l
         $passend = null; $basis = null;
-        foreach (all("SELECT preis, menge, LOWER(TRIM(COALESCE(einheit,''))) AS e FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0", [$rid]) as $r) {
+        $abgR = [];   // 13.11.2026: nur gültige Preise je Lieferant, abgelaufene markiert (nie still)
+        foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, preis, menge, gueltig_bis, LOWER(TRIM(COALESCE(einheit,''))) AS e FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0", [$rid]), $abgR, ['rezeptur', $rid]) as $r) {
             $e = (string)$r['e'];
             if (in_array($e, ['kg', 'kilogramm', 'l', 'liter'], true))      { $pkg = (float)$r['preis'];        $m = (float)$r['menge']; }
             elseif (in_array($e, ['g', 'gramm', 'ml'], true))              { $pkg = (float)$r['preis'] * 1000; $m = (float)$r['menge'] / 1000; }
@@ -7141,7 +7145,7 @@ function item_ek_aus_lieferantenpreis(int $item_id): void {
             $seen[$k] = true;
             if ($best === null || (float)$r['preis'] < $best['preis']) $best = ['preis' => (float)$r['preis'], 'lid' => (int)$r['lieferant_id']];
         }
-        if ($best === null) { if ($auto) q("UPDATE item SET ek_preis=0, ek_auto=0 WHERE id=?", [$item_id]); return; }
+        if ($best === null) { if ($auto) q("UPDATE item SET ek_preis=0, ek_auto=0, ek_abgelaufen_seit=NULL WHERE id=?", [$item_id]); return; }   // 13.11.2026: keine Preise mehr = kein Kennzeichen
         $lid = $best['lid'] > 0 && scalar("SELECT id FROM lieferanten WHERE id=?", [$best['lid']]) ? $best['lid'] : null;
         q("UPDATE item SET ek_preis=?, ek_auto=1, ek_abgelaufen_seit=NULL, haupt_lieferant_id=COALESCE(haupt_lieferant_id, ?) WHERE id=?", [$best['preis'], $lid, $item_id]);
     } catch (Throwable $e) { /* best-effort: Spalte ek_auto evtl. noch nicht da */ }
@@ -11340,9 +11344,10 @@ function verpackung_kundenspezifisch_sicherstellen(int $produkt_id, int $basis_i
     foreach (all("SELECT menge_ab, ek_preis, lieferant_id FROM pack_ek_staffel WHERE item_id=?", [(int)$b['id']]) as $st)
         q("INSERT INTO pack_ek_staffel (item_id, menge_ab, ek_preis, lieferant_id) VALUES (?,?,?,?)", [$nid, (int)$st['menge_ab'], $st['ek_preis'], $st['lieferant_id']]);
     if (table_exists('lieferant_preis'))
-        foreach (all("SELECT lieferant_id, menge_ab, preis, waehrung, lieferant_name FROM lieferant_preis WHERE item_id=?", [(int)$b['id']]) as $lp)
-            q("INSERT INTO lieferant_preis (item_id, lieferant_id, menge_ab, preis, waehrung, stand, lieferant_name, quelle) VALUES (?,?,?,?,?,CURDATE(),?,'kopie_neutral')",
-              [$nid, $lp['lieferant_id'], $lp['menge_ab'], $lp['preis'], $lp['waehrung'] ?: 'EUR', $lp['lieferant_name']]);
+        // 13.11.2026: „gültig bis“ und „Stand“ vom Original übernehmen – sonst wäre ein abgelaufener Preis in der Kopie wieder frisch.
+        foreach (all("SELECT lieferant_id, menge_ab, preis, waehrung, lieferant_name, stand, gueltig_bis FROM lieferant_preis WHERE item_id=?", [(int)$b['id']]) as $lp)
+            q("INSERT INTO lieferant_preis (item_id, lieferant_id, menge_ab, preis, waehrung, stand, gueltig_bis, lieferant_name, quelle) VALUES (?,?,?,?,?,COALESCE(?, CURDATE()),?,?,'kopie_neutral')",
+              [$nid, $lp['lieferant_id'], $lp['menge_ab'], $lp['preis'], $lp['waehrung'] ?: 'EUR', $lp['stand'] ?: null, $lp['gueltig_bis'] ?: null, $lp['lieferant_name']]);
     if ($slot) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$nid, $produkt_id]);
     if (function_exists('bedarf_bump')) bedarf_bump();
     return $nid;
@@ -12332,8 +12337,9 @@ function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?i
     if ($menge <= 0) $menge = (float)$packs;
     // Staffelpreis: gegen die Bestellmenge in DIESER Einheit vergleichen.
     $preis = null; $einheitPreis = ''; $groesse = '';
-    foreach (all("SELECT preis, menge_ab, einheit, groesse FROM produkt_lieferant_preis
-                  WHERE produkt_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$a['produkt_id'], $lieferant_id]) as $s) {
+    // 13.11.2026: gültige Preise zuerst; nur abgelaufene -> gerechnet und markiert („Preis abgelaufen - Summe unsicher“).
+    foreach (lp_gueltig_auswahl(all("SELECT preis, menge_ab, einheit, groesse, gueltig_bis FROM produkt_lieferant_preis
+                  WHERE produkt_id=? AND lieferant_id=? AND (waehrung IS NULL OR waehrung='EUR') ORDER BY menge_ab", [(int)$a['produkt_id'], $lieferant_id]), ['produkt', (int)$a['produkt_id']])['rows'] as $s) {
         // Packungspreis (St-24) für lose Einheiten umrechnen: Preis / Einheiten je Packung, Staffel × Einheiten je Packung.
         if ((string)($s['einheit'] ?? '') === 'packung' && $einhProP > 0) { $s['preis'] = (float)$s['preis'] / $einhProP; $s['menge_ab'] = (float)$s['menge_ab'] * $einhProP; $s['einheit'] = ''; }
         if ($preis === null) { $preis = (float)$s['preis']; $einheitPreis = (string)($s['einheit'] ?? ''); $groesse = (string)$s['groesse']; }

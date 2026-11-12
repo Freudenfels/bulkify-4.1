@@ -457,7 +457,8 @@ function bx_menue_script(): string {
 
 function render_footer(): void {
     // Block D (11.11.2026): wurde auf dieser Seite mit einem abgelaufenen Preis gerechnet, steht oben „Preis abgelaufen - Summe unsicher".
-    if (!empty($GLOBALS['pg_abgelaufen']) && function_exists('pg_abgelaufen_hinweis')) {
+    if (!empty($_SESSION['pg_abgelaufen_flash'])) require_once __DIR__ . '/preis_gueltig.php';   // 13.11.2026: Hinweis aus einer Weiterleitung (Express)
+    if ((!empty($GLOBALS['pg_abgelaufen']) || !empty($_SESSION['pg_abgelaufen_flash'])) && function_exists('pg_abgelaufen_hinweis')) {
         echo pg_abgelaufen_hinweis() . '<script>(function(){var h=document.getElementById("pgAbgelaufen"),m=document.querySelector(".bx-main .bx-head");if(h&&m)m.insertAdjacentElement("afterend",h);})();</script>';
     }
     echo "</main></div>";
