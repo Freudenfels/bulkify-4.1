@@ -485,3 +485,6 @@ Downloads (Laboranalyse, Auftrags-Dokument, Zertifikat, Druckvorlagen) über kun
 Nico: „Grundcharge ist 2775, die Buchstaben stehen nur für verschiedene Tage. Der Kunde soll nicht sehen, wann wir was produziert haben.“
 - **Charge & Qualität** (Bestellseite): eine Zeile je **Grundcharge** (2775) statt je Buchstabe (2775.A/.B). Die Spalte **Produktionsdatum ist weg**. MHD = das früheste der Teile, Status = der schlechteste. CoA, Laboranalyse oder Informationsdokument zählen für die ganze Grundcharge, auch wenn sie an einer Buchstaben-Charge abgelegt sind. So entsteht kein Wunsch nach einem CoA je Buchstabe.
 - **Bestellliste, Suche, Dokumente:** Angezeigt wird überall die Grundcharge (`$kundeChargeBasis()`, `$auftragChargen[...]['roh']` behält die Buchstaben). Die Suche findet auch „2775.A“.
+
+## Original-Rechnung und Dokumenttitel neutral (13.11.2026)
+`rechnung_datei` liefert über `kunde_datei_ausliefern()` aus: Dateiname „Rechnung_<Nummer>“, PDF-Metadaten leer. Titel hochgeladener Auftragsdokumente laufen durch `kunde_text_neutral()`.

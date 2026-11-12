@@ -389,16 +389,13 @@ if ($k && ($_GET['v'] ?? '') === 'rechnung_beleg') {
 }
 if ($k && ($_GET['v'] ?? '') === 'rechnung_datei') {
     $bid = (int)($_GET['id'] ?? 0);
-    $b = $bid ? one("SELECT original_datei, original_orig FROM beleg WHERE id=? AND kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND original_datei IS NOT NULL", [$bid, (int)$k['id']]) : null;
+    $b = $bid ? one("SELECT nummer, original_datei FROM beleg WHERE id=? AND kunde_id=? AND typ='rechnung' AND kunde_sichtbar=1 AND original_datei IS NOT NULL", [$bid, (int)$k['id']]) : null;
     $pf = $b ? BX_UPLOADS . '/' . basename((string)$b['original_datei']) : '';
     if (!$b || !$pf || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
-    $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
-    $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif'][$ext] ?? 'application/octet-stream';
-    header('Content-Type: ' . $mime);
-    header('Content-Disposition: inline; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', (string)($b['original_orig'] ?: 'Rechnung')) . '"');
-    header('X-Content-Type-Options: nosniff');
-    header('Content-Length: ' . filesize($pf));
-    readfile($pf); exit;
+    // 13.11.2026: über den zentralen neutralen Download – neutraler Dateiname (nie der Original-Dateiname), PDF-Metadaten leer.
+    require_once BX_ROOT . '/core/kunde_neutral.php';
+    $extR = strtolower(pathinfo($pf, PATHINFO_EXTENSION)) ?: 'pdf';
+    kunde_datei_ausliefern($pf, 'Rechnung_' . kunde_dateiname_teil((string)$b['nummer']) . '.' . preg_replace('/[^a-z0-9]/', '', $extR));
 }
 
 // Zum Auftrag hochgeladenes Dokument (z. B. nachgetragene Original-Rechnung) ausliefern – nur eigener Auftrag,
@@ -4992,7 +4989,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <div class="bx-row" style="gap:10px;flex-wrap:wrap">
         <?php foreach ($auftragDocs as $ad): ?>
           <a class="btn btn-ghost" target="_blank" rel="noopener" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('auftrag_dok') ?>&id=<?= (int)$ad['id'] ?>">
-            <?= h($ad['titel'] ?: ($DOKLBL[$ad['typ']] ?? 'Dokument')) ?><?= $ad['dok_datum'] ? ' <span class="muted" style="font-size:12px">· ' . h(fmt_zeit($ad['dok_datum'] . ' 00:00:00', 'd.m.Y')) . '</span>' : '' ?>
+            <?= h(trim((string)$ad['titel']) !== '' ? kunde_text_neutral((string)$ad['titel']) : ($DOKLBL[$ad['typ']] ?? 'Dokument')) ?><?= $ad['dok_datum'] ? ' <span class="muted" style="font-size:12px">· ' . h(fmt_zeit($ad['dok_datum'] . ' 00:00:00', 'd.m.Y')) . '</span>' : '' ?>
           </a>
         <?php endforeach; ?>
       </div>
