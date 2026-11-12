@@ -7825,6 +7825,13 @@ function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = nul
     if (function_exists('bedarf_bump')) bedarf_bump();
     return '';
 }
+// Bestellung als Entwurf führen (Fable-3 T2.1, 13.11.2026): Status „offen“ ohne Bestelldatum – z. B. wenn die Unterlagen-Sperre greift
+// oder „Vorsorglich bestellen“. Meldung „nur Entwurf“ und Status stimmen so überein; der Bedarf gilt nicht als bestellt.
+function bestellung_als_entwurf(int $bestellung_id, string $notiz = ''): void {
+    q("UPDATE bestellung SET bestellart='lieferant', status='offen', bestelldatum=NULL, notiz=CONCAT_WS(' · ', NULLIF(TRIM(notiz),''), NULLIF(?,'')) WHERE id=? AND status IN ('offen','gesendet','bestellt') AND COALESCE(bestaetigt,0)=0",
+      [trim($notiz), $bestellung_id]);
+    if (function_exists('bedarf_bump')) bedarf_bump();
+}
 // „Als bestellt markieren“ (Bestellseite, Einkauf mobil) – EIN Weg mit der zentralen Unterlagen-Sperre (13.11.2026).
 // Rückgabe ['ok'=>bool, 'msg'=>string]: ok=false = gesperrt (msg = Grund); ok=true und msg nicht leer = Mail-Fehler (Bestellung gilt).
 function bestellung_als_bestellt_markieren(int $bestellung_id, string $ausnahme_grund = '', string $wer = ''): array {

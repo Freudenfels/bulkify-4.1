@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
         if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         if ($bid && !$online && ($luS = lu_bestellen_sperre($bid)) !== '') {   // Unterlagen fehlen: nur Entwurf, nicht senden
             // Wirklich als Entwurf (offen, ohne Bestelldatum) – bestellung_erstellen() mit Datum legt sonst „bestellt" an.
-            q("UPDATE bestellung SET bestellart='lieferant', status='offen', bestelldatum=NULL, notiz=CONCAT_WS(' · ', NULLIF(TRIM(notiz),''), 'Vorsorglich') WHERE id=?", [$bid]);
+            bestellung_als_entwurf($bid, 'Vorsorglich');
             header('Location: ?p=bestellung&id=' . $bid . '&fehler=' . urlencode('Als Entwurf angelegt, nicht gesendet. ' . $luS) . '#unterlagen'); exit;
         }
         if ($bid) {
@@ -183,7 +183,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
     $luEntwurf = [];
     $finalLief = function(int $bid) use ($direkt, $datum, &$luEntwurf) {
         // Paket 12.11.2026 Teil 4: fehlen Unterlagen des Lieferanten, bleibt die Bestellung Entwurf (nicht gesendet).
-        if (lu_bestellen_sperre($bid) !== '') { $luEntwurf[] = $bid; return; }
+        // Fable-3 T2.1: auch wirklich Entwurf (offen, ohne Bestelldatum) – bestellung_erstellen() mit Datum legt sonst „bestellt“ an.
+        if (lu_bestellen_sperre($bid) !== '') { bestellung_als_entwurf($bid); $luEntwurf[] = $bid; return; }
         if ($direkt) { bestellung_direkt_abschliessen($bid, (string)$datum, (string)($_POST['di_eta'] ?? ''), trim((string)($_POST['di_notiz'] ?? ''))); return; }
         q("UPDATE bestellung SET bestellart='lieferant', status='gesendet' WHERE id=?", [$bid]);   // Notiz bleibt; „wartet auf Bestätigung" zeigt die Statuskette
         if (mail_bereit()) mail_lieferant_bestellung($bid);

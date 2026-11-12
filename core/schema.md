@@ -677,3 +677,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 `auftrag_fortschritt_kunde($steps, $a)`: Mit Auftrag kein Produktionsdatum beim Kunden. Daten nur bei Bestätigt, Abgeschlossen und Versendet; Untertexte ohne Datum. Bei Fremdproduktion (`auftrag_ist_fremdproduktion()`: Zukauf fertig, Handelsware oder Bulk extern festgelegt) nur Hauptpunkte: Bestätigt, In Produktion, Laboranalyse, Abgeschlossen, Versendet und rote Punkte zum Handeln. Auftrags-PDF: Charge als Grundcharge.
 
 **Ortszeit (13.11.2026, Fable-3 T1.7):** `mhd_standard()` rechnet ab heute in Europe/Berlin (`heute_ort()`), nicht UTC. `produktion_teilmenge_einbuchen()` (alter Einlager-Weg) schreibt `wareneingang` = `heute_ort()` statt `CURDATE()`.
+
+**`bestellung_als_entwurf($id, $notiz)` (13.11.2026, Fable-3 T2.1):** setzt eine noch nicht bestätigte Bestellung auf Entwurf (offen, ohne Bestelldatum, Bestellart Lieferant). Genutzt von der Einkaufsliste bei Unterlagen-Sperre und „Vorsorglich bestellen“.
