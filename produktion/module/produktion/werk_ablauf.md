@@ -6,7 +6,7 @@ Seit 11.11.2026. Wird in der Schritt-Ansicht von `werk.php` eingebunden, wenn `e
    - Bulk scannen. Danach steht groß „**Charge 2785.B · MHD 14.10.2028**“ mit dem Hinweis „Stempel genau so einstellen“.
    - Linie wählen, dazu Pflichtfoto „Linie leer“ und Pflichtfoto „Stempelbild“.
    - Abweichende Charge nur mit Grund (geht als Aufgabe ans Büro).
-   - **Wiederanlauf:** Ist der letzte Start einer laufenden Unter-Charge von einem früheren Tag, kommt der Start-Dialog erneut, mit gleicher Charge und neuen Fotos.
+   - **Wiederanlauf:** Ist der letzte Start einer laufenden Unter-Charge von einem früheren Tag, kommt der Start-Dialog erneut mit neuen Fotos. Seit 12.11.2026 (Nico) gibt es dabei den **nächsten Buchstaben** (neuer Produktionstag = neue Unter-Charge, Vorschlag aus `pa_vorgabe`). Die alte Unter-Charge wird mit „neuer Produktionstag“ abgeschlossen.
 2. **Laufende Charge:** groß Charge und MHD, dazu produziert/offen.
 3. **Material scannen:**
    - Falsches Material wird gesperrt.
