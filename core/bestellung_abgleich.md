@@ -29,3 +29,6 @@
 - **„Menge korrigieren und verknüpfen“** an jedem Vorschlag (Bestellseite: Pop-up `charge_korr_dialog`, Datenprüfung: JS-Pop-up). Das Pop-up ist mit der offenen Bestellmenge vorbelegt. Erst wird korrigiert (`charge_menge_korrigieren`), dann verknüpft. Aktion `korr_verknuepfen`, nur Admin.
 - **„Verknüpfung lösen“:** Aktion `loesen` -> `webe_charge_loesen()`, nur Admin.
 - **Mehrere Chargen je Position:** `BA_POS_OFFEN` blendet eine Position nicht mehr aus, sobald irgendeine Charge dranhängt. Sie bleibt offen, solange weniger als 98 % geliefert sind. „verknüpfen“ gibt `pos_voll` zurück.
+
+## Verknüpfte Chargen in der Datenprüfung (13.11.2026)
+Die Zelle zeigt schon verknüpfte Chargen der Bestellung mit „Verknüpfung lösen“, auch nach dem Neuladen. Beim Verknüpfen meldet sie eine Mehrlieferung.

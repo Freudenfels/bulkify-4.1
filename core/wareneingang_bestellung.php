@@ -154,6 +154,9 @@ function webe_charge_loesen(int $charge_id, string $von = ''): array {
     if ((int) scalar("SELECT COUNT(*) FROM charge WHERE bestellung_position_id=?", [$bpId]) === 0) q("UPDATE bestellung_position SET geliefert_menge=0 WHERE id=?", [$bpId]);
     else webe_position_neu_rechnen($bpId);
     $st = $bp ? webe_bestellung_stand((int)$bp['bestellung_id'], false, '', true) : ['wieder_offen' => false];
+    // 13.11.2026: ist an der Bestellung gar nichts mehr geliefert, gilt sie auch nicht mehr als teilgeliefert.
+    if ($bp && (float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [(int)$bp['bestellung_id']]) <= 0.0005)
+        q("UPDATE bestellung SET teilgeliefert_am=NULL WHERE id=?", [(int)$bp['bestellung_id']]);
     $cnr = (string)($c['charge_nr'] ?: '#' . $charge_id);
     $txt = 'Verknüpfung gelöst: Charge ' . $cnr . ' gehört nicht mehr zu ' . ($bp['nummer'] ?? 'der Bestellung') . ($von !== '' ? ' (' . $von . ')' : '') . '.';
     if (function_exists('log_aktivitaet')) {

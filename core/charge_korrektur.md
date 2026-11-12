@@ -26,3 +26,8 @@ Nur Admin, die Prüfung macht der Aufrufer (`has_role('admin')` bzw. `lg_ist_adm
 
 ## Leere Menge abgelehnt (13.11.2026)
 `charge_menge_korrigieren()` nimmt die rohe Eingabe (Text) und liest sie selbst (`charge_korr_menge_lesen()`): leer oder keine Zahl = abgelehnt mit Meldung, nichts gebucht (vorher wurde leer zu 0 und die Charge „leer“). Alle Wege (Dashboard Chargen, Rohstoff, Verpackung, Datenprüfung, Lager-App) geben den Text durch.
+
+## Nachbesserung 13.11.2026
+- Erst die Korrektur-Zeile, dann `UPDATE charge` – beides in einer Transaktion (nie eine geänderte Charge ohne Spur).
+- Status: 0 setzt „leer“ nur aus „frei“; Quarantäne/gesperrt bleiben. Aus „leer“ mit neuer Menge zurück auf den Status vor „leer“ (`charge.status_vor_leer`), nicht automatisch „frei“.
+- Hinweise: neue Menge unter der reservierten Menge, Ursprung unter der schon verbrauchten Menge, Mehrlieferung an der verknüpften Bestellposition.

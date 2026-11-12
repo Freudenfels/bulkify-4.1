@@ -149,6 +149,13 @@ function bestellung_abgleich_eindeutig(array $p, array $konflikte): ?array {
 function bestellung_abgleich_zelle(array $r, array $konflikte): string {
     $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
     $h = ''; $bid = (int)$r['_id']; $nr = (string)$r['nummer'];
+    // 13.11.2026: schon verknüpfte Chargen der Bestellung (auch nach dem Neuladen) mit „Verknüpfung lösen“.
+    foreach (all("SELECT c.id, c.charge_nr, c.menge, c.einheit, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '') AS bez FROM charge c
+                  JOIN bestellung_position bp ON bp.id=c.bestellung_position_id LEFT JOIN item i ON i.id=bp.item_id WHERE bp.bestellung_id=? ORDER BY c.id", [$bid]) as $vc)
+        $h .= '<div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;margin:0 0 4px"><span class="muted">verknüpft:</span>'
+            . '<a href="?p=chargen&id=' . (int)$vc['id'] . '" target="_blank" rel="noopener">' . h((string)($vc['charge_nr'] ?: '#' . $vc['id'])) . '</a>'
+            . '<span>' . $mz($vc['menge']) . ' ' . h((string)$vc['einheit']) . '</span><span class="muted">' . h((string)$vc['bez']) . '</span>'
+            . '<button type="button" class="btn btn-ghost btn-sm" data-dpabgl="loesen" data-bestellung="' . $bid . '" data-charge="' . (int)$vc['id'] . '" data-frage="Verknüpfung lösen? Die Charge ist danach frei, die Bestellung rechnet neu.">Verknüpfung lösen</button></div>';
     foreach (($r['_pos'] ?? []) as $p) {
         $v = $p['vorschlaege'];
         $h .= '<div data-dp-pos="' . (int)$p['id'] . '" style="margin:0 0 6px"><div style="font-size:13px"><strong style="font-weight:600">' . h((string)($p['artikel'] ?: $p['bezeichnung'])) . '</strong> <span class="muted">· bestellt ' . $mz($p['menge']) . ' ' . h((string)$p['einheit']) . ' · geliefert ' . $mz($p['geliefert']) . '</span></div>';
@@ -203,8 +210,9 @@ function bestellung_abgleich_aktion(string $aktion, int $bestellung_id, int $bp_
         $pr = one("SELECT menge, COALESCE(geliefert_menge,0) AS g, einheit FROM bestellung_position WHERE id=?", [$bp_id]);
         $posRest = $pr ? max(0.0, (float)$pr['menge'] - (float)$pr['g']) : 0.0;
         $posVoll = !$pr || (float)$pr['g'] >= (float)$pr['menge'] * 0.98;
+        $mehrTxt = ($pr && (float)$pr['g'] > (float)$pr['menge'] * 1.02) ? ' Mehrlieferung: ' . rtrim(rtrim(number_format((float)$pr['g'] - (float)$pr['menge'], 3, ',', '.'), '0'), ',') . ' ' . $pr['einheit'] . ' mehr als bestellt.' : '';   // 13.11.2026
         return ['ok' => true, 'offen' => $offen, 'pos_voll' => $posVoll, 'charge' => $charge_id,
-                'msg' => $nr . ': Charge ' . $cnr . ' verknüpft.' . (!$posVoll ? ' Position noch offen: ' . rtrim(rtrim(number_format($posRest, 3, ',', '.'), '0'), ',') . ' ' . $pr['einheit'] . '.' : '') . ($offen ? ' Noch ' . $offen . ' Position(en) offen.' : '')];
+                'msg' => $nr . ': Charge ' . $cnr . ' verknüpft.' . $mehrTxt . (!$posVoll ? ' Position noch offen: ' . rtrim(rtrim(number_format($posRest, 3, ',', '.'), '0'), ',') . ' ' . $pr['einheit'] . '.' : '') . ($offen ? ' Noch ' . $offen . ' Position(en) offen.' : '')];
     }
     // Block B (11.11.2026): erst Menge der Charge korrigieren (Pop-up wie auf der Chargenseite), dann verknüpfen.
     if ($aktion === 'korr_verknuepfen') {

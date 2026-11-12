@@ -27,6 +27,11 @@ function charge_korr_schema(): void {
             KEY idx_charge (charge_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } catch (\Throwable $e) {}
+    // 13.11.2026: Status vor „leer“ merken – kommt wieder Menge dazu, geht die Charge dorthin zurück (nicht automatisch „frei“).
+    try {
+        if ((int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='charge' AND COLUMN_NAME='status_vor_leer'") === 0)
+            q("ALTER TABLE charge ADD COLUMN status_vor_leer VARCHAR(20) NULL");
+    } catch (\Throwable $e) {}
 }
 function charge_korr_mz(float $x): string { return rtrim(rtrim(number_format($x, 3, ',', '.'), '0'), ','); }
 
@@ -58,17 +63,44 @@ function charge_menge_korrigieren(int $charge_id, string $was, float|string $neu
     $notiz = mb_substr(trim($notiz), 0, 500);
     if ($grund === 'sonstiges' && $notiz === '') return ['ok' => false, 'meldung' => 'Bei „Sonstiges“ bitte eine Notiz schreiben.'];
     if ($neu < 0) return ['ok' => false, 'meldung' => 'Die Menge darf nicht negativ sein.'];
-    $c = one("SELECT c.id, c.charge_nr, c.menge, c.menge_verfuegbar, c.einheit, c.status, c.bestellung_position_id, i.name AS item_name
-              FROM charge c LEFT JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
+    $c = one("SELECT c.*, i.name AS item_name FROM charge c LEFT JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
     $mAlt = (float)$c['menge']; $vAlt = (float)$c['menge_verfuegbar'];
     if ($was === 'ursprung') { $mNeu = round($neu, 3); $vNeu = max(0.0, round($vAlt + ($mNeu - $mAlt), 3)); }
     else                     { $mNeu = $mAlt; $vNeu = round($neu, 3); }
     if (abs($mNeu - $mAlt) < 0.0005 && abs($vNeu - $vAlt) < 0.0005) return ['ok' => false, 'meldung' => 'Keine Änderung - die Menge ist schon so.'];
     $dv = round($vNeu - $vAlt, 3); $dm = round($mNeu - $mAlt, 3);
-    $status = (string)$c['status'];
-    if ($vNeu <= 0.0005) $status = 'leer'; elseif ($status === 'leer') $status = 'frei';
-    q("UPDATE charge SET menge=?, menge_verfuegbar=?, status=? WHERE id=?", [$mNeu, $vNeu, $status, $charge_id]);
+    // Status (13.11.2026): 0 setzt „leer“ nur aus „frei“ – Quarantäne/gesperrt bleiben. Aus „leer“ mit neuer Menge zurück auf den
+    // Status vor „leer“ (gemerkt in status_vor_leer), nicht automatisch „frei“.
+    $status = (string)$c['status']; $statusVorLeer = $c['status_vor_leer'] ?? null;
+    if ($vNeu <= 0.0005) { if ($status === 'frei') { $statusVorLeer = 'frei'; $status = 'leer'; } }
+    elseif ($status === 'leer') { $status = (string)($c['status_vor_leer'] ?? '') !== '' ? (string)$c['status_vor_leer'] : 'frei'; $statusVorLeer = null; }
+    // Hinweise (13.11.2026): Reservierung und Verbrauch.
+    $hinweise = [];
+    $reserviert = function_exists('charge_bulk_reserviert') ? charge_bulk_reserviert($charge_id)
+                : (float) (scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE charge_id=? AND status='aktiv'", [$charge_id]) ?? 0);
+    if ($reserviert > 0.0005 && $vNeu + 0.0005 < $reserviert) $hinweise[] = 'Achtung: für Aufträge reserviert sind ' . charge_korr_mz($reserviert) . ' ' . $c['einheit'] . ', verfügbar ist jetzt nur ' . charge_korr_mz($vNeu) . ' - Reservierungen prüfen.';
+    $verbraucht = max(0.0, $mAlt - $vAlt);
+    if ($was === 'ursprung' && $verbraucht > 0.0005 && $mNeu + 0.0005 < $verbraucht) $hinweise[] = 'Achtung: die neue Ursprungsmenge liegt unter der schon verbrauchten Menge (' . charge_korr_mz($verbraucht) . ' ' . $c['einheit'] . ') - verfügbar bleibt 0.';
+
+    // Erst die Korrektur-Zeile, dann die Charge – beides in EINER Transaktion (13.11.2026): nie eine geänderte Charge ohne Spur.
+    $gtxt = charge_korr_gruende()[$grund];
+    $einh = (string)$c['einheit'];
+    $pdo = db(); $eigeneTx = !$pdo->inTransaction();
+    try {
+        if ($eigeneTx) $pdo->beginTransaction();
+        q("INSERT INTO charge_korrektur (charge_id, art, menge_alt, menge_neu, verf_alt, verf_neu, differenz, einheit, grund, notiz, beleg, von, angelegt)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          [$charge_id, $was, $mAlt, $mNeu, $vAlt, $vNeu, $was === 'ursprung' ? $dm : $dv, $einh ?: null, $grund, $notiz ?: null, $beleg ?: null,
+           mb_substr($von, 0, 120) ?: null, gmdate('Y-m-d H:i:s')]);
+        $korrId = (int) $pdo->lastInsertId();
+        try { q("UPDATE charge SET menge=?, menge_verfuegbar=?, status=?, status_vor_leer=? WHERE id=?", [$mNeu, $vNeu, $status, $statusVorLeer, $charge_id]); }
+        catch (\Throwable $e0) { q("UPDATE charge SET menge=?, menge_verfuegbar=?, status=? WHERE id=?", [$mNeu, $vNeu, $status, $charge_id]); }
+        if ($eigeneTx) $pdo->commit();
+    } catch (\Throwable $eTx) {
+        if ($eigeneTx && $pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'meldung' => 'Korrektur nicht gebucht (Datenbankfehler) - nichts geändert.'];
+    }
 
     // Gebinde: Differenz auf das letzte (nicht leere) Gebinde, bei Abgang ggf. weiter nach vorne. Hinweis, welche betroffen sind.
     $gebHinweis = '';
@@ -105,14 +137,11 @@ function charge_menge_korrigieren(int $charge_id, string $was, float|string $neu
             $st = webe_bestellung_stand($bid, false, '', true);
             $bnr = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$bid]);
             $bestHinweis = 'Bestellung ' . $bnr . ' neu gerechnet: ' . ($st['komplett'] ? 'vollständig geliefert.' : (!empty($st['wieder_offen']) ? 'wieder offen.' : 'noch offen.'));
+            foreach (($st['mehr'] ?? []) as $mh) if ((int)$mh['id'] === $bpId) $hinweise[] = 'Mehrlieferung: ' . charge_korr_mz((float)$mh['mehr']) . ' ' . $mh['einheit'] . ' mehr geliefert als bestellt.';   // 13.11.2026
         }
     }
-    $gtxt = charge_korr_gruende()[$grund];
-    $einh = (string)$c['einheit'];
-    q("INSERT INTO charge_korrektur (charge_id, art, menge_alt, menge_neu, verf_alt, verf_neu, differenz, einheit, grund, notiz, beleg, gebinde, bestellung, von, angelegt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-      [$charge_id, $was, $mAlt, $mNeu, $vAlt, $vNeu, $was === 'ursprung' ? $dm : $dv, $einh ?: null, $grund, $notiz ?: null, $beleg ?: null,
-       mb_substr($gebHinweis, 0, 190) ?: null, mb_substr($bestHinweis, 0, 190) ?: null, mb_substr($von, 0, 120) ?: null, gmdate('Y-m-d H:i:s')]);
+    // Gebinde-/Bestellungs-Hinweis an die schon geschriebene Korrektur-Zeile hängen.
+    try { q("UPDATE charge_korrektur SET gebinde=?, bestellung=? WHERE id=?", [mb_substr($gebHinweis, 0, 190) ?: null, mb_substr($bestHinweis, 0, 190) ?: null, $korrId]); } catch (\Throwable $e) {}
     $text = 'Korrektur ' . ($was === 'ursprung' ? 'Ursprungsmenge ' . charge_korr_mz($mAlt) . ' -> ' . charge_korr_mz($mNeu) : 'verfügbar ' . charge_korr_mz($vAlt) . ' -> ' . charge_korr_mz($vNeu))
           . ' ' . $einh . ' · ' . $gtxt . ($notiz !== '' ? ': ' . $notiz : '') . ' · ' . $von;
     // Bewegung (Lager-App „Bewegungen") + Verlauf der Charge. Beides Lager-Tabellen in derselben DB – best effort.
@@ -128,7 +157,7 @@ function charge_menge_korrigieren(int $charge_id, string $was, float|string $neu
     if (function_exists('webe_bedarf_bump')) webe_bedarf_bump();
     return ['ok' => true, 'differenz' => $was === 'ursprung' ? $dm : $dv,
             'meldung' => 'Korrigiert: ' . ($was === 'ursprung' ? 'Ursprung ' . charge_korr_mz($mNeu) . ', verfügbar ' . charge_korr_mz($vNeu) : 'verfügbar ' . charge_korr_mz($vNeu)) . ' ' . $einh . '.',
-            'hinweis' => trim($gebHinweis . ' ' . $bestHinweis)];
+            'hinweis' => trim(implode(' ', $hinweise) . ' ' . $gebHinweis . ' ' . $bestHinweis)];
 }
 function charge_korr_liste(int $charge_id): array {
     charge_korr_schema();
