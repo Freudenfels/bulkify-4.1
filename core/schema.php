@@ -7809,13 +7809,26 @@ function bestellung_stufe(array $b): array {
 // Portal trotzdem (Tracking, Rechnung), muss aber nichts bestätigen. $datum = Bestelldatum (leer = heute), $eta = erwarteter Termin.
 // Rückgabe (seit 13.11.2026): '' = abgeschlossen, sonst der Grund, warum nicht (Unterlagen des Lieferanten fehlen – zentrale
 // Sperre lu_bestellen_pruefen(); Admin-Ausnahme mit $ausnahme_grund). Dann bleibt die Bestellung unverändert (Entwurf).
+// Fable-3 T2.4 (13.11.2026): bestellt werden kann nur ein Entwurf (offen) oder eine gesendete Bestellung – nie aus geliefert,
+// storniert oder einer schon bestätigten Bestellung. Ausnahme: eine eben aus der Einkaufsliste mit Datum angelegte Bestellung steht
+// schon auf „bestellt“, ist aber unbestätigt (bestellung_erstellen) – die darf „Direkt bestellt“ noch abschließen.
+// '' = darf, sonst der Grund. Eine Regel für „als bestellt markieren“ und „Direkt bestellt“.
+function bestellung_bestellbar(int $bestellung_id): string {
+    $b = one("SELECT status, bestaetigt, angekommen_am FROM bestellung WHERE id=?", [$bestellung_id]);
+    $st = (string)($b['status'] ?? '');
+    if ($st === '') return 'Bestellung nicht gefunden.';
+    if (in_array($st, ['offen', 'gesendet'], true)) return '';
+    if ($st === 'bestellt' && (int)$b['bestaetigt'] !== 1 && empty($b['angekommen_am'])) return '';
+    return 'Die Bestellung ist schon ' . (['bestellt' => 'bestellt', 'geliefert' => 'geliefert', 'storniert' => 'storniert'][$st] ?? $st) . ' – „bestellt“ geht nur aus Entwurf oder gesendet.';
+}
 function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = null, ?string $eta = null, string $notiz = '', string $wer = '', string $ausnahme_grund = ''): string {
     require_once __DIR__ . '/lieferant_unterlagen.php';
+    if (($bb = bestellung_bestellbar($bestellung_id)) !== '') return $bb;
     $sperre = lu_bestellen_pruefen($bestellung_id, $ausnahme_grund, $wer);
     if ($sperre !== '') return $sperre;
     $d = fn($x) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$x) ? (string)$x : null;
     $wer = $wer !== '' ? $wer : (string)(function_exists('current_user') ? (current_user()['name'] ?? '') : '');
-    $bestellt = $d($datum) ?? gmdate('Y-m-d');
+    $bestellt = $d($datum) ?? heute_ort();   // Ortszeit (13.11.2026)
     // „Erwartet am" nur, wenn es NACH dem Bestelltag liegt – eine Lieferung am Bestelltag oder davor ist ein Eingabefehler
     // (BE-2924: bestellt 28.10., „erwartet" 28.10.). Ohne Termin bleibt das Feld leer und lässt sich an der Bestellung setzen.
     $eta = $d($eta); if ($eta !== null && $eta <= $bestellt) $eta = null;
@@ -7836,9 +7849,10 @@ function bestellung_als_entwurf(int $bestellung_id, string $notiz = ''): void {
 // Rückgabe ['ok'=>bool, 'msg'=>string]: ok=false = gesperrt (msg = Grund); ok=true und msg nicht leer = Mail-Fehler (Bestellung gilt).
 function bestellung_als_bestellt_markieren(int $bestellung_id, string $ausnahme_grund = '', string $wer = ''): array {
     require_once __DIR__ . '/lieferant_unterlagen.php';
+    if (($bb = bestellung_bestellbar($bestellung_id)) !== '') return ['ok' => false, 'msg' => $bb];   // Fable-3 T2.4
     $sperre = lu_bestellen_pruefen($bestellung_id, $ausnahme_grund, $wer);
     if ($sperre !== '') return ['ok' => false, 'msg' => $sperre];
-    q("UPDATE bestellung SET status='bestellt', bestelldatum=COALESCE(bestelldatum, CURDATE()) WHERE id=?", [$bestellung_id]);
+    q("UPDATE bestellung SET status='bestellt', bestelldatum=COALESCE(bestelldatum, ?) WHERE id=? AND status IN ('offen','gesendet','bestellt')", [heute_ort(), $bestellung_id]);
     if (function_exists('bedarf_bump')) bedarf_bump();
     // Der Lieferant erfährt es per Mail – wenn der Versand eingerichtet ist. Ein Fehler stoppt nichts.
     $f = (function_exists('mail_bereit') && mail_bereit() && function_exists('mail_lieferant_bestellung')) ? mail_lieferant_bestellung($bestellung_id) : '';
