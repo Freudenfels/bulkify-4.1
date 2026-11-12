@@ -429,7 +429,7 @@ function lg_versand_anlegen(array $d): int {
        $d['empf_email'] ?? '', $d['empf_telefon'] ?? '', $d['adress_quelle'] ?? 'frei',
        in_array(($d['typ'] ?? 'paket'), ['paket', 'palette', 'abholung'], true) ? ($d['typ'] ?? 'paket') : 'paket',
        $d['notiz'] ?? '',
-       (($d['gewicht_kg'] ?? '') !== '' ? (float)$d['gewicht_kg'] : null),
+       (($d['gewicht_kg'] ?? '') !== '' ? lg_zahl($d['gewicht_kg']) : null),
        max(1, (int)($d['pakete'] ?? 1)),
        (int)($u['id'] ?? 0) ?: null, mb_substr((string)($u['name'] ?? ''), 0, 120), jetzt_utc()]);
     return (int) insert_id();
@@ -449,7 +449,7 @@ function lg_lieferschein_erstellen(array $d): int {
     $vicSum = 0; $gewSumG = 0.0; $kartonsSum = 0;
     foreach (($d['positionen'] ?? []) as $p) {
         $kartons = max(0, (int)($p['kartons'] ?? 0));
-        $mk = (float)str_replace(',', '.', (string)($p['menge_karton'] ?? 0));
+        $mk = lg_zahl($p['menge_karton'] ?? 0);   // 13.11.2026: „1.000“ Stk je Karton = 1000
         $menge = ($kartons > 0 && $mk > 0) ? $kartons * $mk : (float)($p['menge'] ?? 0);
         if (trim((string)($p['bezeichnung'] ?? '')) === '' && $menge <= 0) continue;
         $einzel = (int)($p['einzelwert_cent'] ?? 0);
@@ -464,7 +464,7 @@ function lg_lieferschein_erstellen(array $d): int {
            $kartons ?: null, $mk ?: null, $einzel ?: null, $gewG ?: null]);
     }
     $vic    = (($d['versicherung_cent'] ?? '') !== '') ? max(0, (int)$d['versicherung_cent']) : $vicSum;
-    $gewKg  = (($d['gewicht_kg'] ?? '') !== '') ? (float)str_replace(',', '.', (string)$d['gewicht_kg']) : round($gewSumG / 1000, 3);
+    $gewKg  = (($d['gewicht_kg'] ?? '') !== '') ? lg_zahl($d['gewicht_kg']) : round($gewSumG / 1000, 3);
     $pakete = max(1, ((int)($d['pakete'] ?? 0)) ?: $kartonsSum ?: 1);
     q("UPDATE lg_versand SET versicherung_cent=?, gewicht_kg=?, pakete=? WHERE id=?", [$vic ?: null, $gewKg ?: null, $pakete, $vid]);
     return $vid;
@@ -507,7 +507,7 @@ function lg_versand_liste(string $status = '', int $limit = 100): array {
     return all("SELECT * FROM lg_versand $w ORDER BY id DESC LIMIT " . max(1, $limit), $p);
 }
 function lg_versand_kopf_speichern(int $id, array $d): void {
-    $mass = fn($v) => ($v ?? '') !== '' ? (float)str_replace(',', '.', (string)$v) : null;
+    $mass = fn($v) => ($v ?? '') !== '' ? lg_zahl($v) : null;   // 13.11.2026
     q("UPDATE lg_versand SET kunde_id=?, empf_firma=?, empf_name=?, empf_strasse=?, empf_hausnummer=?,
          empf_plz=?, empf_ort=?, empf_land=?, empf_email=?, empf_telefon=?, adress_quelle=?, typ=?,
          notiz=?, gewicht_kg=?, pakete=?, masse_l=?, masse_b=?, masse_h=?, dhl_groesse=? WHERE id=?",
@@ -516,7 +516,7 @@ function lg_versand_kopf_speichern(int $id, array $d): void {
        strtoupper(trim((string)($d['empf_land'] ?? 'DE'))) ?: 'DE', $d['empf_email'] ?? '', $d['empf_telefon'] ?? '',
        $d['adress_quelle'] ?? 'frei', in_array(($d['typ'] ?? 'paket'), ['paket', 'palette', 'abholung'], true) ? ($d['typ'] ?? 'paket') : 'paket',
        $d['notiz'] ?? '',
-       (($d['gewicht_kg'] ?? '') !== '' ? (float)str_replace(',', '.', (string)$d['gewicht_kg']) : null),
+       (($d['gewicht_kg'] ?? '') !== '' ? lg_zahl($d['gewicht_kg']) : null),
        max(1, (int)($d['pakete'] ?? 1)), $mass($d['masse_l'] ?? ''), $mass($d['masse_b'] ?? ''), $mass($d['masse_h'] ?? ''),
        (($d['dhl_groesse'] ?? 'gross') === 'klein' ? 'klein' : 'gross'), $id]);
 }
@@ -546,9 +546,14 @@ function lg_artikel_liste(int $kunde_id = 0, string $q = ''): array {
 }
 function lg_artikel(int $id): ?array { return one("SELECT * FROM lg_artikel WHERE id=?", [$id]); }
 // Numerik: deutsche Dezimaltrennung -> float/int oder null (leer).
+// Zahl aus einem Eingabefeld (13.11.2026): gemeinsamer Mengen-Parser der Lager-App (erp_menge_parse) - „1.000“ = 1000, „1,5“ = 1,5.
+function lg_zahl($v): float {
+    require_once __DIR__ . '/erp.php';
+    return erp_menge_parse((string)$v);
+}
 function lg_artikel_num($v, bool $int = false) {
     if ($v === null || trim((string)$v) === '') return null;
-    $f = (float) str_replace(',', '.', (string)$v);
+    $f = lg_zahl($v);
     return $int ? (int) round($f) : $f;
 }
 function lg_artikel_anlegen(array $d): int {

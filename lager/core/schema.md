@@ -20,3 +20,6 @@ Legt nur Tabellen mit dem Präfix `lg_` an und fasst Dashboard-Tabellen nie an. 
 Soll-Kette 7 (04.11.2026): `lg_versand_pos.auftrag_id`; Versandart `abholung` (Selbstabholung) zusätzlich zu paket/palette.
 
 | `lg_packstueck` | **Packstücke einer Sendung (Soll-Kette 7b)**: `versand_id`, `art` (palette/karton/paket), `nr` (je Art laufend), `parent_id` (Karton liegt auf Palette), `auftrag_id`, `pa_id`, `bezeichnung`, `charge_nr`, `menge` (Pkg), `gewicht_kg`. Helfer `lg_packstueck_liste/_anlegen`, `lg_packstueck_kartons_uebernehmen($versand_id)` legt je Auftrag der Sendung die Kartons aus den Kartonwerten der Produktion an (`karton_stueck`/`karton_menge`, Schritt 6; letzter Karton = Rest). |
+
+## Mengen-Parser (13.11.2026)
+Alle Mengen-, Gewichts- und Maßfelder lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.

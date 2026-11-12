@@ -33,8 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fuell
         $stk = (int)$stk;
         if ($stk > 0) q("INSERT INTO pack_kapazitaet (item_id,kapselgroesse_id,stueck) VALUES (?,?,?)", [(int)$id, (int)$kgid, $stk]);
     }
-    $mfg = trim($_POST['max_fuellgewicht_g'] ?? '') !== '' ? (float)str_replace(',', '.', $_POST['max_fuellgewicht_g']) : null;
-    $vol = trim($_POST['volumen_ml'] ?? '') !== '' ? (float)str_replace(',', '.', $_POST['volumen_ml']) : null;
+    $mfg = trim($_POST['max_fuellgewicht_g'] ?? '') !== '' ? zahl_lesen((string)($_POST['max_fuellgewicht_g']), true) : null;
+    $vol = trim($_POST['volumen_ml'] ?? '') !== '' ? zahl_lesen((string)($_POST['volumen_ml']), true) : null;
     q("UPDATE item SET max_fuellgewicht_g=?, volumen_ml=? WHERE id=?", [$mfg, $vol, (int)$id]);
     header('Location: ?p=verpackung&id=' . $id . '&tab=fuell&gespeichert=1'); exit;
 }

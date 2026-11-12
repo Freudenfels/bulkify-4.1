@@ -32,3 +32,6 @@ Die Box steht jetzt **für alle** im Produktionsmodus, wie am Tablet. Vorher gab
 Eingabe Packungen (vorbelegt mit dem Machbaren) und Umfang. „komplett“ läuft über `erp_teilmenge_produzieren`, bucht anteilig ab und legt die Fertigware-Charge an. „bis vor dem Etikettieren“ läuft über `erp_teilmenge_vor_etikett`. Der Rest bleibt offen. Der Mengen-Fortschrittsbalken bleibt nur für den Produktionsleiter.
 
 **Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.
+
+## Mengen-Parser (13.11.2026)
+Alle Mengen-, Gewichts- und Maßfelder lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.

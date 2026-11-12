@@ -773,7 +773,7 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
         }
         // Fallback: Einzelfelder (Formular sendet „Stück je Packung" + „Anzahl (Packungen)").
         if (!$zeilen) {
-            $aA = (int) round((float) str_replace(',', '.', (string)($_POST['stueck'] ?? $_POST['fuellmenge_g'] ?? '0')));
+            $aA = (int) round(zahl_lesen((string)((string)($_POST['stueck'] ?? $_POST['fuellmenge_g'] ?? '0')), true));
             // „Anzahl (Packungen)" darf eine STAFFEL-LISTE sein (z. B. „1000, 2500, 5000") -> je Menge eine Staffel
             // mit gleicher Packungsgröße. Trenner Komma/Semikolon/Schrägstrich; je Token nur Ziffern (Tausenderpunkt raus).
             foreach (preg_split('/[;,\/]+/', (string)($_POST['menge'] ?? '')) as $mTok) {

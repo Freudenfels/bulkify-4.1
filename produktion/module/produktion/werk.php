@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Soll-Kette 4: Teilmenge am Tablet melden – komplett (mit Etikett, bucht Fertigware) oder bis vor dem Etikettieren.
     if ($werkUid && $aktion === 'werk_teilmenge') {
         $paId = (int)($_POST['pa_id'] ?? 0);
-        $mT = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['menge'] ?? '0'));
+        $mT = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // 13.11.2026: gemeinsamer Mengen-Parser
         $r = ($_POST['umfang'] ?? '') === 'vor_etikett' ? erp_teilmenge_vor_etikett($paId, $mT, $werkName ?: 'Mitarbeiter')
                                                          : erp_teilmenge_produzieren($paId, $mT, $werkName ?: 'Mitarbeiter');
         $fehltTxt = implode(', ', array_map(fn($f) => (string)($f['name'] ?? ''), $r['fehlt'] ?? []));
@@ -89,14 +89,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $g = [];
         foreach ((array)($_POST['rest'] ?? []) as $cid => $val) {
             $cid = (int)$cid; if ($cid <= 0) continue;
-            $g[$cid] = (float) str_replace(',', '.', (string)$val);
+            $g[$cid] = pr_menge_parse((string)$val);   // 13.11.2026
         }
         // Gewicht & Bestand pro Gebinde: je gescanntem Karton/Sack das neu gewogene Ist-Gewicht (+ Bestätigung „verschlossen“).
         $gb = [];
         foreach ((array)($_POST['rest_g'] ?? []) as $gid => $val) {
             if (trim((string)$val) === '') continue;
             $v = trim((string)$val);
-            $gb[(int)$gid] = (float) (strpos($v, ',') !== false ? str_replace(',', '.', str_replace('.', '', $v)) : $v);   // 1.234,5 / 25,5 / 25.5
+            $gb[(int)$gid] = pr_menge_parse($v);   // 13.11.2026: 1.234,5 / 25,5 / 25.5 / 1.500 wie überall
         }
         if ($gb && empty($_POST['verschlossen'])) {
             $_SESSION['werk_flash'] = $T['return_closed_req']; $_SESSION['werk_flash_ok'] = false;

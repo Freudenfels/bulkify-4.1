@@ -24,8 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'erste
             'bezeichnung'     => $b,
             'kartons'         => (int)($kart[$i] ?? 0),
             'menge_karton'    => (string)($mk[$i] ?? ''),
-            'einzelwert_cent' => (int)round((float)str_replace(',', '.', (string)($einz[$i] ?? 0)) * 100),
-            'gewicht_g'       => (int)($gew[$i] ?? 0),
+            'einzelwert_cent' => (int)round(erp_menge_parse((string)($einz[$i] ?? 0)) * 100),   // 13.11.2026: gemeinsamer Parser
+            'gewicht_g'       => (int)round(erp_menge_parse((string)($gew[$i] ?? 0))),
             'einheit'         => 'Stk',
         ];
     }

@@ -49,7 +49,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             // Produktionscharge CH/CHE anbinden + eingesetzte Rohstoff-Batches verknüpfen (Spec 7.5).
             $mm_menge = null;
             $mmv = trim((string)($_POST['daten']['mischmenge'] ?? ''));
-            if ($mmv !== '') $mm_menge = (float) str_replace(',', '.', $mmv);
+            if ($mmv !== '') $mm_menge = pr_menge_parse($mmv);   // 13.11.2026: gemeinsamer Mengen-Parser
             $pc = erp_prod_charge_fuer_station($id, (string)$r['station'], $mid, $mm_menge, $akteur);
             if ($pc) {
                 $zusatz .= ' Charge ' . $pc['nummer'] . ($pc['neu'] ? ' angelegt' : '')
@@ -58,7 +58,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             // Mischer-Kapazität (Spec 7.7): kg je Gebinde -> Gebinde-Unterchargen anlegen (ein Etikett je Gebinde).
             $capv = trim((string)($_POST['kg_pro_gebinde'] ?? ''));
             if ((string)$r['station'] === 'Mischen' && $capv !== '') {
-                $cap = (float) str_replace(',', '.', $capv);
+                $cap = pr_menge_parse($capv);   // 13.11.2026: „1.500“ = 1500 wie überall
                 if ($cap > 0) {
                     pr_daten_setzen($id, 'kg_pro_gebinde', $capv, $akteur);
                     $ng = erp_mischer_unterchargen_anlegen($id, $cap, $akteur);
@@ -81,7 +81,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } elseif ($aktion === 'teilmenge') {
         // Teilmenge produzieren (Nico 05.11.2026: im Produktionsmodus für alle, wie am Tablet/Werk-App) – komplett mit Etikett
         // (bucht Fertigware) oder bis vor dem Etikettieren (bucht das Material der Stationen außer Etikett). Rest bleibt offen.
-        $mT = (float) str_replace(['.', ','], ['', '.'], (string)($_POST['menge'] ?? '0'));
+        $mT = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // 13.11.2026: „1.5“ = 1,5 (vorher 15)
         $r = ($_POST['umfang'] ?? '') === 'vor_etikett' ? erp_teilmenge_vor_etikett($id, $mT, $akteur) : erp_teilmenge_produzieren($id, $mT, $akteur);
         if (!$r['ok'] && !empty($r['fehlt'])) {
             $t = []; foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_einh_txt($f['fehlt'], (string)$f['einheit']) . ')';

@@ -18,3 +18,6 @@ springt ins **Versand-Detail** (`?p=versand_detail`). Dort: **Lieferschein öffn
 Erreichbar über den eigenen Menüpunkt **„Lieferschein erstellen“** (Lager 1, seit 08.11.2026) und über Warenausgang → „+ Lieferschein erstellen".
 
 **Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.
+
+## Mengen-Parser (13.11.2026)
+Alle Mengen-, Gewichts- und Maßfelder lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.

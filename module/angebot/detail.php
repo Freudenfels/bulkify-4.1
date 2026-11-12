@@ -304,21 +304,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'verp_id'=>(int)($_POST['add_verp_id'] ?? 0), 'deckel_id'=>(int)($_POST['add_deckel_id'] ?? 0), 'etikett_id'=>(int)($_POST['add_etikett_id'] ?? 0)];
         } elseif ($aktion === 'add_rohstoff') {
             $iid = (int)($_POST['add_rohstoff_id'] ?? 0);
-            $mng = (float)str_replace(',', '.', $_POST['add_menge'] ?? '0');
+            $mng = zahl_lesen((string)($_POST['add_menge'] ?? '0'), true);
             if ($iid) angebot_gruppe_anhaengen((int)$id, angebot_rohstoff_zeile($iid, $mng, trim($_POST['add_einheit'] ?? ''), $kid));
         } else { // add_dienstleistung
             // Aus dem DL-Katalog gewählt? Dann über dl_position_add – das setzt dienstleistung_id (für den späteren
             // DL-Auftrag) und den kundenspezifischen Preis (dl_kundenpreis). Sonst Freitext-Zuschlag wie bisher.
             $dlid = (int)($_POST['add_dl_id'] ?? 0);
             if ($dlid > 0 && function_exists('dl_position_add')) {
-                $mng = (float)str_replace(',', '.', $_POST['add_dl_menge'] ?? '1') ?: 1;
+                $mng = zahl_lesen((string)($_POST['add_dl_menge'] ?? '1'), true) ?: 1;
                 dl_position_add((int)$id, $dlid, $mng);
                 header('Location: ?p=angebot&id=' . $id . '&gespeichert=1' . $editQ . '#positionen'); exit;
             }
             $bez = trim($_POST['add_bez'] ?? '');
             if ($bez !== '') {
                 $preis = (float)str_replace(',', '.', $_POST['add_preis'] ?? '0');
-                $mng = (float)str_replace(',', '.', $_POST['add_menge'] ?? '1') ?: 1;
+                $mng = zahl_lesen((string)($_POST['add_menge'] ?? '1'), true) ?: 1;
                 $mwst = ($_POST['add_mwst'] ?? '') !== '' ? mwst_normalisieren((float)str_replace(',', '.', $_POST['add_mwst'])) : angebot_ust_satz($kid);
                 angebot_gruppe_anhaengen((int)$id, [['artikelnr'=>'', 'bezeichnung'=>$bez, 'beschreibung'=>trim($_POST['add_besch'] ?? ''), 'menge'=>$mng, 'einheit'=>trim($_POST['add_einheit'] ?? ''), 'preis_cent'=>(int)round($preis*100), 'preis_e4'=>(int)round($preis*10000), 'ek_cent'=>0, 'mwst_satz'=>$mwst, 'quelle'=>'manuell']]);
             }

@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'charge_std_save') {
     meta_set('mhd_monate_standard', (string)max(1, (int)($_POST['mhd_monate_standard'] ?? 18)));
     // MHD-Warnung (Tage vor Ablauf) + Schwund-Grenze (kg) für die Benachrichtigungen/Wiege-Prüfung.
     meta_set('mhd_warn_tage', (string)max(1, (int)($_POST['mhd_warn_tage'] ?? 30)));
-    meta_set('schwund_grenze_kg', (string)max(0, (float)str_replace(',', '.', (string)($_POST['schwund_grenze_kg'] ?? '1'))));
+    meta_set('schwund_grenze_kg', (string)max(0, zahl_lesen((string)((string)($_POST['schwund_grenze_kg'] ?? '1')), true)));
     meta_set('wareneingang_quarantaene', isset($_POST['wareneingang_quarantaene']) ? '1' : '0');   // Wareneingang: Standard sofort frei (Nico 04.11.2026)
     header('Location: ?p=einstellungen&tab=produktion&ok=1'); exit;
 }
@@ -246,11 +246,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'preise_save') {
     meta_set('laboranalyse_fixpreis', (string)(float)str_replace(',', '.', $_POST['laboranalyse_fixpreis'] ?? '250'));
     meta_set('laboranalyse_regulaer_preis', (string)(float)str_replace(',', '.', $_POST['laboranalyse_regulaer_preis'] ?? '300'));
     meta_set('tablette_hilfsstoff_prozent', (string)(float)str_replace(',', '.', $_POST['tablette_hilfsstoff_prozent'] ?? '20'));
-    meta_set('tablette_hilfsstoff_ek_kg', (string)(float)str_replace(',', '.', $_POST['tablette_hilfsstoff_ek_kg'] ?? '8'));
+    meta_set('tablette_hilfsstoff_ek_kg', (string)zahl_lesen((string)($_POST['tablette_hilfsstoff_ek_kg'] ?? '8')));
     meta_set('fluessig_portion_ml', (string)(float)str_replace(',', '.', $_POST['fluessig_portion_ml'] ?? '10'));
     meta_set('fluessig_basis_ek_l', (string)(float)str_replace(',', '.', $_POST['fluessig_basis_ek_l'] ?? '3'));
-    meta_set('gummi_gewicht_mg', (string)(float)str_replace(',', '.', $_POST['gummi_gewicht_mg'] ?? '3000'));
-    meta_set('gummi_basis_ek_kg', (string)(float)str_replace(',', '.', $_POST['gummi_basis_ek_kg'] ?? '4'));
+    meta_set('gummi_gewicht_mg', (string)zahl_lesen((string)($_POST['gummi_gewicht_mg'] ?? '3000'), true));
+    meta_set('gummi_basis_ek_kg', (string)zahl_lesen((string)($_POST['gummi_basis_ek_kg'] ?? '4')));
     meta_set('gel_portion_ml', (string)(float)str_replace(',', '.', $_POST['gel_portion_ml'] ?? '15'));
     meta_set('gel_basis_ek_l', (string)(float)str_replace(',', '.', $_POST['gel_basis_ek_l'] ?? '5'));
     // Standard-Lieferbedingung für Preisanfragen

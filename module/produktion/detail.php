@@ -234,7 +234,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 // Auftrag (stueck) und diesen PA (stueck), damit produktion_stueck_je_packung() überall denselben Wert liefert.
 // Dient v. a. der Korrektur von Alt-/v3-Aufträgen, bei denen dort noch eine Portionszahl statt Gramm steht.
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'pulver_fuellmenge' && has_role('admin')) {
-    $g = (int) round((float) str_replace(',', '.', (string)($_POST['fuellmenge_g'] ?? '0')));
+    $g = (int) round(zahl_lesen((string)((string)($_POST['fuellmenge_g'] ?? '0')), true));
     if ($g > 0) {
         $paF = one("SELECT nummer, kunde_id, auftrag_id, produkt_id, stueck FROM produktionsauftrag WHERE id=?", [$id]);
         $alt = (int)($paF['stueck'] ?? 0);

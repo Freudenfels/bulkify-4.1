@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ((array)($_POST['z_hs'] ?? []) as $pid => $hs) {
             $pid = (int)$pid;
             $wert = ($_POST['z_wert'][$pid] ?? '') !== '' ? erp_menge_parse((string)$_POST['z_wert'][$pid]) : null;
-            $gew  = ($_POST['z_gewicht'][$pid] ?? '') !== '' ? (int)$_POST['z_gewicht'][$pid] : null;
+            $gew  = ($_POST['z_gewicht'][$pid] ?? '') !== '' ? (int)round(erp_menge_parse((string)$_POST['z_gewicht'][$pid])) : null;   // 13.11.2026: „1.500“ g = 1500
             lg_versand_pos_zoll_set($pid, (string)$hs, (string)($_POST['z_ursprung'][$pid] ?? ''), $wert, $gew);
         }
         flash('Zolldaten gespeichert.');
