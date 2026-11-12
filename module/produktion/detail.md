@@ -187,3 +187,10 @@ Alle Materialnamen auf der Seite führen per Klick zum Artikel, und zwar in den 
   - **Wieder öffnen** geht nur, wenn keine andere Unter-Charge läuft. Das Ereignis „wiederanlauf“ wird vermerkt.
   - Aktionen `uc_schliessen` und `uc_oeffnen`.
 - **Buchstabe je Produktionstag (12.11.2026):** Beim Nachtragen gilt das Produktionsdatum. Gleicher Bulk und gleicher Tag wie die laufende Unter-Charge ergibt denselben Buchstaben. Ein anderer Tag oder ein anderer Bulk ergibt den nächsten Buchstaben, die laufende Unter-Charge wird dabei abgeschlossen („neuer Produktionstag“). Ein unveränderter Charge-Vorschlag (`charge_vorschlag`) gilt als „System vergibt“.
+
+## Material: Produkt öffnen und Bestellungen sehen (12.11.2026)
+Nico: „Ich will dann auf das Produkt kommen und sehen, wann es bestellt wurde.“
+- Die **Zukauf-Zeile** („… – Kapseln (Zukauf)“, ohne Lagerartikel) verlinkt auf den Bulk-Artikel der Rezeptur (`pa_material_bulk_item()`, Kategorie `fertig`).
+- Unter jedem Material stehen bis zu drei **Bestellungen** (`pa_material_bestellungen()` / `pa_material_bestellung_html()`): Nummer als Link, Lieferant, „bestellt am“, Stand und „erwartet am“. Der Stand ist Entwurf, Station, bestätigt oder geliefert.
+  - Artikel: Bestellungen dieses Auftrags und offene Bestellungen des Artikels.
+  - Zukauf-Bulk: Bulk-Bestellungen des Auftrags (Freitext-Position bzw. Fertigware-Artikel des Produkts).

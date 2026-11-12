@@ -3,6 +3,34 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/item_link.php';   // Material anklickbar (Nico 12.11.2026)
+// Material-Tabelle (Nico 12.11.2026: „auf das Produkt kommen und sehen, wann es bestellt wurde“): je Zeile die Bestellungen.
+// Artikel: Bestellungen dieses Auftrags + offene Bestellungen des Artikels. Zukauf-Bulk (ohne Lagerartikel): die Bulk-Bestellungen
+// des Auftrags (Freitext-Position bzw. Fertigware-Artikel). Rückgabe: Liste von Bestellzeilen (neueste zuerst, höchstens 3).
+function pa_material_bestellungen(int $auftrag_id, int $item_id, int $produkt_id): array {
+    $sel = "SELECT DISTINCT b.id, b.nummer, b.status, b.station, b.bestelldatum, b.eta_geplant, b.angekommen_am, b.bestaetigt, l.firma
+            FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.status<>'storniert' AND ";
+    if ($item_id > 0)
+        return all($sel . "bp.item_id=? AND (bp.auftrag_id=? OR (b.status NOT IN ('geliefert') AND b.angekommen_am IS NULL)) ORDER BY b.id DESC LIMIT 3", [$item_id, $auftrag_id]);
+    if ($auftrag_id <= 0) return [];
+    return all($sel . "bp.auftrag_id=? AND (bp.item_id IS NULL OR bp.item_id IN (SELECT id FROM item WHERE produkt_id=? AND kategorie IN ('fertig','verkaufsfertig')))
+                       ORDER BY b.id DESC LIMIT 3", [$auftrag_id, $produkt_id]);
+}
+function pa_material_bestellung_html(array $b): string {
+    $st = bestellung_stationen()[(string)$b['station']] ?? '';
+    $stand = (string)$b['status'] === 'geliefert' || !empty($b['angekommen_am']) ? 'geliefert' . (!empty($b['angekommen_am']) ? ' ' . date('d.m.', strtotime((string)$b['angekommen_am'])) : '')
+           : ((string)$b['status'] === 'offen' ? 'Entwurf' : ($st !== '' ? $st : ((int)$b['bestaetigt'] === 1 ? 'bestätigt' : status_text((string)$b['status']))));
+    return '<div style="font-size:12px;margin-top:2px"><a href="?p=bestellung&amp;id=' . (int)$b['id'] . '">' . h((string)$b['nummer']) . '</a>'
+         . ($b['firma'] ? ' <span class="muted">· ' . h((string)$b['firma']) . '</span>' : '')
+         . ($b['bestelldatum'] ? ' <span class="muted">· bestellt ' . h(date('d.m.Y', strtotime((string)$b['bestelldatum']))) . '</span>' : '')
+         . ' <span class="muted">· ' . h($stand) . '</span>'
+         . (!empty($b['eta_geplant']) && empty($b['angekommen_am']) ? ' <span class="muted">· erwartet ' . h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) . '</span>' : '')
+         . '</div>';
+}
+// Zukauf-Bulk ohne Lagerartikel: der Bulk-Artikel der Rezeptur (Bulkware) als Ziel des Links.
+function pa_material_bulk_item(int $produkt_id): int {
+    if ($produkt_id <= 0) return 0;
+    return (int) (scalar("SELECT i.id FROM item i JOIN produkt p ON p.rezeptur_id=i.rezeptur_id WHERE p.id=? AND i.kategorie='fertig' ORDER BY COALESCE(i.gesperrt,0), i.id LIMIT 1", [$produkt_id]) ?: 0);
+}
 // Artikel-IDs der fehlenden Materialien für die Fehlermeldung (Links „Material öffnen“).
 function pa_teilitems_q(array $r): string {
     $ids = array_values(array_unique(array_filter(array_map(fn($f) => (int)($f['item_id'] ?? 0), (array)($r['fehlt'] ?? [])))));
@@ -862,7 +890,9 @@ if ($bedarfListe):
             $tint = $ok ? 'rgba(29,158,117,.08)' : 'rgba(143,35,27,.08)'; ?>
         <tr style="background:<?= $tint ?>">
           <td style="text-align:center;font-size:16px"><?= $ok ? '<span class="bx-ok">&#10003;</span>' : '<span style="color:#8f231b">&#10007;</span>' ?></td>
-          <td><?= item_link_html((int)($r['item_id'] ?? 0), (string)$r['name']) ?></td>
+          <td><?php $mIid = (int)($r['item_id'] ?? 0); $mLink = $mIid > 0 ? $mIid : pa_material_bulk_item((int)($pa['produkt_id'] ?? 0)); ?>
+            <?= item_link_html($mLink, (string)$r['name']) ?>
+            <?php foreach (pa_material_bestellungen((int)($pa['auftrag_id'] ?? 0), $mIid, (int)($pa['produkt_id'] ?? 0)) as $mB) echo pa_material_bestellung_html($mB); ?></td>
           <td><?= $rolleBadge($r['rolle']) ?></td>
           <td class="bx-num"><?= $mfmt($r['benoetigt']) ?> <?= h($r['einheit']) ?></td>
           <td class="bx-num"><?= $mfmt($r['verfuegbar']) ?> <?= h($r['einheit']) ?></td>
