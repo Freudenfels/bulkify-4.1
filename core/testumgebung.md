@@ -29,3 +29,5 @@ Live (app.bulkify.pro) ist nie betroffen.
 - Sub-Apps (Lager, CRM, Buchhaltung, Produktion) nehmen im Test-Ordner nur die eigene secrets.php, nie `BULKIFY_SECRETS` oder Nachbar-/Elternordner.
 - `bx_intern_host()`: interne Aufrufe Lager/Produktion -> Dashboard und QR-Links fallen im Testmodus nie auf app.bulkify.pro zurück.
 - Beleg-Abruf der Buchhaltung (`be_mail_abholen`) im Testmodus gesperrt.
+
+**Live ignoriert den Datei-Marker (13.11.2026, Fable-3 T4.4):** `bx_test_marker_da()` zählt die Datei `.testumgebung` bei Host `app.bulkify.pro` nie – ein von Hand in den Live-Ordner gelegter Marker schaltet live nicht in den Testmodus. Auf test./beta. und auf der Kommandozeile wirkt er weiter.

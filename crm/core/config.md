@@ -26,3 +26,5 @@ Das Dashboard setzt seine Werte mit `define()`, ältere Dateien mit Variablen (`
 
 ## Zeit
 `date_default_timezone_set(UTC)` – intern immer UTC, Anzeige über `fmt_zeit()` in Berliner Zeit. Genau wie im Dashboard.
+
+**Live ignoriert den Datei-Marker (13.11.2026, Fable-3 T4.4):** Die Einschränkung „nur eigene secrets.php“ gilt nicht bei Host `app.bulkify.pro`.

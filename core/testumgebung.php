@@ -16,8 +16,11 @@ if (!function_exists('bx_testumgebung')) {
 // Kommandozeile (Crons, tools/), bevor eine secrets.php geladen ist. Der Test-Deploy legt ihn an, live gibt es ihn nie.
 function bx_test_marker_da(): bool {
     static $da = null;
-    if ($da === null) $da = is_file(dirname(__DIR__) . '/.testumgebung');
-    return $da;
+    if ($da !== null) return $da;
+    // Fable-3 T4.4 (13.11.2026): auf app.bulkify.pro zählt die Datei nie – ein Bedienfehler (Marker im Live-Ordner) darf live nie
+    // in den Testmodus schalten.
+    if (PHP_SAPI !== 'cli' && preg_match('/^app\.bulkify\.pro$/i', (string)($_SERVER['HTTP_HOST'] ?? '')) === 1) return $da = false;
+    return $da = is_file(dirname(__DIR__) . '/.testumgebung');
 }
 function bx_testumgebung(): bool {
     static $an = null;

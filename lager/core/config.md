@@ -6,3 +6,5 @@ Findet die `secrets.php` und setzt daraus die Datenbank-Zugangsdaten. Gesucht wi
 - Eigene Sitzung `BXLAGER`, damit sich Dashboard, CRM und Lager nicht gegenseitig abmelden.
 - `LG_BEFEHL_VERFALL_SEK` (30): So lange darf ein Leuchtbefehl auf die Brücke warten, danach wird er verworfen.
 - `ist_lokal()` erlaubt den Autologin nur auf dem eigenen Rechner. `jetzt_utc()` liefert die aktuelle Zeit in UTC.
+
+**Live ignoriert den Datei-Marker (13.11.2026, Fable-3 T4.4):** Die Einschränkung „nur eigene secrets.php“ gilt nicht bei Host `app.bulkify.pro`.
