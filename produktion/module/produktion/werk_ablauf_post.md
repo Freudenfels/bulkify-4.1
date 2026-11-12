@@ -19,3 +19,5 @@ Seit 11.11.2026. `werk.php` bindet die Datei für alle Aktionen `wa_*` ein. Gebu
 Die Ausnahme „jüngere Charge trotzdem“ prüft der Server: nur Admin, nur mit Grund (`aelter_grund`). Sie steht als Ereignis „abweichung“ im Chargenprotokoll. Bulk ohne MHD wird nach Wareneingang verglichen (`erp_wa_aeltere_bulk()`).
 
 **Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Hier: Kapselprobe (g) und Sack brutto (kg); die Tara kommt als ID (`tara_id`) und wird aus `lg_tara` geholt.
+
+**Ausnahme „jüngere Charge trotzdem“ (13.11.2026, Fable-3 T1.5):** Die Admin-Prüfung nimmt den PIN-Nutzer der Werk-App (`$istAdminW` aus werk.php, Sitzung `werk_uid`), nicht die Anmeldung der Produktions-App. Admin per PIN + Grund = Start geht, Ereignis „Admin-Ausnahme“ im Chargenprotokoll; Nicht-Admin oder ohne Grund = abgelehnt.

@@ -34,7 +34,7 @@ if ($aktion === 'wa_start') {
     if ($s['charge_id'] && !$gleicherBulk && ($alt = erp_wa_aeltere_bulk($s['item_id'], $s['charge_id'], $s['mhd'])) !== '') {
         // 13.11.2026: Ausnahme „jüngere Charge trotzdem“ serverseitig nur Admin MIT Grund, Ereignis im Chargenprotokoll.
         $aGrund = trim((string)($_POST['aelter_grund'] ?? ''));
-        if (empty($_POST['aelter_ok']) || !pr_ist_admin() || $aGrund === '') {
+        if (empty($_POST['aelter_ok']) || empty($istAdminW) || $aGrund === '') {   // 13.11.2026 (Fable-3 T1.5): PIN-Nutzer der Werk-App ($istAdminW aus werk.php), nicht die Sitzung der Produktions-App
             $flash(sprintf($T['wa_fl_older'], $alt) . (!empty($_POST['aelter_ok']) ? ' ' . $T['wa_fl_older_admin'] : ''), false);
             weiter($zur . '&bulk=' . rawurlencode((string)$_POST['bulk_code']));
         }
