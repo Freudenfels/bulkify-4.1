@@ -535,7 +535,16 @@ function combo(sel){
     else if(e.key==='ArrowUp'){e.preventDefault();hl=Math.max(hl-1,0);paint();}
     else if(e.key==='Enter'){if(hl>=0||shown.length===1){e.preventDefault();pick(hl>=0?hl:0);}}
     else if(e.key==='Escape'){list.hidden=true;sync();}});
-  box.addEventListener('blur',function(){setTimeout(function(){list.hidden=true;sync();},160);});
+  // Getippt, aber nichts angeklickt (Nico 12.11.2026: „Wellgreen“ getippt, dann gleich „Bestellen“ -> leerer Lieferant):
+  // beim Verlassen des Felds einen eindeutigen Treffer selbst übernehmen – erst exakter Text, sonst genau ein Teiltreffer.
+  // Läuft synchron im blur, also VOR dem Klick auf einen Absenden-Knopf.
+  function autoPick(){var q=norm(box.value.trim());if(q==='')return;
+    var c=sel.options[sel.selectedIndex];if(sel.value!==''&&c&&norm(c.textContent.trim())===q)return;
+    var all=opts().filter(function(o){return !o.d&&o.v!=='';});
+    var ex=all.filter(function(o){return norm(o.t)===q;});
+    var hit=ex.length===1?ex:all.filter(function(o){return norm(o.t+' '+o.s).indexOf(q)>=0;});
+    if(hit.length===1){sel.value=hit[0].v;last=null;ok();sel.dispatchEvent(new Event('change',{bubbles:true}));}}
+  box.addEventListener('blur',function(){autoPick();setTimeout(function(){list.hidden=true;sync();},160);});
   list.addEventListener('mousedown',function(e){var o=e.target.closest('.rs-opt');if(o){e.preventDefault();pick(+o.dataset.i);}});
   document.addEventListener('click',function(e){if(!wrap.contains(e.target))list.hidden=true;});
   alle.push({sel:sel,box:box,sync:sync,last:function(){return last;}});

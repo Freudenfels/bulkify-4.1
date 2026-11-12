@@ -323,7 +323,8 @@ if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-colo
 if (isset($_GET['vorsorgportal'])) {   // echter Grund (Account ODER Preis) aus lieferant_portal_grund()
     $vpGrund = trim((string)$_GET['vorsorgportal']); if ($vpGrund === '' || $vpGrund === '1') $vpGrund = 'Dieser Lieferant hat keinen Portal-Zugang oder keinen Preis für den Artikel.';
     echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">Nicht bestellt – nichts gespeichert. ' . h($vpGrund)
-       . ' Über das Portal geht es erst mit Preis (am Artikel oder an der Rezeptur). Sonst „Direkt bestellt (Telefon/Mail)" nutzen.</div>';
+       . (str_contains($vpGrund, 'Preis') ? ' Über das Portal geht es erst mit Preis (am Artikel oder an der Rezeptur). Sonst „Direkt bestellt (Telefon/Mail)" nutzen.'
+          : (str_contains($vpGrund, 'Zugang') ? ' Sonst „Direkt bestellt (Telefon/Mail)" nutzen.' : ' Den Lieferanten im Suchfeld aus der Liste anklicken.')) . '</div>';
 }
 if (isset($_GET['direktfehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Direkt bestellt" bitte einen Lieferanten wählen.</div>';
 if (isset($_GET['hinzugefuegt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zum Einkauf hinzugefügt – erscheint im passenden Typ-Reiter und ist bestellbar.</div>';
