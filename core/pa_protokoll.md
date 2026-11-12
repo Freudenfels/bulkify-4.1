@@ -14,3 +14,6 @@ Seit 11.11.2026, Teil 7 von `plan-produktion-gefuehrt.md`. Gemeinsam für Dashbo
   - Pflicht-Hinweis „maschinell erstellt …“
 - **`pa_protokoll_ablegen($uc)`**: Beim Schließen der Unter-Charge (Chargenwechsel oder Abschluss) wird das PDF als Dokument `chargenprotokoll` an der **Fertigware-Charge** und am **PA** abgelegt (`kunde_sichtbar=0`). Es dient als Nachweis für QS/Behörde und für die Prüfliste vor Versand.
 - **Route** `?p=chargenprotokoll&uc=` (`module/produktion/chargenprotokoll.php`): abgelegte Fassung, bei laufender Unter-Charge der aktuelle Stand.
+
+
+**Lieferantennummer statt Name (Regel Nico 13.11.2026):** Im Chargenprotokoll steht der Lieferant der eingesetzten Chargen nur als Lieferantennummer (L-xxxx), nie der Name.

@@ -10217,14 +10217,15 @@ function produktion_bericht_daten(int $pa_id): ?array {
 
     $schritte  = all("SELECT * FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]);
     // Entnommene Materialien inkl. Lieferant (intern) + Datum der Entnahme.
-    $verbrauch = all("SELECT v.*, c.charge_nr, c.mhd AS charge_mhd, i.name AS item_name, l.firma AS lieferant
+    // Regel Nico 13.11.2026: im Produktionsbericht (Ausdruck) Lieferant nur als Lieferantennummer, nie der Name.
+    $verbrauch = all("SELECT v.*, c.charge_nr, c.mhd AS charge_mhd, i.name AS item_name, l.lieferantennummer AS lieferant
                       FROM produktion_verbrauch v
                       LEFT JOIN charge c ON c.id=v.charge_id LEFT JOIN item i ON i.id=v.item_id
                       LEFT JOIN lieferanten l ON l.id=c.lieferant_id
                       WHERE v.pa_id=? ORDER BY v.id", [$pa_id]);
     // Dem Auftrag zugeordnete Chargen (reserviert/eingegangen) – Charge-Vollstaendigkeit.
     $zugeChargen = $pa['auftrag_id'] ? all(
-        "SELECT c.charge_nr, c.mhd, c.status, i.name AS item_name, i.kategorie, l.firma AS lieferant
+        "SELECT c.charge_nr, c.mhd, c.status, i.name AS item_name, i.kategorie, l.lieferantennummer AS lieferant
          FROM charge c LEFT JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
          WHERE c.auftrag_id=? ORDER BY i.kategorie, c.id", [(int)$pa['auftrag_id']]) : [];
     $fwChargen = all("SELECT c.charge_nr, c.menge, c.menge_verfuegbar, c.mhd, c.status, i.artikelnummer, i.name

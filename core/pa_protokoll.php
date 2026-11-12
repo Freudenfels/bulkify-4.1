@@ -12,8 +12,9 @@ function pa_protokoll_daten(int $uc_id): ?array {
                LEFT JOIN rezeptur r ON r.id=pa.rezeptur_id LEFT JOIN kunden k ON k.id=COALESCE(a.kunde_id, pa.kunde_id) WHERE pa.id=?", [(int)$uc['pa_id']]) ?: [];
     $tm = all("SELECT * FROM pa_teilmenge WHERE unter_charge_id=? ORDER BY id", [$uc_id]);
     $tmIds = array_map(fn($t) => (int)$t['id'], $tm);
+    // Regel Nico 13.11.2026: Lieferant im Chargenprotokoll nur als Lieferantennummer (L-xxxx), nie der Name.
     $verbrauch = $tmIds && pa_spalte_da('produktion_verbrauch', 'teilmenge_id')
-        ? all("SELECT i.name, c.charge_nr, c.mhd, l.firma AS lieferant, SUM(v.menge) AS menge, v.einheit FROM produktion_verbrauch v JOIN item i ON i.id=v.item_id
+        ? all("SELECT i.name, c.charge_nr, c.mhd, l.lieferantennummer AS lieferant, SUM(v.menge) AS menge, v.einheit FROM produktion_verbrauch v JOIN item i ON i.id=v.item_id
                LEFT JOIN charge c ON c.id=v.charge_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id WHERE v.teilmenge_id IN (" . implode(',', $tmIds) . ")
                GROUP BY v.item_id, v.charge_id, v.einheit ORDER BY i.name", []) : [];
     return [

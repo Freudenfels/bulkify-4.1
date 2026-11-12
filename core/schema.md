@@ -705,3 +705,6 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** `kunde_finden_fuzzy()` per Kundennummer ohne gesperrte; `kunde_finden_oder_anlegen()` verwendet einen gesperrten Kunden nicht und legt ihn auch nicht doppelt an (id 0, `gesperrt`). Express-Bestellungen nie an gesperrte Lieferanten.
 
 **Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.
+
+
+**Lieferantennummer statt Name (Regel Nico 13.11.2026):** `produktion_bericht_daten()` liefert in `verbrauch` und den Chargen-Listen die Lieferantennummer (Feld `lieferant`), nicht mehr den Namen – der Produktionsbericht ist ein Ausdruck fürs Lager/Produktion.
