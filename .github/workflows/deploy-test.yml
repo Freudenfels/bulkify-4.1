@@ -7,6 +7,8 @@ name: Deploy Testumgebung (test.bulkify.pro)
 #  - schlaegt er fehl, bleibt der Live-Lauf gruen (eigener Lauf, eigenes Ergebnis)
 # Ziel: Secret TEST_SERVER_PATH (eigener Ordner, NICHT der Live-Ordner und NICHT beta). Fehlt es, passiert nichts.
 # Zugang: dieselben SERVER_HOST/PORT/USERNAME/PASSWORD wie live (gleiches Hosting).
+# 13.11.2026: nur nach gruenem Live-Lauf; Zielpfad per realpath gegen live/beta (Secret BETA_SERVER_PATH, optional) geprueft;
+# legt den Datei-Marker .testumgebung an (Testmodus auch auf der Kommandozeile, Sub-Apps nur mit eigener secrets.php).
 # Alte Laeufe (12.11.2026): ist die Testumgebung schon neuer, setzt prep mode=skip -> kein Upload, kein mark.
 # Auf dem Server legt Nico einmalig <TEST_SERVER_PATH>/secrets.php an (Test-DB, BX_TESTUMGEBUNG) - wird nie hochgeladen.
 on:
@@ -22,6 +24,8 @@ concurrency:
 
 jobs:
   deploy-test:
+    # 13.11.2026: nur nach einem GRÜNEN Live-Lauf (oder von Hand) – ein fehlgeschlagener/abgebrochener Live-Lauf startet keinen Test-Upload.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -52,6 +56,21 @@ jobs:
         if: steps.ziel.outputs.los == '1'
         timeout-minutes: 4
         run: python -m pip install --disable-pip-version-check --retries 5 --timeout 20 paramiko
+
+      # 13.11.2026: Zielpfad auf dem Server mit realpath pruefen – gleich, Unter- oder Elternordner von live bzw. beta = Abbruch.
+      - name: Zielpfad pruefen (realpath gegen live und beta)
+        if: steps.ziel.outputs.los == '1'
+        timeout-minutes: 3
+        env:
+          TEST_PATH: ${{ secrets.TEST_SERVER_PATH }}
+          LIVE_PATH: ${{ secrets.SERVER_PATH }}
+          BETA_PATH: ${{ secrets.BETA_SERVER_PATH }}
+          SFTP_HOST: ${{ secrets.SERVER_HOST }}
+          SFTP_PORT: ${{ secrets.SERVER_PORT }}
+          SFTP_USER: ${{ secrets.SERVER_USERNAME }}
+          SFTP_PASS: ${{ secrets.SERVER_PASSWORD }}
+          SFTP_PATH: ${{ secrets.TEST_SERVER_PATH }}
+        run: python .github/scripts/sftp_deploy.py pfadcheck
 
       - name: Aenderungsumfang bestimmen
         id: prep
@@ -94,6 +113,9 @@ jobs:
         run: |
           printf 'User-agent: *\nDisallow: /\n' > robots_test.txt
           python .github/scripts/sftp_deploy.py put robots_test.txt public/robots.txt
+          # 13.11.2026: Datei-Marker der Testumgebung (Testmodus auch auf der Kommandozeile, nur eigene secrets.php)
+          printf 'test\n' > testumgebung_marker.txt
+          python .github/scripts/sftp_deploy.py put testumgebung_marker.txt .testumgebung
 
       - name: Deployten Stand merken (.deploy_sha der Testumgebung)
         if: steps.ziel.outputs.los == '1' && steps.prep.outputs.mode != 'skip'

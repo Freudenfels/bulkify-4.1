@@ -277,11 +277,36 @@ def cmd_put(local, remote_rel):
     print(f'hochgeladen: {remote_rel}')
 
 
+def cmd_pfadcheck():
+    # Testumgebung (13.11.2026): Zielpfad mit realpath (SFTP normalize) gegen live und beta pruefen. Gleich, Unter- oder
+    # Elternordner = Abbruch. TEST_PATH/LIVE_PATH/BETA_PATH kommen aus den Secrets (BETA_PATH optional).
+    test_p = env('TEST_PATH').rstrip('/')
+    andere = [(n, env(k).rstrip('/')) for n, k in (('SERVER_PATH (live)', 'LIVE_PATH'), ('beta', 'BETA_PATH')) if env(k)]
+    if not test_p:
+        sys.exit('TEST_PATH leer - Abbruch.')
+    client, sftp = connect()
+    try:
+        def real(p):
+            try:
+                return sftp.normalize(p).rstrip('/') or '/'
+            except IOError:
+                return p   # existiert (noch) nicht: dann der Text selbst
+        t = real(test_p)
+        for name, p in andere:
+            o = real(p)
+            if t == o or t.startswith(o + '/') or o.startswith(t + '/'):
+                sys.exit(f'Abbruch: Testziel {t} ist gleich, Unter- oder Elternordner von {name} ({o}).')
+        print(f'Testziel {t} ist getrennt von ' + ', '.join(f'{n}' for n, _ in andere))
+    finally:
+        sftp.close()
+        client.close()
+
+
 if __name__ == '__main__':
-    cmds = {'prep': cmd_prep, 'upload': cmd_upload, 'mark': cmd_mark, 'upload_all': cmd_upload_all}
+    cmds = {'prep': cmd_prep, 'upload': cmd_upload, 'mark': cmd_mark, 'upload_all': cmd_upload_all, 'pfadcheck': cmd_pfadcheck}
     if len(sys.argv) == 4 and sys.argv[1] == 'put':
         cmd_put(sys.argv[2], sys.argv[3])
         sys.exit(0)
     if len(sys.argv) != 2 or sys.argv[1] not in cmds:
-        sys.exit('Aufruf: sftp_deploy.py prep|upload|mark|upload_all  oder  put <lokal> <ziel-relativ>')
+        sys.exit('Aufruf: sftp_deploy.py prep|upload|mark|upload_all|pfadcheck  oder  put <lokal> <ziel-relativ>')
     cmds[sys.argv[1]]()
