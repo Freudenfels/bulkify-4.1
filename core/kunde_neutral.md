@@ -22,3 +22,6 @@ DL-Schritte, KI-Info), `core/dokument_ui.php` (Liste + Freigabe-Schalter), `core
 `module/produktion/_bericht_inhalt.php` (Notiz in der Kundenversion), `core/pdf_pib.php` (hochgeladenes PIB).
 
 Zusatz: Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft, gleicher Firmenname), werden in Texten nie ersetzt.
+
+## Kunden-Mail erkennen (13.11.2026)
+`kunde_ist_mailadresse()` prüft jede Adresse, die zu einem Kunden gehört: Firmen-Adresse, Portal-Benutzer (benutzer, kunde_portal_user), CRM-Kontakte mit Kunde. Mehrere Adressen in einem Feld und „Name <mail>“ werden zerlegt; trifft eine, läuft die ganze Mail durch den Lieferanten-Filter.

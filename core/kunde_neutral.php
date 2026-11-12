@@ -124,14 +124,30 @@ function kunde_position_text(?string $t): string {
     $t = preg_replace('/\s*·\s*Handelsware\b|\bHandelsware\s*·\s*|\bHandelsware\b/u', '', $t);
     return trim($t);
 }
-// Ist die Mail-Adresse ein Kunde (Firma oder Portal-Benutzer)? Dann geht die Mail durch kunde_text_neutral.
+// Ist die Mail-Adresse ein Kunde? Dann geht die Mail durch kunde_text_neutral. Seit 13.11.2026 JEDE Adresse, die zu einem Kunden
+// gehört: Firmen-Adresse, Portal-Benutzer (benutzer.kunde_id und kunde_portal_user), CRM-Kontakte eines Kunden (crm_kontakt.kunde_id).
+// Mehrere Adressen in einem Feld („a@x.de; b@x.de“) und „Name <mail>“ werden zerlegt – trifft eine, gilt die ganze Mail als Kundenmail.
 function kunde_ist_mailadresse(string $email): bool {
-    $email = mb_strtolower(trim($email));
-    if ($email === '' || !function_exists('table_exists')) return false;
-    try {
-        if (table_exists('kunden') && (int) scalar("SELECT COUNT(*) FROM kunden WHERE LOWER(email)=?", [$email]) > 0) return true;
-        if (table_exists('benutzer') && column_exists('benutzer', 'kunde_id') && (int) scalar("SELECT COUNT(*) FROM benutzer WHERE LOWER(email)=? AND kunde_id IS NOT NULL AND kunde_id>0", [$email]) > 0) return true;
-    } catch (\Throwable $e) {}
+    if (!function_exists('table_exists')) return false;
+    preg_match_all('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', $email, $m);
+    $liste = array_values(array_unique(array_map(fn($x) => mb_strtolower(trim($x)), $m[0] ?? [])));
+    if (!$liste) return false;
+    $quellen = [
+        ['kunden', 'email', ''],
+        ['benutzer', 'email', ' AND kunde_id IS NOT NULL AND kunde_id>0'],
+        ['kunde_portal_user', 'email', ''],
+        ['crm_kontakt', 'email', ' AND kunde_id IS NOT NULL AND kunde_id>0'],
+    ];
+    foreach ($quellen as [$t, $c, $wo]) {
+        try {
+            if (!table_exists($t) || !column_exists($t, $c) || ($wo !== '' && !column_exists($t, 'kunde_id'))) continue;
+            // Feld kann mehrere Adressen enthalten: LIKE je Adresse, plus genauer Treffer.
+            foreach ($liste as $e) {
+                $like = '%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], $e) . '%';
+                if ((int) scalar("SELECT COUNT(*) FROM `$t` WHERE (LOWER(`$c`)=? OR LOWER(`$c`) LIKE ? ESCAPE '=')$wo", [$e, $like]) > 0) return true;
+            }
+        } catch (\Throwable $e2) {}
+    }
     return false;
 }
 
