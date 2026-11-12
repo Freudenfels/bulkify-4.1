@@ -20,7 +20,8 @@ on:
 
 concurrency:
   group: deploy-test
-  cancel-in-progress: true
+  # 13.11.2026 (Fable-3 T4.5/D9): ein laufender Test-Upload wird nicht mehr abgebrochen (sonst bliebe test halb hochgeladen).
+  cancel-in-progress: false
 
 jobs:
   deploy-test:
@@ -46,6 +47,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
+      # 13.11.2026 (Fable-3 T4.5/D2): das Deploy-Skript immer aus main nehmen (nicht aus dem ausgecheckten, evtl. alten Commit) –
+      # so gelten Schutz und Pfadprüfung von main auch für ältere Stände.
+      - name: Deploy-Skript aus main holen
+        if: steps.ziel.outputs.los == '1'
+        run: |
+          git show origin/main:.github/scripts/sftp_deploy.py > "$RUNNER_TEMP/sftp_deploy.py"
+          echo "DEPLOY_PY=$RUNNER_TEMP/sftp_deploy.py" >> "$GITHUB_ENV"
+
       - name: Python + paramiko
         if: steps.ziel.outputs.los == '1'
         uses: actions/setup-python@v5
@@ -70,7 +79,7 @@ jobs:
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
           SFTP_PASS: ${{ secrets.DEPLOY_PASSWORD }}
           SFTP_PATH: ${{ secrets.TEST_SERVER_PATH }}
-        run: python .github/scripts/sftp_deploy.py pfadcheck
+        run: python "$DEPLOY_PY" pfadcheck
 
       - name: Aenderungsumfang bestimmen
         id: prep
@@ -84,7 +93,7 @@ jobs:
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
           SFTP_PASS: ${{ secrets.DEPLOY_PASSWORD }}
           SFTP_PATH: ${{ secrets.TEST_SERVER_PATH }}
-        run: python .github/scripts/sftp_deploy.py prep
+        run: python "$DEPLOY_PY" prep
 
       - name: Upload (inkrementell, beim ersten Mal alles)
         if: steps.ziel.outputs.los == '1' && steps.prep.outputs.mode != 'skip'
@@ -99,7 +108,7 @@ jobs:
           SFTP_PATH: ${{ secrets.TEST_SERVER_PATH }}
           MODE: ${{ steps.prep.outputs.mode }}
         run: |
-          if [ "$MODE" = "full" ]; then python .github/scripts/sftp_deploy.py upload_all; else python .github/scripts/sftp_deploy.py upload; fi
+          if [ "$MODE" = "full" ]; then python "$DEPLOY_PY" upload_all; else python "$DEPLOY_PY" upload; fi
 
       - name: robots.txt nur fuer test (Suchmaschinen aussperren)
         if: steps.ziel.outputs.los == '1' && steps.prep.outputs.mode != 'skip'
@@ -112,10 +121,10 @@ jobs:
           SFTP_PATH: ${{ secrets.TEST_SERVER_PATH }}
         run: |
           printf 'User-agent: *\nDisallow: /\n' > robots_test.txt
-          python .github/scripts/sftp_deploy.py put robots_test.txt public/robots.txt
+          python "$DEPLOY_PY" put robots_test.txt public/robots.txt
           # 13.11.2026: Datei-Marker der Testumgebung (Testmodus auch auf der Kommandozeile, nur eigene secrets.php)
           printf 'test\n' > testumgebung_marker.txt
-          python .github/scripts/sftp_deploy.py put testumgebung_marker.txt .testumgebung
+          python "$DEPLOY_PY" put testumgebung_marker.txt .testumgebung
 
       - name: Deployten Stand merken (.deploy_sha der Testumgebung)
         if: steps.ziel.outputs.los == '1' && steps.prep.outputs.mode != 'skip'
@@ -128,4 +137,4 @@ jobs:
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
           SFTP_PASS: ${{ secrets.DEPLOY_PASSWORD }}
           SFTP_PATH: ${{ secrets.TEST_SERVER_PATH }}
-        run: python .github/scripts/sftp_deploy.py mark
+        run: python "$DEPLOY_PY" mark
