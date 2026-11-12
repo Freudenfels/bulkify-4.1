@@ -40,15 +40,17 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     $bulk = (int)($_POST['bulk_charge_id'] ?? 0);
     $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);
     $charge = trim((string)($_POST['charge_nr'] ?? ''));
+    $datumN = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST['datum'] ?? '')) ? (string)$_POST['datum'] : pa_tag_heute();
+    if ($charge !== '' && $charge === trim((string)($_POST['charge_vorschlag'] ?? ''))) $charge = '';   // unveränderter Vorschlag = System vergibt
     $akt = pa_aktuelle_unter_charge($id);
     $uc = 0;
-    if ($akt && (int)$akt['bulk_charge_id'] === $bulk) {
-        // Gleicher Bulk = gleiche Unter-Charge (Regel Nico): eine andere Charge-Nr. geht nur mit anderem Bulk.
-        if ($charge !== '' && $charge !== (string)$akt['charge_nr']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode('Gleicher Bulk = gleiche Charge ' . $akt['charge_nr'] . '. Eine andere Charge gibt es nur mit einem anderen Bulk.') . '&nachtragen=1#nachtragen'); exit; }
+    if ($akt && (int)$akt['bulk_charge_id'] === $bulk && pa_uc_tag($akt) === $datumN) {
+        // Gleicher Bulk am selben Tag = gleiche Unter-Charge. Neuer Tag oder anderer Bulk = nächster Buchstabe (Nico 12.11.2026).
+        if ($charge !== '' && $charge !== (string)$akt['charge_nr']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode('Gleicher Bulk am selben Tag = gleiche Charge ' . $akt['charge_nr'] . '. Ein neuer Buchstabe kommt mit anderem Bulk oder an einem anderen Produktionstag.') . '&nachtragen=1#nachtragen'); exit; }
         $uc = (int)$akt['id'];
     }
     if (!$uc) {
-        $r0 = pa_starten($id, ['bulk_charge_id' => $bulk, 'nachtrag' => true, 'charge_nr' => $charge, 'abweichung_grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')], $wer);
+        $r0 = pa_starten($id, ['bulk_charge_id' => $bulk, 'nachtrag' => true, 'datum' => $datumN, 'charge_nr' => $charge, 'abweichung_grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')], $wer);
         if (!$r0['ok']) { header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($r0['msg']) . '&nachtragen=1#nachtragen'); exit; }
         $uc = (int)$r0['unter_charge_id'];
     }

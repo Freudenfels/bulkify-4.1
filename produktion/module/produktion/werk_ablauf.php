@@ -33,7 +33,8 @@ $kap = erp_wa_kapsel_info($id);
 <?php if ($zeigeStart):
     $bulkCode = (string)($_GET['bulk'] ?? '');
     $s = $bulkCode !== '' ? erp_wa_scan($bulkCode) : null;
-    $v = $wiederanlauf && !$wechsel ? ['charge_nr' => $uc['charge_nr'], 'mhd' => $uc['mhd'], 'neu' => false] : ($s ? pa_vorgabe($id, (int)$s['charge_id'], (int)$s['prod_charge_id']) : null);
+    // Wiederanlauf an einem neuen Tag: gleicher Bulk, aber nächster Buchstabe (Nico 12.11.2026) – pa_vorgabe prüft den Produktionstag.
+    $v = $wiederanlauf && !$wechsel ? pa_vorgabe($id, (int)$uc['bulk_charge_id'], (int)$uc['prod_charge_id']) : ($s ? pa_vorgabe($id, (int)$s['charge_id'], (int)$s['prod_charge_id']) : null);
     if ($wiederanlauf && !$wechsel && !$s) {   // Wiederanlauf: Bulk der laufenden Unter-Charge vorbelegen
         $bulkCode = $uc['bulk_charge_id'] ? '?id=' . (int)$uc['bulk_charge_id'] : (string) scalar("SELECT CONCAT(nummer, COALESCE(sub_kennung,'')) FROM prod_charge WHERE id=?", [(int)$uc['prod_charge_id']]);
         $s = erp_wa_scan($bulkCode);

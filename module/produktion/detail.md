@@ -186,3 +186,4 @@ Alle Materialnamen auf der Seite führen per Klick zum Artikel, und zwar in den 
   - **Abschließen** macht dasselbe wie Chargenwechsel oder Ende in der Werk-App: `pa_unter_charge_schliessen()` mit Gegenprobe, Chargenprotokoll-PDF und Ereignis. Eine weitere Teilmenge bekommt danach einen neuen Buchstaben.
   - **Wieder öffnen** geht nur, wenn keine andere Unter-Charge läuft. Das Ereignis „wiederanlauf“ wird vermerkt.
   - Aktionen `uc_schliessen` und `uc_oeffnen`.
+- **Buchstabe je Produktionstag (12.11.2026):** Beim Nachtragen gilt das Produktionsdatum. Gleicher Bulk und gleicher Tag wie die laufende Unter-Charge ergibt denselben Buchstaben. Ein anderer Tag oder ein anderer Bulk ergibt den nächsten Buchstaben, die laufende Unter-Charge wird dabei abgeschlossen („neuer Produktionstag“). Ein unveränderter Charge-Vorschlag (`charge_vorschlag`) gilt als „System vergibt“.

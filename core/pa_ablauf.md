@@ -20,8 +20,9 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 
 ## Regeln
 - **Charge vom System** (`pa_vorgabe`, `pa_naechster_buchstabe`): Basis ist die PR-Nummer, der Buchstabe der nächste freie nach allen benutzten (Unter-Chargen und vorhandene Chargen).
-  - **Neuer Buchstabe nur bei anderem Bulk bzw. anderem Eimer**, nicht an einem neuen Tag.
-  - Gleicher Bulk heißt Wiederanlauf mit erneuten Fotos.
+  - **Neuer Buchstabe bei anderem Bulk bzw. anderem Eimer UND an einem neuen Produktionstag** (Nico 12.11.2026, ersetzt die Regel vom 11.11.): einen Tag später gibt es dieselbe Nummer mit dem nächsten Buchstaben.
+  - Gleicher Bulk am selben Tag heißt Wiederanlauf (z. B. nach der Pause) mit erneuten Fotos.
+  - Der Produktionstag einer Unter-Charge ist `pa_uc_tag()`: die letzte Teilmenge (`datum`), sonst die Anlage (Berlin). „Heute“ ist `pa_tag_heute()` (Berlin). `pa_vorgabe(..., $tag)` vergleicht beides. Ein Nachtrag nutzt das Produktionsdatum aus dem Formular.
   - Abweichende Charge nur mit Grund, das erzeugt eine Aufgabe ans Büro.
   - `charge_naechste_nr()` und `erp_charge_naechste_nr()` nutzen dieselbe Buchstabenregel.
 - **MHD** (`pa_mhd_vorgabe`): das frühere aus Bulk-MHD und heute + Haltbarkeit des Produkts (sonst 18 Monate). Ein am PA festgelegtes MHD gilt vorrangig.

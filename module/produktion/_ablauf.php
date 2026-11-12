@@ -13,7 +13,8 @@ $bulkWahl = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.mhd 
                    AND (c.auftrag_id=? OR (c.auftrag_id IS NULL AND i.rezeptur_id=?)) ORDER BY (c.mhd IS NULL), c.mhd, c.id",
                 [(int)($pa['auftrag_id'] ?? 0), (int)($pa['rezeptur_id'] ?: scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]))]);
 $mitarbeiterA = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name");
-$vorgabeA = pa_vorgabe($id, (int)($bulkWahl[0]['id'] ?? 0));
+// Vorschlag für heute: gleicher Bulk wie die laufende Unter-Charge UND heute = gleicher Buchstabe, sonst der nächste (Nico 12.11.2026).
+$vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl[0]['id'] ?? 0), $akt ? (int)$akt['prod_charge_id'] : 0);
 ?>
 <div class="bx-panel">
   <div class="bx-row" style="gap:28px;flex-wrap:wrap">
@@ -30,7 +31,7 @@ $vorgabeA = pa_vorgabe($id, (int)($bulkWahl[0]['id'] ?? 0));
 <div class="bx-panel" id="unterchargen">
   <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
     <h2 style="margin:0">Unter-Chargen und Teilmengen</h2>
-    <span class="muted" style="font-size:13px">Produziert wird in der Werk-App. Neuer Buchstabe nur bei anderem Bulk bzw. Eimer.</span>
+    <span class="muted" style="font-size:13px">Produziert wird in der Werk-App. Neuer Buchstabe bei anderem Bulk bzw. Eimer oder an einem neuen Produktionstag.</span>
   </div>
   <?php if (!$ucs): ?><p class="muted">Noch keine Unter-Charge. Start in der Werk-App (Bulk scannen, Fotos Linie und Stempel) oder unten „Teilmenge nachtragen“.</p>
   <?php else: ?>
@@ -73,9 +74,9 @@ $vorgabeA = pa_vorgabe($id, (int)($bulkWahl[0]['id'] ?? 0));
         <select name="bulk_charge_id" id="naBulk"><option value="0">ohne (kein Bulk-Bezug)</option><?php foreach ($bulkWahl as $b): ?><option value="<?= (int)$b['id'] ?>"<?= $akt && (int)$akt['bulk_charge_id'] === (int)$b['id'] ? ' selected' : '' ?>><?= h(($b['charge_nr'] ?: '#' . $b['id']) . ' · ' . $nfA($b['menge_verfuegbar']) . ' ' . $b['einheit'] . ($b['mhd'] ? ' · MHD ' . date('d.m.Y', strtotime((string)$b['mhd'])) : '')) ?></option><?php endforeach; ?></select></div>
     </div>
     <div class="bx-row" style="gap:12px;flex-wrap:wrap">
-      <div class="bx-field" style="width:170px"><label>Charge (Vorschlag)</label><input type="text" name="charge_nr" value="<?= h($akt ? (string)$akt['charge_nr'] : $vorgabeA['charge_nr']) ?>" data-vorgabe="<?= h($akt ? (string)$akt['charge_nr'] : $vorgabeA['charge_nr']) ?>"></div>
+      <div class="bx-field" style="width:170px"><label>Charge (Vorschlag)</label><input type="text" name="charge_nr" value="<?= h($vorgabeA['charge_nr']) ?>" data-vorgabe="<?= h($vorgabeA['charge_nr']) ?>"><input type="hidden" name="charge_vorschlag" value="<?= h($vorgabeA['charge_nr']) ?>"><div class="muted" style="font-size:12px">Unverändert lassen: das System vergibt je Bulk und Produktionstag den richtigen Buchstaben.</div></div>
       <div class="bx-field" style="flex:1;min-width:220px"><label>Grund, falls die Charge abweicht</label><input type="text" name="grund" placeholder="nur bei Abweichung"></div>
-      <div class="bx-field" style="width:170px"><label>MHD</label><input type="date" name="mhd" value="<?= h($akt ? (string)$akt['mhd'] : $vorgabeA['mhd']) ?>"></div>
+      <div class="bx-field" style="width:170px"><label>MHD</label><input type="date" name="mhd" value="<?= h($vorgabeA['mhd']) ?>"></div>
     </div>
     <div class="bx-row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
       <div class="bx-field" style="flex:1;min-width:220px"><label>Mitarbeiter</label><select name="mitarbeiter"><option value="">–</option><?php foreach ($mitarbeiterA as $m): ?><option><?= h((string)$m['name']) ?></option><?php endforeach; ?></select></div>

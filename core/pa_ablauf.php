@@ -4,8 +4,9 @@
 // und ruft fachliche Funktionen über pa_fn() auf (Dashboard-Name, sonst der erp_-Spiegel der Produktions-App). Darf deshalb NICHT
 // core/schema.php laden (Sub-App-DB-Kollision). Tabellen legt pa_schema() selbst an (best-effort, Version in app_meta).
 //
-// Begriffe: Unter-Charge = Kunden-Charge mit Buchstabe (2785.A). Regel (Nico): ein NEUER Buchstabe nur bei einer anderen Bulk-Charge
-// bzw. einem anderen Eimer nach Chargenende – NICHT automatisch an einem neuen Tag (dann gleicher Buchstabe, aber erneut Fotos).
+// Begriffe: Unter-Charge = Kunden-Charge mit Buchstabe (2785.A). Regel (Nico 12.11.2026, ersetzt 11.11.): ein NEUER Buchstabe bei
+// einer anderen Bulk-Charge bzw. einem anderen Eimer UND an einem neuen Produktionstag („einen Tag später: dieselbe Nummer mit dem
+// nächsten Buchstaben“). Gleicher Bulk am selben Tag = gleicher Buchstabe.
 // Im Lager gibt es je Unter-Charge GENAU EINE Fertigware-Charge; jede Teilmenge erhöht deren Menge.
 
 const PA_SCHEMA_VERSION = '4';
@@ -165,9 +166,19 @@ function pa_aktuelle_unter_charge(int $pa_id): ?array {
 }
 // Vorschlag für Charge + MHD bei gegebenem Bulk (Werk-App zeigt ihn groß an): gleicher Bulk wie die laufende Unter-Charge =
 // gleicher Buchstabe, sonst der nächste.
-function pa_vorgabe(int $pa_id, int $bulk_charge_id = 0, int $prod_charge_id = 0): array {
+// Produktionstag (Europe/Berlin) – heute bzw. der Tag einer Unter-Charge: letzte Teilmenge (datum), sonst Anlage (UTC -> Berlin).
+function pa_tag_heute(): string { return (new DateTime('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d'); }
+function pa_uc_tag(array $uc): string {
+    $d = (string) scalar("SELECT MAX(datum) FROM pa_teilmenge WHERE unter_charge_id=?", [(int)$uc['id']]);
+    if ($d !== '') return substr($d, 0, 10);
+    try { return (new DateTime((string)$uc['angelegt'] . ' UTC'))->setTimezone(new DateTimeZone('Europe/Berlin'))->format('Y-m-d'); }
+    catch (\Throwable $e) { return substr((string)$uc['angelegt'], 0, 10); }
+}
+function pa_vorgabe(int $pa_id, int $bulk_charge_id = 0, int $prod_charge_id = 0, ?string $tag = null): array {
     $akt = pa_aktuelle_unter_charge($pa_id);
-    if ($akt && ((int)$akt['bulk_charge_id'] === $bulk_charge_id && (int)$akt['prod_charge_id'] === $prod_charge_id || ($bulk_charge_id === 0 && $prod_charge_id === 0)))
+    $tag = ($tag !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/', $tag)) ? $tag : pa_tag_heute();
+    if ($akt && pa_uc_tag($akt) === $tag   // neuer Produktionstag = nächster Buchstabe (Nico 12.11.2026)
+        && ((int)$akt['bulk_charge_id'] === $bulk_charge_id && (int)$akt['prod_charge_id'] === $prod_charge_id || ($bulk_charge_id === 0 && $prod_charge_id === 0)))
         return ['neu' => false, 'buchstabe' => (string)$akt['buchstabe'], 'charge_nr' => (string)$akt['charge_nr'], 'mhd' => (string)$akt['mhd'], 'unter_charge_id' => (int)$akt['id']];
     $bs = pa_naechster_buchstabe($pa_id);
     return ['neu' => true, 'buchstabe' => $bs, 'charge_nr' => pa_basis($pa_id) . '.' . $bs, 'mhd' => pa_mhd_vorgabe($pa_id, $bulk_charge_id), 'unter_charge_id' => 0];
@@ -180,13 +191,14 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     $bulk = (int)($d['bulk_charge_id'] ?? 0); $eimer = (int)($d['prod_charge_id'] ?? 0);
     $nachtrag = !empty($d['nachtrag']);   // Nachtrag im Dashboard (Produktion ist schon gelaufen): keine Fotos möglich
     if (!$nachtrag && (($d['foto_linie'] ?? '') === '' || ($d['foto_stempel'] ?? '') === '')) return ['ok' => false, 'msg' => 'Bitte Foto „Linie leer“ und Foto vom Stempelbild machen.'];
-    $v = pa_vorgabe($pa_id, $bulk, $eimer);
+    $tag = ($nachtrag && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($d['datum'] ?? ''))) ? (string)$d['datum'] : pa_tag_heute();
+    $v = pa_vorgabe($pa_id, $bulk, $eimer, $tag);
     $akt = pa_aktuelle_unter_charge($pa_id);
-    if (!$v['neu'] && $akt) {   // gleiche Bulk-Charge: gleicher Buchstabe, Wiederanlauf (z. B. nächster Tag)
+    if (!$v['neu'] && $akt) {   // gleiche Bulk-Charge am selben Tag: gleicher Buchstabe, Wiederanlauf (z. B. nach der Pause)
         pa_ereignis($pa_id, (int)$akt['id'], 'wiederanlauf', 'Wiederanlauf ' . $akt['charge_nr'] . ': Linie leer bestätigt, Stempel auf Charge ' . $akt['charge_nr'] . ' / MHD ' . date('d.m.Y', strtotime((string)$akt['mhd'])) . ' eingestellt.', (string)($d['linie'] ?? ''), (string)$d['foto_linie'], (string)$d['foto_stempel'], $von);
         return ['ok' => true, 'unter_charge_id' => (int)$akt['id'], 'charge_nr' => (string)$akt['charge_nr'], 'mhd' => (string)$akt['mhd'], 'neu' => false];
     }
-    if ($akt) pa_unter_charge_schliessen((int)$akt['id'], $von, 'Chargenwechsel');
+    if ($akt) pa_unter_charge_schliessen((int)$akt['id'], $von, ((int)$akt['bulk_charge_id'] === $bulk && (int)$akt['prod_charge_id'] === $eimer) ? 'neuer Produktionstag' : 'Chargenwechsel');
     $charge = trim((string)($d['charge_nr'] ?? '')) ?: $v['charge_nr'];
     $grund = trim((string)($d['abweichung_grund'] ?? ''));
     if ($charge !== $v['charge_nr'] && $grund === '') return ['ok' => false, 'msg' => 'Andere Charge als vorgegeben (' . $v['charge_nr'] . ') nur mit Grund.'];
@@ -269,7 +281,7 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     if ($fehlt && empty($o['ohne_material'])) { unset($GLOBALS['pa_bevorzugt']);
         return ['ok' => false, 'fehler' => 'mangel', 'fehlt' => $fehlt, 'msg' => 'Nicht genug Material für ' . pa_mz($menge) . ' Stk: ' . implode(', ', array_map(fn($f) => (string)$f['name'] . ' (fehlt ' . pa_mz($f['fehlt']) . ' ' . ($f['einheit'] ?? '') . ')', $fehlt)) . '.']; }
     // 2) … Teilmenge anlegen, dann buchen (Verbrauch trägt die Teilmenge)
-    $datum = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($o['datum'] ?? '')) ? (string)$o['datum'] : gmdate('Y-m-d');
+    $datum = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($o['datum'] ?? '')) ? (string)$o['datum'] : pa_tag_heute();   // Produktionstag Berlin (Buchstabe je Tag)
     q("INSERT INTO pa_teilmenge (pa_id, unter_charge_id, menge, umfang, rueckstell, foto, art, datum, mitarbeiter, geliefert, notiz, angelegt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
       [$pa_id, $uc_id, $menge, $umfang, max(0, (int)($o['rueckstell'] ?? 0)), ($o['foto'] ?? '') ?: null, ($o['art'] ?? 'werk') === 'nachtrag' ? 'nachtrag' : 'werk', $datum,
        mb_substr((string)($o['mitarbeiter'] ?? $von), 0, 120) ?: null, !empty($o['geliefert']) ? 1 : 0, mb_substr(trim((string)($o['notiz'] ?? '')), 0, 255) ?: null, gmdate('Y-m-d H:i:s')]);

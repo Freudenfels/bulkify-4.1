@@ -8,7 +8,8 @@ Seit 11.11.2026, Teil 1/5/6/7 von `plan-produktion-gefuehrt.md`. Wird in `detail
   - Teilmengen (Datum, Menge, vor Etikett, nachgetragen, Mitarbeiter, schon geliefert)
   - Kartons, Status, Chargenprotokoll (PDF)
 - **Teilmenge nachtragen** (ersetzt Easy Production): Datum, Menge, Bulk-Charge, Charge (Vorschlag), Grund bei Abweichung, MHD, Mitarbeiter, Rückstellmuster, Foto optional, „schon geliefert“.
-  - Gleicher Bulk ergibt dieselbe Unter-Charge; eine andere Charge-Nr. gibt es nur mit anderem Bulk.
+  - Gleicher Bulk **am selben Produktionstag** ergibt dieselbe Unter-Charge. Ein anderer Bulk oder ein anderer Tag (Produktionsdatum) ergibt den nächsten Buchstaben (Nico 12.11.2026).
+  - Das Feld Charge ist mit dem Vorschlag für heute vorbelegt (`charge_vorschlag`). Bleibt es unverändert, vergibt das System den richtigen Buchstaben auch dann, wenn das Datum geändert wird.
   - Neuer Bulk ergibt den nächsten Buchstaben (`pa_starten` mit `nachtrag`, ohne Fotos).
   - Gebucht wird über `pa_teilmenge_buchen`, wie in der Werk-App.
   - „Schon geliefert“ bucht die Menge sofort per Lieferschein wieder aus (wie früher Easy Production).
