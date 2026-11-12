@@ -41,3 +41,6 @@ bulkify-CoA: Lieferant nur als Nummer (neutralisiert), Methode ohne Lieferantenn
 `build_coa_pdf()` zeigt keine Lieferantennummer mehr (Kunde sieht nie, wer produziert).
 
 **Ohne Lieferantennamen (13.11.2026, Fable-3 T3.6):** `build_coa_pdf()`: der Artikelname (Kopf, Untertitel, Feld „Rohstoff“) läuft durch `kunde_text_neutral()`.
+
+
+**Lieferantennummer (Regel Nico 13.11.2026, ersetzt T4.2 aus Fable-2):** Der CoA (`build_coa_pdf()`) zeigt die Zeile „Lieferant“ wieder – nur mit der Lieferantennummer (L-xxxx), nie Firma oder Adresse.
