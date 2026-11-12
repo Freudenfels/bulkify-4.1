@@ -4783,7 +4783,7 @@ function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
         // 13.11.2026: nur gültige Preise je Lieferant (lp_je_lieferant_gueltig); gibt es nur abgelaufene, wird mit dem letzten
         // gerechnet und auf der Seite markiert („Preis abgelaufen - Summe unsicher“, nie still).
         $rows = lp_je_lieferant_gueltig(all("SELECT lieferant_id, preis, menge, gueltig_bis FROM rezeptur_lief_angebot
-                     WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0
+                     WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))
                        AND (einheit IS NULL OR einheit='' OR LOWER(TRIM(einheit)) NOT IN ('kg','g','l','ml','liter','gramm','kilogramm','mg'))",
                     [$rid]), $abgR, ['rezeptur', $rid]);
         $passend = null; $basis = null;
@@ -5018,7 +5018,7 @@ function rezeptur_zukauf_ek_packung(int $rid, int $stueck, int $packungen = 0): 
         $bedarf = (float)$stueck / 1000 * max(1, $packungen);   // Gesamtmenge in kg bzw. l
         $passend = null; $basis = null;
         $abgR = [];   // 13.11.2026: nur gültige Preise je Lieferant, abgelaufene markiert (nie still)
-        foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, preis, menge, gueltig_bis, LOWER(TRIM(COALESCE(einheit,''))) AS e FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0", [$rid]), $abgR, ['rezeptur', $rid]) as $r) {
+        foreach (lp_je_lieferant_gueltig(all("SELECT lieferant_id, preis, menge, gueltig_bis, LOWER(TRIM(COALESCE(einheit,''))) AS e FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND preis IS NOT NULL AND preis>0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$rid]), $abgR, ['rezeptur', $rid]) as $r) {
             $e = (string)$r['e'];
             if (in_array($e, ['kg', 'kilogramm', 'l', 'liter'], true))      { $pkg = (float)$r['preis'];        $m = (float)$r['menge']; }
             elseif (in_array($e, ['g', 'gramm', 'ml'], true))              { $pkg = (float)$r['preis'] * 1000; $m = (float)$r['menge'] / 1000; }
@@ -5152,10 +5152,10 @@ function produkt_aus_rezeptur(int $rezeptur_id, int $stueck, ?int $verp_id, ?int
     // Katalogprodukt ist kundenneutral: nie ein bedruckter Behälter / Kundenetikett im Slot (Blocker 1).
     if ($exKid === 0) [$verp_id, $v] = produkt_slots_neutral($verp_id, $v);
     if ($exKid > 0) {
-        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=1 AND kunde_id=? AND handelsware=? ORDER BY id LIMIT 1",
+        $treffer = one("SELECT id FROM produkt WHERE COALESCE(status,'')<>'inaktiv' AND rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=1 AND kunde_id=? AND handelsware=? ORDER BY id LIMIT 1",
                        [$rezeptur_id, $stueck, $verp_id, $exKid, $hw]);
     } else {
-        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 AND handelsware=? ORDER BY id LIMIT 1",
+        $treffer = one("SELECT id FROM produkt WHERE COALESCE(status,'')<>'inaktiv' AND rezeptur_id=? AND einheiten_pro_packung=? AND (verpackung_id <=> ?) AND exklusiv=0 AND handelsware=? ORDER BY id LIMIT 1",
                        [$rezeptur_id, $stueck, $verp_id, $hw]);
     }
     if ($treffer) return (int)$treffer['id'];
@@ -5241,11 +5241,11 @@ function produkt_variante_id(int $vorlage_produkt_id, int $stueck, ?int $verp_id
     if ($exKid === 0) [$verp_id, $v] = produkt_slots_neutral($verp_id, $v);
     // Vorhandenes Produkt mit genau dieser Kombination wiederverwenden (Katalog oder dasselbe Vorlage-Produkt)
     if ($exKid > 0) {
-        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=?
+        $treffer = one("SELECT id FROM produkt WHERE COALESCE(status,'')<>'inaktiv' AND rezeptur_id=? AND einheiten_pro_packung=?
                         AND (verpackung_id <=> ?) AND ((exklusiv=1 AND kunde_id=?) OR id=?) ORDER BY id LIMIT 1",
                        [$rid, $stueck, $verp_id, $exKid, $vorlage_produkt_id]);
     } else {
-        $treffer = one("SELECT id FROM produkt WHERE rezeptur_id=? AND einheiten_pro_packung=?
+        $treffer = one("SELECT id FROM produkt WHERE COALESCE(status,'')<>'inaktiv' AND rezeptur_id=? AND einheiten_pro_packung=?
                         AND (verpackung_id <=> ?) AND (exklusiv=0 OR id=?) ORDER BY id LIMIT 1",
                        [$rid, $stueck, $verp_id, $vorlage_produkt_id]);
     }
@@ -5951,7 +5951,7 @@ function angebot_rezeptur_zeilen(int $rid, int $stueck, array $verp_ids, int $me
     $ekH = rezeptur_herstell_ek_pro_packung($rid, $stueck, $menge);
     // Handelsware über eine Rezeptur-Position (Nacht 2b): gibt es zu Rezeptur + Inhalt ein Handelsware-Produkt mit Zukaufpreis je
     // Packung, ist DAS der EK (die Ware ist schon verpackt) – keine eigenen Verpackungszeilen, wie beim Produkt-Weg.
-    $hwPid = (int) scalar("SELECT id FROM produkt WHERE rezeptur_id=? AND COALESCE(handelsware,0)=1 AND einheiten_pro_packung=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$rid, $stueck, $kid]);
+    $hwPid = (int) scalar("SELECT id FROM produkt WHERE COALESCE(status,'')<>'inaktiv' AND rezeptur_id=? AND COALESCE(handelsware,0)=1 AND einheiten_pro_packung=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$rid, $stueck, $kid]);
     $hwZp  = $hwPid ? produkt_lieferant_preise_pkg($hwPid, $menge) : [];
     if ($hwZp) { $ekH = min($hwZp); $verp_ids = []; }
     $marge = $mo !== null ? $mo : max(marge_typ_prozent($form), marge_min_prozent());
@@ -7032,12 +7032,17 @@ function lp_verlauf_sichern(int $item_id, ?int $lieferant_id = null, ?int $preis
            SELECT item_id,lieferant_id,lieferant_name,menge_ab,preis,waehrung,stand,gueltig_bis,UTC_TIMESTAMP() FROM lieferant_preis WHERE $w", $args);
     } catch (Throwable $e) { /* best effort */ }
 }
+// Hauptlieferant eines Artikels für Vorbelegungen (13.11.2026): gesperrt = 0 (dann ohne Lieferant, Hinweis an der Bestellung).
+function item_haupt_lieferant_aktiv(int $item_id): int {
+    $r = one("SELECT i.haupt_lieferant_id, COALESCE(l.gesperrt,0) AS g FROM item i LEFT JOIN lieferanten l ON l.id=i.haupt_lieferant_id WHERE i.id=?", [$item_id]);
+    return ($r && (int)$r['haupt_lieferant_id'] > 0 && (int)$r['g'] === 0) ? (int)$r['haupt_lieferant_id'] : 0;
+}
 function rohstoff_bester_lieferant(int $item_id, float $menge): ?array {
     // Passende Staffel je Lieferant: größte Staffel, deren menge_ab <= Bedarf. Liegt der Bedarf
     // unter allen Staffeln (unter MOQ), gilt die KLEINSTE Staffel – so viel müsste man mindestens abnehmen.
     $rows = all("SELECT lp.lieferant_id, lp.preis, lp.menge_ab, lp.gueltig_bis, l.firma FROM lieferant_preis lp
                  LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
-                 WHERE lp.item_id=? AND (lp.waehrung IS NULL OR lp.waehrung='EUR')
+                 WHERE lp.item_id=? AND (lp.waehrung IS NULL OR lp.waehrung='EUR') AND COALESCE(l.gesperrt,0)=0   -- 13.11.2026: ohne gesperrte
                  ORDER BY lp.lieferant_id, lp.menge_ab", [$item_id]);
     if (!$rows) return null;
     $gSel = lp_gueltig_auswahl($rows); $rows = $gSel['rows'];   // gültige bevorzugen (auch bei „günstigster")
@@ -8892,7 +8897,7 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         return $l;
     };
     $angRows = lp_gueltig_auswahl(all("SELECT lieferant_id, menge, preis, LOWER(COALESCE(einheit,'')) AS einheit, gueltig_bis FROM rezeptur_lief_angebot
-                    WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis > 0", [$rid, rezeptur_stamm_id($rid)]), ['rezeptur', $rid])['rows'];
+                    WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis > 0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$rid, rezeptur_stamm_id($rid)]), ['rezeptur', $rid])['rows'];
     // (a) fertige Kapseln/Tabletten: Fremdfertigungs-Angebote je Stück + Zukaufpreise je Einheit am Produkt.
     $mengeA = $schuett ? $einh / 1000 : $einh;     // Schüttgut: fertige Mischung in kg
     $za = [];
@@ -8906,7 +8911,7 @@ function auftrag_beschaffungswege(int $auftrag_id): array {
         $pm = rezeptur_premixitem($rid, false);
         $zb = [];
         foreach ($angRows as $r) if ($r['einheit'] === 'kg') $zb[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
-        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]), ['item', $pm])['rows'] as $r)
+        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$pm]), ['item', $pm])['rows'] as $r)
             $zb[] = [(int)$r['lieferant_id'], (float)$r['menge_ab'], (float)$r['preis']];
         $out['wege']['premix'] = ['menge' => $kg, 'menge_voll' => $kgVoll, 'einheit' => 'kg', 'angebote' => $angebote(staffel_je_lieferant($zb, $kg), $kg), 'zusatz' => $kapZeile, 'item_id' => $pm, 'label' => 'Premix (fertige Mischung)'];
     }
@@ -11735,7 +11740,10 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
             $a['druck'] = verpackung_ist_bedruckt((int)$a['item_id']);
             if ($a['druck']) foreach ($a['orders'] as $o) if (!etikett_freigegeben((int)$o['auftrag_id'])) { $a['etikett_ok'] = false; break; }
         }
-        $a['haupt_lieferant'] = (int) scalar("SELECT haupt_lieferant_id FROM item WHERE id=?", [$a['item_id']]);
+        // 13.11.2026: gesperrter Hauptlieferant wird nicht vorbelegt (Hinweis „Hauptlieferant gesperrt“ in der Bestellliste).
+        $hlRow = one("SELECT i.haupt_lieferant_id, COALESCE(l.gesperrt,0) AS g FROM item i LEFT JOIN lieferanten l ON l.id=i.haupt_lieferant_id WHERE i.id=?", [$a['item_id']]);
+        $a['haupt_lieferant_gesperrt'] = $hlRow && (int)$hlRow['haupt_lieferant_id'] > 0 && (int)$hlRow['g'] === 1;
+        $a['haupt_lieferant'] = $a['haupt_lieferant_gesperrt'] ? 0 : (int)($hlRow['haupt_lieferant_id'] ?? 0);
     }
     unset($a);
     $out = array_values($agg);
@@ -11939,7 +11947,7 @@ function bestellung_sammel_anlegen(?string $typ = null): array {
     foreach (bedarf_aggregiert(true) as $a) {   // nur gemeldete Bedarfe
         if ($a['zu_bestellen'] <= 1e-6) continue;
         if ($typ && $a['typ'] !== $typ) continue;
-        $lief = (int) (scalar("SELECT haupt_lieferant_id FROM item WHERE id=?", [$a['item_id']]) ?: 0);
+        $lief = item_haupt_lieferant_aktiv((int)$a['item_id']);   // 13.11.2026: gesperrter Hauptlieferant = ohne Lieferant
         $gruppen[$lief][] = $a;
     }
     $label = $typ ? bedarf_typ_label($typ) : 'Material';
@@ -12013,7 +12021,7 @@ function bestellung_aus_bedarf(int $pa_id): array {
     $aid = $pa ? (int)$pa['auftrag_id'] : 0;
     $gruppen = [];
     foreach (auftrag_fehlbedarf($pa_id) as $r) {
-        $lief = (int) (scalar("SELECT haupt_lieferant_id FROM item WHERE id=?", [(int)$r['item_id']]) ?: 0);
+        $lief = item_haupt_lieferant_aktiv((int)$r['item_id']);   // 13.11.2026: gesperrter Hauptlieferant = ohne Lieferant
         $gruppen[$lief][] = $r;
     }
     $erstellt = [];
@@ -13429,10 +13437,10 @@ function rez_name_norm(string $s): string {
 // Bevorzugt die des Kunden, sonst kundenneutral. Rückgabe: Zeile (id,nummer,name) oder null.
 function rezeptur_finden_fuzzy(string $name, ?int $kunde_id): ?array {
     $name = trim($name); if ($name === '') return null;
-    $t = one("SELECT id, nummer, name FROM rezeptur WHERE name=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$name, $kunde_id]);
+    $t = one("SELECT id, nummer, name FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' AND name=? ORDER BY (kunde_id<=>?) DESC, id LIMIT 1", [$name, $kunde_id]);   // 13.11.2026: keine inaktiven
     if ($t) return $t;
     $norm = rez_name_norm($name); if ($norm === '') return null;
-    foreach (all("SELECT id, nummer, name FROM rezeptur ORDER BY (kunde_id<=>?) DESC, id", [$kunde_id]) as $r)
+    foreach (all("SELECT id, nummer, name FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' ORDER BY (kunde_id<=>?) DESC, id", [$kunde_id]) as $r)
         if (rez_name_norm((string)$r['name']) === $norm) return $r;
     return null;
 }
@@ -13463,10 +13471,10 @@ function kunde_finden_fuzzy(string $name, string $nr = ''): ?array {
     $name = trim($name); $nr = trim($nr);
     if ($nr !== '') { $k = one("SELECT id, firma, kundennummer FROM kunden WHERE kundennummer=? LIMIT 1", [$nr]); if ($k) return $k; }
     if ($name === '') return null;
-    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE LOWER(TRIM(firma))=LOWER(TRIM(?)) LIMIT 1", [$name]); if ($k) return $k;
+    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE COALESCE(gesperrt,0)=0 AND LOWER(TRIM(firma))=LOWER(TRIM(?)) LIMIT 1", [$name]); if ($k) return $k;   // 13.11.2026: keine gesperrten
     $esc = str_replace(['=', '%', '_'], ['==', '=%', '=_'], $name);
-    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE LOWER(firma) LIKE LOWER(?) ESCAPE '=' ORDER BY CHAR_LENGTH(firma) ASC LIMIT 1", ['%' . $esc . '%']); if ($k) return $k;
-    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE CHAR_LENGTH(firma) >= 4 AND LOWER(?) LIKE CONCAT('%', LOWER(firma), '%') ORDER BY CHAR_LENGTH(firma) DESC LIMIT 1", [$name]); if ($k) return $k;
+    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE COALESCE(gesperrt,0)=0 AND LOWER(firma) LIKE LOWER(?) ESCAPE '=' ORDER BY CHAR_LENGTH(firma) ASC LIMIT 1", ['%' . $esc . '%']); if ($k) return $k;
+    $k = one("SELECT id, firma, kundennummer FROM kunden WHERE COALESCE(gesperrt,0)=0 AND CHAR_LENGTH(firma) >= 4 AND LOWER(?) LIKE CONCAT('%', LOWER(firma), '%') ORDER BY CHAR_LENGTH(firma) DESC LIMIT 1", [$name]); if ($k) return $k;
     return null;
 }
 function kunde_finden_oder_anlegen(string $firma, string $nr = ''): array {

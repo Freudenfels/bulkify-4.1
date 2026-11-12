@@ -466,6 +466,7 @@ function erp_versandkatalog(int $kunde_id = 0, string $q = ''): array {
         $w[] = '(p.name LIKE ? OR p.kundenname LIKE ? OR p.nummer LIKE ?)';
         $like = '%' . $t . '%'; array_push($p, $like, $like, $like);
     }
+    $w[] = "COALESCE(p.status,'')<>'inaktiv'";   // 13.11.2026: inaktive Produkte nicht auswählbar
     $where  = $w ? 'WHERE ' . implode(' AND ', $w) : '';
     $hatVf  = tabelle_da('item');
     $hatPp  = tabelle_da('produkt_preis');
@@ -946,7 +947,7 @@ function erp_etikett_anlegen(array $d): array {
 // Alle Produkte für die Auswahl „Anderes Etikett anlegen“ (Nummer · Name).
 function erp_produkt_auswahl(): array {
     if (!tabelle_da('produkt')) return [];
-    return all("SELECT id, nummer, name FROM produkt ORDER BY name");
+    return all("SELECT id, nummer, name FROM produkt WHERE COALESCE(status,'')<>'inaktiv' ORDER BY name");   // 13.11.2026
 }
 
 // Typen fuer die Lager-2-Einbuchung -> item.kategorie (+ Verpackungs-Rolle + Verpackungsart) + ob "neu anlegen" erlaubt.
@@ -1025,7 +1026,7 @@ function erp_lieferant_finden_oder_anlegen(string $name): int {
         $nt = erp_name_tokens($name);
         if ($nt) {
             $best = null; $bestScore = 0;
-            foreach (all("SELECT id, firma, lieferantennummer FROM lieferanten") as $lf) {
+            foreach (all("SELECT id, firma, lieferantennummer FROM lieferanten WHERE COALESCE(gesperrt,0)=0") as $lf) {   // 13.11.2026: ähnliche nur ungesperrte
                 $ft = erp_name_tokens((string)$lf['firma']); if (!$ft) continue;
                 $gem = count(array_intersect($nt, $ft)); $klein = min(count($nt), count($ft));
                 if ($gem >= $klein && $gem > $bestScore) { $bestScore = $gem; $best = $lf; }  // kuerzere ganz enthalten
@@ -1407,7 +1408,7 @@ function erp_rezeptur_zu_position(int $item_id, int $auftrag_id, string $name): 
     }
     if ($rid <= 0) {
         $n = trim($name);
-        if ($n !== '') $rid = (int) scalar("SELECT id FROM rezeptur WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) ORDER BY id LIMIT 1", [$n]);
+        if ($n !== '') $rid = (int) scalar("SELECT id FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' AND LOWER(TRIM(name))=LOWER(TRIM(?)) ORDER BY id LIMIT 1", [$n]);   // 13.11.2026
     }
     if ($rid <= 0) return $leer;
     $rz = one("SELECT name FROM rezeptur WHERE id=?", [$rid]);

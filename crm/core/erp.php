@@ -148,10 +148,11 @@ function erp_stand(string $typ, int $id): string {
 function erp_kunden_suche(string $q, int $limit = 20): array {
     if (!tabelle_da('kunden')) return [];
     $q = trim($q);
-    if ($q === '') return all("SELECT id, kundennummer, firma, ansprechpartner, email FROM kunden ORDER BY firma LIMIT ?", [$limit]);
+    // 13.11.2026: gesperrte Kunden nicht in der Kundensuche (per Link weiter erreichbar).
+    if ($q === '') return all("SELECT id, kundennummer, firma, ansprechpartner, email FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma LIMIT ?", [$limit]);
     $w = '%' . $q . '%';
     return all("SELECT id, kundennummer, firma, ansprechpartner, email FROM kunden
-                WHERE firma LIKE ? OR ansprechpartner LIKE ? OR email LIKE ? OR kundennummer LIKE ?
+                WHERE (firma LIKE ? OR ansprechpartner LIKE ? OR email LIKE ? OR kundennummer LIKE ?) AND COALESCE(gesperrt,0)=0
                 ORDER BY firma LIMIT ?", [$w, $w, $w, $w, $limit]);
 }
 function erp_kunde(int $id): ?array {

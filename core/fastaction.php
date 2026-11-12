@@ -69,7 +69,7 @@ function fastaction_analyse(string $text, ?string $pfad = null): array {
 function fastaction_aufloesen(array $erkannt): array {
     $res = ['kunde' => null, 'rezeptur' => null, 'produkt' => null];
     $kn = trim((string)($erkannt['kunde'] ?? ''));
-    if ($kn !== '') $res['kunde'] = one("SELECT id, firma FROM kunden WHERE firma LIKE ? ORDER BY (LOWER(firma)=LOWER(?)) DESC, LENGTH(firma) LIMIT 1", ['%' . $kn . '%', $kn]);
+    if ($kn !== '') $res['kunde'] = one("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 AND firma LIKE ? ORDER BY (LOWER(firma)=LOWER(?)) DESC, LENGTH(firma) LIMIT 1", ['%' . $kn . '%', $kn]);
     $rn = trim((string)($erkannt['rezeptur'] ?? ''));
     if ($rn !== '') $res['rezeptur'] = one("SELECT id, name FROM rezeptur WHERE name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $rn . '%', $rn]);
     $pn = trim((string)($erkannt['produkt'] ?? ''));

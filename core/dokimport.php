@@ -187,7 +187,7 @@ function dokimport_lieferant_finden(string $name): ?int {
     };
     $ziel = $norm($name);
     if ($ziel === '') return null;
-    $kandidaten = all("SELECT id, firma FROM lieferanten");
+    $kandidaten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0");   // 13.11.2026: keine gesperrten
     foreach ($kandidaten as $l) if ($norm((string)$l['firma']) === $ziel) return (int)$l['id'];
     if (mb_strlen($ziel) >= 8) {
         $treffer = [];

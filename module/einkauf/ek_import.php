@@ -276,7 +276,7 @@ if ($rows) {
         echo '</datalist>';
     } else {
         echo '<datalist id="prod_dl">';
-        foreach (all("SELECT name FROM produkt ORDER BY name") as $r) echo '<option value="' . h($r['name']) . '">';
+        foreach (all("SELECT name FROM produkt WHERE COALESCE(status,'')<>'inaktiv' ORDER BY name") as $r) echo '<option value="' . h($r['name']) . '">';
         echo '</datalist>';
     }
 }

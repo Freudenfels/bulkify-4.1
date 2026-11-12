@@ -96,7 +96,7 @@ if ($kiDaten) {
     if (!empty($kiDaten['waehrung'])) $preWaehrung = strtoupper((string)$kiDaten['waehrung']);
     $preUstVal = (float)($kiDaten['ust_prozent'] ?? 0);
     if (!$vorLieferant && !empty($kiDaten['lieferant_name'])) {
-        $m = scalar("SELECT id FROM lieferanten WHERE firma LIKE ? ORDER BY id LIMIT 1", ['%' . $kiDaten['lieferant_name'] . '%']);
+        $m = scalar("SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=0 AND firma LIKE ? ORDER BY id LIMIT 1", ['%' . $kiDaten['lieferant_name'] . '%']);   // 13.11.2026
         if ($m) {
             $vorLieferant = (int)$m;
             $lf2 = one("SELECT zahlungsziel_tage, waehrung, land FROM lieferanten WHERE id=?", [$vorLieferant]);

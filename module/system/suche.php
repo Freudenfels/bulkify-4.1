@@ -26,13 +26,18 @@ $add = function (string $titel, array $rows, callable $hrefFn, callable $labelFn
     if ($rows) $gruppen[] = compact('titel', 'rows', 'hrefFn', 'labelFn', 'subFn');
 };
 
+// 13.11.2026: gesperrte/inaktive Einträge nur mit Schalter „auch inaktive“ (bx_inaktiv_an()), Standard aus.
+$mitInaktiv = function_exists('bx_inaktiv_an') && bx_inaktiv_an();
+$wK = $mitInaktiv ? '' : ' AND COALESCE(k.gesperrt,0)=0';
+$wG = $mitInaktiv ? '' : ' AND COALESCE(gesperrt,0)=0';
+$wS = $mitInaktiv ? '' : " AND COALESCE(status,'')<>'inaktiv'";
 if (mb_strlen($q) >= 2) {
     $f6 = array_fill(0, 6, $like);
 
     $add('Kunden',
         all("SELECT DISTINCT k.id, k.firma, k.ansprechpartner, k.ort, k.kundennummer
              FROM kunden k LEFT JOIN kunde_marke m ON m.kunde_id=k.id
-             WHERE k.firma LIKE ? OR k.ansprechpartner LIKE ? OR k.email LIKE ? OR k.kundennummer LIKE ? OR k.ort LIKE ? OR m.name LIKE ?
+             WHERE (k.firma LIKE ? OR k.ansprechpartner LIKE ? OR k.email LIKE ? OR k.kundennummer LIKE ? OR k.ort LIKE ? OR m.name LIKE ?)$wK
              ORDER BY k.firma LIMIT $LIMIT", $f6),
         fn($r) => '?p=kunde&id=' . $r['id'],
         fn($r) => $r['firma'],
@@ -40,7 +45,7 @@ if (mb_strlen($q) >= 2) {
 
     $add('Lieferanten',
         all("SELECT id, firma, ansprechpartner, ort, lieferantennummer FROM lieferanten
-             WHERE firma LIKE ? OR ansprechpartner LIKE ? OR email LIKE ? OR lieferantennummer LIKE ? OR ort LIKE ? OR webseite LIKE ?
+             WHERE (firma LIKE ? OR ansprechpartner LIKE ? OR email LIKE ? OR lieferantennummer LIKE ? OR ort LIKE ? OR webseite LIKE ?)$wG
              ORDER BY firma LIMIT $LIMIT", $f6),
         fn($r) => '?p=lieferant&id=' . $r['id'],
         fn($r) => $r['firma'],
@@ -69,14 +74,14 @@ if (mb_strlen($q) >= 2) {
     $itemSub = fn($r) => trim(($r['artikelnummer'] ? $r['artikelnummer'] . ' · ' : '') . ($KAT[$r['kategorie']] ?? $r['kategorie']) . ($r['name_lat'] ? ' · ' . $r['name_lat'] : ''));
     $add('Rohstoffe',
         all("SELECT id, name, name_lat, artikelnummer, kategorie FROM item
-             WHERE kategorie IN ('rohstoff','leerkapsel') AND $itemWo
+             WHERE kategorie IN ('rohstoff','leerkapsel') AND $itemWo$wG
              ORDER BY name LIMIT $LIMIT", array_fill(0, 5, $like)),
         fn($r) => '?p=rohstoff&id=' . $r['id'],
         fn($r) => $r['name'],
         $itemSub);
     $add('Artikel (Verpackung, Etiketten, Bulk, Fertigware)',
         all("SELECT id, name, name_lat, artikelnummer, kategorie FROM item
-             WHERE COALESCE(kategorie,'') NOT IN ('rohstoff','leerkapsel') AND $itemWo
+             WHERE COALESCE(kategorie,'') NOT IN ('rohstoff','leerkapsel') AND $itemWo$wG
              ORDER BY FIELD(kategorie,'verpackung','fertig','verkaufsfertig'), name LIMIT $LIMIT", array_fill(0, 5, $like)),
         fn($r) => ($r['kategorie'] === 'verpackung' ? '?p=verpackung&id=' : '?p=rohstoff&id=') . $r['id'],
         fn($r) => $r['name'],
@@ -84,7 +89,7 @@ if (mb_strlen($q) >= 2) {
 
     $add('Produkte',
         all("SELECT id, nummer, name, kundenname FROM produkt
-             WHERE name LIKE ? OR kundenname LIKE ? OR synonyme LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?)
+             WHERE (name LIKE ? OR kundenname LIKE ? OR synonyme LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?))$wS
              ORDER BY name LIMIT $LIMIT", [$like, $like, $like, $like, $qk, $likeK]),
         fn($r) => '?p=produkt&id=' . $r['id'],
         fn($r) => $r['name'],
@@ -92,7 +97,7 @@ if (mb_strlen($q) >= 2) {
 
     $add('Rezepturen',
         all("SELECT id, nummer, name, darreichungsform FROM rezeptur
-             WHERE name LIKE ? OR synonyme LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?)
+             WHERE (name LIKE ? OR synonyme LIKE ? OR nummer LIKE ? OR (?<>'' AND REPLACE(REPLACE(LOWER(nummer),'-',''),' ','') LIKE ?))$wS
              ORDER BY name LIMIT $LIMIT", [$like, $like, $like, $qk, $likeK]),
         fn($r) => '?p=rezeptur_detail&id=' . $r['id'],
         fn($r) => $r['name'],
@@ -156,6 +161,7 @@ bx_head('Globale Suche', $q !== '' ? $gesamt . ' Treffer für „' . h($q) . '"'
       <button class="btn btn-primary" type="submit" data-busy="Suche…">Suchen</button>
       <?php if ($q !== ''): ?><a class="btn btn-ghost" href="?p=suche">Leeren</a><?php endif; ?>
     </div>
+    <label class="muted" style="font-size:13px;display:inline-flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" name="inaktiv" value="1" <?= $mitInaktiv ? 'checked' : '' ?> onchange="this.form.submit()"> auch inaktive/gesperrte</label>
   </div>
 </form>
 

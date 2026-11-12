@@ -70,7 +70,7 @@ $energChargen = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.mhd, c.ener
 // Fulfillment-Kunden + deren Produkte (auch ohne bisherigen Bestand) für die Einbuchung
 $ffProdukte = all("SELECT p.id, p.nummer, COALESCE(NULLIF(p.kundenname,''),p.name) AS anzeigename, k.firma AS kunde
                    FROM produkt p JOIN kunden k ON k.id=p.kunde_id
-                   WHERE k.nutzt_fulfillment=1 ORDER BY k.firma, p.nummer");
+                   WHERE k.nutzt_fulfillment=1 AND COALESCE(k.gesperrt,0)=0 AND COALESCE(p.status,'')<>'inaktiv' ORDER BY k.firma, p.nummer");   // 13.11.2026
 $ffKunden = (int) scalar("SELECT COUNT(*) FROM kunden WHERE nutzt_fulfillment=1");
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 

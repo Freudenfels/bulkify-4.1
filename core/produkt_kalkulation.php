@@ -146,9 +146,9 @@ function produkt_kalkulation(int $pid, int $packungen = 1000): array {
     if (!$schuett && $rid) {
         $pm = rezeptur_premixitem($rid, false);
         $zb = [];
-        foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge, preis, LOWER(COALESCE(einheit,'')) AS e, gueltig_bis FROM rezeptur_lief_angebot WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis>0",
+        foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge, preis, LOWER(COALESCE(einheit,'')) AS e, gueltig_bis FROM rezeptur_lief_angebot WHERE rezeptur_id IN (?, ?) AND lieferant_id IS NOT NULL AND preis>0 AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))",
                      [$rid, rezeptur_stamm_id($rid)]), ['rezeptur', $rid])['rows'] as $r) if ($r['e'] === 'kg') $zb[] = [(int)$r['lieferant_id'], (float)$r['menge'], (float)$r['preis']];
-        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR')", [$pm]), ['item', $pm])['rows'] as $r)
+        if ($pm) foreach (lp_gueltig_auswahl(all("SELECT lieferant_id, menge_ab, preis, gueltig_bis FROM lieferant_preis WHERE item_id=? AND lieferant_id IS NOT NULL AND (waehrung IS NULL OR waehrung='EUR') AND (lieferant_id IS NULL OR lieferant_id NOT IN (SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=1))", [$pm]), ['item', $pm])['rows'] as $r)
             $zb[] = [(int)$r['lieferant_id'], (float)$r['menge_ab'], (float)$r['preis']];
         $pp = staffel_je_lieferant($zb, $kgPack * $packungen); asort($pp);
         $lid = $pp ? (int) array_key_first($pp) : 0;

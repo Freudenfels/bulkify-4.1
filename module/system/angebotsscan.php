@@ -107,7 +107,7 @@ if ($schritt === 'match' && !empty($_SESSION['angebotsscan'])) {
     // Kunden-Match (fuzzy) + Rezeptur-Dedup (tolerant – fängt Groß/klein, Leerzeichen, „A / B" vs „A/B").
     $kMatch = kunde_finden_fuzzy((string)$d['kunde_name'], (string)$d['kunde_nr']);
     $rezExist = rezeptur_finden_fuzzy((string)$d['produkt_name'], $kMatch ? (int)$kMatch['id'] : null);
-    $kunden = all("SELECT id, firma, kundennummer FROM kunden ORDER BY firma");
+    $kunden = all("SELECT id, firma, kundennummer FROM kunden WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($kMatch['id'] ?? 0)]);   // 13.11.2026
 
     bx_head('Angebotsscan – prüfen & zuordnen', 'KI-Ergebnis kontrollieren, Kunde zuordnen, Staffeln korrigieren – dann speichern', bx_btn('Abbrechen', '?p=angebotsscan', 'ghost'));
     if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h($fehler) . '</div>';

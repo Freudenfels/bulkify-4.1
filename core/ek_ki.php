@@ -111,7 +111,7 @@ function ek_ki_batch(string $typ, int $limit = 25): array {
 function ek_lieferant_id(?string $name): ?int {
     $name = trim((string)$name); if ($name === '') return null;
     $id = scalar("SELECT id FROM lieferanten WHERE firma=? LIMIT 1", [$name])
-       ?: scalar("SELECT id FROM lieferanten WHERE firma LIKE ? ORDER BY CHAR_LENGTH(firma) LIMIT 1", ['%' . $name . '%']);
+       ?: scalar("SELECT id FROM lieferanten WHERE COALESCE(gesperrt,0)=0 AND firma LIKE ? ORDER BY CHAR_LENGTH(firma) LIMIT 1", ['%' . $name . '%']);   // 13.11.2026
     return $id ? (int)$id : null;
 }
 
@@ -252,7 +252,7 @@ function ek_lief_norm(string $s): string { return preg_replace('/[^a-z0-9]/', ''
 // Passenden bestehenden Lieferanten zu einem Textnamen finden (normiert). Sonst null.
 function ek_lieferant_kandidat(string $name): ?int {
     $n = ek_lief_norm($name); if ($n === '') return null;
-    foreach (all("SELECT id, firma FROM lieferanten") as $l) if (ek_lief_norm((string)$l['firma']) === $n) return (int)$l['id'];
+    foreach (all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0") as $l) if (ek_lief_norm((string)$l['firma']) === $n) return (int)$l['id'];   // 13.11.2026
     return null;
 }
 

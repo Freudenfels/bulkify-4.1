@@ -174,7 +174,7 @@ if ($schritt === 'match' && !empty($_SESSION['angebot_import'])) {
 
     // Kunde-Match (gilt fürs ganze Angebot).
     $kMatch = kunde_finden_fuzzy((string)($d['kunde_name'] ?? ''), (string)($d['kunde_nr'] ?? ''));
-    $kunden = all("SELECT id, firma FROM kunden ORDER BY firma");
+    $kunden = all("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // 13.11.2026: gesperrte nicht auswählbar
     $verpOpt = all("SELECT id, name FROM item WHERE kategorie='verpackung' AND COALESCE(verpackung_rolle,'primaer')='primaer' AND COALESCE(gesperrt,0)=0 ORDER BY name");
 
     // Je Produkt: Rezeptur-Match + Glas-Vorschlag + Staffeln aufbereiten.

@@ -107,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $produkte = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, k.firma,
                         p.einheiten_pro_packung, r.darreichungsform AS form
                  FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                 WHERE COALESCE(p.status,'')<>'inaktiv'   -- 13.11.2026
                  ORDER BY name");
 // Menge je Packung fuer die Dropdown-Beschriftung (nur wenn nicht schon im Namen als Variante enthalten).
 $labWort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : ($f === 'pulver' || $f === 'fluessig' ? '' : 'Stk')));

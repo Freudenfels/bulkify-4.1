@@ -89,9 +89,9 @@ function erp_kunde(int $id): ?array {
 function erp_kunde_per_firma(string $firma): ?array {
     $firma = trim($firma);
     if ($firma === '' || !tabelle_da('kunden')) return null;
-    $exact = one("SELECT id, firma FROM kunden WHERE firma=? LIMIT 1", [$firma]);
+    $exact = one("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 AND firma=? LIMIT 1", [$firma]);   // 13.11.2026: keine gesperrten
     if ($exact) return $exact;
-    return one("SELECT id, firma FROM kunden WHERE firma LIKE ? ORDER BY CHAR_LENGTH(firma) LIMIT 1", ['%' . $firma . '%']);
+    return one("SELECT id, firma FROM kunden WHERE COALESCE(gesperrt,0)=0 AND firma LIKE ? ORDER BY CHAR_LENGTH(firma) LIMIT 1", ['%' . $firma . '%']);
 }
 // EINZIGE Schreibstelle der Buchhaltung in die Kunden: Neuanlage (nur firma Pflicht). Gibt die neue id.
 // Für den Rechnungs-Import („Kunde neu anlegen", wenn kein Treffer). Vergibt eine Kundennummer (K-…).
@@ -195,7 +195,7 @@ function erp_auftraege(?int $kunde_id = null): array {
 // Liste für den Picker (nummer/name). Nummer absteigend = neueste zuerst.
 function erp_rezepturen(int $limit = 1000): array {
     if (!tabelle_da('rezeptur')) return [];
-    return all("SELECT id, nummer, name FROM rezeptur ORDER BY nummer DESC LIMIT " . max(1, $limit));
+    return all("SELECT id, nummer, name FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' ORDER BY nummer DESC LIMIT " . max(1, $limit));   // 13.11.2026
 }
 function erp_rezeptur(int $id): ?array {
     return ($id && tabelle_da('rezeptur')) ? one("SELECT id, nummer, name, kunde_id FROM rezeptur WHERE id=?", [$id]) : null;

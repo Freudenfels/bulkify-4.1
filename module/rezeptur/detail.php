@@ -925,7 +925,7 @@ if (!$neu && function_exists('has_role') && has_role('admin')):
     $stammId = (int) scalar("SELECT stamm_rezeptur_id FROM rezeptur WHERE id=?", [$rid]);
     $stammRow = $stammId ? one("SELECT id, nummer, name FROM rezeptur WHERE id=?", [$stammId]) : null;
     // Kandidaten: andere Rezepturen, die NICHT selbst an eine Stammrezeptur hängen (sonst Ketten).
-    $kand = all("SELECT id, nummer, name FROM rezeptur WHERE id<>? AND (stamm_rezeptur_id IS NULL OR stamm_rezeptur_id=0) ORDER BY name", [$rid]);
+    $kand = all("SELECT id, nummer, name FROM rezeptur WHERE id<>? AND (stamm_rezeptur_id IS NULL OR stamm_rezeptur_id=0) AND (COALESCE(status,'')<>'inaktiv' OR id=?) ORDER BY name", [$rid, (int)$stammId]);   // 13.11.2026
     // Wie viele Rezepturen teilen aktuell diesen Bulk (diese Rezeptur ist Stamm von …)?
     $teilenN = (int) scalar("SELECT COUNT(*) FROM rezeptur WHERE stamm_rezeptur_id=?", [$rid]);
     // Requirement 2: Impact fürs Bestätigungs-Pop-up – was wandert beim Verknüpfen? (Bulk dieser Rezeptur.)

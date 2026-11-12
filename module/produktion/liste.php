@@ -255,6 +255,7 @@ if ($zeigeNeu):
     // Produkte für die Auswahl (tippbar mit Live-Filter). Mit Rezeptur zuerst (dort ist die Darreichungsform bekannt).
     $produkteNeu = all("SELECT p.id, p.name, p.nummer, p.einheiten_pro_packung AS epp, r.darreichungsform AS form
                         FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id
+                        WHERE COALESCE(p.status,'')<>'inaktiv'   -- 13.11.2026
                         ORDER BY (p.rezeptur_id IS NULL), p.name");
     $DFORMN = ['kapsel'=>'Kapsel','tablette'=>'Tablette','softgel'=>'Softgel','stick'=>'Stick','gummi'=>'Fruchtgummi','gel'=>'Gel','pulver'=>'Pulver','fluessig'=>'Flüssig'];
     // Einheit-Wort + Label je Produkt einmal bauen (datalist + JS-Map nutzen dasselbe -> müssen identisch sein).
@@ -268,7 +269,7 @@ if ($zeigeNeu):
     unset($pn);
     // Rezepturen für den Bulk-Modus (tippbar). Nur Kapsel/Softgel/Tablette sind als Bulk sinnvoll herstellbar,
     // wir zeigen aber alle (die Form steht im Label).
-    $rezepteNeu = all("SELECT id, name, nummer, darreichungsform AS form FROM rezeptur ORDER BY name");
+    $rezepteNeu = all("SELECT id, name, nummer, darreichungsform AS form FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' ORDER BY name");   // 13.11.2026
     foreach ($rezepteNeu as &$rn) {
         $rn['_ehl'] = $ehlWort($rn['form'] ?? '');
         $rn['_lbl'] = trim($rn['name'] . ($rn['nummer'] ? ' · ' . $rn['nummer'] : '') . (($rn['form'] ?? '') ? ' · ' . ($DFORMN[$rn['form']] ?? $rn['form']) : ''));

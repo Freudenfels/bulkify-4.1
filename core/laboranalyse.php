@@ -16,7 +16,7 @@ function laboranalyse_ki_vorschlag(string $pfad): array {
     $wort = fn($f) => in_array($f, ['kapsel','softgel'], true) ? 'Kapseln' : ($f === 'tablette' ? 'Tabletten' : ($f === 'stick' ? 'Sticks' : 'Stk'));
     // Produkt-Kandidaten MIT Menge je Packung (damit „60 Kapseln" 6mg/60 von 8mg/90 unterscheidet).
     $prods = all("SELECT p.id, COALESCE(NULLIF(p.kundenname,''), p.name) AS name, p.einheiten_pro_packung AS stk, r.darreichungsform AS form
-                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id ORDER BY name LIMIT 400");
+                  FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE COALESCE(p.status,'')<>'inaktiv' ORDER BY name LIMIT 400");   // 13.11.2026
     $pListe = implode("\n", array_map(function ($p) use ($wort) {
         $m = ((int)$p['stk'] > 0) ? ' · ' . (int)$p['stk'] . ' ' . $wort((string)$p['form']) : '';
         return (int)$p['id'] . ': ' . $p['name'] . $m;

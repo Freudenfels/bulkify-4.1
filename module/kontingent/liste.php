@@ -52,7 +52,7 @@ $statusBadge = fn($s) => match ($s) {
     default           => bx_badge((string)$s),
 };
 $kunden   = all("SELECT id, firma FROM kunden WHERE gesperrt=0 ORDER BY firma");
-$produkte = all("SELECT id, COALESCE(NULLIF(kundenname,''), name) AS name FROM produkt ORDER BY name");
+$produkte = all("SELECT id, COALESCE(NULLIF(kundenname,''), name) AS name FROM produkt WHERE COALESCE(status,'')<>'inaktiv' ORDER BY name");   // 13.11.2026
 // VK/Pkg: normal 2 Nachkommastellen; nur bei echten Sub-Cent-Preisen (keine ganzen Cent) feiner zeigen.
 $eur = function($x) {
     $x = (float)$x;

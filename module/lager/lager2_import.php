@@ -5,7 +5,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
-$ffKunden = all("SELECT id, firma FROM kunden WHERE nutzt_fulfillment=1 ORDER BY firma");
+$ffKunden = all("SELECT id, firma FROM kunden WHERE nutzt_fulfillment=1 AND (COALESCE(gesperrt,0)=0 OR id=?) ORDER BY firma", [(int)($_GET['kunde'] ?? $_POST['kunde'] ?? 0)]);   // 13.11.2026: gesperrte nicht auswählbar
 $kid = (int)($_GET['kunde'] ?? $_POST['kunde'] ?? 0);
 $kundeRow = $kid ? one("SELECT id, firma, COALESCE(nutzt_fulfillment,0) AS ff FROM kunden WHERE id=?", [$kid]) : null;
 

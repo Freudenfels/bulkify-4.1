@@ -814,7 +814,7 @@ if (!$neu) {
       </select></div>
     <div class="bx-field" id="anf_rez_feld" hidden><label>Rezeptur als Vorlage <?= bx_hint('optional – dann weiß der Lieferant, was hineinsoll') ?></label>
       <select name="rezeptur_id"><option value="">– keine –</option>
-        <?php foreach (all("SELECT id, name, darreichungsform FROM rezeptur ORDER BY name") as $rz): ?><option value="<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>"><?= h($rz['name']) ?></option><?php endforeach; ?>
+        <?php foreach (all("SELECT id, name, darreichungsform FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' ORDER BY name") as $rz): ?><option value="<?= (int)$rz['id'] ?>" data-form="<?= h($rz['darreichungsform']) ?>"><?= h($rz['name']) ?></option><?php endforeach; ?>
       </select></div>
     <div class="bx-field"><label>Menge <span id="anf_menge_hint" class="muted" style="font-weight:normal"></span></label><input type="text" name="menge" placeholder="z. B. 500"></div>
     <div class="bx-field"><label>Einheit <?= bx_hint('kommt automatisch aus Artikel bzw. Darreichungsform – nur überschreiben, wenn es abweicht') ?></label>
