@@ -16,3 +16,6 @@ Funktionen: `lu_fehlt`, `lu_position_fehlt`, `lu_bestellung_fehlt`, `lu_bestelle
 
 ## Upload nur an eigene offene Unterlagen (13.11.2026)
 `lu_upload_erlaubt()`: Ein Lieferant darf nur zu Artikeln/Rezepturen hochladen, die in seiner offenen Unterlagen-Liste stehen (Aufgabenliste + fehlende Unterlagen seiner laufenden Bestellungen). Sonst abgelehnt und im Verlauf des Lieferanten protokolliert. Uploads des Teams (intern) bleiben frei.
+
+## Unterlagen-Sperre zentral (13.11.2026)
+`lu_bestellen_pruefen($bid, $ausnahme_grund, $wer)`: eine Prüfung für alle Bestellwege. Genutzt von `bestellung_als_bestellt_markieren()` (Bestellseite, Einkauf mobil) und `bestellung_direkt_abschliessen()` (Einkaufsliste, Beschaffungsweg am Auftrag, Produktionsauftrag). Fehlen Unterlagen: gesperrt, Bestellung bleibt Entwurf; Admin-Ausnahme mit Pflicht-Grund. Online-Bestellungen ausgenommen.

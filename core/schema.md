@@ -669,3 +669,6 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 - `bestellung_stornieren($id, $wer, $grund, $lieferant_informieren = true)`: mit `false` keine Portal-Nachricht und keine Mail, Grund Pflicht; Verlaufseintrag immer. `false` nur intern (Datenpflege-Läufe), kein Formularfeld setzt es (13.11.2026).
 - `bestellung_position_stornieren($bp_id, $wer, $grund, $lieferant_informieren = true)`: Position bleibt (rest_storniert_am + pos_storno_grund), nichts gelöscht; nicht bei eingebuchter Ware; Bestellung rechnet neu.
 - Offene Menge (unterwegs) überall nur noch für nicht stornierte Positionen: `IF(bp.rest_storniert_am IS NULL, GREATEST(menge - geliefert, 0), 0)` (item_unterwegs, bp_rest_sql, Material/Bestand/Doppelt-Prüfung, Lager-App).
+
+## Bestellwege mit Unterlagen-Sperre (13.11.2026)
+`bestellung_direkt_abschliessen()` gibt jetzt einen Text zurück ('' = abgeschlossen, sonst Grund der Sperre). Neu `bestellung_als_bestellt_markieren()` für „als bestellt markieren“ (Sperre + Mail).

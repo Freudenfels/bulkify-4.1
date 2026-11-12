@@ -104,6 +104,21 @@ function lu_bestellen_sperre(int $bestellung_id): string {
     return 'Bestellen erst, wenn die Unterlagen des Lieferanten da sind. Es fehlen: ' . lu_liste_text($f) . '.';
 }
 
+// Zentrale Prüfung für JEDEN Bestellweg (Nachbesserung 13.11.2026): „als bestellt markieren“, „Direkt bestellt (Telefon/Mail)“
+// aus Bestellseite, Einkaufsliste, Beschaffungsweg am Auftrag und Produktionsauftrag. '' = frei. Fehlen Unterlagen, gibt nur ein
+// Admin mit Pflicht-Grund frei (Ausnahme wird an der Bestellung vermerkt); sonst kommt der Grund zurück. Online-Bestellungen sind
+// ausgenommen (lu_bestellung_fehlt liefert dort nichts).
+function lu_bestellen_pruefen(int $bestellung_id, string $ausnahme_grund = '', string $wer = ''): string {
+    $s = lu_bestellen_sperre($bestellung_id);
+    if ($s === '') return '';
+    $ausnahme_grund = trim($ausnahme_grund);
+    if ($ausnahme_grund !== '' && function_exists('has_role') && has_role('admin')) {
+        lu_ausnahme_setzen($bestellung_id, $ausnahme_grund, $wer !== '' ? $wer : (string)(function_exists('current_user') ? (current_user()['name'] ?? 'Admin') : 'Admin'));
+        return '';
+    }
+    return $s;
+}
+
 function lu_braucht_text(string $b, string $sprache = 'de'): string {
     $t = ['coa_spec' => ['de' => 'CoA oder Spezifikation', 'en' => 'CoA or specification', 'zh' => 'CoA 或规格书'],
           'spec'     => ['de' => 'Spezifikation des Gesamtprodukts', 'en' => 'specification of the finished product', 'zh' => '成品规格书']];

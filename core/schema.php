@@ -7764,7 +7764,12 @@ function bestellung_stufe(array $b): array {
 // Dritter Bestellweg „Direkt bestellt (Telefon/Mail)" (Nico 08.11.2026): beim Lieferanten (egal ob mit Portal-Account) selbst
 // bestellt – Status sofort „bestellt" und bestätigt, KEINE Mail/Portal-Benachrichtigung. Der Lieferant sieht die Bestellung im
 // Portal trotzdem (Tracking, Rechnung), muss aber nichts bestätigen. $datum = Bestelldatum (leer = heute), $eta = erwarteter Termin.
-function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = null, ?string $eta = null, string $notiz = '', string $wer = ''): void {
+// Rückgabe (seit 13.11.2026): '' = abgeschlossen, sonst der Grund, warum nicht (Unterlagen des Lieferanten fehlen – zentrale
+// Sperre lu_bestellen_pruefen(); Admin-Ausnahme mit $ausnahme_grund). Dann bleibt die Bestellung unverändert (Entwurf).
+function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = null, ?string $eta = null, string $notiz = '', string $wer = '', string $ausnahme_grund = ''): string {
+    require_once __DIR__ . '/lieferant_unterlagen.php';
+    $sperre = lu_bestellen_pruefen($bestellung_id, $ausnahme_grund, $wer);
+    if ($sperre !== '') return $sperre;
     $d = fn($x) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$x) ? (string)$x : null;
     $wer = $wer !== '' ? $wer : (string)(function_exists('current_user') ? (current_user()['name'] ?? '') : '');
     $bestellt = $d($datum) ?? gmdate('Y-m-d');
@@ -7775,6 +7780,19 @@ function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = nul
       [gmdate('Y-m-d H:i:s'), $wer ?: 'Einkauf', $bestellt, $eta, trim('Direkt bestellt (Telefon/Mail)' . ($notiz !== '' ? ' · ' . $notiz : '')), $bestellung_id]);   // ergänzt die Notiz, statt sie zu überschreiben
     log_aktivitaet('bestellung', $bestellung_id, 'team', 'Direkt beim Lieferanten bestellt (Telefon/Mail) – ohne Mail, gilt als bestätigt' . ($notiz !== '' ? ': ' . $notiz : '') . '.', 'status');
     if (function_exists('bedarf_bump')) bedarf_bump();
+    return '';
+}
+// „Als bestellt markieren“ (Bestellseite, Einkauf mobil) – EIN Weg mit der zentralen Unterlagen-Sperre (13.11.2026).
+// Rückgabe ['ok'=>bool, 'msg'=>string]: ok=false = gesperrt (msg = Grund); ok=true und msg nicht leer = Mail-Fehler (Bestellung gilt).
+function bestellung_als_bestellt_markieren(int $bestellung_id, string $ausnahme_grund = '', string $wer = ''): array {
+    require_once __DIR__ . '/lieferant_unterlagen.php';
+    $sperre = lu_bestellen_pruefen($bestellung_id, $ausnahme_grund, $wer);
+    if ($sperre !== '') return ['ok' => false, 'msg' => $sperre];
+    q("UPDATE bestellung SET status='bestellt', bestelldatum=COALESCE(bestelldatum, CURDATE()) WHERE id=?", [$bestellung_id]);
+    if (function_exists('bedarf_bump')) bedarf_bump();
+    // Der Lieferant erfährt es per Mail – wenn der Versand eingerichtet ist. Ein Fehler stoppt nichts.
+    $f = (function_exists('mail_bereit') && mail_bereit() && function_exists('mail_lieferant_bestellung')) ? mail_lieferant_bestellung($bestellung_id) : '';
+    return ['ok' => true, 'msg' => $f];
 }
 // Bereits über das Portal gesendete Bestellung (Status gesendet, wartet auf Bestätigung) – der Lieferant hat am Telefon bestätigt.
 // Setzt „bestellt" + bestätigt, ohne weitere Mail. Rückgabe '' = ok, sonst Fehlertext.

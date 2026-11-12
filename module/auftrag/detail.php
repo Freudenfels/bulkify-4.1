@@ -594,7 +594,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?
     $bid = auftrag_beschaffung_bestellen($id, (string)($_POST['weg'] ?? ''), (int)($_POST['lieferant_id'] ?? 0));
     if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
     // Dritter Weg „Direkt bestellt (Telefon/Mail)": Entwurf sofort als bestellt + bestätigt abschließen, ohne Mail.
-    if ($bid && ($_POST['modus'] ?? '') === 'direkt') bestellung_direkt_abschliessen($bid, null, null, 'aus dem Beschaffungsweg');
+    // 13.11.2026: zentrale Unterlagen-Sperre – fehlen Unterlagen, bleibt es ein Entwurf (Admin-Ausnahme mit Grund an der Bestellseite).
+    $dSperre = ($bid && ($_POST['modus'] ?? '') === 'direkt') ? bestellung_direkt_abschliessen($bid, null, null, 'aus dem Beschaffungsweg') : '';
+    if ($bid && $dSperre !== '') { header('Location: ?p=bestellung&id=' . $bid . '&fehler=' . urlencode('Als Entwurf angelegt, nicht bestellt. ' . $dSperre) . '#unterlagen'); exit; }
     header('Location: ' . ($bid ? '?p=bestellung&id=' . $bid : $bwZ . '&bwfehler=' . urlencode('Bestellung nicht möglich (Weg nicht festgelegt oder kein Angebot).'))); exit;
 }
 // Beschaffungsweg: vorhandenen Bestand / offene Bestellung dem Auftrag zuordnen bzw. lösen (Nico 05.11.2026, nur Admin).

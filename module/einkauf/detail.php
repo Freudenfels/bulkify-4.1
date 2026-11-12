@@ -109,15 +109,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($aktion === 'bestellt' && !$neu) {
         // Paket 12.11.2026 Teil 4: Bestellen erst mit vollständigen Unterlagen des Lieferanten; Ausnahme nur Admin mit Grund.
-        require_once BX_ROOT . '/core/lieferant_unterlagen.php';
-        $luGrund = trim((string)($_POST['lu_grund'] ?? ''));
-        if (lu_bestellen_sperre((int)$id) !== '') {
-            if (!has_role('admin') || $luGrund === '') { header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode(lu_bestellen_sperre((int)$id)) . '#unterlagen'); exit; }
-            lu_ausnahme_setzen((int)$id, $luGrund, (string)(current_user()['name'] ?? 'Admin'));
-        }
-        q("UPDATE bestellung SET status='bestellt' WHERE id=?", [(int)$id]);
-        // Der Lieferant erfährt es per Mail – wenn der Versand eingerichtet ist. Ein Fehler stoppt nichts.
-        $f = mail_bereit() ? mail_lieferant_bestellung((int)$id) : '';
+        // Zentral (13.11.2026): bestellung_als_bestellt_markieren() prüft die Unterlagen (Admin-Ausnahme mit Grund) und mailt.
+        $rB = bestellung_als_bestellt_markieren((int)$id, trim((string)($_POST['lu_grund'] ?? '')), (string)(current_user()['name'] ?? ''));
+        if (!$rB['ok']) { header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode($rB['msg']) . '#unterlagen'); exit; }
+        $f = (string)$rB['msg'];
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode('Bestellung gespeichert, aber E-Mail nicht verschickt: ' . $f))); exit;
     }
     // Chargen & Dokumente je Position (Handbuch 4.4) – derselbe Baustein wie im Lieferantenportal.
