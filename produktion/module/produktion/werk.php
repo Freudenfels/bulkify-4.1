@@ -39,12 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Soll-Kette 4: Teilmenge am Tablet melden – komplett (mit Etikett, bucht Fertigware) oder bis vor dem Etikettieren.
     if ($werkUid && $aktion === 'werk_teilmenge') {
         $paId = (int)($_POST['pa_id'] ?? 0);
-        $mT = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // 13.11.2026: gemeinsamer Mengen-Parser
-        $r = ($_POST['umfang'] ?? '') === 'vor_etikett' ? erp_teilmenge_vor_etikett($paId, $mT, $werkName ?: 'Mitarbeiter')
-                                                         : erp_teilmenge_produzieren($paId, $mT, $werkName ?: 'Mitarbeiter');
-        $fehltTxt = implode(', ', array_map(fn($f) => (string)($f['name'] ?? ''), $r['fehlt'] ?? []));
-        $_SESSION['werk_flash'] = (string)($r['msg'] ?? '') . ($fehltTxt !== '' ? ' (' . $fehltTxt . ')' : '');
-        $_SESSION['werk_flash_ok'] = !empty($r['ok']);
+        // 13.11.2026: EIN Weg – Teilmengen nur noch im geführten Ablauf Abfüllen/Verpacken (pa_teilmenge_buchen); hier nichts buchen.
+        $_SESSION['werk_flash'] = (string)($T['tm_nur_ablauf'] ?? 'Teilmengen bitte im Ablauf Abfüllen/Verpacken melden.');
+        $_SESSION['werk_flash_ok'] = false;
         weiter('?p=werk&id=' . $paId);
     }
     // Ein Weg (11.11.2026): geführter Ablauf Abfüllen/Verpacken (Start, Scan, Kartons, Teilmenge, Chargenwechsel, Abschluss).
@@ -422,12 +419,7 @@ header('Content-Type: text/html; charset=utf-8');
       <?php if ($mbW['vorproduziert'] > 0): ?><br><span class="muted"><?= h(sprintf($T['hint_prelabeled'] ?? '%s Pkg bis vor dem Etikett fertig', $nW($mbW['vorproduziert']))) ?></span><?php endif; ?>
       <?php if ($mbW['sperre'] !== ''): ?><br><span style="color:#e0786c"><?= h($mbW['sperre']) ?></span><?php endif; ?>
     </div>
-    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0">
-      <input type="hidden" name="aktion" value="werk_teilmenge"><input type="hidden" name="pa_id" value="<?= (int)$id ?>">
-      <input type="text" inputmode="numeric" name="menge" value="<?= $aw1 ? (int)min((float)$aw1['menge'], (float)($aw1['umfang'] === 'vor_etikett' ? $mbW['vor_etikett'] : $mbW['komplett'])) ?: '' : '' ?>" placeholder="<?= h($T['packages']) ?>" style="font-size:19px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px">
-      <button class="btn btn-ghost" type="submit" name="umfang" value="vor_etikett" style="min-height:52px" <?= $mbW['vor_etikett'] > 0 ? '' : 'disabled' ?>><?= h($T['tm_prelabel_btn'] ?? 'bis vor dem Etikettieren') ?></button>
-      <button class="btn btn-lime" type="submit" name="umfang" value="komplett" style="min-height:52px" <?= $mbW['komplett'] > 0 ? '' : 'disabled' ?>><?= h($T['tm_full_btn'] ?? 'komplett fertig') ?></button>
-    </form>
+    <div style="font-size:15px;margin:0"><?= h($T['tm_nur_ablauf'] ?? 'Teilmengen bitte im Ablauf Abfüllen/Verpacken melden.') ?></div>
     <div class="muted" style="font-size:14px;margin-top:8px"><?= h($T['tm_note'] ?? 'Gemeldet wird, was wirklich gemacht wurde. Der Rest bleibt im Auftrag offen, bis das Material da ist.') ?></div>
   </div>
   <?php endif; ?>

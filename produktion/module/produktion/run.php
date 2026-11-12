@@ -81,12 +81,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } elseif ($aktion === 'teilmenge') {
         // Teilmenge produzieren (Nico 05.11.2026: im Produktionsmodus für alle, wie am Tablet/Werk-App) – komplett mit Etikett
         // (bucht Fertigware) oder bis vor dem Etikettieren (bucht das Material der Stationen außer Etikett). Rest bleibt offen.
-        $mT = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // 13.11.2026: „1.5“ = 1,5 (vorher 15)
-        $r = ($_POST['umfang'] ?? '') === 'vor_etikett' ? erp_teilmenge_vor_etikett($id, $mT, $akteur) : erp_teilmenge_produzieren($id, $mT, $akteur);
-        if (!$r['ok'] && !empty($r['fehlt'])) {
-            $t = []; foreach ($r['fehlt'] as $f) $t[] = (string)$f['name'] . ' (fehlt ' . menge_einh_txt($f['fehlt'], (string)$f['einheit']) . ')';
-            flash('Nicht genug Material: ' . implode(', ', $t) . '.', 'warn');
-        } else flash($r['msg'], $r['ok'] ? 'ok' : 'warn');
+        // 13.11.2026: EIN Weg – Teilmengen nur noch über den geführten Ablauf (pa_teilmenge_buchen), hier wird nichts gebucht.
+        flash('Teilmengen bucht nur noch der geführte Ablauf (Werk-App: Abfüllen/Verpacken).', 'warn');
     } elseif ($aktion === 'blink') {
         $modus = ($_POST['modus'] ?? 'an') === 'aus' ? 'aus' : 'an';
         $r = pr_lager_blink((int)($_POST['charge_id'] ?? 0), $modus);
@@ -177,17 +173,7 @@ if (($pa['status'] ?? '') === 'vorbereitung') {
     <?php if ($tm['sperre'] !== ''): ?><div style="color:#8f231b;margin-top:4px">Etikett: <?= h($tm['sperre']) ?> – möglich ist „bis vor dem Etikettieren“.</div><?php endif; ?>
   </div>
   <?php if ($tmMax > 0): ?>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap" onsubmit="return confirm('Teilmenge jetzt produzieren? Das Material wird anteilig abgebucht, der Rest bleibt offen im Auftrag.')">
-    <input type="hidden" name="aktion" value="teilmenge">
-    <div class="bx-field" style="margin:0;max-width:160px"><label>Packungen</label>
-      <input type="text" inputmode="numeric" name="menge" value="<?= (int)($tm['komplett'] > 0 ? $tm['komplett'] : $tm['vor_etikett']) ?>" required></div>
-    <div class="bx-field" style="margin:0;max-width:280px"><label>Umfang</label>
-      <select name="umfang">
-        <?php if ($tm['komplett'] > 0): ?><option value="komplett">komplett (mit Etikett, Fertigware einbuchen)</option><?php endif; ?>
-        <?php if ($tm['vor_etikett'] > 0): ?><option value="vor_etikett">bis vor dem Etikettieren</option><?php endif; ?>
-      </select></div>
-    <button type="submit" class="btn btn-primary">Teilmenge produzieren</button>
-  </form>
+  <div class="muted" style="font-size:13px">Teilmengen bucht nur noch der geführte Ablauf (Werk-App: Abfüllen/Verpacken).</div>
   <?php else: ?><div class="muted" style="font-size:13px">Zurzeit ist keine Teilmenge machbar – es fehlt Material<?= $tm['limit'] !== '' ? ' (' . h($tm['limit']) . ')' : '' ?>.</div><?php endif; ?>
 </div>
 <?php endif; ?>

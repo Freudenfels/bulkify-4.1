@@ -194,3 +194,6 @@ Nico: „Ich will dann auf das Produkt kommen und sehen, wann es bestellt wurde.
 - Unter jedem Material stehen bis zu drei **Bestellungen** (`pa_material_bestellungen()` / `pa_material_bestellung_html()`): Nummer als Link, Lieferant, „bestellt am“, Stand und „erwartet am“. Der Stand ist Entwurf, Station, bestätigt oder geliefert.
   - Artikel: Bestellungen dieses Auftrags und offene Bestellungen des Artikels.
   - Zukauf-Bulk: Bulk-Bestellungen des Auftrags (Freitext-Position bzw. Fertigware-Artikel des Produkts).
+
+## Ein Weg für Teilmengen (13.11.2026)
+Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App, Werk-App außerhalb Abfüllen/Verpacken) sind entfernt; ihre POST-Aktionen buchen nichts mehr und verweisen auf den geführten Ablauf. Gebucht wird nur über `pa_teilmenge_buchen()` (Werk-App Abfüllen/Verpacken, Dashboard „Teilmenge nachtragen“).

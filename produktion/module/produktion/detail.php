@@ -33,6 +33,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') ==
 
 // Teilmenge produzieren (anteilig Rohstoffe verbrauchen + als Charge einbuchen).
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['aktion'] ?? '') === 'teilmenge') {
+    // 13.11.2026: EIN Weg – dieser alte Weg buchte an den Unter-Chargen vorbei und bucht nichts mehr.
+    flash('Teilmengen bucht nur noch der geführte Ablauf (Werk-App: Abfüllen/Verpacken).', 'warn'); weiter('?p=pa&id=' . $id);
     $m = pr_menge_parse((string)($_POST['menge'] ?? '0'));   // Tausenderpunkt (Block D)
     $r = erp_teilmenge_produzieren($id, $m, (string)(pr_benutzer()['name'] ?? ''));
     if (!$r['ok'] && !empty($r['fehlt'])) {
@@ -247,13 +249,7 @@ if ($bedarf && $weg['basis'] !== 'zukauf'): $sumMg = 0.0; foreach ($bedarf as $b
     <?php else: ?><strong>Jetzt machbar:</strong> <?= number_format($tm['komplett'], 0, ',', '.') ?> Stk komplett fertig<?= $tm['komplett'] < $tm['rest'] && $tm['limit'] !== '' ? ' <span class="muted">(begrenzt durch ' . h($tm['limit']) . ')</span>' : '' ?><?php if ($tm['vor_etikett'] > $tm['komplett']): ?> · bis vor dem Etikettieren <?= number_format($tm['vor_etikett'], 0, ',', '.') ?> Stk<?php endif; ?>
     <?php endif; ?>
   </div>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:14px" onsubmit="return confirm('Teilmenge jetzt produzieren? Rohstoffe, Behälter, Deckel und Etikett werden anteilig abgebucht und als Fertigware-Charge eingebucht.');">
-    <input type="hidden" name="aktion" value="teilmenge">
-    <div class="bx-field" style="margin:0;max-width:200px"><label>Teilmenge produzieren</label>
-      <input type="number" name="menge" min="1" max="<?= (int)$prod_rest ?>" step="1" required placeholder="max. <?= (int)$prod_rest ?>"></div>
-    <button type="submit" class="btn btn-primary">Produzieren &amp; einbuchen</button>
-    <span class="muted" style="font-size:12px">Verbraucht Rohstoffe anteilig (muss reichen) und bucht die Menge als Fertigware-Charge.</span>
-  </form>
+  <div class="muted" style="margin-top:14px;font-size:13px">Teilmengen bucht nur noch der geführte Ablauf (Werk-App: Abfüllen/Verpacken).</div>
   <?php else: ?>
   <div class="muted" style="margin-top:10px">Vollständig produziert.</div>
   <?php endif; ?>

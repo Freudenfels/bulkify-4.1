@@ -125,7 +125,9 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
 
 // Teilmenge Fertigware einbuchen (Teilproduktion .A/.B/.C) – der Abschluss bucht später nur noch den Rest
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'teilmenge') {
-    // Mit Material-/Etikett-Prüfung und anteiliger Abbuchung (S-12) – nicht mehr nur die Fertigware-Charge.
+    // 13.11.2026: EIN Weg – Teilmengen nur über pa_teilmenge_buchen() (Werk-App Abfüllen/Verpacken bzw. „Teilmenge nachtragen“).
+    // Der alte Weg buchte an den Unter-Chargen vorbei; er bucht nichts mehr.
+    header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode('Teilmengen bucht nur noch der geführte Ablauf: in der Werk-App unter Abfüllen/Verpacken bzw. hier unter „Teilmenge nachtragen“.')); exit;
     $r = produktion_teilmenge_produzieren($id, zahl_lesen((string)($_POST['menge'] ?? '0'), true),
         trim((string)($_POST['mhd'] ?? '')) ?: null, (string)($_POST['notiz'] ?? ''));
     if ($r['ok']) {
@@ -757,16 +759,7 @@ ob_start(); ?>
       <?php if ($tmM['vor_etikett'] > $tmM['komplett']): ?> · bis vor dem Etikettieren <?= number_format($tmM['vor_etikett'], 0, ',', '.') ?> Stk<?php endif; ?>
     <?php endif; ?>
   </div>
-  <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="teilmenge">
-    <div class="bx-field" style="margin:0;max-width:160px"><label>Menge (Stk)</label>
-      <input type="number" name="menge" min="1" max="<?= (int)$fwRest ?>" step="1" required></div>
-    <div class="bx-field" style="margin:0;max-width:180px"><label>MHD <?= bx_hint('Leer = heute + Standardmonate aus den Einstellungen.') ?></label>
-      <input type="date" name="mhd" value="<?= h(mhd_standard()) ?>"></div>
-    <div class="bx-field" style="margin:0;flex:1;min-width:200px"><label>Notiz (optional)</label>
-      <input type="text" name="notiz" maxlength="200" placeholder="z. B. Tag 1 von 3"></div>
-    <button class="btn btn-primary" type="submit">Teilmenge einbuchen</button>
-  </form>
+  <p class="muted" style="margin:0">Teilmengen bucht nur noch der geführte Ablauf: in der Werk-App unter Abfüllen/Verpacken bzw. hier unter „Teilmenge nachtragen“.</p>
 </div>
 <?php endif; ?>
 <?php $panTeil = ob_get_clean();

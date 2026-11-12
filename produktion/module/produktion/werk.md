@@ -82,3 +82,6 @@ Rückgabe nach dem Mischen (04.11.2026): Hat eine Charge in die Produktion gesca
 
 ## Mengen-Parser (13.11.2026)
 Alle Mengen-, Gewichts- und Maßfelder lesen über den gemeinsamen Parser (`pr_menge_parse()` bzw. `erp_menge_parse()`/`lg_zahl()`): „1.500“ = 1500, „1,5“ = 1,5, „1.5“ = 1,5.
+
+## Ein Weg für Teilmengen (13.11.2026)
+Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App, Werk-App außerhalb Abfüllen/Verpacken) sind entfernt; ihre POST-Aktionen buchen nichts mehr und verweisen auf den geführten Ablauf. Gebucht wird nur über `pa_teilmenge_buchen()` (Werk-App Abfüllen/Verpacken, Dashboard „Teilmenge nachtragen“).
