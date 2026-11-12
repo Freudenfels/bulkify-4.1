@@ -87,6 +87,7 @@ function la_aufkleber_zeichnen(MiniPDF $p, float $ox, float $oy, float $s, array
 
 // PDF zu mehreren Aufkleber-IDs. Rückgabe PDF-Bytes oder null.
 function la_pdf(array $ids, string $format = '100x150'): ?string {
+    if (!la_schluessel_da()) return null;   // 13.11.2026: ohne Schlüssel kein Druck (Code wäre fälschbar)
     $daten = array_values(array_filter(array_map(fn($id) => la_daten((int)$id), $ids)));
     if (!$daten) return null;
     $pdf = new MiniPDF();

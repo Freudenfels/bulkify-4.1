@@ -2329,6 +2329,7 @@ function erp_la_aufgabe(string $titel, string $text, string $ref_typ, int $ref_i
 // Scan eines Aufklebers. Rückgabe: ['ok', 'art' => gebucht|schon|storniert|unbekannt|fehler, 'meldung', 'info' => [...], 'stand' => [...], 'bestellung_id']
 function erp_la_scan(string $code, string $wer = ''): array {
     if (!erp_la_laden()) return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Gebindeaufkleber sind auf diesem Server nicht eingerichtet.'];
+    if (!la_schluessel_da()) return ['ok' => false, 'art' => 'fehler', 'meldung' => 'Aufkleber-Schlüssel fehlt - Scan gesperrt, bitte Admin informieren.'];   // 13.11.2026
     $id = la_code_id($code);
     if ($id <= 0) return ['ok' => false, 'art' => 'unbekannt', 'meldung' => la_ist_code($code) ? 'Code ungültig (Prüfziffer passt nicht) – kein Aufkleber von bulkify.' : 'Kein Lieferanten-Aufkleber (BX…).'];
     $a = one("SELECT la.*, bc.charge_nr, bc.mhd, bp.item_id, bp.auftrag_id, bp.bezeichnung, bp.einheit AS bp_einheit, b.nummer AS bestellung_nr, b.lieferant_id,

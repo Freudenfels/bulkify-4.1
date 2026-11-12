@@ -10,3 +10,6 @@ nie core/schema.php).
 - QR/Code: `la_code($id)` = `BX<id>-<5 Zeichen HMAC>` (Schlüssel `app_meta la_hmac_key`), `la_code_id($code)` prüft.
 - `la_anlegen`, `la_stornieren`, `la_positionen`, `la_aktive`, `la_stand` (gedruckt/erfasst/netto/fehlt), `la_daten` (Inhalt
   fürs PDF), `la_ship_to` (Einstellung `firma_prod_adresse`, Standard Barßel), `la_versand_hinweis`.
+
+## Schlüssel und Code-Länge (13.11.2026)
+`la_schluessel()` liest den Schlüssel nach dem Anlegen noch einmal; ohne lesbaren Schlüssel kein Druck (`la_pdf()` = null, Formular meldet es) und kein Scan (`erp_la_scan()`). Prüfteil neu 8 Hex-Zeichen, alte 5-stellige Codes bleiben gültig (`la_code_id()` prüft beide Längen).

@@ -1320,7 +1320,7 @@ if ($gebucht):
   var track=document.getElementById('weTrack'), trackInfo=document.getElementById('weTrackInfo');
   function trackSuchen(){
     var code=(track.value||'').trim(); if(code==='')return;
-    if(/^BX\d{1,9}-[0-9A-F]{5}$/i.test(code)){ track.value=''; zeigeWeg('aufkleber'); laIn.value=code; laScan(); return; }   // Gebindeaufkleber erkannt (Paket 12.11.2026 Teil 5)
+    if(/^BX\d{1,9}-([0-9A-F]{8}|[0-9A-F]{5})$/i.test(code)){ track.value=''; zeigeWeg('aufkleber'); laIn.value=code; laScan(); return; }   // Gebindeaufkleber erkannt (Paket 12.11.2026 Teil 5)
     trackInfo.textContent='Suche Lieferung …';
     var fd=new FormData(); fd.append('aktion','tracking'); fd.append('code',code);
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
@@ -1371,7 +1371,7 @@ if ($gebucht):
   var rst=document.getElementById('weRsticker'), rstInfo=document.getElementById('weRstickerInfo');
   function rstSuchen(){
     var code=(rst.value||'').trim(); if(code==='')return;
-    if(/^BX\d{1,9}-[0-9A-F]{5}$/i.test(code)){ rst.value=''; zeigeWeg('aufkleber'); laIn.value=code; laScan(); return; }   // Gebindeaufkleber erkannt (Paket 12.11.2026 Teil 5)
+    if(/^BX\d{1,9}-([0-9A-F]{8}|[0-9A-F]{5})$/i.test(code)){ rst.value=''; zeigeWeg('aufkleber'); laIn.value=code; laScan(); return; }   // Gebindeaufkleber erkannt (Paket 12.11.2026 Teil 5)
     rstInfo.textContent='Suche Rezeptur …';
     var fd=new FormData(); fd.append('aktion','rsticker'); fd.append('code',code);
     fetch('?p=we',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){

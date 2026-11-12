@@ -53,6 +53,7 @@ function la_post(array $b, string $von, string $sprache): ?array {
         return ['ok' => true, 'msg' => $t('Herstelldatum gespeichert.', 'Production date saved.', '生产日期已保存。'), 'pdf' => ''];
     }
     if ($aktion === 'la_drucken' && $gehoert) {
+        if (!la_schluessel_da()) return ['ok' => false, 'msg' => $t('Aufkleber können gerade nicht erstellt werden (Schlüssel fehlt) - bitte bulkify informieren.', 'Labels cannot be created right now (key missing) - please inform bulkify.', '目前无法生成标签（缺少密钥），请通知 bulkify。'), 'pdf' => ''];
         $fehler = '';
         $ids = la_anlegen($bcId, la_zahl((string)($_POST['netto'] ?? ''), $sprache), la_zahl((string)($_POST['brutto'] ?? ''), $sprache), la_zahl((string)($_POST['stueck'] ?? ''), $sprache, true),
                           (int)($_POST['anzahl'] ?? 0), $von, $fehler);

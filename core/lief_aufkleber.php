@@ -60,21 +60,31 @@ function la_schema(): void {
 }
 
 // --- QR-Code ------------------------------------------------------------------------------------------------------
+// Schlüssel (13.11.2026): wird er neu angelegt, wird er danach noch einmal GELESEN. Lässt er sich nicht lesen/schreiben, gibt es
+// keinen Schlüssel ('') – dann wird weder gedruckt noch gescannt (vorher wurde mit leerem Schlüssel gerechnet = fälschbar).
 function la_schluessel(): string {
+    static $k = null;
+    if ($k !== null && $k !== '') return $k;
     $k = la_meta('la_hmac_key');
-    if ($k === '') $k = la_meta('la_hmac_key', bin2hex(random_bytes(24)));
+    if ($k === '') { la_meta('la_hmac_key', bin2hex(random_bytes(24))); $k = la_meta('la_hmac_key'); }
+    if (strlen($k) < 32) $k = '';
     return $k;
 }
-// Code eines Aufklebers: BX + ID + '-' + 5 Zeichen Prüfziffer (HMAC). Erfundene Codes passen nicht.
-function la_code(int $id): string {
-    return 'BX' . $id . '-' . strtoupper(substr(hash_hmac('sha256', 'BX' . $id, la_schluessel()), 0, 5));
+function la_schluessel_da(): bool { return la_schluessel() !== ''; }
+// Code eines Aufklebers: BX + ID + '-' + Prüfteil (HMAC). Seit 13.11.2026 8 Hex-Zeichen; alte 5-stellige Codes bleiben gültig.
+// Ohne Schlüssel: '' (kein Code).
+function la_code(int $id, int $len = 8): string {
+    $k = la_schluessel();
+    if ($k === '') return '';
+    return 'BX' . $id . '-' . strtoupper(substr(hash_hmac('sha256', 'BX' . $id, $k), 0, $len));
 }
-function la_ist_code(string $s): bool { return (bool) preg_match('/^\s*BX\d{1,9}-[0-9A-Fa-f]{5}\s*$/i', $s); }
-// Code prüfen -> Aufkleber-ID oder 0 (falsche Prüfziffer = 0).
+function la_ist_code(string $s): bool { return (bool) preg_match('/^\s*BX\d{1,9}-([0-9A-Fa-f]{8}|[0-9A-Fa-f]{5})\s*$/i', $s); }
+// Code prüfen -> Aufkleber-ID oder 0 (falsche Prüfziffer oder kein Schlüssel = 0). 8 oder (alt) 5 Zeichen.
 function la_code_id(string $code): int {
     $code = strtoupper(preg_replace('/\s+/', '', $code));
-    if (!preg_match('/^BX(\d{1,9})-([0-9A-F]{5})$/', $code, $m)) return 0;
-    return hash_equals(la_code((int)$m[1]), $code) ? (int)$m[1] : 0;
+    if (!preg_match('/^BX(\d{1,9})-([0-9A-F]{8}|[0-9A-F]{5})$/', $code, $m)) return 0;
+    $soll = la_code((int)$m[1], strlen($m[2]));
+    return ($soll !== '' && hash_equals($soll, $code)) ? (int)$m[1] : 0;
 }
 
 // --- Daten --------------------------------------------------------------------------------------------------------
