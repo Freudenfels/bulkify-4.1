@@ -6686,6 +6686,13 @@ function auftrag_status_kunde(array $a): string {
     return auftrag_fortschritt_fertig($a) ? 'erledigt' : 'in_produktion';
 }
 
+// Darf der Kunde Daten rund um die Produktion sehen (Freigabe Produktionsbericht, Informationsdokument, „seit“)? Erst, wenn der
+// Auftrag fertig ist – versandbereit oder versendet (Regel Nico, Fable-3 T3.3, 13.11.2026). $a = Auftragszeile oder ID.
+function auftrag_kunde_datum_frei($a): bool {
+    if (is_int($a) || is_numeric($a)) $a = (int)$a > 0 ? (one("SELECT * FROM auftrag WHERE id=?", [(int)$a]) ?: []) : [];
+    if (!$a) return false;
+    return in_array(auftrag_status_kunde($a), ['erledigt', 'versendet'], true);
+}
 // Kundensicht der neuen Kette (für das Portal, noch nicht eingebaut): interne Einkaufs-Stände der Etiketten (nicht bestellt / bestellt / auf Lager) sieht der Kunde
 // nur als „Etikettierung"; „Etiketten Daten fehlen" sieht er rot mit Upload-Link. Interne Untertexte (Liefertermin, abgefüllt) entfallen.
 // Fremdproduktion (13.11.2026): extern produziert – Fertigware zugekauft (Zukauf-Art „fertig“, Handelsware) oder Bulk extern
@@ -6726,7 +6733,11 @@ function auftrag_fortschritt_kunde(array $steps, ?array $a = null): array {
     foreach ($steps as $i => &$s) {
         if ($i === 0 || in_array($s[1], ['Abgeschlossen', 'Versendet'], true)) continue;
         $s[3] = null;
-        if (is_string($s[4])) { $s[4] = trim((string) preg_replace('/\s*(?:am|seit|vom|bis|ab)?\s*\d{1,2}\.\d{1,2}\.(?:\d{2,4})?/u', '', $s[4])) ?: null; }
+        // Fable-3 T3.3: ein Teil mit Datum („Rest erwartet am 20.11.“) fällt ganz weg – kein hängender Satzrest.
+        if (is_string($s[4])) {
+            $teile = array_filter(preg_split('/\s*·\s*/u', $s[4]), fn($x) => trim($x) !== '' && !preg_match('/\d{1,2}\.\d{1,2}\.(?:\d{2,4})?/u', $x));
+            $s[4] = trim(implode(' · ', $teile)) ?: null;
+        }
     }
     unset($s);
     if (!auftrag_ist_fremdproduktion((int)($a['id'] ?? 0))) return $steps;

@@ -8,3 +8,5 @@ Nico: „Der Kunde soll nicht sehen, wann wir was produziert haben.“ In der Ku
 - Die Zeilen **Angelegt** und **Abgeschlossen** sowie die Spalte **Datum** bei „Herstellung & Prüfung“ entfallen. Nur „Freigegeben am“ bleibt.
 
 Die interne Version bleibt unverändert.
+
+**Produktionsdaten beim Kunden (13.11.2026, Fable-3 T3.3):** Kundenversion: „Freigegeben am“ nur, wenn der Auftrag versandbereit oder versendet ist (`auftrag_kunde_datum_frei()`).

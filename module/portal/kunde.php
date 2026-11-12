@@ -2629,10 +2629,11 @@ portal_head('Kundenportal · ' . $k['firma']);
     $neu = []; $seit = gmdate('Y-m-d H:i:s', time() - 21 * 86400);
     foreach (all("SELECT d.id, d.titel, d.angelegt, a.id AS aid, a.nummer, COALESCE(d.hochgeladen_von,'') AS quelle FROM dokument d JOIN auftrag a ON a.id=d.objekt_id
                   WHERE d.objekt_typ='auftrag' AND d.typ='analyse' AND d.kunde_sichtbar=1 AND a.kunde_id=? AND d.angelegt>=? ORDER BY d.angelegt DESC LIMIT 5", [$kid, $seit]) as $d)
-        $neu[] = [$d['angelegt'], ($d['quelle'] === 'coa_ueb' ? 'Informationsdokument' : 'Laboranalyse') . ' eingetroffen', 'Bestellung ' . $d['nummer'], $portalLink('bestellung') . '&aid=' . (int)$d['aid']];
+        $neu[] = [$d['angelegt'], ($d['quelle'] === 'coa_ueb' ? 'Informationsdokument' : 'Laboranalyse') . ' eingetroffen', 'Bestellung ' . $d['nummer'], $portalLink('bestellung') . '&aid=' . (int)$d['aid'],
+                  $d['quelle'] === 'coa_ueb' && !auftrag_kunde_datum_frei((int)$d['aid'])];   // Fable-3 T3.3: ohne Datum, solange nicht fertig
     foreach (all("SELECT pa.bericht_freigegeben_am AS am, a.id AS aid, a.nummer FROM produktionsauftrag pa JOIN auftrag a ON a.id=pa.auftrag_id
                   WHERE a.kunde_id=? AND pa.bericht_freigegeben_am>=? ORDER BY pa.bericht_freigegeben_am DESC LIMIT 5", [$kid, $seit]) as $d)
-        $neu[] = [$d['am'], 'Produktionsbericht verfügbar', 'Bestellung ' . $d['nummer'], $portalLink('produktionsbericht') . '&aid=' . (int)$d['aid']];
+        $neu[] = [$d['am'], 'Produktionsbericht verfügbar', 'Bestellung ' . $d['nummer'], $portalLink('produktionsbericht') . '&aid=' . (int)$d['aid'], !auftrag_kunde_datum_frei((int)$d['aid'])];
     foreach (all("SELECT b.nummer AS ls, b.datum, b.angelegt, a.id AS aid, a.nummer FROM beleg b JOIN auftrag a ON a.id=b.auftrag_id
                   WHERE b.typ='lieferschein' AND a.kunde_id=? AND b.angelegt>=? ORDER BY b.angelegt DESC LIMIT 5", [$kid, $seit]) as $d)
         $neu[] = [$d['angelegt'], 'Ware versendet', 'Bestellung ' . $d['nummer'] . ' · Lieferschein ' . $d['ls'], $portalLink('bestellung') . '&aid=' . (int)$d['aid']];
@@ -2651,7 +2652,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </div>
     <div class="bx-panel" style="margin:0">
       <h2 style="margin:0 0 4px;font-size:16px">Neu für Sie</h2>
-      <?php if ($neu): foreach ($neu as [$am, $t, $sub, $href]) echo $zeile($t, $sub, $href, h(fmt_zeit((string)$am, 'd.m.Y'))); ?>
+      <?php if ($neu): foreach ($neu as $nz) { [$am, $t, $sub, $href] = $nz; echo $zeile($t, $sub, $href, !empty($nz[4]) ? '' : h(fmt_zeit((string)$am, 'd.m.Y'))); } ?>
       <?php else: ?><p class="muted" style="margin:6px 0 0">In den letzten drei Wochen ist nichts Neues dazugekommen.</p><?php endif; ?>
     </div>
   </div>
@@ -4621,7 +4622,7 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <!-- Status-Kacheln -->
   <div class="bx-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
-    <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a) ?><?php if (!empty($a['status_datum']) && !(($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id']))): ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
+    <div class="bx-panel" style="margin:0"><div class="muted">Status</div><div style="margin-top:6px"><?= $aufBadge($a) ?><?php if (!empty($a['status_datum']) && !(($a['status'] ?? '') === 'storniert' && !empty($a['kontingent_id'])) && auftrag_status_kunde($a) !== 'in_produktion'): // Fable-3 T3.3: „in Produktion“ ohne Datum ?> <span class="muted" style="font-size:13px">seit <?= h(date('d.m.Y', strtotime($a['status_datum']))) ?></span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Menge</div><div style="margin-top:6px"><?= number_format((int)$a['menge'], 0, ',', '.') ?> Packungen<?php if ((int)$a['stueck']): ?> &middot; <?= h(inhalt_je_packung_txt(auftrag_darreichungsform($a), (float)$a['stueck'])) ?><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Gesamtbetrag</div><div style="margin-top:6px"><strong><?= $eur($re ? $re['brutto'] : $a['gesamt_netto']) ?></strong><?php if ($re): ?> <span class="muted">brutto</span><?php endif; ?></div></div>
     <div class="bx-panel" style="margin:0"><div class="muted">Zahlung</div><div style="margin-top:6px"><?php

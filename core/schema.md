@@ -691,3 +691,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **Stornieren nur mit Grund (13.11.2026, Fable-3 T2.8):** `bestellung_stornieren()` verlangt auf jedem Weg einen Grund (auch der alte Weg aus der Bestellliste `module/einkauf/liste.php`).
 
 **Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
+
+**Produktionsdaten beim Kunden (13.11.2026, Fable-3 T3.3):** `auftrag_kunde_datum_frei($a)`: Daten rund um die Produktion sieht der Kunde erst, wenn der Auftrag versandbereit oder versendet ist. `auftrag_fortschritt_kunde()` lässt einen Untertext-Teil mit Datum ganz weg („Rest erwartet am …“ ohne hängenden Satzrest).

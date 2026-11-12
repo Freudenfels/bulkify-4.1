@@ -47,7 +47,7 @@ $kundeStation = function(string $st): string {
     <tr><td>Angelegt</td><td><?= $dt($pa['angelegt']) ?></td></tr>
     <tr><td>Abgeschlossen</td><td><?= $D['abg'] ? $dt($D['abg']) : '<span class="muted">–</span>' ?></td></tr>
     <?php endif; ?>
-    <?php if ($fuerKunde && !empty($pa['bericht_freigegeben_am'])): ?><tr><td>Freigegeben am</td><td><?= h(date('d.m.Y', strtotime((string)$pa['bericht_freigegeben_am']))) ?></td></tr><?php endif; ?>
+    <?php if ($fuerKunde && !empty($pa['bericht_freigegeben_am']) && auftrag_kunde_datum_frei((int)($pa['auftrag_id'] ?? 0))): // Fable-3 T3.3: Datum erst, wenn der Auftrag fertig ist ?><tr><td>Freigegeben am</td><td><?= h(date('d.m.Y', strtotime((string)$pa['bericht_freigegeben_am']))) ?></td></tr><?php endif; ?>
   </tbody></table></div>
 </div>
 
