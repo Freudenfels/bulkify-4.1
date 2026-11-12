@@ -31,8 +31,14 @@ if ($aktion === 'wa_start') {
         }
     }
     $gleicherBulk = $uc && $s['charge_id'] && (int)$uc['bulk_charge_id'] === $s['charge_id'];   // Wiederanlauf: keine erneute Prüfung
-    if ($s['charge_id'] && !$gleicherBulk && ($alt = erp_wa_aeltere_bulk($s['item_id'], $s['charge_id'], $s['mhd'])) !== '' && empty($_POST['aelter_ok'])) {
-        $flash(sprintf($T['wa_fl_older'], $alt), false); weiter($zur . '&bulk=' . rawurlencode((string)$_POST['bulk_code']));
+    if ($s['charge_id'] && !$gleicherBulk && ($alt = erp_wa_aeltere_bulk($s['item_id'], $s['charge_id'], $s['mhd'])) !== '') {
+        // 13.11.2026: Ausnahme „jüngere Charge trotzdem“ serverseitig nur Admin MIT Grund, Ereignis im Chargenprotokoll.
+        $aGrund = trim((string)($_POST['aelter_grund'] ?? ''));
+        if (empty($_POST['aelter_ok']) || !pr_ist_admin() || $aGrund === '') {
+            $flash(sprintf($T['wa_fl_older'], $alt) . (!empty($_POST['aelter_ok']) ? ' ' . $T['wa_fl_older_admin'] : ''), false);
+            weiter($zur . '&bulk=' . rawurlencode((string)$_POST['bulk_code']));
+        }
+        pa_ereignis($paId, $uc ? (int)$uc['id'] : null, 'abweichung', 'Jüngere Bulk-Charge ' . $s['charge_nr'] . ' vor älterer ' . $alt . ' verwendet (Admin-Ausnahme). Grund: ' . $aGrund, '', '', '', $von);
     }
     $fl = pa_foto_speichern($_FILES['foto_linie'] ?? [], 'linie' . $paId);
     $fs = pa_foto_speichern($_FILES['foto_stempel'] ?? [], 'stempel' . $paId);

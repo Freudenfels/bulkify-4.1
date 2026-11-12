@@ -14,3 +14,6 @@ Seit 11.11.2026. `werk.php` bindet die Datei für alle Aktionen `wa_*` ein. Gebu
 **Zahlen (Block D, 11.11.2026):** Mengen-, Gewichts- und Wertfelder lesen deutsch (`erp_menge_parse` bzw. `pr_menge_parse`): 135.000 = 135000, 12,5 = 12,5, 0.045 = 0,045.
 
 **Sprachen (Block F, 11.11.2026):** Alle Texte des geführten Ablaufs laufen über `werk_texte()` (`wa_*`), Meldungen aus dem Kern über `werk_msg()`. Der Umschalter DE/EN/УКР wirkt auf Tagesplan, Start, Material-Scan, Kapselprobe, Kartons, Teilmenge, Abschluss und alle Meldungen.
+
+## Ältere Charge zuerst (13.11.2026)
+Die Ausnahme „jüngere Charge trotzdem“ prüft der Server: nur Admin, nur mit Grund (`aelter_grund`). Sie steht als Ereignis „abweichung“ im Chargenprotokoll. Bulk ohne MHD wird nach Wareneingang verglichen (`erp_wa_aeltere_bulk()`).

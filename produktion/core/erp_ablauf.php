@@ -52,8 +52,15 @@ function erp_wa_scan(string $code): ?array {
                  'mhd' => (string)$r['mhd'], 'name' => (string)$r['name'], 'status' => (string)$r['status']] : null;
 }
 // Ältere freie Charge desselben Bulk-Artikels vorhanden (ältere zuerst, Handbuch 4.8)? Rückgabe Charge-Nr oder ''.
+// 13.11.2026: Bulk ohne MHD wird nach Wareneingang verglichen (vorher: gar nicht geprüft).
 function erp_wa_aeltere_bulk(int $item_id, int $charge_id, string $mhd): string {
-    if ($mhd === '') return '';
+    if ($mhd === '') {
+        $we = (string) scalar("SELECT COALESCE(wareneingang, DATE(angelegt)) FROM charge WHERE id=?", [$charge_id]);
+        if ($we === '') return '';
+        $x = one("SELECT charge_nr FROM charge WHERE item_id=? AND id<>? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL
+                  AND COALESCE(wareneingang, DATE(angelegt)) < ? ORDER BY COALESCE(wareneingang, DATE(angelegt)) LIMIT 1", [$item_id, $charge_id, $we]);
+        return $x ? (string)$x['charge_nr'] : '';
+    }
     $x = one("SELECT charge_nr FROM charge WHERE item_id=? AND id<>? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL AND mhd IS NOT NULL AND mhd<? ORDER BY mhd LIMIT 1", [$item_id, $charge_id, $mhd]);
     return $x ? (string)$x['charge_nr'] : '';
 }

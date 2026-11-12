@@ -65,6 +65,7 @@ $kap = erp_wa_kapsel_info($id);
         <?php endif; ?>
         <?php if (isset($_GET['bulk']) && erp_wa_aeltere_bulk((int)$s['item_id'], (int)$s['charge_id'], (string)$s['mhd']) !== '' && $istAdminW): ?>
           <label class="wa-zeile"><input type="checkbox" name="aelter_ok" value="1"> <?= h($T['wa_admin_younger']) ?></label>
+          <div class="wa-zeile"><input type="text" name="aelter_grund" placeholder="<?= h($T['wa_reason']) ?>" style="flex:1"></div>
         <?php endif; ?>
         <button class="btn btn-lime btn-lg" type="submit"><?= h($wiederanlauf && !$wechsel ? $T['wa_continue'] : $T['wa_start']) ?></button>
       </form>
