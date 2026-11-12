@@ -14704,11 +14704,26 @@ function auftrag_rechnungen_stornieren(int $auftrag_id, string $grund = 'Auftrag
 
 // Auftrags-Status schnell setzen (Fast-Track / v3-Style): Status + Datum (leer = heute), Kundensicht + Protokoll.
 // Bei 'storniert' werden offene Rechnungen automatisch per Gutschrift storniert.
-function auftrag_status_setzen(int $auftrag_id, string $status, ?string $datum = null, string $notiz = '', string $akteur = 'team'): bool {
+// Regel „von Hand versendet“ (Sofortfix 11.11.2026, zentral seit 13.11.2026): Ist beim Wechsel auf „versendet“ noch etwas offen
+// (Labor, Menge – auftrag_versendet_offen_text()), geht es nur mit Pflicht-Grund; der Grund kommt in den Verlauf. Hinweis statt
+// Sperre. Rückgabe '' = darf, sonst der offene Stand (dann fehlt der Grund). Genutzt von Auftragsseite, Fortschritt und Fast Track.
+function auftrag_versendet_regel(int $auftrag_id, string $alt, string $neu, string $grund, string $wer = ''): string {
+    if ($neu !== 'versendet' || $alt === 'versendet') return '';
+    $voT = auftrag_versendet_offen_text(['id' => $auftrag_id]);
+    if ($voT === '') return '';
+    $grund = trim($grund);
+    if ($grund === '') return $voT;
+    $wer = $wer !== '' ? $wer : (string)(function_exists('current_user') ? (current_user()['name'] ?? 'Team') : 'Team');
+    log_aktivitaet('auftrag', $auftrag_id, 'team', 'Trotzdem auf versendet gesetzt (' . $voT . ') von ' . $wer . '. Grund: ' . mb_substr($grund, 0, 500), 'status', 'auftrag', $auftrag_id);
+    return '';
+}
+// $versendet_grund (13.11.2026): „versendet“ mit offenem Labor/offener Menge nur mit Grund (auftrag_versendet_regel) – sonst false.
+function auftrag_status_setzen(int $auftrag_id, string $status, ?string $datum = null, string $notiz = '', string $akteur = 'team', string $versendet_grund = ''): bool {
     $labels = ['offen'=>'offen','in_produktion'=>'in Produktion','erledigt'=>'versandbereit','versendet'=>'versendet','storniert'=>'storniert'];
     if (!isset($labels[$status])) return false;
     $a = one("SELECT nummer, kunde_id, status FROM auftrag WHERE id=?", [$auftrag_id]);
     if (!$a) return false;
+    if (auftrag_versendet_regel($auftrag_id, (string)$a['status'], $status, $versendet_grund, $akteur !== 'team' ? $akteur : '') !== '') return false;
     $d = ($datum && preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) ? $datum : date('Y-m-d');
     $alt = (string)($a['status'] ?? '');
     q("UPDATE auftrag SET status=?, status_datum=? WHERE id=?", [$status, $d, $auftrag_id]);

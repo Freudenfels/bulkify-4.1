@@ -277,11 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     if (!in_array($neu, ['offen','in_produktion','erledigt','versendet'], true)) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Ungültiger Status.')); exit; }
     $alt = (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]);
     // Sofortfix 11.11.2026: von Hand „versendet" bei offenem Labor/offener Menge nur mit Pflicht-Grund (Hinweis statt Sperre).
-    if ($neu === 'versendet' && $neu !== $alt && ($voT = auftrag_versendet_offen_text(['id' => $id])) !== '') {
-        $voG = trim((string)($_POST['versendet_grund'] ?? ''));
-        if ($voG === '') { header('Location: ?p=auftrag&id=' . $id . '&versendetfrage=status'); exit; }
-        log_aktivitaet('auftrag', $id, 'team', 'Trotzdem auf versendet gesetzt (' . $voT . ') von ' . (current_user()['name'] ?? 'Team') . '. Grund: ' . mb_substr($voG, 0, 500), 'status', 'auftrag', $id);
-    }
+    if (auftrag_versendet_regel($id, $alt, $neu, (string)($_POST['versendet_grund'] ?? '')) !== '') { header('Location: ?p=auftrag&id=' . $id . '&versendetfrage=status'); exit; }   // zentral (13.11.2026)
     if ($neu !== $alt) {
         q("UPDATE auftrag SET status=?, status_datum=CURDATE() WHERE id=?", [$neu, $id]);
         log_aktivitaet('auftrag', $id, 'team', 'Status geändert: ' . $alt . ' -> ' . $neu, 'status', 'auftrag', $id);
@@ -335,10 +331,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $ovVal = $idx > 0 ? $idx : null;
     $alt = one("SELECT status, phase_override FROM auftrag WHERE id=?", [$id]);
     // Sofortfix 11.11.2026: von Hand „versendet" bei offenem Labor/offener Menge nur mit Pflicht-Grund (Hinweis statt Sperre).
-    if ($neuStatus === 'versendet' && (string)($alt['status'] ?? '') !== 'versendet' && ($voT = auftrag_versendet_offen_text(['id' => $id])) !== '') {
-        $voG = trim((string)($_POST['versendet_grund'] ?? ''));
-        if ($voG === '') { header('Location: ?p=auftrag&id=' . $id . '&versendetfrage=phase&ph=' . $idx . (isset($_POST['rest']) ? '&rest=' . rawurlencode((string)$_POST['rest']) : '') . '#schritte'); exit; }
-        log_aktivitaet('auftrag', $id, 'team', 'Trotzdem auf versendet gesetzt (' . $voT . ') von ' . (current_user()['name'] ?? 'Team') . '. Grund: ' . mb_substr($voG, 0, 500), 'status', 'auftrag', $id);
+    if (auftrag_versendet_regel($id, (string)($alt['status'] ?? ''), $neuStatus, (string)($_POST['versendet_grund'] ?? '')) !== '') {   // zentral (13.11.2026)
+        header('Location: ?p=auftrag&id=' . $id . '&versendetfrage=phase&ph=' . $idx . (isset($_POST['rest']) ? '&rest=' . rawurlencode((string)$_POST['rest']) : '') . '#schritte'); exit;
     }
     q("UPDATE auftrag SET phase_override=?, status=?, status_datum=CURDATE() WHERE id=?", [$ovVal, $neuStatus, $id]);
     if ((int)($alt['phase_override'] ?? -1) !== (int)($ovVal ?? -1) || (string)($alt['status'] ?? '') !== $neuStatus)

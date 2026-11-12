@@ -13,7 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'set')
     $notiz  = trim($_POST['notiz'] ?? '');
     $akteur = (function_exists('current_user') && ($u = current_user())) ? $u['name'] : 'team';
     $q      = trim($_POST['q'] ?? '');
-    if ($aid && $status) auftrag_status_setzen($aid, $status, $datum ?: null, $notiz, $akteur);
+    // 13.11.2026: „versendet“ mit offenem Labor/offener Menge nur mit Grund – gleiche Regel wie an der Auftragsseite (zentral).
+    $vgF = trim((string)($_POST['versendet_grund'] ?? ''));
+    $offenF = ($aid && $status === 'versendet') ? auftrag_versendet_regel($aid, (string) scalar("SELECT status FROM auftrag WHERE id=?", [$aid]), $status, '') : '';
+    if ($offenF !== '' && $vgF === '') { header('Location: ?p=fasttrack&auftrag=' . $aid . ($q !== '' ? '&q=' . urlencode($q) : '') . '&grundfrage=' . urlencode($offenF)); exit; }
+    if ($aid && $status) auftrag_status_setzen($aid, $status, $datum ?: null, $notiz, $akteur, $vgF);
     header('Location: ?p=fasttrack&auftrag=' . $aid . ($q !== '' ? '&q=' . urlencode($q) : '') . '&ok=1'); exit;
 }
 
@@ -45,6 +49,7 @@ $badge = fn($s) => match ($s) {
 render_header('auftraege', 'Fast Track');
 bx_head('Fast Track', 'Auftrag wählen · Status + Datum setzen · kurze Notiz (auch per Sprache). Der Kunde sieht Status und Datum.');
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
+if (!empty($_GET['grundfrage'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht gespeichert: Noch offen – ' . h((string)$_GET['grundfrage']) . '. „versendet“ geht nur mit Grund (Feld unten), wie an der Auftragsseite.</div>';
 ?>
 <form method="get" class="bx-listbar" style="margin-bottom:12px">
   <input type="hidden" name="p" value="fasttrack">
@@ -75,6 +80,9 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
       </div>
       <div class="muted" id="ftMicInfo" style="font-size:12px"></div>
     </div>
+    <?php if (!empty($_GET['grundfrage'])): ?>
+    <div class="bx-field" style="margin-top:8px"><label>Grund für „versendet“ trotz offenem Stand</label><input type="text" name="versendet_grund" maxlength="300" required></div>
+    <?php endif; ?>
     <div style="font-weight:600;margin:10px 0 6px">Status setzen (ein Klick speichert):</div>
     <div class="bx-row" style="gap:8px;flex-wrap:wrap">
       <?php foreach ($LABELS as $key=>$lbl): ?>
