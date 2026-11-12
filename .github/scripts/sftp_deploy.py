@@ -122,11 +122,17 @@ def cmd_prep():
     print(f'Stand dieses Laufs: {after}')
 
     # Schutz 1: Server ist schon auf diesem oder einem neueren Stand -> nichts tun.
+    # Ausnahme (13.11.2026, Fable-3 T4.6/D3): „Run workflow“ (workflow_dispatch) auf main HEAD, wenn der Server GENAU diesen Stand
+    # hat -> Reparatur-Vollupload (z. B. Dateien auf dem Server beschädigt). Ist der Server neuer, bleibt es beim skip.
+    # Hinweis (D4): Zurückdrehen per Force-Push auf einen älteren Commit wird übersprungen – zurück nur per Revert-Commit.
     if len(after) == 40 and is_commit(base) and is_ancestor(after, base):
-        print(f'Server ist schon neuer ({base}) - nichts zu tun' if base != after
-              else f'Server hat diesen Stand schon ({base}) - nichts zu tun')
-        set_output('mode', 'skip')
-        return
+        reparatur = event == 'workflow_dispatch' and base == after and after == main_head()
+        if not reparatur:
+            print(f'Server ist schon neuer ({base}) - nichts zu tun' if base != after
+                  else f'Server hat diesen Stand schon ({base}) - nichts zu tun')
+            set_output('mode', 'skip')
+            return
+        print(f'Manueller Lauf auf main HEAD, Server hat diesen Stand ({base}) - Reparatur-Vollupload.')
 
     mode = 'incremental'
     if event != 'push':
