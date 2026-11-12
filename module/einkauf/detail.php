@@ -184,11 +184,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&ok=1' : '&fehler=' . urlencode($res['msg']))); exit;
     }
     // B4: Bestellung stornieren.
-    // Nico 12.11.2026: Grund Pflicht; „Lieferant informieren“ abschalten darf nur Admin (dann keine Portal-Nachricht, keine Mail).
+    // Nico 12.11.2026: Grund Pflicht. Portal-Lieferanten werden immer informiert (Nachricht + Mail); „ohne Nachricht“ gibt es nur
+    // intern für Datenpflege-Läufe (Parameter $lieferant_informieren), kein Formularfeld (Nachbesserung 13.11.2026 Teil 1).
     if ($aktion === 'storno' && !$neu) {
         $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : 'Team';
         $grundS = trim((string)($_POST['grund'] ?? ''));
-        $informS = !has_role('admin') || !empty($_POST['informieren']);
+        $informS = true;
         $res = $grundS === '' ? ['ok' => false, 'msg' => 'Bitte einen Grund für die Stornierung angeben.']
                               : bestellung_stornieren((int)$id, $wer ?: 'Team', $grundS, $informS);
         header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&aufg=' . rawurlencode($res['msg']) : '&fehler=' . urlencode($res['msg']))); exit;
@@ -199,7 +200,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $bpS = (int)($_POST['bp_id'] ?? 0);
         $res = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE id=? AND bestellung_id=?", [$bpS, (int)$id]) !== 1
              ? ['ok' => false, 'msg' => 'Position gehört nicht zu dieser Bestellung.']
-             : bestellung_position_stornieren($bpS, $wer ?: 'Team', trim((string)($_POST['grund'] ?? '')), !empty($_POST['informieren']));
+             : bestellung_position_stornieren($bpS, $wer ?: 'Team', trim((string)($_POST['grund'] ?? '')));
         header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&aufg=' . rawurlencode($res['msg']) : '&fehler=' . urlencode($res['msg']))); exit;
     }
     // KI-Erfassung: Lieferanten-Dokument (PDF/Foto/Tabelle) auslesen -> Positionen vorbelegen.
@@ -402,12 +403,12 @@ if (!$neu) {
         echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="erinnern"><button class="btn ' . ($ueberf ? 'btn-primary' : 'btn-ghost') . ' btn-sm" type="submit" title="Erinnerungsmail an den Lieferanten senden">Erinnern' . ($ueberf ? ' (überfällig · T+' . bestellung_tage_offen($b) . ')' : (!empty($b['erinnert_am']) ? ' (erneut)' : '')) . '</button></form>';
     }
     if (!in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am'])) {
-        // Nico 12.11.2026: Grund Pflicht; Admin kann „Lieferant informieren“ abwählen (keine Portal-Nachricht, keine Mail).
+        // Nico 12.11.2026: Grund Pflicht; ein Portal-Lieferant wird immer informiert (Nachricht + Mail).
         $stPortal = bestellung_ist_portal($b);
         echo '<details style="display:inline-block;vertical-align:top"><summary class="btn btn-ghost btn-sm" style="color:#8f231b;list-style:none;cursor:pointer" title="Bestellung stornieren">Stornieren</summary>'
            . '<form method="post" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap" onsubmit="return confirm(\'Diese Bestellung stornieren?\');">'
            . '<input type="hidden" name="aktion" value="storno"><input type="text" name="grund" required maxlength="180" placeholder="Grund der Stornierung" style="width:240px">'
-           . ($stPortal && has_role('admin') ? '<label style="font-size:13px;white-space:nowrap"><input type="checkbox" name="informieren" value="1" checked> Lieferant informieren</label>' : ($stPortal ? '<span class="muted" style="font-size:12px">Der Lieferant wird informiert.</span>' : ''))
+           . ($stPortal ? '<span class="muted" style="font-size:12px">Der Lieferant wird informiert.</span>' : '')
            . '<button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Jetzt stornieren</button></form></details>';
     }
     echo '</div></div></div>';
@@ -465,7 +466,7 @@ if (!$neu) {
                     ? '<details style="display:inline-block;text-align:left"><summary class="btn btn-ghost btn-sm" style="list-style:none;cursor:pointer" title="Nur diese Position stornieren (bleibt sichtbar, zählt nicht mehr als unterwegs)">Position stornieren</summary>'
                       . '<form method="post" style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap" onsubmit="return confirm(\'Diese Position stornieren?\');"><input type="hidden" name="aktion" value="pos_storno"><input type="hidden" name="bp_id" value="' . (int)$z['bps'][0] . '">'
                       . '<input type="text" name="grund" required maxlength="180" placeholder="Grund" style="width:200px">'
-                      . ($posPortal ? '<label style="font-size:13px;white-space:nowrap"><input type="checkbox" name="informieren" value="1" checked> Lieferant informieren</label>' : '')
+                      . ($posPortal ? '<span class="muted" style="font-size:12px">Der Lieferant wird informiert.</span>' : '')
                       . '<button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Stornieren</button></form></details>'
                     : '') . '</td>';
             }

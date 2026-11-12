@@ -91,12 +91,12 @@ Block „Wareneingang zuordnen“ (`#abgleich`, aus `core/bestellung_abgleich.ph
 Bereich „Labels / Aufkleber“ wie im Portal (Direkt-Bestellungen, Nachdruck); Versanddaten mit Anzahl Pakete.
 
 ## Stornieren mit Grund, ohne Nachricht, Position stornieren (12.11.2026)
-- **Stornieren** klappt ein kleines Formular auf: Grund ist Pflicht. Bei einem Portal-Lieferanten sieht der Admin die Checkbox
-  **„Lieferant informieren“** (Standard an). Abgewählt: keine Portal-Nachricht, keine Mail; im Verlauf steht
-  „Bestellung storniert ohne Nachricht an den Lieferanten (Grund …)“. Andere Rollen informieren den Portal-Lieferanten immer.
+- **Stornieren** klappt ein kleines Formular auf: Grund ist Pflicht. Ein Portal-Lieferant wird immer informiert (Nachricht + Mail).
+  Den Schalter „Lieferant informieren“ gibt es seit 13.11.2026 nicht mehr in der Oberfläche; „ohne Nachricht“ geht nur intern
+  (Parameter `$lieferant_informieren` für Datenpflege-Läufe).
 - **Position stornieren** (nur Admin) in der Tabelle „Positionen“, je Zeile mit genau einer Position, solange dazu keine Ware
-  eingebucht ist: Grund Pflicht, Checkbox „Lieferant informieren“ nur solange die Bestellung beim Lieferanten noch läuft.
+  eingebucht ist: Grund Pflicht; läuft die Bestellung beim Portal-Lieferanten noch, wird er informiert.
   Die Position bleibt stehen (`rest_storniert_am`, `pos_storno_grund`), ihre Menge zählt nicht mehr als unterwegs.
   Geht auch an einer schon eingegangenen Bestellung. Danach rechnet die Bestellung neu: alle Positionen storniert und nichts
   geliefert = Bestellung storniert, sonst schließt sie sich ggf.
-- Aktionen: `storno` (Felder `grund`, `informieren`), `pos_storno` (Felder `bp_id`, `grund`, `informieren`).
+- Aktionen: `storno` (Feld `grund`), `pos_storno` (Felder `bp_id`, `grund`).
