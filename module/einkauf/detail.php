@@ -184,9 +184,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&ok=1' : '&fehler=' . urlencode($res['msg']))); exit;
     }
     // B4: Bestellung stornieren.
+    // Nico 12.11.2026: Grund Pflicht; „Lieferant informieren“ abschalten darf nur Admin (dann keine Portal-Nachricht, keine Mail).
     if ($aktion === 'storno' && !$neu) {
         $wer = (function_exists('current_user') && ($cu = current_user())) ? (string)($cu['name'] ?? '') : 'Team';
-        $res = bestellung_stornieren((int)$id, $wer ?: 'Team', trim((string)($_POST['grund'] ?? '')));
+        $grundS = trim((string)($_POST['grund'] ?? ''));
+        $informS = !has_role('admin') || !empty($_POST['informieren']);
+        $res = $grundS === '' ? ['ok' => false, 'msg' => 'Bitte einen Grund für die Stornierung angeben.']
+                              : bestellung_stornieren((int)$id, $wer ?: 'Team', $grundS, $informS);
+        header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&aufg=' . rawurlencode($res['msg']) : '&fehler=' . urlencode($res['msg']))); exit;
+    }
+    // Einzelne Position stornieren (Admin, Nico 12.11.2026) – auch an einer schon eingegangenen Bestellung.
+    if ($aktion === 'pos_storno' && !$neu && has_role('admin')) {
+        $wer = (string)(current_user()['name'] ?? 'Team');
+        $bpS = (int)($_POST['bp_id'] ?? 0);
+        $res = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE id=? AND bestellung_id=?", [$bpS, (int)$id]) !== 1
+             ? ['ok' => false, 'msg' => 'Position gehört nicht zu dieser Bestellung.']
+             : bestellung_position_stornieren($bpS, $wer ?: 'Team', trim((string)($_POST['grund'] ?? '')), !empty($_POST['informieren']));
         header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&aufg=' . rawurlencode($res['msg']) : '&fehler=' . urlencode($res['msg']))); exit;
     }
     // KI-Erfassung: Lieferanten-Dokument (PDF/Foto/Tabelle) auslesen -> Positionen vorbelegen.
@@ -388,15 +401,22 @@ if (!$neu) {
         $ueberf = bestellung_ueberfaellig($b);
         echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="erinnern"><button class="btn ' . ($ueberf ? 'btn-primary' : 'btn-ghost') . ' btn-sm" type="submit" title="Erinnerungsmail an den Lieferanten senden">Erinnern' . ($ueberf ? ' (überfällig · T+' . bestellung_tage_offen($b) . ')' : (!empty($b['erinnert_am']) ? ' (erneut)' : '')) . '</button></form>';
     }
-    if (!in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
-        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese Bestellung stornieren?' . (bestellung_ist_portal($b) ? ' Der Lieferant wird informiert.' : '') . '\');"><input type="hidden" name="aktion" value="storno"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung stornieren">Stornieren</button></form>';
+    if (!in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am'])) {
+        // Nico 12.11.2026: Grund Pflicht; Admin kann „Lieferant informieren“ abwählen (keine Portal-Nachricht, keine Mail).
+        $stPortal = bestellung_ist_portal($b);
+        echo '<details style="display:inline-block;vertical-align:top"><summary class="btn btn-ghost btn-sm" style="color:#8f231b;list-style:none;cursor:pointer" title="Bestellung stornieren">Stornieren</summary>'
+           . '<form method="post" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap" onsubmit="return confirm(\'Diese Bestellung stornieren?\');">'
+           . '<input type="hidden" name="aktion" value="storno"><input type="text" name="grund" required maxlength="180" placeholder="Grund der Stornierung" style="width:240px">'
+           . ($stPortal && has_role('admin') ? '<label style="font-size:13px;white-space:nowrap"><input type="checkbox" name="informieren" value="1" checked> Lieferant informieren</label>' : ($stPortal ? '<span class="muted" style="font-size:12px">Der Lieferant wird informiert.</span>' : ''))
+           . '<button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Jetzt stornieren</button></form></details>';
+    }
     echo '</div></div></div>';
     $aktionenHtml = ob_get_clean();   // B6: unten ausgeben
 
     // B6: Positionen-Überblick (bestellt / geliefert) mit Auftragsbezug – read-only, ganz oben.
     $posUeb = all("SELECT bp.id, bp.menge, bp.einheit, bp.item_id, bp.auftrag_id,
                           COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS pname, a.nummer AS auftrag_nr,
-                          COALESCE(bp.geliefert_menge,0) AS geliefert, bp.rest_storniert_am,   -- Summe der verknüpften Chargen (webe_position_neu_rechnen)
+                          COALESCE(bp.geliefert_menge,0) AS geliefert, bp.rest_storniert_am, bp.pos_storno_grund,   -- Summe der verknüpften Chargen (webe_position_neu_rechnen)
                           (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_chargen
                    FROM bestellung_position bp
                    LEFT JOIN item i ON i.id=bp.item_id
@@ -410,7 +430,9 @@ if (!$neu) {
             $istBulk = empty($p['item_id']) && strncmp((string)$p['pname'], 'Bulk', 4) === 0;
             $name = $istBulk ? $basis((string)$p['pname']) : (string)$p['pname'];
             $key = $istBulk ? 'b:' . mb_strtolower($name) : 'p:' . (int)$p['id'];
-            if (!isset($zeilen[$key])) $zeilen[$key] = ['name'=>$name, 'einheit'=>(string)$p['einheit'], 'bestellt'=>0.0, 'geliefert'=>0.0, 'auftraege'=>[], 'storno'=>false, 'chargen'=>0, 'bp'=>(int)$p['id']];
+            if (!isset($zeilen[$key])) $zeilen[$key] = ['name'=>$name, 'einheit'=>(string)$p['einheit'], 'bestellt'=>0.0, 'geliefert'=>0.0, 'auftraege'=>[], 'storno'=>false, 'chargen'=>0, 'bp'=>(int)$p['id'], 'bps'=>[], 'grund'=>''];
+            $zeilen[$key]['bps'][] = (int)$p['id'];
+            if (!empty($p['pos_storno_grund'])) $zeilen[$key]['grund'] = (string)$p['pos_storno_grund'];
             $zeilen[$key]['bestellt']  += (float)$p['menge'];
             $zeilen[$key]['geliefert'] += (float)$p['geliefert'];
             $zeilen[$key]['chargen']   += (int)$p['n_chargen'];
@@ -419,7 +441,9 @@ if (!$neu) {
         }
         $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         echo '<div class="bx-panel"><h2 style="margin-top:0">Positionen</h2>';
-        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Position</th><th>Für Auftrag</th><th class="bx-num">bestellt</th><th class="bx-num">geliefert</th><th class="bx-num">offen</th></tr></thead><tbody>';
+        $posStornoOk = has_role('admin') && (string)$b['status'] !== 'storniert';
+        $posPortal = bestellung_ist_portal($b) && empty($b['angekommen_am']) && (string)$b['status'] !== 'geliefert';
+        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Position</th><th>Für Auftrag</th><th class="bx-num">bestellt</th><th class="bx-num">geliefert</th><th class="bx-num">offen</th>' . ($posStornoOk ? '<th></th>' : '') . '</tr></thead><tbody>';
         $bOffen = !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']);
         foreach ($zeilen as $z) {
             $auf = '<span class="muted">Lager / allgemein</span>';
@@ -429,11 +453,23 @@ if (!$neu) {
             if ($gel + 0.0001 >= (float)$z['bestellt'] && (float)$z['bestellt'] > 0) $gelHtml = '<span class="bx-ok">' . $mz($gel) . ' ' . h($z['einheit']) . '</span>';
             $rest = max(0.0, (float)$z['bestellt'] - $gel);
             if ($gel > (float)$z['bestellt'] * 1.02 && (float)$z['bestellt'] > 0) $gelHtml .= ' <span class="muted" style="font-size:11px">Mehrlieferung</span>';
-            $restHtml = $z['storno'] && $rest > 0.0001 ? '<span class="muted">' . $mz($rest) . ' ' . h($z['einheit']) . ' storniert</span>'
+            $restHtml = $z['storno'] && $rest > 0.0001 ? '<span class="muted"' . ($z['grund'] !== '' ? ' title="' . h('Grund: ' . $z['grund']) . '"' : '') . '>' . $mz($rest) . ' ' . h($z['einheit']) . ' storniert</span>'
                       : ($rest > 0.0001 ? ($bOffen ? '<a href="?p=wareneingang&bp=' . (int)$z['bp'] . '" title="Wareneingang zu dieser Position buchen">' . $mz($rest) . ' ' . h($z['einheit']) . '</a>' : $mz($rest) . ' ' . h($z['einheit'])) : '<span class="muted">–</span>');
             echo '<tr><td>' . h($z['name']) . ($z['chargen'] ? ' <span class="muted" style="font-size:11px">' . (int)$z['chargen'] . ' Charge(n)</span>' : '') . '</td><td style="font-size:13px">' . $auf . '</td>'
                . '<td class="bx-num">' . $mz($z['bestellt']) . ' ' . h($z['einheit']) . '</td>'
-               . '<td class="bx-num">' . $gelHtml . '</td><td class="bx-num">' . $restHtml . '</td></tr>';
+               . '<td class="bx-num">' . $gelHtml . '</td><td class="bx-num">' . $restHtml . '</td>';
+            if ($posStornoOk) {
+                // Position stornieren: nur bei genau einer Position je Zeile, ohne eingebuchte Ware und noch nicht storniert.
+                $kannPS = count($z['bps']) === 1 && !$z['storno'] && $gel <= 0.0001 && (int)$z['chargen'] === 0;
+                echo '<td style="text-align:right;white-space:nowrap">' . ($kannPS
+                    ? '<details style="display:inline-block;text-align:left"><summary class="btn btn-ghost btn-sm" style="list-style:none;cursor:pointer" title="Nur diese Position stornieren (bleibt sichtbar, zählt nicht mehr als unterwegs)">Position stornieren</summary>'
+                      . '<form method="post" style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap" onsubmit="return confirm(\'Diese Position stornieren?\');"><input type="hidden" name="aktion" value="pos_storno"><input type="hidden" name="bp_id" value="' . (int)$z['bps'][0] . '">'
+                      . '<input type="text" name="grund" required maxlength="180" placeholder="Grund" style="width:200px">'
+                      . ($posPortal ? '<label style="font-size:13px;white-space:nowrap"><input type="checkbox" name="informieren" value="1" checked> Lieferant informieren</label>' : '')
+                      . '<button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Stornieren</button></form></details>'
+                    : '') . '</td>';
+            }
+            echo '</tr>';
         }
         echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. gelieferte Menge je Position (geliefert = Summe der verknüpften Chargen). Ist alles da, schließt sich die Bestellung selbst. Bei einer Teillieferung bleibt sie offen, der Rest zählt weiter als unterwegs – „Rest storniert“ schließt sie. Bearbeiten unten im Formular.</p></div>';
         // Block B Teil 3 (11.11.2026): verknüpfte Chargen einzeln, mit „Verknüpfung lösen" (falsch verknüpft) und Link zum Korrigieren.

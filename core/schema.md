@@ -664,3 +664,8 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 `etikett_bestand_info()` (Block D, 11.11.2026): **verbraucht** = versendete Aufträge voll + bei laufenden/erledigten die wirklich produzierte (gebuchte) Menge. Vorher zählte „Status erledigt“ als ganze Auftragsmenge, deshalb zeigte das Portal bei AB-3237 (175 von 500, 825 Kundenetiketten im Lager) „Ihre Etiketten im Lager: 0 von 500“.
 
 **Kein Etikett-Ersatz mehr (Block E, 11.11.2026, Entscheidung Nico):** `produktion_etikett_entnehmen()` nimmt bei fehlendem Kundenetikett-Bestand nicht mehr still das generische Maß-Etikett. Etikettieren ist dann blockiert, wie in der Werk-App. Produkte ohne Kundenetikett (neutral) ziehen weiter das generische Etikett. Früher schon über den Ersatz gebuchte generische Etiketten eines PA zählen weiter als verbraucht.
+
+## Stornieren ohne Nachricht, Position stornieren (12.11.2026)
+- `bestellung_stornieren($id, $wer, $grund, $lieferant_informieren = true)`: mit `false` keine Portal-Nachricht und keine Mail, Grund Pflicht; Verlaufseintrag immer.
+- `bestellung_position_stornieren($bp_id, $wer, $grund, $lieferant_informieren = true)`: Position bleibt (rest_storniert_am + pos_storno_grund), nichts gelöscht; nicht bei eingebuchter Ware; Bestellung rechnet neu.
+- Offene Menge (unterwegs) überall nur noch für nicht stornierte Positionen: `IF(bp.rest_storniert_am IS NULL, GREATEST(menge - geliefert, 0), 0)` (item_unterwegs, bp_rest_sql, Material/Bestand/Doppelt-Prüfung, Lager-App).

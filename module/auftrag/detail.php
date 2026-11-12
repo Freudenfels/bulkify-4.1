@@ -1786,7 +1786,7 @@ if ($pa && in_array((string)($pa['status'] ?? ''), ['offen', 'laufend'], true) &
         $hwItem  = (int) (scalar("SELECT id FROM item WHERE produkt_id=? AND kategorie='verkaufsfertig' LIMIT 1", [(int)$a['produkt_id']]) ?: 0);
         $hwFrei  = $hwItem ? item_bestand($hwItem, true) : 0.0;
         $hwQuar  = $hwItem ? item_bestand($hwItem, false) - $hwFrei : 0.0;
-        $hwUnt   = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $hwUnt   = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                    WHERE bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$id]);
         $hwOffen = max(0, (int)$a['menge'] - (int)($a['versendet_menge'] ?? 0));
         $hwZu    = max(0.0, $hwOffen - $hwFrei - $hwQuar - $hwUnt); ?>

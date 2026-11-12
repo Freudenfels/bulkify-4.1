@@ -55,7 +55,7 @@ $rows = all("SELECT i.id,i.artikelnummer,i.name,i.kategorie,i.einheit,i.bestand_
              (SELECT COUNT(*) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt')$ortSql) AS n_chargen,
              (SELECT COUNT(DISTINCT COALESCE(NULLIF(c.einheit,''),'Stk')) FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt') AND c.menge_verfuegbar>0$ortSql) AS n_einheit,
              (SELECT COALESCE(NULLIF(c.einheit,''),'Stk') FROM charge c WHERE c.item_id=i.id AND c.status IN ('frei','quarantaene','gesperrt') AND c.menge_verfuegbar>0$ortSql ORDER BY c.menge_verfuegbar DESC LIMIT 1) AS charge_einheit,
-             (SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+             (SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                 WHERE bp.item_id=i.id AND b.status='bestellt' AND b.angekommen_am IS NULL) AS unterwegs
              FROM item i WHERE $where", $params);
 

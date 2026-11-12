@@ -285,7 +285,7 @@ function webe_offene_positionen(string $such = '', int $limit = 300, int $bestel
     $rows = all("SELECT bp.id AS bp_id, bp.bestellung_id, b.nummer, b.status, b.station, b.bestellart, b.bestelldatum, b.eta_geplant, b.lieferant_id,
                         COALESCE(l.firma, NULLIF(b.online_haendler,''), '') AS lieferant,
                         bp.item_id, COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, bp.bezeichnung, i.kategorie, i.form, i.rezeptur_id,
-                        bp.menge, COALESCE(bp.geliefert_menge,0) AS geliefert, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0) AS rest,
+                        bp.menge, COALESCE(bp.geliefert_menge,0) AS geliefert, IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0) AS rest,
                         COALESCE(NULLIF(bp.einheit,''), i.einheit, '') AS einheit, bp.auftrag_id, a.nummer AS auftrag_nr
                  FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                  LEFT JOIN lieferanten l ON l.id=b.lieferant_id LEFT JOIN item i ON i.id=bp.item_id LEFT JOIN auftrag a ON a.id=bp.auftrag_id

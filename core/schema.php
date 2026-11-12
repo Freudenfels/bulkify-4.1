@@ -1402,6 +1402,7 @@ function init_schema(): void {
     ensure_column('bestellung_position', 'bezeichnung', "VARCHAR(200) NULL");   // Freitext (z. B. Bulk-Zukauf ohne Lagerartikel)
     ensure_column('bestellung_position', 'geliefert_menge', "DECIMAL(14,3) NOT NULL DEFAULT 0");
     ensure_column('bestellung_position', 'rest_storniert_am', "DATE NULL");      // „Rest storniert" (Teil 3): Rest zählt nicht mehr als unterwegs
+    ensure_column('bestellung_position', 'pos_storno_grund', "VARCHAR(255) NULL"); // Position stornieren (12.11.2026): Grund; rest_storniert_am = Datum
     ensure_column('bestellung', 'nachtraeglich_grund', "VARCHAR(40) NULL");      // beim Wareneingang ohne Bestellung angelegt (Teil 2)
     ensure_column('bestellung', 'nachtraeglich_geprueft_am', "DATETIME NULL");
     ensure_column('charge', 'we_grund', "VARCHAR(40) NULL");                     // Wareneingang ohne Bestellung: Grund + Notiz (Teil 2)
@@ -4611,7 +4612,7 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
 // Bestellung als angekommen/geliefert markieren OHNE Chargen anzulegen (die Ware wurde schon eingebucht, z. B. über die
 // Wareneingangs-Maske mit Bestellbezug). Gleiche Wirkung wie erp_bestellung_angekommen() in der Lager-App (S-06/St-12).
 // Teillieferung (Nacht 1c): „unterwegs" = bestellte Menge MINUS schon gelieferte (bestellung_position.geliefert_menge).
-function bp_rest_sql(string $a = 'bp'): string { return "GREATEST($a.menge - COALESCE($a.geliefert_menge,0), 0)"; }
+function bp_rest_sql(string $a = 'bp'): string { return "IF($a.rest_storniert_am IS NULL, GREATEST($a.menge - COALESCE($a.geliefert_menge,0), 0), 0)"; }
 // Mengen-Umrechnung zwischen Charge und Bestellposition (g<->kg, ml<->l), sonst 1.
 function einheit_faktor(string $von, string $nach): float {
     $v = mb_strtolower(trim($von)); $n = mb_strtolower(trim($nach));
@@ -6236,7 +6237,7 @@ function auftrag_rohstoffe_beschafft(int $aid): ?string {
     if (!$roh) return null;                       // keine eingekauften Rohstoffe -> Signal nicht anwendbar
     $earliest = null; $hatBestellung = false;
     foreach ($roh as $iid => $fehlt) {
-        $bp = one("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
+        $bp = one("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
                    FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                    WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
         $ordered = (float)($bp['menge'] ?? 0);
@@ -7803,16 +7804,25 @@ function bestellung_erinnerung_senden(int $bestellung_id, bool $auto = false): s
     return $f === '' ? '' : $f;
 }
 // Bestellung stornieren (B4). Markiert storniert, informiert einen Portal-Lieferanten (Chat + Mail).
-function bestellung_stornieren(int $bestellung_id, string $wer = 'Team', string $grund = ''): array {
+// $lieferant_informieren (Nico 12.11.2026, Abgleich Maggi-Liste): false = KEINE Portal-Nachricht und KEINE Mail an den
+// Lieferanten (z. B. doppelt angelegte Bestellung, von der der Lieferant nie wusste). Dann ist ein Grund Pflicht; im Verlauf steht
+// „storniert ohne Nachricht an den Lieferanten (Grund …)“.
+function bestellung_stornieren(int $bestellung_id, string $wer = 'Team', string $grund = '', bool $lieferant_informieren = true): array {
     $b = one("SELECT * FROM bestellung WHERE id=?", [$bestellung_id]);
     if (!$b) return ['ok'=>false, 'msg'=>'Bestellung nicht gefunden.'];
     if ((string)$b['status'] === 'storniert') return ['ok'=>false, 'msg'=>'Bestellung ist bereits storniert.'];
     if ((string)$b['status'] === 'geliefert' || !empty($b['angekommen_am'])) return ['ok'=>false, 'msg'=>'Bereits (teil)geliefert – nicht stornierbar.'];
+    $grund = trim($grund);
+    if (!$lieferant_informieren && $grund === '') return ['ok'=>false, 'msg'=>'Ohne Nachricht an den Lieferanten bitte einen Grund angeben.'];
     $wer = trim($wer) ?: 'Team';
     q("UPDATE bestellung SET status='storniert', notiz=CONCAT(COALESCE(notiz,''), ' | Storniert', ?, ' – ', ?) WHERE id=?",
-      [$grund !== '' ? ' (' . mb_substr($grund, 0, 180) . ')' : '', $wer, $bestellung_id]);
+      [($grund !== '' ? ' (' . mb_substr($grund, 0, 180) . ')' : '') . ($lieferant_informieren ? '' : ' ohne Nachricht an den Lieferanten'), $wer, $bestellung_id]);
+    if (function_exists('log_aktivitaet')) {
+        try { log_aktivitaet('bestellung', $bestellung_id, 'team', ($lieferant_informieren ? 'Bestellung storniert' : 'Bestellung storniert ohne Nachricht an den Lieferanten')
+                             . ($grund !== '' ? ' (Grund: ' . mb_substr($grund, 0, 180) . ')' : '') . ' – ' . $wer, 'status'); } catch (\Throwable $e) {}
+    }
     $mail = 0;
-    if (bestellung_ist_portal($b)) {
+    if ($lieferant_informieren && bestellung_ist_portal($b)) {
         require_once __DIR__ . '/nachricht.php';
         nachricht_senden((int)$b['lieferant_id'], 'team', $wer,
             'Hinweis: Bestellung ' . (string)$b['nummer'] . ' wurde storniert' . ($grund !== '' ? ' (' . $grund . ')' : '') . '. Bitte nicht mehr ausführen.',
@@ -7820,7 +7830,50 @@ function bestellung_stornieren(int $bestellung_id, string $wer = 'Team', string 
         if (function_exists('mail_bereit') && mail_bereit()) $mail = 1;
     }
     bedarf_bump();
-    return ['ok'=>true, 'mail'=>$mail, 'msg'=>'Bestellung ' . (string)$b['nummer'] . ' storniert' . ($mail ? ', Lieferant informiert' : '') . '.'];
+    return ['ok'=>true, 'mail'=>$mail, 'msg'=>'Bestellung ' . (string)$b['nummer'] . ' storniert' . ($mail ? ', Lieferant informiert' : (!$lieferant_informieren ? ' – ohne Nachricht an den Lieferanten' : '')) . '.'];
+}
+// Einzelne Bestellposition stornieren (Nico 12.11.2026): die Position bleibt stehen (nichts gelöscht), ihre offene Menge zählt
+// nicht mehr als unterwegs (rest_storniert_am + pos_storno_grund). Geht auch an einer schon eingegangenen Bestellung. Eine Position
+// mit verknüpfter Charge wird nicht storniert (erst „Verknüpfung lösen“ bzw. „Rest storniert“). Danach rechnet die Bestellung neu:
+// sind alle Positionen storniert und nichts geliefert, ist die Bestellung storniert; sonst schließt sie sich ggf. (webe_bestellung_stand).
+// $lieferant_informieren=false: keine Portal-Nachricht, keine Mail; Grund ist immer Pflicht.
+function bestellung_position_stornieren(int $bp_id, string $wer = 'Team', string $grund = '', bool $lieferant_informieren = true): array {
+    $p = one("SELECT bp.*, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '') AS pname, (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_ch
+              FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id WHERE bp.id=?", [$bp_id]);
+    if (!$p) return ['ok'=>false, 'msg'=>'Position nicht gefunden.'];
+    $b = one("SELECT * FROM bestellung WHERE id=?", [(int)$p['bestellung_id']]);
+    if (!$b || (string)$b['status'] === 'storniert') return ['ok'=>false, 'msg'=>'Die Bestellung ist bereits storniert.'];
+    if (!empty($p['rest_storniert_am'])) return ['ok'=>false, 'msg'=>'Diese Position ist bereits storniert.'];
+    if ((int)$p['n_ch'] > 0 || (float)($p['geliefert_menge'] ?? 0) > 0) return ['ok'=>false, 'msg'=>'Zu dieser Position ist schon Ware eingebucht – erst die Verknüpfung lösen bzw. „Rest storniert“ nutzen.'];
+    $grund = trim($grund);
+    if ($grund === '') return ['ok'=>false, 'msg'=>'Bitte einen Grund angeben.'];
+    $wer = trim($wer) ?: 'Team';
+    $bid = (int)$b['id'];
+    q("UPDATE bestellung_position SET rest_storniert_am=CURDATE(), pos_storno_grund=? WHERE id=?", [mb_substr($grund, 0, 255), $bp_id]);
+    $mz = rtrim(rtrim(number_format((float)$p['menge'], 3, ',', '.'), '0'), ',');
+    $txt = 'Position storniert' . ($lieferant_informieren ? '' : ' ohne Nachricht an den Lieferanten') . ': ' . (string)$p['pname'] . ' (' . $mz . ' ' . (string)$p['einheit'] . ', Grund: ' . mb_substr($grund, 0, 180) . ') – ' . $wer;
+    q("UPDATE bestellung SET notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", ["\n[" . gmdate('d.m.Y') . '] ' . $txt, $bid]);
+    if (function_exists('log_aktivitaet')) { try { log_aktivitaet('bestellung', $bid, 'team', $txt, 'status'); } catch (\Throwable $e) {} }
+    // Bestellung neu bewerten.
+    $aktiv = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND rest_storniert_am IS NULL", [$bid]);
+    $gel   = (float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [$bid]);
+    $msgB = '';
+    if ($aktiv === 0 && $gel <= 0 && empty($b['angekommen_am']) && (string)$b['status'] !== 'geliefert') {
+        q("UPDATE bestellung SET status='storniert' WHERE id=?", [$bid]);
+        $msgB = ' Alle Positionen storniert – die Bestellung ist storniert.';
+    } else {
+        require_once __DIR__ . '/wareneingang_bestellung.php';
+        $st = webe_bestellung_stand($bid);
+        if (!empty($st['komplett']) && (string)$b['status'] !== 'geliefert') $msgB = ' Die Bestellung ist damit vollständig und geschlossen.';
+    }
+    $mail = 0;
+    if ($lieferant_informieren && bestellung_ist_portal($b) && empty($b['angekommen_am']) && (string)$b['status'] !== 'geliefert') {
+        require_once __DIR__ . '/nachricht.php';
+        nachricht_senden((int)$b['lieferant_id'], 'team', $wer, 'Hinweis: In Bestellung ' . (string)$b['nummer'] . ' wurde die Position „' . (string)$p['pname'] . '“ (' . $mz . ' ' . (string)$p['einheit'] . ') storniert (' . $grund . '). Bitte diese Position nicht mehr ausführen.', 'bestellung', $bid);
+        if (function_exists('mail_bereit') && mail_bereit()) $mail = 1;
+    }
+    bedarf_bump();
+    return ['ok'=>true, 'mail'=>$mail, 'msg'=>'Position storniert' . ($mail ? ', Lieferant informiert' : ($lieferant_informieren ? '' : ' – ohne Nachricht an den Lieferanten')) . '.' . $msgB];
 }
 // Token für den Einkauf-Erinnerungs-Cron (analog crm mail_cron_token).
 function einkauf_cron_token(): string {
@@ -10082,7 +10135,7 @@ function item_unterwegs(int $item_id): float {
     if ($item_id <= 0) return 0.0;
     $ck = 'uw:' . $item_id;
     if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
-    $v = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+    $v = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                          WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$item_id]);
     if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
     return $v;
@@ -10665,7 +10718,7 @@ function meldebestand_bedarf(): array {
                   WHERE mindestbestand IS NOT NULL AND mindestbestand > 0 AND gesperrt=0 ORDER BY name") as $it) {
         $iid = (int)$it['id'];
         $bestand = item_bestand($iid, true);
-        $offen = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $offen = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
         $soll = (float)$it['mindestbestand'];
         $verf = $bestand + $offen;
@@ -10885,7 +10938,7 @@ function auftrag_fehlbedarf(int $pa_id): array {
         $fehltBest = (float)($r['zu_bestellen'] ?? $r['fehlt']);
         if ($fehltBest <= 1e-6 || (int)$r['item_id'] <= 0) continue;
         // schon offen bestellt: für diesen Auftrag ODER als Sammelbestellung (Lager, auftrag_id NULL)
-        $offen = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+        $offen = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                                  WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND (bp.auftrag_id=? OR bp.auftrag_id IS NULL)", [(int)$r['item_id'], $aid]);
         $noch = $fehltBest - $offen;
         if ($noch <= 1e-6) continue;
@@ -11596,7 +11649,7 @@ function bedarf_aggregiert(bool $nur_gemeldet = false): array {
         $quar = item_quarantaene($iid);
         $unt  = item_unterwegs($iid);
         $eigen = [];
-        foreach ($aids as $aid) $eigen[$aid] = (float) scalar("SELECT COALESCE(SUM(GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid, $aid]);
+        foreach ($aids as $aid) $eigen[$aid] = (float) scalar("SELECT COALESCE(SUM(IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)),0) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid, $aid]);
         $pool = $frei + $quar + max(0.0, $unt - array_sum($eigen));
         foreach ($keys as $k) {                                // Überschuss gebundener Bestellungen geht in den Topf
             $aid = (int)$agg[$k]['auftrag_id'];

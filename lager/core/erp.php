@@ -1157,7 +1157,7 @@ function erp_bp_geliefert_da(): bool {
     if ($da === null) $da = tabelle_da('bestellung_position') && (int) scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='bestellung_position' AND column_name='geliefert_menge'") > 0;
     return $da;
 }
-function erp_bp_rest_sql(): string { return erp_bp_geliefert_da() ? "GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0)" : "bp.menge"; }
+function erp_bp_rest_sql(): string { return erp_bp_geliefert_da() ? "IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0)" : "bp.menge"; }
 function erp_einheit_faktor(string $von, string $nach): float {
     $v = mb_strtolower(trim($von)); $n = mb_strtolower(trim($nach));
     if ($v === $n || $v === '' || $n === '') return 1.0;

@@ -31,7 +31,7 @@ function bestellung_doppelt_treffer(array $item_ids = [], array $bulk_produkt_id
     if (!$or) return [];
     try {
         return all("SELECT b.id AS bestellung_id, b.nummer, b.status, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '') AS bez, bp.menge,
-                           GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0) AS offen, COALESCE(bp.einheit, i.einheit, '') AS einheit
+                           IF(bp.rest_storniert_am IS NULL, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0), 0) AS offen, COALESCE(bp.einheit, i.einheit, '') AS einheit
                     FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN item i ON i.id=bp.item_id
                     WHERE (" . implode(' OR ', $or) . ") AND " . bestellung_doppelt_offen_sql() . "
                     ORDER BY b.id DESC LIMIT 20", $args);
