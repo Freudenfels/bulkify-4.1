@@ -19,3 +19,5 @@ Bei „direkt bestellt“ heißt der Termin „Erwartet am“; das Team (`$wer='
 
 ## Paket 12.11.2026 Teil 5 (Gebindeaufkleber)
 Versandformular: Anzahl Pakete (Vorschlag = nicht stornierte Gebindeaufkleber) und Hinweis bei starker Gewichtsabweichung.
+
+**Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** Das Bestätigen-Formular (Team) zeigt bei einem Entwurf mit fehlenden Unterlagen dem Admin das Feld „Grund (Unterlagen fehlen, nur Admin)“, anderen den Grund mit gesperrtem Knopf.

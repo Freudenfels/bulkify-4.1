@@ -18,3 +18,5 @@ Zutaten mit `item_id` sind jetzt Links (`a.lp-roh[data-iid]`) → öffnen das Ro
 ## Sichtbarkeit (11.11.2026)
 - Nicht mehr allein über die freigeschaltete Form. Nur noch Rezepturen, die bei diesem Lieferanten angefragt, von ihm bepreist oder bei ihm bestellt wurden.
 - Andere Rezepturen: „nicht gefunden oder nicht für Sie freigeschaltet“.
+
+**Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** Ein Entwurf schaltet keine Rezeptur frei (`bestellung_portal_sichtbar_sql('b')`).

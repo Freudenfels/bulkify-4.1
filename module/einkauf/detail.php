@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
     }
     if ($aktion === 'lief_bestaetigen' && !$neu) {
-        $f = bestellung_bestaetigen((int)$id, (string)($_POST['eta_geplant'] ?? ''), trim((string)($_POST['wer'] ?? 'Team')));
+        $f = bestellung_bestaetigen((int)$id, (string)($_POST['eta_geplant'] ?? ''), trim((string)($_POST['wer'] ?? 'Team')), 'de', 'team', trim((string)($_POST['lu_grund'] ?? '')));   // Fable-3 T2.2: Sperre zentral
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
     }
     if ($aktion === 'lief_station' && !$neu) {

@@ -24,6 +24,17 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
     $o  = '<div class="bx-panel"><h2 style="margin-top:0">' . $t('Ablauf', 'Progress', '进度') . '</h2>';
 
     // 1) Bestätigung mit Termin – ohne sie geht nichts weiter.
+    // Fable-3 T2.2: Team bestätigt einen Entwurf mit fehlenden Unterlagen nur als Admin mit Grund (Prüfung in bestellung_bestaetigen()).
+    $luFeld = ''; $luAus = '';
+    if (!$bestaetigt && $wer === 'team' && (string)($b['status'] ?? '') === 'offen') {
+        require_once __DIR__ . '/lieferant_unterlagen.php';
+        $luS = lu_bestellen_sperre((int)$b['id']);
+        if ($luS !== '') {
+            if (function_exists('has_role') && has_role('admin'))
+                $luFeld = '<div class="bx-field" style="margin:0;min-width:240px"><label>Grund (Unterlagen fehlen, nur Admin)</label><input type="text" name="lu_grund" required placeholder="Grund für die Ausnahme"></div>';
+            else { $luAus = ' disabled title="' . $h($luS) . '"'; $luFeld = '<div class="muted" style="font-size:12px;max-width:320px">' . $h($luS) . '</div>'; }
+        }
+    }
     if (!$bestaetigt) {
         $o .= '<p class="muted" style="margin-top:0">'
             . $t('Bitte die Bestellung bestätigen und den geplanten Liefertermin nennen. Danach lassen sich die Stationen pflegen.',
@@ -35,7 +46,8 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
             . '<input type="date" name="eta_geplant" required></div>'
             . '<div class="bx-field" style="margin:0;min-width:220px"><label>' . $t('Ihr Name', 'Your name', '您的姓名') . '</label>'
             . '<input type="text" name="wer" required placeholder="' . $t('Vor- und Nachname', 'First and last name', '姓名') . '"></div>'
-            . '<button class="btn btn-primary" type="submit">' . $t('Bestellung bestätigen', 'Confirm order', '确认订单') . '</button>'
+            . $luFeld
+            . '<button class="btn btn-primary" type="submit"' . $luAus . '>' . $t('Bestellung bestätigen', 'Confirm order', '确认订单') . '</button>'
             . '</form>';
     } else {
         $direkt = (string)($b['bestellart'] ?? '') === 'direkt';

@@ -679,3 +679,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **Ortszeit (13.11.2026, Fable-3 T1.7):** `mhd_standard()` rechnet ab heute in Europe/Berlin (`heute_ort()`), nicht UTC. `produktion_teilmenge_einbuchen()` (alter Einlager-Weg) schreibt `wareneingang` = `heute_ort()` statt `CURDATE()`.
 
 **`bestellung_als_entwurf($id, $notiz)` (13.11.2026, Fable-3 T2.1):** setzt eine noch nicht bestätigte Bestellung auf Entwurf (offen, ohne Bestelldatum, Bestellart Lieferant). Genutzt von der Einkaufsliste bei Unterlagen-Sperre und „Vorsorglich bestellen“.
+
+**Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** `bestellung_bestaetigen($id, $eta, $wer, $sprache, $quelle, $ausnahme_grund)` prüft zentral: storniert/geliefert nicht; Lieferant (`$quelle='lieferant'`) nur gesendete/bestellte Bestellungen, einen Entwurf gibt es für ihn nicht; Team bestätigt einen Entwurf mit fehlenden Unterlagen nur über die Admin-Ausnahme mit Grund (`lu_bestellen_pruefen()`). `bestellung_portal_sichtbar_sql($alias)` ist die eine Bedingung „kein Entwurf“ für alle Portal-Abfragen.

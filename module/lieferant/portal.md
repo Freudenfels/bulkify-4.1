@@ -9,3 +9,5 @@ Eine vierte Kachel zeigt, wie viele Nachrichten von bulkify noch ungelesen sind 
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 Hinweis „Es fehlen noch Unterlagen (n)“ mit Link auf die Aufgabenliste.
+
+**Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** Die Übersicht zählt keine Entwürfe (`bestellung_portal_sichtbar_sql()`).

@@ -8001,13 +8001,28 @@ function bestellung_station_setzen(int $bestellung_id, string $ziel, ?string $we
         'Bestellung ' . $b['nummer'] . ': ' . bestellung_stationen()[$ziel] . ($wer ? ' (' . $wer . ')' : '') . '.', 'bestellung', 'bestellung', $bestellung_id);
     return '';
 }
-// Bestellung durch den Lieferanten bestaetigen (mit zugesagtem Termin).
-function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, string $sprache = 'de'): string {
+// Entwürfe (Status „offen“) sieht der Lieferant im Portal nicht – weder in Listen noch per Link (Fable-3 T2.2, 13.11.2026).
+// Eine Stelle für alle Portal-Abfragen: Bedingung auf die Tabelle bestellung (Alias $a).
+function bestellung_portal_sichtbar_sql(string $a = ''): string { return ($a !== '' ? $a . '.' : '') . "status <> 'offen'"; }
+// Bestellung bestaetigen (mit zugesagtem Termin). $quelle: 'lieferant' (Portal) oder 'team' (Bestellseite).
+// Fable-3 T2.2: Prüfung zentral hier, nicht in den Seiten –
+//  - storniert/geliefert: nicht bestätigen,
+//  - Lieferant: nur an ihn gesendete Bestellungen (gesendet/bestellt), einen Entwurf (offen) gibt es für ihn nicht,
+//  - Team: einen Entwurf nur mit vollständigen Unterlagen bestätigen, sonst nur Admin mit Grund (lu_bestellen_pruefen).
+function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, string $sprache = 'de', string $quelle = 'lieferant', string $ausnahme_grund = ''): string {
     $m = fn(string $de, string $en, string $zh) => $sprache === 'de' ? $de : ($sprache === 'zh' ? $zh : $en);
-    $b = one("SELECT id, nummer, bestaetigt, lieferant_id FROM bestellung WHERE id=?", [$bestellung_id]);
+    $b = one("SELECT id, nummer, bestaetigt, lieferant_id, status FROM bestellung WHERE id=?", [$bestellung_id]);
     if (!$b) return $m('Bestellung nicht gefunden.', 'Order not found.', '未找到订单。');
+    $st = (string)$b['status'];
+    if ($quelle !== 'team' && $st === 'offen') return $m('Bestellung nicht gefunden.', 'Order not found.', '未找到订单。');
     if ((int)$b['bestaetigt'] === 1) return '';                     // schon bestaetigt: nichts tun
+    if (in_array($st, ['storniert', 'geliefert'], true)) return $m('Diese Bestellung ist ' . ($st === 'storniert' ? 'storniert' : 'schon geliefert') . ' und kann nicht mehr bestätigt werden.', 'This order is ' . ($st === 'storniert' ? 'cancelled' : 'already delivered') . ' and can no longer be confirmed.', '此订单已' . ($st === 'storniert' ? '取消' : '交付') . '，无法再确认。');
     if (trim($eta) === '' || !strtotime($eta)) return $m('Bitte einen geplanten Liefertermin angeben.', 'Please state a planned delivery date.', '请填写计划交货日期。');
+    if ($st === 'offen') {   // Team bestätigt einen Entwurf: gleiche Unterlagen-Sperre wie jeder Bestellweg
+        require_once __DIR__ . '/lieferant_unterlagen.php';
+        $sperre = lu_bestellen_pruefen($bestellung_id, $ausnahme_grund, $wer);
+        if ($sperre !== '') return $sperre . ' Bestätigen nur als Admin mit Grund.';
+    }
     q("UPDATE bestellung SET bestaetigt=1, bestaetigt_am=UTC_TIMESTAMP(), bestaetigt_von=?, eta_geplant=?, station=?, status=IF(status IN ('offen','gesendet'),'bestellt',status) WHERE id=?",
       [mb_substr(trim($wer), 0, 190), date('Y-m-d', strtotime($eta)), 'angenommen', $bestellung_id]);
     if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], 'lieferant',

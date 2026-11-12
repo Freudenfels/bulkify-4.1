@@ -8,7 +8,7 @@ if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 $lid = aktueller_lieferant_id();
 $id  = (int)($_GET['id'] ?? 0);
 // Nur eigene Bestellungen – die Pruefung haengt an jeder Abfrage, nicht an der Oberflaeche.
-$b   = $id ? one("SELECT * FROM bestellung WHERE id=? AND lieferant_id=?", [$id, $lid]) : null;
+$b   = $id ? one("SELECT * FROM bestellung WHERE id=? AND lieferant_id=? AND " . bestellung_portal_sichtbar_sql(), [$id, $lid]) : null;   // Entwürfe nie (Fable-3 T2.2)
 
 // Paket 12.11.2026 Teil 5: Gebindeaufkleber (PDF, Drucken, Storno, Herstelldatum) – Baustein core/lief_aufkleber_ui.php
 if ($b) {
@@ -73,7 +73,7 @@ if (!$b):
                        FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
                        WHERE bp.bestellung_id=b.id ORDER BY bp.sort, bp.id LIMIT 1) AS produkt,
                     (SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=b.id) AS n_pos
-                  FROM bestellung b WHERE b.lieferant_id=? ORDER BY (b.status='geliefert'), b.angelegt DESC", [$lid]);
+                  FROM bestellung b WHERE b.lieferant_id=? AND " . bestellung_portal_sichtbar_sql('b') . " ORDER BY (b.status='geliefert'), b.angelegt DESC", [$lid]);
 ?>
   <h1 style="margin-bottom:4px"><?= h(lp_t('bestellungen')) ?></h1>
   <div class="bx-panel">

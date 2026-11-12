@@ -26,7 +26,7 @@ if ($r) {
         || (int) scalar("SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                          LEFT JOIN item i ON i.id=bp.item_id LEFT JOIN auftrag au ON au.id=bp.auftrag_id
                          LEFT JOIN produkt pr ON pr.id=au.produkt_id
-                         WHERE b.lieferant_id=? AND (i.rezeptur_id=? OR au.rezeptur_id=? OR pr.rezeptur_id=?)", [$lid, $rid, $rid, $rid]) > 0;
+                         WHERE b.lieferant_id=? AND " . bestellung_portal_sichtbar_sql('b') . " AND (i.rezeptur_id=? OR au.rezeptur_id=? OR pr.rezeptur_id=?)", [$lid, $rid, $rid, $rid]) > 0;
     if (!$erlaubt) $r = null;
 }
 

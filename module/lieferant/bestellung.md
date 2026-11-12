@@ -46,3 +46,5 @@ Bereich „Labels / Aufkleber“ (core/lief_aufkleber_ui.php): Herstelldatum, Au
 
 ## Preise (13.11.2026)
 Stückpreis über `preis_anzeige()` (unter 0,01 je 1.000), Summen aus dem genauen Preis.
+
+**Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** Entwürfe (Status „offen“) erscheinen weder in der Liste noch per Link (`bestellung_portal_sichtbar_sql()`); bestätigen lassen sich nur gesendete Bestellungen.

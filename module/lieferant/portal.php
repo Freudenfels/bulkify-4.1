@@ -6,7 +6,7 @@ if (!ist_lieferant()) { header('Location: ?p=lieferant_login'); exit; }
 $lid = aktueller_lieferant_id();
 $lf  = aktueller_lieferant();
 
-$offen = all("SELECT * FROM bestellung WHERE lieferant_id=? AND status <> 'geliefert' ORDER BY angelegt DESC", [$lid]);
+$offen = all("SELECT * FROM bestellung WHERE lieferant_id=? AND status <> 'geliefert' AND " . bestellung_portal_sichtbar_sql() . " ORDER BY angelegt DESC", [$lid]);   // Entwürfe nie (Fable-3 T2.2)
 $unbestaetigt = array_values(array_filter($offen, fn($b) => (int)$b['bestaetigt'] !== 1));
 $anfragenOffen = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE lieferant_id=? AND status='offen'", [$lid]);
 $nachrNeu      = nachrichten_ungelesen($lid, 'lieferant');
