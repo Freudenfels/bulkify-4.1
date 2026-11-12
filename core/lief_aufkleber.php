@@ -181,7 +181,8 @@ function la_daten(int $id): ?array {
     if ($it) {
         try { foreach (all("SELECT parameter, wert FROM item_kennwert WHERE item_id=? ORDER BY sort, id LIMIT 6", [(int)$it['id']]) as $k) $spec[] = trim($k['parameter'] . ($k['wert'] !== null && $k['wert'] !== '' ? ': ' . $k['wert'] : '')); } catch (\Throwable $e) {}
     }
-    $lief = $a['lieferant_id'] ? one("SELECT firma, strasse, hausnummer, plz, ort, land FROM lieferanten WHERE id=?", [(int)$a['lieferant_id']]) : null;
+    // Regel Nico 13.11.2026: Der Aufkleber klebt bei uns im Lager – Lieferant nur als Lieferantennummer, nie Name oder Adresse.
+    $lief = $a['lieferant_id'] ? one("SELECT lieferantennummer, land FROM lieferanten WHERE id=?", [(int)$a['lieferant_id']]) : null;
     $lager = trim((string)($it['aufkleber_lagerung'] ?? ''));
     if ($lager === '') $lager = la_lagerung_standard();
     return [
@@ -189,8 +190,7 @@ function la_daten(int $id): ?array {
         'charge' => (string)$a['charge_nr'], 'herstell' => (string)($a['herstell_datum'] ?? ''), 'mhd' => (string)($a['mhd'] ?? ''),
         'netto' => $a['netto_kg'] !== null ? (float)$a['netto_kg'] : null, 'brutto' => $a['brutto_kg'] !== null ? (float)$a['brutto_kg'] : null,
         'stueck' => $a['stueck'] !== null ? (float)$a['stueck'] : null, 'po' => (string)$a['bestellung_nr'], 'lagerung' => $lager,
-        'hersteller' => $lief ? (string)$lief['firma'] : '',
-        'hersteller_adresse' => $lief ? trim(trim((string)$lief['strasse'] . ' ' . (string)$lief['hausnummer']) . ', ' . trim((string)$lief['plz'] . ' ' . (string)$lief['ort']) . ', ' . (string)$lief['land'], ' ,') : '',
+        'lieferant_nr' => $lief ? trim((string)$lief['lieferantennummer']) : '',
         'herkunft' => trim((string)($it['herkunftsland'] ?? '')) ?: (string)($lief['land'] ?? ''),
         'ship_to' => la_ship_to(),
     ];

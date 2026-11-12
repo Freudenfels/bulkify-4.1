@@ -13,3 +13,6 @@ nie core/schema.php).
 
 ## Schlüssel und Code-Länge (13.11.2026)
 `la_schluessel()` liest den Schlüssel nach dem Anlegen noch einmal; ohne lesbaren Schlüssel kein Druck (`la_pdf()` = null, Formular meldet es) und kein Scan (`erp_la_scan()`). Prüfteil neu 8 Hex-Zeichen, alte 5-stellige Codes bleiben gültig (`la_code_id()` prüft beide Längen).
+
+
+**Lieferantennummer statt Name (Regel Nico 13.11.2026):** Der Aufkleber klebt bei uns im Lager auf dem Gebinde. Statt „Manufacturer“ mit Firmenname und Adresse steht dort nur „Supplier no.: L-xxxx“ (`lieferant_nr` in `la_daten`). „Origin“ (Herkunftsland) bleibt.

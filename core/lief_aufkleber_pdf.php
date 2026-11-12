@@ -77,8 +77,9 @@ function la_aufkleber_zeichnen(MiniPDF $p, float $ox, float $oy, float $s, array
         $y += 1.2;
     }
     $abschnitt('Shelf life / Storage'); $zeilen($d['lagerung'], 6.8, 2); $y += 1.2;
-    $abschnitt('Manufacturer');
-    $zeilen(trim($d['hersteller'] . ($d['hersteller_adresse'] !== '' ? ', ' . $d['hersteller_adresse'] : '')), 6.8, 2);
+    // Regel Nico 13.11.2026: nur die Lieferantennummer, kein Name, keine Adresse (der Aufkleber klebt im Lager).
+    $abschnitt('Supplier');
+    $zeilen('Supplier no.: ' . (($d['lieferant_nr'] ?? '') !== '' ? $d['lieferant_nr'] : '–'), 6.8, 1);
     if ($d['herkunft'] !== '') $zeilen('Origin: ' . $d['herkunft'], 6.8, 1);
     $y += 1.2;
     $abschnitt('Ship to');
