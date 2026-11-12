@@ -650,7 +650,7 @@ if (!$neu) {
           <td><select name="p_item[]" class="pitem rscombo" data-ph="Artikel suchen (Name, Synonym) …"><?= pos_options($items, $p['item_id']) ?></select></td>
           <td><select name="p_auftrag[]" class="pauf"><?= auftrag_options($auftraege, $p['auftrag_id'] ?? '') ?></select></td>
           <td><input type="text" inputmode="decimal" class="pmenge" name="p_menge[]" value="<?= h($p['menge']!==''&&$p['menge']!==null ? rtrim(rtrim(number_format((float)$p['menge'],3,',','.'),'0'),',') : '') ?>"></td>
-          <td><input type="text" inputmode="decimal" class="pek" name="p_ek[]" value="<?= h($p['ek_preis']!==''&&$p['ek_preis']!==null ? rtrim(rtrim(number_format((float)$p['ek_preis'],4,',',''),'0'),',') : '') ?>"></td>
+          <td><input type="text" inputmode="decimal" class="pek" name="p_ek[]" value="<?= h($p['ek_preis']!==''&&$p['ek_preis']!==null ? rtrim(rtrim(number_format((float)$p['ek_preis'],6,',',''),'0'),',') : '') ?>"></td>
           <td class="bx-num psum">–</td>
           <td><button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.prow').remove();psum()">×</button></td>
         </tr>
