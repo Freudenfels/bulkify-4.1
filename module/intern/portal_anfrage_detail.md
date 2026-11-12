@@ -122,3 +122,5 @@ Bei einer Rohstoffanfrage mit zugeordnetem Rohstoff steht unter „Rohstoff-Prei
 - Bei einer Rohstoffanfrage stehen hinter „Gewünschte Menge“ die Badges „MOQ 25 kg“ und gegebenenfalls „unter MOQ“.
 - In „Rohstoff-Preis berechnen“ steht ein Hinweis mit MOQ, Notiz und angefragter Menge.
 - Das ist nur ein Hinweis, das Angebot bleibt möglich.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

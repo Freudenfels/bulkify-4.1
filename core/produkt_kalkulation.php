@@ -125,7 +125,7 @@ function produkt_kalkulation(int $pid, int $packungen = 1000): array {
         foreach ($inhalt as $z) { if ($z['preis'] === null) $voll = false; else $s += $z['preis']; if (!empty($z['abgelaufen'])) $unsicher = true; }
         return ['label' => $label, 'inhalt' => $inhalt, 'summe' => $s + $vSumme, 'inhalt_summe' => $s, 'vollstaendig' => $voll && $inhalt && !$unsicher, 'unsicher' => $unsicher];
     };
-    $fmtP = fn(float $x) => number_format($x, $x < 1 ? 4 : 2, ',', '.') . ' €';
+    $fmtP = fn(float $x) => preis_zahl($x) . ' €';   // zentrale Preis-Anzeige (13.11.2026)
 
     // ---- Weg (a): fertig zukaufen (Kapseln/Tabletten bzw. fertige Mischung) ----
     $unitsTot = $einh * $packungen;

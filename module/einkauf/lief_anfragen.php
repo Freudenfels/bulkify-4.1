@@ -91,7 +91,7 @@ if ($typ !== 'rohstoff' && $f !== 'offen') {
                          ORDER BY COALESCE(rla.stand, DATE(rla.angelegt)) DESC, l.firma, rz.name LIMIT 500", $ppArgs);
 }
 
-$eur = fn($x, $w) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',') . ' ' . h($w ?: 'EUR');
+$eur = fn($x, $w) => preis_zahl($x) . ' ' . h($w ?: 'EUR');   // zentrale Preis-Anzeige (13.11.2026)
 $menge = fn($m, $e) => $m !== null && $m !== '' ? rtrim(rtrim(number_format((float)$m, 3, ',', '.'), '0'), ',') . ($e ? ' ' . h($e) : '') : '–';
 $dat = fn($d) => $d ? fmt_zeit($d, 'd.m.Y') : '–';
 

@@ -106,3 +106,5 @@ Im Reiter Preise steht der Block „Fertigprodukte anfragen“. Er erscheint, we
 - **Im Portal:** Der Lieferant sieht nur diese Rezepturen, mit Zusammensetzung.
 
 **Mail-Filter nur voller Name/Alias (13.11.2026, Fable-3 T3.4):** Neues Feld „Weitere Namen (für Kunden ersetzt)“ (`kunden_alias`): Kurz- oder Markennamen, die Kunden nie sehen dürfen.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

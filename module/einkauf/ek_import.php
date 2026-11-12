@@ -90,7 +90,7 @@ $retQuery  = ($q !== '' ? '&q=' . urlencode($q) : '') . (isset($STATUS[$statusF]
 $preisFmt = function ($e) {
     $p = (float)$e['preis'];
     $eh = $e['einheit'] === 'kg' ? '/kg' : ($e['einheit'] === 'kapsel' ? '/Kapsel' : '/' . $e['einheit']);
-    return number_format($p, $p < 1 ? 4 : 2, ',', '.') . ' €' . $eh;
+    return preis_zahl($p) . ' €' . $eh;   // zentrale Preis-Anzeige (13.11.2026)
 };
 
 $flash = $_SESSION['ek_flash'] ?? null; unset($_SESSION['ek_flash']);

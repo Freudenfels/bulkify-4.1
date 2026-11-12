@@ -240,7 +240,7 @@ $pForm = (string)($rez['darreichungsform'] ?? 'kapsel');
 $schuett = form_groessen_einheit($pForm) !== '';
 $einh = (int)($p['einheiten_pro_packung'] ?? 0);
 $darf = has_role('admin') || has_role('einkauf') || has_role('sales') || has_role('production');
-$eur = function ($x) { $x = (float)$x; return number_format($x, $x > 0 && $x < 1 ? 4 : 2, ',', '.') . ' €'; };
+$eur = function ($x) { return preis_zahl($x) . ' €'; };   // zentrale Preis-Anzeige (13.11.2026)
 $eur2 = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 $nf0 = fn($x) => number_format((float)$x, 0, ',', '.');
 $fehlt = fn(string $t = 'fehlt') => '<span style="color:var(--warn)">' . h($t) . '</span>';
@@ -567,7 +567,7 @@ if (!$istExtern):
         <div class="muted" style="font-size:12px"><?= h(implode(' · ', array_filter([$l['land'] ?? '', $z['portal'] ? 'Portal-Account' : ($z['lieferant_id'] ? 'kein Portal-Account' : ''), !empty($l['lieferzeit_tage']) ? 'Lieferzeit ' . (int)$l['lieferzeit_tage'] . ' Tage' : '', !empty($l['mindestbestellwert']) ? 'Mindestbestellwert ' . $eur2($l['mindestbestellwert']) : '', $l['ansprechpartner'] ?? '']))) ?></div>
       </div>
       <div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table"><thead><tr><th class="bx-num">ab Menge</th><th class="bx-num">Preis</th><th>Incoterm</th><th>Versand</th><th>Stand</th><th>Quelle</th><th></th></tr></thead><tbody>
-      <?php foreach ($z['staffeln'] as $s): ?><tr><td class="bx-num"><?= $s['ab'] > 0 ? $nf0($s['ab']) : '–' ?></td><td class="bx-num"><?= number_format($s['preis'], $s['preis'] < 1 ? 4 : 2, ',', '.') ?> <?= h($s['waehrung'] === 'EUR' ? '€' : $s['waehrung']) ?>/<?= h(['kapsel' => 'Kapsel', 'packung' => 'Pkg'][$s['einheit']] ?? $s['einheit']) ?><?= !empty($s['abgelaufen']) ? ' ' . bx_badge('abgelaufen', 'err') : '' ?></td>
+      <?php foreach ($z['staffeln'] as $s): ?><tr><td class="bx-num"><?= $s['ab'] > 0 ? $nf0($s['ab']) : '–' ?></td><td class="bx-num"><?= preis_zahl($s['preis']) . ('') ?> <?= h($s['waehrung'] === 'EUR' ? '€' : $s['waehrung']) ?>/<?= h(['kapsel' => 'Kapsel', 'packung' => 'Pkg'][$s['einheit']] ?? $s['einheit']) ?><?= !empty($s['abgelaufen']) ? ' ' . bx_badge('abgelaufen', 'err') : '' ?></td>
         <td><?= $s['incoterm'] !== '' ? h($s['incoterm']) : '–' ?></td><td><?= $s['versandart'] !== '' ? h($VERSZ[$s['versandart']] ?? $s['versandart']) : '–' ?></td><td><?= $s['stand'] ? h(date('d.m.Y', strtotime($s['stand']))) : '–' ?></td><td class="muted"><?= h($s['quelle']) ?></td>
         <td style="text-align:right"><?php if ($s['id'] && $darf): ?><form method="post" style="display:inline" onsubmit="return confirm('Zukaufpreis löschen?');"><input type="hidden" name="aktion" value="zk_preis_del"><input type="hidden" name="preis_id" value="<?= $s['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">×</button></form><?php endif; ?></td></tr><?php endforeach; ?>
       </tbody></table></div>

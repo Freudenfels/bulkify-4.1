@@ -703,3 +703,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** `produktion_rest()` kennt „Rest storniert“ (kein Phantombestand). `einlager_buchen($pa, $wer, $grund)` lehnt ab, solange eine Unter-Charge läuft; `produktion_fertigware_einbuchen()` schreibt „Rest … ohne Unter-Charge eingebucht (Einlagern): Charge …“ ins Chargenprotokoll. MHD und Wareneingang in Ortszeit (T1.7).
 
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** `kunde_finden_fuzzy()` per Kundennummer ohne gesperrte; `kunde_finden_oder_anlegen()` verwendet einen gesperrten Kunden nicht und legt ihn auch nicht doppelt an (id 0, `gesperrt`). Express-Bestellungen nie an gesperrte Lieferanten.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

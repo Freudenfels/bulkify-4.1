@@ -200,9 +200,7 @@ if (!$pa) { render_header('portal_anfragen','Anfrage'); bx_head('Anfrage nicht g
 
 $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ',');
 // Preis mit Sub-Cent-Genauigkeit: mind. 2, bis 4 Nachkommastellen (Lieferanten-Kapselpreise wie 0,0325 nicht auf 0,03 runden).
-$preis4 = function($x) { $s = rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',');
-    if (strpos($s, ',') === false) return $s . ',00';
-    $d = strlen($s) - strpos($s, ',') - 1; return $d < 2 ? $s . str_repeat('0', 2 - $d) : $s; };
+$preis4 = fn($x) => preis_zahl($x);   // zentrale Preis-Anzeige (13.11.2026: bis 6 Stellen)
 $stBadge = fn($s) => match ($s) { 'neu'=>bx_badge('neu','info'),'in_bearbeitung'=>bx_badge('in Bearbeitung','warn'),'beantwortet'=>bx_badge('Angebot abgegeben','ok'),'abgelehnt'=>bx_badge('abgelehnt','err'),default=>bx_badge($s) };
 // Bereits abgegebene Angebote zu dieser Anfrage (Verknüpfung über Notiz-Präfix "Aus Anfrage <Nr>")
 // Angebote zur Anfrage: bevorzugt über anfrage_id (sauber), zusätzlich über die alte Notiz-Konvention.
@@ -357,7 +355,7 @@ if ($darfAbsage && $pa['typ'] === 'rohstoff'): ?>
     $menge = (float)($pa['wunsch_menge'] ?? 0);
     $bezug = $pa['rohstoff_bezug'] ?: ($pa['wunsch_einheit'] ?: 'Einheit');
     $rohliste = all("SELECT id, name, artikelnummer FROM item WHERE kategorie='rohstoff' AND gesperrt=0 ORDER BY name");
-    $prz = fn($x) => $x === null ? '–' : number_format((float)$x, ((float)$x < 1 ? 4 : 2), ',', '.') . ' EUR';
+    $prz = fn($x) => $x === null ? '–' : preis_zahl($x) . ' EUR';
 ?>
 <div class="bx-panel">
   <h2>Rohstoff-Preis berechnen</h2>

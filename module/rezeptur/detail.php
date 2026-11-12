@@ -498,7 +498,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
   $mk = rezeptur_materialkosten((int)$id, $mkBatch);
   $ewMg = (float)$mk['einwaage_mg'];
   $mgTxt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
-  $eur4  = fn($x) => number_format((float)$x, 4, ',', '.');
+  $eur4  = fn($x) => preis_zahl($x);   // zentrale Preis-Anzeige (13.11.2026)
   $eur2  = fn($x) => number_format((float)$x, 2, ',', '.');
 ?>
 <div class="bx-panel" id="materialkosten">
@@ -686,7 +686,7 @@ document.getElementById('bxDocOverlay').addEventListener('click', function(e){ i
 
 <?php // Wo wurde diese Rezeptur als Fertigprodukt (Fremdfertigung) angefragt? Schnell sehen, ob schon angefragt.
   $prodAnfragen = $neu ? [] : anfrage_produkt_anfragen((int)$id);
-  if ($prodAnfragen): $eurRz = fn($x) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',') . ' €'; ?>
+  if ($prodAnfragen): $eurRz = fn($x) => preis_zahl($x) . ' €'; ?>
 <div class="bx-panel">
   <h2 style="margin-top:0">Fremdfertigung angefragt bei <?= bx_hint('Bei welchen Lohnherstellern diese Rezeptur als Fertigprodukt angefragt wurde – mit Status und (falls vorhanden) dem angebotenen Preis. Solange noch kein Preis abgegeben wurde, kannst du die Anfrage hier zurückziehen.') ?></h2>
   <?php if (isset($_GET['anfzurueck'])): ?><div class="badge-ok" style="padding:8px 12px;margin-bottom:10px">Anfrage zurückgezogen.</div><?php endif; ?>
@@ -724,7 +724,7 @@ document.getElementById('bxDocOverlay').addEventListener('click', function(e){ i
       <?php foreach ($kundenpreise as $kp): ?>
         <tr>
           <td><?= $kp['firma'] ? kunde_link((int)$kp['kunde_id'], $kp['firma']) : '<span class="muted">–</span>' ?><?= $kp['kundennummer'] ? ' <span class="muted" style="font-size:11px">' . h($kp['kundennummer']) . '</span>' : '' ?></td>
-          <td class="bx-num"><?= (float)$kp['vk'] > 0 ? '<strong>' . number_format((float)$kp['vk'], 4, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= (float)$kp['vk'] > 0 ? '<strong>' . preis_zahl($kp['vk']) . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= (int)$kp['stueck_je_packung'] > 0 ? (int)$kp['stueck_je_packung'] : '<span class="muted">–</span>' ?></td>
           <td class="bx-num"><?= (int)$kp['menge'] > 0 ? number_format((int)$kp['menge'], 0, ',', '.') : '<span class="muted">–</span>' ?></td>
           <td><?= $kp['datum'] ? h(date('d.m.Y', strtotime((string)$kp['datum']))) : '<span class="muted">–</span>' ?></td>
@@ -745,7 +745,7 @@ document.getElementById('bxDocOverlay').addEventListener('click', function(e){ i
       <?php foreach ($liefAngebote as $la): ?>
         <tr>
           <td><?= $la['firma'] ? h($la['firma']) : '<span class="muted">–</span>' ?></td>
-          <td class="bx-num"><?= $la['preis'] !== null && (float)$la['preis'] > 0 ? '<strong>' . number_format((float)$la['preis'], 4, ',', '.') . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
+          <td class="bx-num"><?= $la['preis'] !== null && (float)$la['preis'] > 0 ? '<strong>' . preis_zahl($la['preis']) . ' &euro;</strong>' : '<span class="muted">–</span>' ?></td>
           <td><?= $la['einheit'] ? h($la['einheit']) : '<span class="muted">–</span>' ?></td>
           <td><?= ($la['status'] ?? '') === 'angenommen' ? bx_badge('angenommen', 'ok') : bx_badge($la['status'] ?: 'offen', 'info') ?><?= !empty($la['angenommen_am']) ? ' <span class="muted" style="font-size:11px">' . h(date('d.m.Y', strtotime((string)$la['angenommen_am']))) . '</span>' : '' ?></td>
         </tr>

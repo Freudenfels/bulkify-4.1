@@ -277,10 +277,7 @@ $rolleBadge = fn($r) => bx_badge($r, $r === 'Fertigware' ? 'info' : '');
 // Lieferantenpreise bis zu 4 Nachkommastellen + Währung (viele China-Lieferanten in USD, nicht EUR).
 // Nachlaufende Nullen werden gekürzt (mind. 2 Nachkommastellen): 96,5000 -> 96,50; Sub-Cent wie 0,0345 bleibt.
 $preis4 = function($p, $cur = 'EUR') {
-    $s = number_format((float)$p, 4, ',', '.');
-    $s = rtrim($s, '0');                               // nachlaufende Nullen weg (Komma bleibt stehen)
-    [$g, $d] = array_pad(explode(',', $s), 2, '');
-    return $g . ',' . str_pad($d, 2, '0') . ' ' . h((string)($cur ?: 'EUR'));   // mind. 2 Nachkommastellen
+    return preis_zahl($p) . ' ' . h((string)($cur ?: 'EUR'));   // zentrale Preis-Anzeige (13.11.2026: bis 6 Stellen)
 };
 $sum2   = fn($p, $cur = 'EUR') => number_format((float)$p, 2, ',', '.') . ' ' . h((string)($cur ?: 'EUR'));   // Gesamtsumme: 2 Nachkommastellen
 $eurShort = $preis4;   // Rückwärtskompatibel: alte Aufrufe ohne Währung -> EUR

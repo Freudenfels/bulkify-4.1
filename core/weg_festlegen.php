@@ -18,7 +18,7 @@ function beschaffungsweg_karten(int $auftrag_id, string $zurueck = '', bool $pop
     $bwE = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
     $bwLink = fn(array $r) => !empty($r['item_id']) ? '<a href="?p=rohstoff&id=' . (int)$r['item_id'] . '&tab=ek" title="Rohstoff öffnen (Preise, Preis anfragen)"' . $bwTgt . '>' . h((string)$r['name']) . '</a>'
         : (!empty($r['link']) ? '<a href="' . h((string)$r['link']) . '"' . $bwTgt . '>' . h((string)$r['name']) . '</a>' . (!empty($r['hinweis']) ? ' <span class="muted" style="font-size:12px">(' . h((string)$r['hinweis']) . ')</span>' : '') : h((string)$r['name']));
-    $bwPreis = fn($x) => (float)$x < 1 ? number_format((float)$x, 4, ',', '.') . ' €' : number_format((float)$x, 2, ',', '.') . ' €';
+    $bwPreis = fn($x) => preis_zahl($x) . ' €';   // zentrale Preis-Anzeige (13.11.2026)
     $bwKost = [];
     foreach ($bw['wege'] as $k => $w) {
         if ($k === 'rohstoffe') { if (!$w['luecke'] && $w['gesamt'] > 0) $bwKost[$k] = $w['gesamt']; }   // abgelaufen: Summe zählt, steht aber als „unsicher" da

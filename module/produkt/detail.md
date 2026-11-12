@@ -61,3 +61,5 @@ Ein Weg mit abgelaufenem Rohstoffpreis zeigt „unsicher: Preis abgelaufen“ st
 **Abgelaufene Preise (Block D, 11.11.2026):** Im Reiter Beschaffung tragen abgelaufene Zukauf-/Premix-Staffeln den Badge „abgelaufen“. Rohstoffpreise zeigen „abgelaufen seit …“ statt „günstigster“.
 
 **Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

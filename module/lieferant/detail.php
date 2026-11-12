@@ -237,7 +237,7 @@ $l_angTabelle = function($rows) use ($l_sym) {
     if (!$rows) echo '<tr><td colspan="5" class="muted">Noch keine Angebote von diesem Lieferanten. Anfragen stellen Sie unten im Bereich „Preisanfragen".</td></tr>';
     foreach ($rows as $r) {
         $pb = (int)($r['preis_basis'] ?? 1) === 1000 ? 1000 : 1;
-        $preis = $r['preis'] !== null ? number_format((float)$r['preis'], 4, ',', '.') . ' ' . h($l_sym((string)($r['ang_waehrung'] ?? 'EUR'))) . ' / ' . ($pb === 1000 ? '1.000 ' : '') . h($r['einheit'] ?: '–') : '–';
+        $preis = $r['preis'] !== null ? preis_zahl($r['preis']) . ' ' . h($l_sym((string)($r['ang_waehrung'] ?? 'EUR'))) . ' / ' . ($pb === 1000 ? '1.000 ' : '') . h($r['einheit'] ?: '–') : '–';
         $terms = array_filter([(string)($r['incoterm'] ?? ''), !empty($r['versandart']) ? ($VERSL[$r['versandart']] ?? $r['versandart']) : '']);
         $st = ($r['ang_status'] ?? '') === 'angenommen' ? bx_badge('übernommen', 'ok') : bx_badge('offen', 'info');
         echo '<tr><td>' . h($r['nummer']) . '</td><td>' . h($r['bez'] ?: '–') . '</td><td class="bx-num">' . $preis . '</td><td class="muted">' . ($terms ? h(implode(' · ', $terms)) : '–') . '</td><td>' . $st . '</td></tr>';
@@ -345,7 +345,7 @@ if (!$neu) {
       <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Rohstoff</th><th class="bx-num">Preis</th><th>Stand</th></tr></thead><tbody>
         <?php foreach ($l_preisliste as $pr): ?>
           <tr><td><?= h($pr['rohstoff_name']) ?></td>
-              <td class="bx-num"><?= $pr['eur_kg'] !== null ? h(rtrim(rtrim(number_format((float)$pr['eur_kg'], 4, ',', '.'), '0'), ',')) . ' ' . h($l_cur) . ' / ' . h($pr['einheit'] ?: 'kg') : '<span class="muted">–</span>' ?></td>
+              <td class="bx-num"><?= $pr['eur_kg'] !== null ? h(preis_zahl($pr['eur_kg'])) . ' ' . h($l_cur) . ' / ' . h($pr['einheit'] ?: 'kg') : '<span class="muted">–</span>' ?></td>
               <td class="muted" style="font-size:12px"><?= $pr['stand'] ? h(date('d.m.Y', strtotime((string)$pr['stand']))) : '–' ?></td></tr>
         <?php endforeach; ?>
       </tbody></table></div>
@@ -359,7 +359,7 @@ if (!$neu) {
         <?php foreach ($l_fremd as $f): ?>
           <tr>
             <td><?= $f['rez_nr'] ? h((string)$f['rez_nr']) . ' · ' : '' ?><?= h((string)($f['rez_name'] ?: '–')) ?></td>
-            <td class="bx-num"><?= $f['preis'] !== null ? h(rtrim(rtrim(number_format((float)$f['preis'], 4, ',', '.'), '0'), ',')) . ' ' . h($l_cur) . ' ' . ($f['einheit'] ? '/ ' . h((string)$f['einheit']) : '') : '<span class="muted">–</span>' ?></td>
+            <td class="bx-num"><?= $f['preis'] !== null ? h(preis_zahl($f['preis'])) . ' ' . h($l_cur) . ' ' . ($f['einheit'] ? '/ ' . h((string)$f['einheit']) : '') : '<span class="muted">–</span>' ?></td>
             <td class="bx-num"><?= $f['menge'] !== null ? h(rtrim(rtrim(number_format((float)$f['menge'], 3, ',', '.'), '0'), ',')) : '–' ?></td>
             <td><?= (($f['status'] ?? '') === 'angenommen' || !empty($f['angenommen_am'])) ? bx_badge('angenommen', 'ok') : bx_badge('erfasst', 'info') ?></td>
             <td class="muted" style="font-size:12px"><?= !empty($f['stand']) ? h(date('d.m.Y', strtotime((string)$f['stand']))) : '–' ?></td>

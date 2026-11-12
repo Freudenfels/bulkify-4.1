@@ -366,7 +366,7 @@ if (isset($_GET['aufg']))      echo '<div class="bx-panel badge-ok" style="paddi
       <tr><td><?= h($t['bez']) ?><?= $t['einheit'] !== '' ? ' <span class="muted">(' . h($t['einheit']) . ')</span>' : '' ?></td>
           <td><?= $itName !== '' ? h($itName) : '<span style="color:#8f231b">nicht gefunden – unten Artikel wählen</span>' ?></td>
           <td class="bx-num"><?= $t['menge'] > 0 ? h(rtrim(rtrim(number_format($t['menge'],3,',','.'),'0'),',')) : '–' ?></td>
-          <td class="bx-num"><?= $t['ek'] !== '' ? h(number_format((float)$t['ek'],4,',','.')) . ' &euro;' : '–' ?></td></tr>
+          <td class="bx-num"><?= $t['ek'] !== '' ? h(preis_zahl($t['ek'])) . ' &euro;' : '–' ?></td></tr>
     <?php endforeach; ?>
     </tbody>
   </table></div>

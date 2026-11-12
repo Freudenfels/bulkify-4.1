@@ -35,3 +35,5 @@ Neuer Reiter **Lager** (vorher gab es auf der Verpackungsseite gar keinen Bestan
 EK- und VK-Staffel: Textfeld mit Auswahl „je Stk“ / „je 1.000 Stk“ (`preis_eingabe_lesen()`), gespeichert mit 6 Nachkommastellen. 2,95 je 1.000 Stk = 0,00295 je Stk.
 
 **Zahlenfelder des Browsers (13.11.2026, Fable-3 T1.3):** Felder mit `type="number"` senden immer den Punkt als Dezimaltrenner. Sie werden mit `(float)` gelesen, nie mit dem deutschen Mengen-Parser (sonst würde „2,125“ zu 2125). Hier: max. Füllgewicht (g) und Volumen (ml).
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

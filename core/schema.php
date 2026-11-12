@@ -6656,8 +6656,15 @@ function preis_spalten_sechs_stellen(): void {
 // $bezug = Bezugseinheit (Stk, kg …). Ab 0,01 wie bisher (2 bzw. 4 Stellen).
 function preis_anzeige(float $p, string $waehrung = 'EUR', string $bezug = 'Stk'): string {
     $w = strtoupper($waehrung) === 'EUR' ? '€' : $waehrung;
-    if ($p > 0 && $p < 0.01) return rtrim(rtrim(number_format($p * 1000, 4, ',', '.'), '0'), ',') . ' ' . $w . ' / 1.000 ' . $bezug;
-    return number_format($p, $p < 1 ? 4 : 2, ',', '.') . ' ' . $w . '/' . $bezug;
+    if ($p > 0 && $p < 0.01) return preis_zahl($p * 1000) . ' ' . $w . ' / 1.000 ' . $bezug;
+    return preis_zahl($p) . ' ' . $w . '/' . $bezug;
+}
+// Preis als Zahl für die Anzeige (Fable-3 T4.7, 13.11.2026) – EINE Regel für alle Preis-Anzeigen: bis 6 Nachkommastellen,
+// Nullen am Ende weg, mindestens 2 (0,00295 · 0,0123 · 12,50 · 96,50). Nie auf 4 Stellen gerundet (Leerkapseln 0,00295).
+function preis_zahl($p): string {
+    $t = rtrim(number_format((float)$p, 6, ',', '.'), '0');
+    [$g, $d] = array_pad(explode(',', $t, 2), 2, '');
+    return $g . ',' . str_pad($d, 2, '0');
 }
 // Preis-Eingabe „je Stk / je 1.000 Stk" lesen (Textfeld + Auswahl, wie im Lieferantenportal). Ergebnis je Bezugseinheit.
 function preis_eingabe_lesen(string $roh, string $basis): float {

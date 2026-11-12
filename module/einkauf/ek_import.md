@@ -66,3 +66,5 @@ Logik in `core/ek_ki.php`. Der manuelle Pfad ist überall verifiziert; der KI-Pf
 identisch, nur mit KI-Vorschlag statt Handeingabe.
 
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Rohstoff-Vorschlagsliste ohne gesperrte Artikel.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

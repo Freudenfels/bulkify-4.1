@@ -113,3 +113,5 @@ Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artik
 **Stornierte Bestellung (13.11.2026, Fable-3 T2.8):** Die Spalte „offen“ zeigt 0 (nichts mehr unterwegs).
 
 **Doppel-Warnung (13.11.2026, Fable-3 T2.10):** Nach der Warnung steht das Formular „Neue Bestellung“ wieder mit den Eingaben da (`bestellung_doppelt_vorbelegung()`); „Abbrechen“ leert nichts.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

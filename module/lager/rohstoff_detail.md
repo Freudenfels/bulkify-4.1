@@ -243,3 +243,5 @@ Unter der Stammdaten-Tabelle des KI-Vorschlags steht jetzt „Wirkstoffgehalt la
 **Zahlenfelder des Browsers (13.11.2026, Fable-3 T1.3):** Felder mit `type="number"` senden immer den Punkt als Dezimaltrenner. Sie werden mit `(float)` gelesen, nie mit dem deutschen Mengen-Parser (sonst würde „2,125“ zu 2125). Hier: Fremdlager umbuchen (`fl_menge`) und „ab Menge“ eines Lieferantenpreises (`lp_menge_ab`).
 
 **Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

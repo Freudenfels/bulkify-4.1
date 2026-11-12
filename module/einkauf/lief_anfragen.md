@@ -44,3 +44,5 @@ Nico hat gemeldet: Ein Lieferant hatte auf seiner Seite „Fertigprodukt-Preise�
 
 ## Preis-Gültigkeit (11.11.2026)
 Unter dem Angebotspreis steht „gültig bis …“ bzw. „abgelaufen seit …“, wenn der Lieferant ein Datum angegeben hat.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.

@@ -285,8 +285,8 @@ if (!$neu) {
               $vk = ($ovr !== null && $ovr !== false) ? (float)$ovr : $ek*(1+$effAuf/100); ?>
           <tr>
             <td class="bx-num"><?= number_format($mab,0,',','.') ?></td>
-            <td class="bx-num"><?= number_format($ek,4,',','.') ?> €</td>
-            <td class="bx-num"><strong><?= number_format($vk,4,',','.') ?> €</strong></td>
+            <td class="bx-num"><?= preis_zahl($ek) ?> €</td>
+            <td class="bx-num"><strong><?= preis_zahl($vk) ?> €</strong></td>
             <td><?= ($ovr !== null && $ovr !== false) ? bx_badge('fester VK','info') : ('Aufschlag '.rtrim(rtrim(number_format($effAuf,2,',','.'),'0'),',').' %') ?></td>
           </tr>
           <?php endforeach; ?>
@@ -457,7 +457,7 @@ if (!$neu) {
         <thead><tr><th class="bx-num">ab Menge (Etiketten)</th><th class="bx-num">Gesamtpreis (€)</th><th class="bx-num">EK je Etikett</th></tr></thead>
         <tbody id="etrows">
           <?php $etrows = $etikettstaffel ?: [['menge_ab'=>'','ek_gesamt'=>'','ek_stueck'=>null]]; foreach ($etrows as $et):
-              $stk = ($et['ek_stueck']!==null && $et['ek_stueck']!=='') ? number_format((float)$et['ek_stueck'],4,',','.').' &euro;' : '&ndash;'; ?>
+              $stk = ($et['ek_stueck']!==null && $et['ek_stueck']!=='') ? preis_zahl($et['ek_stueck']).' &euro;' : '&ndash;'; ?>
           <tr>
             <td class="bx-num"><input type="number" min="0" step="1" name="et_menge_ab[]" value="<?= h((string)$et['menge_ab']) ?>" style="max-width:160px;text-align:right"></td>
             <td class="bx-num"><input type="number" min="0" step="0.01" name="et_gesamt[]" value="<?= ($et['ek_gesamt']!=='' && $et['ek_gesamt']!==null) ? (float)$et['ek_gesamt'] : '' ?>" style="max-width:140px;text-align:right"></td>

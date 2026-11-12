@@ -1770,7 +1770,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
         <tbody><?php foreach ($pvAlle as $pv): ?>
           <tr<?= !$pv['_aktuell'] ? ' style="opacity:.7"' : '' ?>><td><?= $pv['stand'] ? h(date('d.m.Y', strtotime((string)$pv['stand']))) : '–' ?></td><td><?= h((string)($pv['firma'] ?: '–')) ?></td>
             <td class="bx-num"><?= rtrim(rtrim(number_format((float)$pv['menge_ab'], 3, ',', '.'), '0'), ',') ?></td>
-            <td class="bx-num"><?= number_format((float)$pv['preis'], (float)$pv['preis'] < 1 ? 4 : 2, ',', '.') ?> <?= h((string)($pv['waehrung'] ?: 'EUR')) ?></td>
+            <td class="bx-num"><?= preis_zahl($pv['preis']) ?> <?= h((string)($pv['waehrung'] ?: 'EUR')) ?></td>
             <td><?= pg_anzeige($pv['gueltig_bis'] ?? null) ?></td><td class="muted" style="font-size:12px"><?= $pv['_aktuell'] ? 'aktuell' : 'ersetzt ' . h(fmt_zeit($pv['archiviert_am'], 'd.m.Y')) ?></td></tr>
         <?php endforeach; ?></tbody>
       </table></div>

@@ -42,3 +42,5 @@ Einheitliche Kundenanzeige auf der Produktseite: „Kürzel (Firma)", z. B. „F
 - Ein abgelaufener Rohstoffpreis setzt die Zeile auf `abgelaufen` und den Weg auf `unsicher`, „vollständig“ ist dann nein.
 
 **Abgelaufene Preise (Block D, 11.11.2026):** Zukauf-, Rezeptur- und Premix-Wege geben den Kontext für den Hinweis „abgelaufen“ weiter. Gesperrte Lieferanten sind ausgenommen. In der Beschaffungsübersicht sind abgelaufene Staffeln und Rohstoffpreise markiert und stehen hinten.
+
+**Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.
