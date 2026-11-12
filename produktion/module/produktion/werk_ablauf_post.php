@@ -68,6 +68,7 @@ if ($aktion === 'wa_scan') {
         }
     }
     if (($s['status'] ?? '') === 'quarantaene') { $flash(sprintf($T['wa_fl_quarantine'], $s['name'], $s['charge_nr']), false); weiter($zur); }
+    if (($tf = pa_uc_tag_pruefen($uc)) !== '') { $flash($tf, false); weiter($zur); }   // 13.11.2026: Tagesregel serverseitig
     pa_scan_merken($paId, (int)$uc['id'], $rolle, $s['item_id'], $s['charge_id'], $s['gebinde_id'], $code, $von, $s['prod_charge_id']);
     $flash(sprintf($T['wa_fl_scanned'], $s['name'], $s['charge_nr']), true); weiter($zur);
 }

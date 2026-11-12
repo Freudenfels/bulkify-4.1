@@ -41,3 +41,6 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 
 ## Quarantäne-Bulk (13.11.2026)
 `pa_starten()` prüft den Status der Bulk-Charge: Quarantäne oder gesperrt = keine Unter-Charge (Start, Wiederanlauf, Nachtrag), Meldung „erst nach der QM-Freigabe produzieren“.
+
+## Tagesregel serverseitig (13.11.2026)
+`pa_uc_tag_pruefen($uc, $tag)`: Gehört die laufende Unter-Charge zu einem anderen Produktionstag (Berlin), bucht weder `pa_teilmenge_buchen()` (Nachtrag: gewähltes Datum) noch `pa_karton_anlegen()` noch der Scan in der Werk-App. Meldung „Neuer Tag - bitte neu starten“.

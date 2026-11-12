@@ -174,6 +174,15 @@ function pa_uc_tag(array $uc): string {
     try { return (new DateTime((string)$uc['angelegt'] . ' UTC'))->setTimezone(new DateTimeZone('Europe/Berlin'))->format('Y-m-d'); }
     catch (\Throwable $e) { return substr((string)$uc['angelegt'], 0, 10); }
 }
+// Tagesregel serverseitig (13.11.2026): eine Unter-Charge gehört zu GENAU einem Produktionstag (Berlin). Läuft sie von einem anderen
+// Tag, wird nichts gebucht (Teilmenge, Karton, Scan) – an einem neuen Tag gibt es einen neuen Buchstaben, also neu starten.
+// '' = gleicher Tag, sonst die Meldung. $tag: Buchungstag (Nachtrag: das gewählte Datum), sonst heute.
+function pa_uc_tag_pruefen(array $uc, ?string $tag = null): string {
+    $tag = $tag ?: pa_tag_heute();
+    $ucTag = pa_uc_tag($uc);
+    if ($ucTag === '' || $ucTag === $tag) return '';
+    return 'Neuer Tag - bitte neu starten. Die laufende Unter-Charge ' . (string)$uc['charge_nr'] . ' ist vom ' . date('d.m.Y', strtotime($ucTag)) . '; an einem neuen Produktionstag gibt es einen neuen Buchstaben.';
+}
 function pa_vorgabe(int $pa_id, int $bulk_charge_id = 0, int $prod_charge_id = 0, ?string $tag = null): array {
     $akt = pa_aktuelle_unter_charge($pa_id);
     $tag = ($tag !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/', $tag)) ? $tag : pa_tag_heute();
@@ -258,6 +267,8 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok' => false, 'msg' => 'Produktionsauftrag nicht gefunden.'];
     if ((string)$pa['status'] === 'vorbereitung') return ['ok' => false, 'msg' => 'Der Auftrag ist noch nicht freigegeben (Beschaffungsweg offen).'];
+    $tagB = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($o['datum'] ?? '')) ? (string)$o['datum'] : pa_tag_heute();
+    if (($tf = pa_uc_tag_pruefen($uc, $tagB)) !== '') return ['ok' => false, 'msg' => $tf];   // 13.11.2026: Tagesregel serverseitig
     $menge = round($menge);
     if ($menge <= 0) return ['ok' => false, 'msg' => 'Bitte eine Menge größer 0 angeben.'];
     $gebucht = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
@@ -341,6 +352,7 @@ function pa_karton_anlegen(int $pa_id, int $uc_id, float $menge, string $von): a
     pa_schema();
     $uc = pa_unter_charge($uc_id);
     if (!$uc || (int)$uc['pa_id'] !== $pa_id) return ['ok' => false, 'msg' => 'Keine laufende Unter-Charge.'];
+    if (($tf = pa_uc_tag_pruefen($uc)) !== '') return ['ok' => false, 'msg' => $tf];   // 13.11.2026: Tagesregel serverseitig
     $menge = round($menge);
     if ($menge <= 0) return ['ok' => false, 'msg' => 'Bitte die Menge im Karton angeben.'];
     $nr = (int) scalar("SELECT COALESCE(MAX(nummer),0)+1 FROM pa_karton WHERE pa_id=?", [$pa_id]);
