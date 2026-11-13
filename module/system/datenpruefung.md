@@ -161,3 +161,5 @@ Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführ
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 „Rohstoff angefragt ohne Dokument“: Knöpfe in der Zeile – Unterlage hochladen (CoA/Spec) oder bei allen angefragten Lieferanten über das Portal anfordern.
+
+**Voll produziert / Linie leer (13.11.2026, Werk-App Teil 3):** Neue Prüfung „PA voll produziert, Produktionsschritte offen“ mit Knopf „Schritte erledigen“ (Pflicht-Grund, `pa_voll_produziert_erledigen()`). Beheben-Knöpfe können `grund_pflicht` haben: dann Feld „Grund (Pflicht)“, der Grund geht an die Aktion.

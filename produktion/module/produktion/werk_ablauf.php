@@ -57,7 +57,7 @@ $kap = erp_wa_kapsel_info($id);
       <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="aktion" value="wa_start"><input type="hidden" name="pa_id" value="<?= (int)$id ?>"><input type="hidden" name="bulk_code" value="<?= h($bulkCode) ?>">
         <div class="wa-zeile"><span><?= h($T['wa_line']) ?></span><select name="linie"><?php foreach ($linien as $l): ?><option<?= $l === $linieVor ? ' selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?></select></div>
-        <div class="wa-pflicht"><?= h($T['wa_line_empty']) ?> – <b><?= h($T['wa_photo']) ?></b> <input type="file" name="foto_linie" accept="image/*" capture="environment" required></div>
+        <div class="wa-pflicht"><label style="display:flex;gap:12px;align-items:center;cursor:pointer"><input type="checkbox" name="linie_leer" value="1" required style="width:28px;height:28px"> <?= h($T['wa_line_empty']) ?></label></div>
         <div class="wa-pflicht"><?= h(sprintf($T['wa_stamp_check'], (string)$v['charge_nr'], $fdate($v['mhd']))) ?> – <b><?= h($T['wa_photo_stamp']) ?></b> <input type="file" name="foto_stempel" accept="image/*" capture="environment" required></div>
         <?php if (!empty($v['neu'])): ?>
         <details style="margin:10px 0"><summary class="muted" style="cursor:pointer"><?= h($T['wa_deviate']) ?></summary>

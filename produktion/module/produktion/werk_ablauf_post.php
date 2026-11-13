@@ -40,10 +40,10 @@ if ($aktion === 'wa_start') {
         }
         pa_ereignis($paId, $uc ? (int)$uc['id'] : null, 'abweichung', 'Jüngere Bulk-Charge ' . $s['charge_nr'] . ' vor älterer ' . $alt . ' verwendet (Admin-Ausnahme). Grund: ' . $aGrund, '', '', '', $von);
     }
-    $fl = pa_foto_speichern($_FILES['foto_linie'] ?? [], 'linie' . $paId);
+    // 13.11.2026 (Teil 3.4): „Linie leer“ ist ein Haken (linie_leer), kein Foto mehr; das Stempelfoto bleibt Pflicht.
     $fs = pa_foto_speichern($_FILES['foto_stempel'] ?? [], 'stempel' . $paId);
     $r = pa_starten($paId, ['bulk_charge_id' => $s['charge_id'], 'prod_charge_id' => $s['prod_charge_id'], 'linie' => (string)($_POST['linie'] ?? ''),
-        'foto_linie' => $fl, 'foto_stempel' => $fs, 'charge_nr' => (string)($_POST['charge_nr'] ?? ''), 'abweichung_grund' => (string)($_POST['grund'] ?? '')], $von);
+        'linie_leer' => !empty($_POST['linie_leer']), 'foto_stempel' => $fs, 'charge_nr' => (string)($_POST['charge_nr'] ?? ''), 'abweichung_grund' => (string)($_POST['grund'] ?? '')], $von);
     if ($r['ok']) pa_scan_merken($paId, (int)$r['unter_charge_id'], $s['prod_charge_id'] ? 'eimer' : 'bulk', $s['item_id'], $s['charge_id'], $s['gebinde_id'], (string)$_POST['bulk_code'], $von, $s['prod_charge_id']);
     $flash($r['ok'] ? ($r['neu'] ? sprintf($T['wa_fl_started'], $r['charge_nr'], date('d.m.Y', strtotime($r['mhd']))) : sprintf($T['wa_fl_continue'], $r['charge_nr'])) : $r['msg'], $r['ok']);
     weiter($zur . ($r['ok'] ? '' : '&bulk=' . rawurlencode((string)($_POST['bulk_code'] ?? ''))));

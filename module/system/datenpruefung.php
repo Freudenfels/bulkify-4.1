@@ -516,6 +516,26 @@ $CHECKS = [
                 return 1; }],
         ],
     ],
+    // Werk-App Teil 3 (13.11.2026): Altbestand – voll produziert, aber Produktionsschritte offen (z. B. PR-2739 2.500 von 2.500, Schritt 1 von 6).
+    // Nicht automatisch umgestellt; Knopf „Schritte erledigen“ (Admin, Pflicht-Grund) – gleiche Funktion wie bei der Buchung.
+    'pa_voll_schritte_offen' => [
+        'titel' => 'PA voll produziert, Produktionsschritte offen',
+        'info'  => 'Produktionsaufträge, bei denen die gebuchte Fertigware das Soll erreicht, aber Produktionsschritte (vor den QM-Stationen) noch offen sind. „Schritte erledigen“ hakt sie ab (fehlt das Etikett, bleibt Etikettieren offen), schließt die laufende Unter-Charge und vermerkt es mit Grund im Verlauf und Chargenprotokoll.',
+        'sql'   => "SELECT pa.id AS _id, CONCAT('?p=produktionsauftrag&id=', pa.id) AS _link, pa.nummer, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, r.name) AS produkt,
+                           pa.menge AS soll, (SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.pa_id=pa.id) AS produziert,
+                           (SELECT GROUP_CONCAT(s.station ORDER BY s.sort SEPARATOR ', ') FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 AND s.station NOT IN ('Qualitätsprüfung','Produktions-Freigabe','Versand-Freigabe')) AS offene_schritte
+                    FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN rezeptur r ON r.id=pa.rezeptur_id
+                    WHERE pa.status IN ('offen','laufend') AND pa.menge > 0
+                      AND (SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.pa_id=pa.id) >= pa.menge
+                      AND EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 AND s.station NOT IN ('Qualitätsprüfung','Produktions-Freigabe','Versand-Freigabe'))
+                    ORDER BY pa.id",
+        'korrektur' => "pa_voll_produziert_erledigen(<PA>, 0, <Admin>, <Grund>) – hakt die offenen Produktionsschritte ab (Etikettieren bleibt ohne freigegebenes Etikett offen).",
+        'fix'   => ['grund_pflicht' => true, 'label' => 'Schritte erledigen', 'aktion' => function (array $r, string $grund = ''): int {
+                        require_once BX_ROOT . '/core/pa_ablauf.php';
+                        $n = pa_voll_produziert_erledigen((int)$r['_id'], 0, (string)(current_user()['name'] ?? 'Admin'), $grund);
+                        if ($n > 0) aenderung_protokollieren('produktionsauftrag', (int)$r['_id'], ['schritte_offen' => (string)$r['offene_schritte']], ['schritte_erledigt' => $n, 'grund' => $grund], 'datenpruefung');
+                        return $n > 0 ? 1 : 0; }],
+    ],
     's10_bulk' => [
         'titel' => 'S-10: Bulk-Bestellungen in g/ml mit €/kg-Preis',
         'info'  => 'Bulk-Positionen in g oder ml mit einem Preis, der nach €/kg aussieht (Summe dadurch 1.000-fach). Korrektur: Menge in kg bzw. l umrechnen'
@@ -1302,9 +1322,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
     if (!empty($fix['sortiert'])) sort($sel);   // z. B. Nummern in ID-Reihenfolge vergeben
     // Eigene Korrektur je Zeile über mehrere Tabellen (protokolliert selbst), z. B. Pulver-Auftrag + PA.
     if (isset($fix['aktion'])) {
+        // 13.11.2026: Knöpfe mit Pflicht-Grund (z. B. „Schritte erledigen“) bekommen den Grund mit.
+        $dpGrund = trim((string)($_POST['dp_grund'] ?? ''));
+        if (!empty($fix['grund_pflicht']) && $dpGrund === '') { header('Location: ?p=datenpruefung' . $dpL . '&err=' . rawurlencode('Bitte einen Grund angeben.') . '#' . $key); exit; }
         $pdo = db();
         $pdo->beginTransaction();
-        try { $n = 0; foreach ($sel as $i) $n += (int)($fix['aktion'])($erlaubt[$i]); $pdo->commit(); }
+        try { $n = 0; foreach ($sel as $i) $n += (int)($fix['aktion'])($erlaubt[$i], $dpGrund); $pdo->commit(); }
         catch (\Throwable $e) { $pdo->rollBack(); header('Location: ?p=datenpruefung&err=' . rawurlencode('Fehler, nichts geändert: ' . $e->getMessage()) . '#' . $key); exit; }
         if (function_exists('bedarf_bump')) bedarf_bump();
         header('Location: ?p=datenpruefung' . $dpL . '&ok=' . rawurlencode($c['titel'] . ': ' . $n . ' Datensatz/Datensätze geändert, im Protokoll.') . '#' . $key); exit;
@@ -1450,7 +1473,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
       <div class="bx-row" style="margin-top:12px;gap:8px;flex-wrap:wrap"><?php foreach ($fixes as $fk => $fd): ?><button class="btn <?= $fk === array_key_first($fixes) ? 'btn-primary' : 'btn-ghost' ?>" type="submit" name="fix" value="<?= h($fk) ?>"><?= h($fd['label']) ?></button><?php endforeach; ?></div>
       <div class="muted" style="font-size:12px;margin-top:6px">Gilt für die angehakten Zeilen. „Rest storniert" nur bei Zeilen mit offener Menge.</div>
     <?php elseif ($fix && $waehlbarN): ?>
-      <div style="margin-top:12px"><button class="btn btn-primary" type="submit">Angehakte beheben</button></div>
+      <div style="margin-top:12px" class="bx-row"><?php if (!empty($fix['grund_pflicht'])): ?><input type="text" name="dp_grund" required placeholder="Grund (Pflicht)" style="max-width:320px"> <?php endif; ?><button class="btn btn-primary" type="submit"><?= h((string)($fix['label'] ?? 'Angehakte beheben')) ?></button></div>
     <?php endif; ?>
   </form>
   <?php endif; ?>

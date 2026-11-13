@@ -24,3 +24,5 @@ Seit 11.11.2026. Wird in der Schritt-Ansicht von `werk.php` eingebunden, wenn `e
 Ist das Etikettieren gesperrt, steht oben ein Hinweis. Teilmengen werden dann bis vor dem Etikettieren gebucht.
 
 **Sprachen (Block F, 11.11.2026):** Alle Texte des geführten Ablaufs laufen über `werk_texte()` (`wa_*`), Meldungen aus dem Kern über `werk_msg()`. Der Umschalter DE/EN/УКР wirkt auf Tagesplan, Start, Material-Scan, Kapselprobe, Kartons, Teilmenge, Abschluss und alle Meldungen.
+
+**Voll produziert / Linie leer (13.11.2026, Werk-App Teil 3):** Start/Chargenwechsel/Wiederanlauf: Haken „Linie leer, keine Reste der vorigen Charge“ statt Foto; Stempelfoto bleibt.

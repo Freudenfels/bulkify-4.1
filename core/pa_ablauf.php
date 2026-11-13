@@ -187,6 +187,34 @@ function pa_noch_offen_text(int $pa_id, bool $etikett_gesperrt = false, string $
     $st = $o['schritte'] ? implode(', ', array_map(fn($s) => $label ? $label($s) : $s, $o['schritte'])) : '–';
     return sprintf($vorlage, $st, pa_mz($o['menge'])) . ($etikett_gesperrt ? ' · ' . $etikettTxt : '');
 }
+// Voll produziert = Produktionsschritte erledigt (13.11.2026, Werk-App Teil 3). Erreicht die gebuchte Fertigware das Soll, werden alle
+// offenen Produktionsschritte (vor den QM-Stationen) erledigt, die laufende Unter-Charge abgeschlossen, Vermerk im Verlauf und im
+// Chargenprotokoll; der PA geht in die Qualitätsprüfung. Ausnahme: fehlt das Etikett bzw. ist es nicht freigegeben, bleibt
+// „Etikettieren“ offen. $grund: bei der Datenprüfung (Altbestand, Admin) Pflicht. Rückgabe: Anzahl erledigter Schritte.
+function pa_voll_produziert_erledigen(int $pa_id, int $uc_id = 0, string $von = '', string $grund = ''): int {
+    $soll = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $ist = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+    if ($soll <= 0 || $ist + 1e-6 < $soll) return 0;
+    $etSperre = (string) (pa_fn('produktion_etikett_sperre', 'erp_etikett_sperre', $pa_id) ?? '');
+    $qm = pa_qm_stationen(); $n = 0; $namen = [];
+    foreach (all("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id", [$pa_id]) as $s) {
+        if (in_array((string)$s['station'], $qm, true)) continue;
+        if ($etSperre !== '' && (string)$s['station'] === 'Etikettieren') continue;   // ohne freigegebenes Etikett bleibt Etikettieren offen
+        $n += q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=? AND erledigt=0", [gmdate('Y-m-d H:i:s'), mb_substr($von ?: 'System', 0, 100), (int)$s['id']])->rowCount();
+        $namen[] = (string)$s['station'];
+    }
+    if ($n === 0) return 0;
+    $akt = pa_aktuelle_unter_charge($pa_id);
+    if ($uc_id <= 0 && $akt) $uc_id = (int)$akt['id'];
+    if ($uc_id <= 0) $uc_id = (int) scalar("SELECT id FROM pa_unter_charge WHERE pa_id=? ORDER BY id DESC LIMIT 1", [$pa_id]);
+    $txt = 'voll produziert (' . pa_mz($ist) . ' von ' . pa_mz($soll) . ') - automatisch erledigt: ' . implode(', ', array_unique($namen))
+         . ($etSperre !== '' ? '. Etikettieren bleibt offen (Etikett fehlt/nicht freigegeben).' : '.') . ($grund !== '' ? ' Grund: ' . $grund : '');
+    pa_ereignis($pa_id, $uc_id ?: null, 'auto_erledigt', $txt, '', '', '', $von ?: 'System');
+    $aid = (int) scalar("SELECT COALESCE(auftrag_id,0) FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if ($aid > 0) pa_fn('log_aktivitaet', 'erp_log_aktivitaet', 'auftrag', $aid, 'team', 'Produktion ' . (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$pa_id]) . ': ' . $txt, 'status');
+    if ($akt) pa_unter_charge_schliessen((int)$akt['id'], $von, 'voll produziert');
+    return $n;
+}
 function pa_rest_storniert(int $pa_id): bool {
     try { return (int) scalar("SELECT COUNT(*) FROM pa_ereignis WHERE pa_id=? AND typ='abschluss' AND wert='storniert'", [$pa_id]) > 0; }
     catch (\Throwable $e) { return false; }
@@ -237,7 +265,9 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     pa_schema();
     $bulk = (int)($d['bulk_charge_id'] ?? 0); $eimer = (int)($d['prod_charge_id'] ?? 0);
     $nachtrag = !empty($d['nachtrag']);   // Nachtrag im Dashboard (Produktion ist schon gelaufen): keine Fotos möglich
-    if (!$nachtrag && (($d['foto_linie'] ?? '') === '' || ($d['foto_stempel'] ?? '') === '')) return ['ok' => false, 'msg' => 'Bitte Foto „Linie leer“ und Foto vom Stempelbild machen.'];
+    // 13.11.2026 (Teil 3.4, Entscheidung Nico): „Linie leer“ ist ein Pflicht-Haken (kein Foto mehr), das Stempelfoto bleibt Pflicht.
+    if (!$nachtrag && (empty($d['linie_leer']) || ($d['foto_stempel'] ?? '') === '')) return ['ok' => false, 'msg' => 'Bitte „Linie leer“ abhaken und das Foto vom Stempelbild machen.'];
+    $leerTxt = 'Linie leer, keine Reste der vorigen Charge – bestätigt von ' . ($von ?: 'Mitarbeiter') . ' um ' . (new DateTime('now', new DateTimeZone('Europe/Berlin')))->format('d.m.Y H:i');
     // 13.11.2026: Bulk-Charge in Quarantäne oder gesperrt startet keine Unter-Charge (auch kein Wiederanlauf/Nachtrag).
     if ($bulk > 0) {
         $bSt = one("SELECT COALESCE(charge_nr, CONCAT('#', id)) AS nr, status FROM charge WHERE id=?", [$bulk]);
@@ -248,7 +278,7 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     $v = pa_vorgabe($pa_id, $bulk, $eimer, $tag);
     $akt = pa_aktuelle_unter_charge($pa_id);
     if (!$v['neu'] && $akt) {   // gleiche Bulk-Charge am selben Tag: gleicher Buchstabe, Wiederanlauf (z. B. nach der Pause)
-        pa_ereignis($pa_id, (int)$akt['id'], 'wiederanlauf', 'Wiederanlauf ' . $akt['charge_nr'] . ': Linie leer bestätigt, Stempel auf Charge ' . $akt['charge_nr'] . ' / MHD ' . date('d.m.Y', strtotime((string)$akt['mhd'])) . ' eingestellt.', (string)($d['linie'] ?? ''), (string)$d['foto_linie'], (string)$d['foto_stempel'], $von);
+        pa_ereignis($pa_id, (int)$akt['id'], 'wiederanlauf', 'Wiederanlauf ' . $akt['charge_nr'] . ': ' . $leerTxt . '. Stempel auf Charge ' . $akt['charge_nr'] . ' / MHD ' . date('d.m.Y', strtotime((string)$akt['mhd'])) . ' eingestellt.', (string)($d['linie'] ?? ''), '', (string)$d['foto_stempel'], $von);
         return ['ok' => true, 'unter_charge_id' => (int)$akt['id'], 'charge_nr' => (string)$akt['charge_nr'], 'mhd' => (string)$akt['mhd'], 'neu' => false];
     }
     $charge = trim((string)($d['charge_nr'] ?? '')) ?: $v['charge_nr'];
@@ -266,7 +296,7 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     $uc = insert_id();
     if (pa_spalte_da('pa_unter_charge', 'tag')) q("UPDATE pa_unter_charge SET tag=? WHERE id=?", [$tag, $uc]);   // Produktionstag (13.11.2026)
     $bulkTxt = $bulk ? 'Bulk-Charge ' . (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#',id)) FROM charge WHERE id=?", [$bulk]) : ($eimer ? 'Eimer ' . (string) scalar("SELECT CONCAT(nummer, COALESCE(sub_kennung,'')) FROM prod_charge WHERE id=?", [$eimer]) : 'ohne Bulk-Scan');
-    pa_ereignis($pa_id, $uc, $akt ? 'chargenwechsel' : 'start', ($akt ? 'Chargenwechsel: ' : 'Start: ') . 'Unter-Charge ' . $charge . ' (' . $bulkTxt . '), MHD ' . date('d.m.Y', strtotime($mhd)) . ($nachtrag ? '. Nachgetragen im Dashboard (ohne Fotos).' : '. Linie leer bestätigt, Stempel eingestellt.'), (string)($d['linie'] ?? ''), (string)($d['foto_linie'] ?? ''), (string)($d['foto_stempel'] ?? ''), $von);
+    pa_ereignis($pa_id, $uc, $akt ? 'chargenwechsel' : 'start', ($akt ? 'Chargenwechsel: ' : 'Start: ') . 'Unter-Charge ' . $charge . ' (' . $bulkTxt . '), MHD ' . date('d.m.Y', strtotime($mhd)) . ($nachtrag ? '. Nachgetragen im Dashboard (ohne Fotos).' : '. ' . $leerTxt . '. Stempel eingestellt.'), (string)($d['linie'] ?? ''), '', (string)($d['foto_stempel'] ?? ''), $von);
     if ($grund !== '') { pa_ereignis($pa_id, $uc, 'abweichung', 'Charge abweichend von der Vorgabe ' . $v['charge_nr'] . ': ' . $grund, '', '', '', $von);
         if (!$nachtrag) pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $charge . ' statt ' . $v['charge_nr'] . ')', 'Grund: ' . $grund . ' · ' . $von, $von); }
     if (!$nachtrag && (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
@@ -430,6 +460,7 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     if (!empty($pa['kunde_id']))
         pa_fn('log_aktivitaet', 'erp_log_aktivitaet', 'kunde', (int)$pa['kunde_id'], 'team', 'Teilmenge ' . pa_mz($menge) . ' Stk produziert (Charge ' . $uc['charge_nr'] . ', Produktion ' . $pa['nummer'] . ').', 'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
     pa_ereignis($pa_id, $uc_id, 'teilmenge', pa_mz($menge) . ' Stk gebucht' . ($rueck ? ', ' . $rueck . ' Rückstellmuster' : '') . (($o['art'] ?? '') === 'nachtrag' ? ' (nachgetragen, Produktionsdatum ' . date('d.m.Y', strtotime($datum)) . ')' : '') . '.', (string)$menge, (string)($o['foto'] ?? ''), '', $von);
+    if ($fertig) pa_voll_produziert_erledigen($pa_id, $uc_id, $von);   // 13.11.2026 (Teil 3): voll produziert = Produktionsschritte erledigt
     // CoA je neuer Fertigcharge bzw. Bericht bei voller Menge – zuletzt (in der Werk-App ein Aufruf ans Dashboard, darf die Buchung nicht aufhalten).
     if ($neu || $fertig) pa_fn('fertigware_qm_freigabe_nach', 'erp_fertigware_dokumente_melden', $cid, ...(function_exists('fertigware_qm_freigabe_nach') ? ['', $fertig, 'Produktionsabschluss'] : [$fertig]));
     return ['ok' => true, 'msg' => pa_mz($menge) . ' Stk gebucht – Charge ' . $uc['charge_nr'] . ' (MHD ' . date('d.m.Y', strtotime((string)$uc['mhd'])) . ').', 'teilmenge_id' => $tm, 'charge_id' => $cid, 'fertig' => $fertig, 'umfang' => 'komplett'];
