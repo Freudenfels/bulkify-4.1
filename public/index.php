@@ -65,12 +65,14 @@ if (($_GET['p'] ?? '') === 'api_pa_machbar') {
     if ($soll === '' || !hash_equals($soll, $token)) { http_response_code(401); echo json_encode(['ok'=>false, 'meldung'=>'Token ungültig.']); exit; }
     try {
         require_once BX_ROOT . '/core/produktion_plan.php';
-        $out = [];
+        $out = []; $fehler = 0;
         foreach (all("SELECT id FROM produktionsauftrag WHERE status IN ('offen','laufend')") as $r) {
-            $m = produktion_machbar_schritte((int)$r['id'], true);
-            $out[(int)$r['id']] = ['machbar' => (int)$m['machbar'], 'stufe' => (string)$m['stufe'], 'grund' => (string)$m['grund'], 'etikett_gesperrt' => (int)$m['etikett_gesperrt']];
+            try {   // Fable-5 T2.5: ein Fehler bei einem Auftrag kippt die anderen nicht (der fehlt dann und nutzt seinen gespeicherten Stand)
+                $m = produktion_machbar_schritte((int)$r['id'], true);
+                $out[(int)$r['id']] = ['machbar' => (int)$m['machbar'], 'stufe' => (string)$m['stufe'], 'grund' => (string)$m['grund'], 'etikett_gesperrt' => (int)$m['etikett_gesperrt']];
+            } catch (\Throwable $e) { $fehler++; error_log('api_pa_machbar PA ' . (int)$r['id'] . ': ' . $e->getMessage()); }
         }
-        echo json_encode(['ok' => true, 'pa' => $out]);
+        echo json_encode(['ok' => true, 'pa' => $out, 'fehler' => $fehler]);
     } catch (\Throwable $e) { http_response_code(500); echo json_encode(['ok' => false, 'meldung' => $e->getMessage()]); }
     exit;
 }

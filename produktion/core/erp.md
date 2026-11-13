@@ -130,3 +130,6 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `erp_rollen_abbuchen()` bucht alle G
 **Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** `erp_produktion_rest()` kennt „Rest storniert“ (`pa_rest_storniert()`).
 
 **Werk-App nur Machbares (13.11.2026, Teil 1):** `erp_dashboard_api($route, $felder)`: eine Stelle für alle Loopback-Aufrufe ans Dashboard (Token einlager_api_token); `erp_fertigware_dokumente_melden()` nutzt sie.
+
+## Nachbesserung Fable-5 (13.11.2026)
+`erp_produktion_gebucht()` = `pa_produziert()` – dieselbe Regel wie das Dashboard.

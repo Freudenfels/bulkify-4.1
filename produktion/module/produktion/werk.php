@@ -29,8 +29,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($aktion === 'werk_logout') { unset($_SESSION['werk_uid']); weiter('?p=werk'); }
     // 13.11.2026 (Teil 1.1): nicht machbare oder erst künftig geplante PAs bucht die Werk-App nie (auch nicht per Direktaufruf).
+    // Fable-5 T2.6: der Auftrag kommt aus dem Schritt (schritt_id), nicht aus der mitgeschickten pa_id; T2.5: nur gespeicherter Stand
+    // (keine zweite Neuberechnung je Buchung); T2.1: laufende sind nie gesperrt.
     $paPost = (int)($_POST['pa_id'] ?? 0);
-    if ($werkUid && $paPost > 0 && in_array(erp_wa_pa_sichtbar($paPost), ['nicht_machbar', 'datum', 'status'], true)) {
+    if ((int)($_POST['schritt_id'] ?? 0) > 0) {
+        $paSchritt = (int) scalar("SELECT pa_id FROM produktion_schritt WHERE id=?", [(int)$_POST['schritt_id']]);
+        $paPost = $paSchritt; $_POST['pa_id'] = (string)$paSchritt;
+    }
+    if ($werkUid && $paPost > 0 && in_array(erp_wa_pa_sichtbar($paPost, false), ['nicht_machbar', 'datum', 'status'], true)) {
         $_SESSION['werk_flash'] = $T['wa_not_released']; $_SESSION['werk_flash_ok'] = false; weiter('?p=werk');
     }
     // Soll-Kette 6: Kartonetiketten drucken (Verpackungsschritt) – Kartonanzahl rechnet das System.
@@ -343,11 +349,12 @@ header('Content-Type: text/html; charset=utf-8');
   </div>
   <?php endif; ?>
   <h1 style="font-size:24px;margin:0 0 14px"><?= h($T['what_produce']) ?> – <?= h($T['wa_dayplan']) ?></h1>
+  <?php if (($waStand = erp_wa_stand_text()) !== ''): // Fable-5 T2.5: Rückfall auf den gespeicherten Stand sichtbar ?><div class="panel" style="color:#ffcf70;padding:10px 14px;margin:-6px 0 14px"><?= h(sprintf($T['wa_stand_von'] ?? 'Stand von %s – die aktuelle Rechnung war gerade nicht erreichbar.', $waStand)) ?></div><?php endif; ?>
   <?php if (!$jobs): ?>
     <div class="panel muted"><?= h($T['no_jobs']) ?></div>
   <?php else: ?>
   <div class="cards">
-    <?php foreach ($jobs as $pa): $m = $pa['_m']; $grau = !$m['machbar']; $proz = (float)$pa['menge'] > 0 ? min(100, round((float)$pa['produziert'] * 100 / (float)$pa['menge'])) : 0; ?>
+    <?php foreach ($jobs as $pa): $m = $pa['_m']; $grau = !$m['machbar'] && empty($pa['_lauf']); $proz = (float)$pa['menge'] > 0 ? min(100, round((float)$pa['produziert'] * 100 / (float)$pa['menge'])) : 0; ?>
     <a class="card" href="<?= $grau ? '#' : '?p=werk&id=' . (int)$pa['id'] ?>"<?= $grau ? ' style="opacity:.45;pointer-events:none"' : '' ?>>
       <div class="nr"><?= h((string)$pa['nummer']) ?><?= $pa['_heute'] ? ' <span class="badge b-bereit" style="margin:0 0 0 6px">' . h($T['wa_today_badge']) . '</span>' : '' ?></div>
       <div class="prod"><?= h((string)($pa['produkt'] ?: '–')) ?></div>
@@ -356,6 +363,7 @@ header('Content-Type: text/html; charset=utf-8');
       <span class="badge <?= $pa['_lauf'] ? 'b-lauf' : 'b-bereit' ?>"><?= $pa['_lauf'] ? h($T['in_production']) : ($grau ? h($T['wa_not_doable']) : ($m['stufe'] === 'bis_etikett' ? h($T['wa_until_label']) : h($T['producible']))) ?></span>
       <?php $offenTxt = pa_noch_offen_text((int)$pa['id'], !empty($m['etikett_gesperrt']), $T['wa_noch_offen_zeile'], fn($s) => werk_station_label($s, $lang), $T['wa_label_only_until']); ?>
       <?php if ($offenTxt !== ''): ?><div class="meta" style="margin-top:6px;font-weight:600;color:var(--text)"><?= h($offenTxt) ?></div><?php endif; ?>
+      <?php if (!empty($pa['_lauf']) && !$m['machbar'] && trim((string)$m['grund']) !== ''): // Fable-5 T2.1: läuft weiter, Material für den Rest fehlt ?><div class="meta" style="margin-top:6px;color:#ff8a80"><?= h(($T['wa_rest_material'] ?? 'Material für den Rest fehlt') . ': ' . $m['grund']) ?></div><?php endif; ?>
       <div class="prog"><div style="width:<?= (int)$proz ?>%"></div></div>
       <div class="meta" style="margin-top:6px"><?= h(sprintf($T['wa_produced_of'], menge_txt($pa['produziert']), menge_txt($pa['menge']))) ?></div>
     </a>
@@ -368,7 +376,9 @@ header('Content-Type: text/html; charset=utf-8');
     $pa = erp_pa($id);
     if (!$pa) { echo '<div class="panel">' . h($T['order_not_found']) . ' <a class="back" href="?p=werk">' . h($T['back']) . '</a></div></div></body></html>'; return; }
     // 13.11.2026 (Teil 1.1): Direktaufruf eines nicht machbaren / künftig geplanten PA – nur Meldung, keine Buchung.
-    if (in_array(erp_wa_pa_sichtbar($id), ['nicht_machbar', 'datum', 'status'], true)) { echo '<div class="panel" style="font-size:20px">' . h($T['wa_not_released']) . ' <a class="back" href="?p=werk">' . h($T['back']) . '</a></div></div></body></html>'; return; }
+    $waSicht = erp_wa_pa_sichtbar($id);
+    if ($waSicht === 'status' && (string)($pa['status'] ?? '') === 'erledigt') $waSicht = '';   // nach dem letzten Schritt: Fertig-Ansicht zeigen
+    if (in_array($waSicht, ['nicht_machbar', 'datum', 'status'], true)) { echo '<div class="panel" style="font-size:20px">' . h($T['wa_not_released']) . ' <a class="back" href="?p=werk">' . h($T['back']) . '</a></div></div></body></html>'; return; }
     $schritte = erp_pa_schritte($id);
     $total = count($schritte);
     $fertigCnt = 0; foreach ($schritte as $s) if ((int)$s['erledigt'] === 1) $fertigCnt++;

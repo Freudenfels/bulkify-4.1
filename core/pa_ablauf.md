@@ -81,3 +81,9 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 - `pa_voll_produziert_erledigen()` schließt auch die übergebene Unter-Charge (Status laeuft oder nachtrag).
 - `pa_teilmenge_buchen()`: Option `ki_vermerk` schreibt das Ereignis `ki_meldung` sofort nach der Teilmenge – vor jedem Protokoll-Ablegen.
 - Lädt `core/charge_norm.php` und `core/pa_produziert.php`.
+
+## Nachbesserung Fable-5 (13.11.2026, Teil 2)
+- `pa_ist_laufend($status, $produziert)` – eine Regel „laufend“ für Dashboard und Werk-App.
+- `pa_schritte_vor_qm($pa_id)` – nur offene Schritte vor der ersten QM-Station; genutzt von „voll produziert“ und `pa_abschliessen()` („Einlagern (Bulk)“ nach der QM bleibt offen).
+- `pa_noch_offen()` beachtet „Rest storniert“ (Menge 0) und Mengen „bis vor dem Etikettieren“, liefert die Einheit (`pa_einheit`: Bulk-PA = Einheit des Bulk-Artikels); `pa_noch_offen_text()` lässt bei Rest 0 „· 0 Stk“ weg.
+- „produziert“ überall über `pa_produziert()`.

@@ -1260,7 +1260,7 @@ function erp_auftrag_reservierung_freigeben(int $pa_id): void {
 
 // --- Fertigware einbuchen (gespiegelt) -------------------------------------------------------
 function erp_produktion_gebucht(int $pa_id): float {
-    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+    return pa_produziert($pa_id);   // Fable-5 T2.2: dieselbe Regel wie das Dashboard (core/pa_produziert.php über pa_ablauf.php)
 }
 function erp_produktion_rest(int $pa_id): float {
     if (function_exists('pa_rest_storniert') && pa_rest_storniert($pa_id)) return 0.0;   // Fable-3 T4.2: gleiche Regel wie produktion_rest()

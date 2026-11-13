@@ -49,3 +49,6 @@ angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Re
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Neue Route `kein_dokument` → `module/einkauf/kein_dokument.php` (POST: „kein Dokument nötig“ am Artikel).
+
+## Nachbesserung Fable-5 (13.11.2026)
+`api_pa_machbar`: je Auftrag ein eigenes try – ein Fehler kippt die anderen nicht; Antwort enthält `fehler` (Anzahl).

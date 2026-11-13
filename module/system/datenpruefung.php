@@ -652,11 +652,11 @@ $CHECKS = [
         'titel' => 'PA voll produziert, Produktionsschritte offen',
         'info'  => 'Produktionsaufträge, bei denen die gebuchte Fertigware das Soll erreicht, aber Produktionsschritte (vor den QM-Stationen) noch offen sind. „Schritte erledigen“ hakt sie ab (fehlt das Etikett, bleibt Etikettieren offen), schließt die laufende Unter-Charge und vermerkt es mit Grund im Verlauf und Chargenprotokoll.',
         'sql'   => "SELECT pa.id AS _id, CONCAT('?p=produktionsauftrag&id=', pa.id) AS _link, pa.nummer, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name, r.name) AS produkt,
-                           pa.menge AS soll, (SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.pa_id=pa.id) AS produziert,
+                           pa.menge AS soll, " . pa_produziert_sql('pa.id') . " AS produziert,
                            (SELECT GROUP_CONCAT(s.station ORDER BY s.sort SEPARATOR ', ') FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 AND s.station NOT IN ('Qualitätsprüfung','Produktions-Freigabe','Versand-Freigabe')) AS offene_schritte
                     FROM produktionsauftrag pa LEFT JOIN auftrag a ON a.id=pa.auftrag_id LEFT JOIN produkt p ON p.id=pa.produkt_id LEFT JOIN rezeptur r ON r.id=pa.rezeptur_id
                     WHERE pa.status IN ('offen','laufend') AND pa.menge > 0
-                      AND (SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.pa_id=pa.id) >= pa.menge
+                      AND " . pa_produziert_sql('pa.id') . " >= pa.menge
                       AND EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 AND s.station NOT IN ('Qualitätsprüfung','Produktions-Freigabe','Versand-Freigabe'))
                     ORDER BY pa.id",
         'korrektur' => "pa_voll_produziert_erledigen(<PA>, 0, <Admin>, <Grund>) – hakt die offenen Produktionsschritte ab (Etikettieren bleibt ohne freigegebenes Etikett offen).",

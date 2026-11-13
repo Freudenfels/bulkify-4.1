@@ -7,6 +7,7 @@ require_once __DIR__ . '/zahl_lesen.php';   // zahl_lesen(), betrag_lesen() – 
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/zeit_ort.php';   // heute_ort(): Tag in Europe/Berlin (13.11.2026)
 require_once __DIR__ . '/kunde_charge.php';   // kunde_charge_anzeige(): Grundcharge beim Kunden (13.11.2026)
+require_once __DIR__ . '/pa_produziert.php';   // pa_produziert(): „produziert“ = Fertigware in Stück (Fable-5 T2.2)
 require_once __DIR__ . '/charge_norm.php';
 require_once __DIR__ . '/rohstoff_alternative.php';   // Alternative zu einer Rohstoff-Anfrage (Dashboard + Kundenportal)
 require_once __DIR__ . '/pib_pruefung.php';
@@ -3624,7 +3625,8 @@ function mhd_standard(?string $ab = null): string {
 
 // Wie viel Fertigware zu einem Produktionsauftrag schon als Charge(n) gebucht ist (Summe über .A, .B, .C …).
 function produktion_gebucht(int $pa_id): float {
-    return (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+    require_once __DIR__ . '/pa_produziert.php';   // Fable-5 T2.2: nur Fertigware in Stück (keine Restmischung in kg, keine Kopien)
+    return pa_produziert($pa_id);
 }
 // Was von der Produktionsmenge noch nicht gebucht ist.
 function produktion_rest(int $pa_id): float {
@@ -9607,6 +9609,7 @@ function bereitschaft_badge(string $s): string {
         'bereit' => bx_badge('produktionsbereit','ok'),
         'wartet' => bx_badge('wartet auf Material','warn'),
         'bestellt' => bx_badge('Material bestellt','info'),
+        'bis_etikett' => bx_badge('bis vor Etikettieren','warn'),   // Fable-5 T2.8: machbar ohne Etikett
         'laeuft' => bx_badge('in Produktion','info'),
         'fertig' => bx_badge('fertig','ok'),
         default  => bx_badge('–'),

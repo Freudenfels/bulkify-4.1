@@ -53,7 +53,8 @@ $alle = all("SELECT pa.*, k.firma AS kunde_firma, a.etikett_freigegeben AS etike
              COALESCE(NULLIF(a.produkt_bezeichnung,''), NULLIF(p.name,''), CONCAT(rz.name, ' · Bulk')) AS produkt_name,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id) AS n_total,
              (SELECT COUNT(*) FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=1) AS n_done,
-             (SELECT station FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 ORDER BY s.sort LIMIT 1) AS naechste_station
+             (SELECT station FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0 ORDER BY s.sort LIMIT 1) AS naechste_station,
+             " . pa_produziert_sql('pa.id') . " AS produziert_stk
              FROM produktionsauftrag pa
              LEFT JOIN kunden k ON k.id=pa.kunde_id LEFT JOIN produkt p ON p.id=pa.produkt_id
              LEFT JOIN rezeptur rz ON rz.id=pa.rezeptur_id
@@ -74,7 +75,7 @@ $GLOBALS['bx_stock_cache'] = [];
 // begonnenen Aufträge auf einmal holen und in den Cache legen (pa_row_cached/produkt_row_cached finden sie dann).
 $vorPa = []; $vorProd = []; $vorAuf = [];
 foreach ($alle as $r) {
-    if ($r['status'] !== 'erledigt' && (int)$r['n_done'] === 0) {
+    if ($r['status'] !== 'erledigt' && !pa_ist_laufend((string)$r['status'], (float)$r['produziert_stk'])) {
         $vorPa[] = (int)$r['id'];
         if (!empty($r['produkt_id']))  $vorProd[] = (int)$r['produkt_id'];
         if (!empty($r['auftrag_id']))  $vorAuf[]  = (int)$r['auftrag_id'];
@@ -105,11 +106,16 @@ if ($vorAuf) { $in = implode(',', array_fill(0, count($vorAuf), '?'));
 unset($sc);
 foreach ($alle as &$r) {
     if ($r['status'] === 'erledigt')        $r['_bereit'] = 'erledigt';
+    elseif (pa_ist_laufend((string)$r['status'], (float)$r['produziert_stk'])) $r['_bereit'] = 'laeuft';   // Fable-5 T2.4: eine Regel mit der Werk-App (vor „Eigen/Fremd offen“)
     elseif (empty($r['art_festgelegt_am'])) $r['_bereit'] = 'art_offen';   // Eigen/Fremd noch nicht festgelegt -> NICHT in Produktion
-    elseif ((int)$r['n_done'] > 0)          $r['_bereit'] = 'laeuft';      // begonnen -> Material war da
     else {
         $ber = produktion_bereitschaft((int)$r['id']);
         $r['_bereit'] = $ber['status'];
+        // Fable-5 T2.8: fehlt nur Etikett (bzw. ist es nicht freigegeben) = „bis vor dem Etikettieren“ – zählt zu „Machbar“.
+        if ($r['_bereit'] === 'wartet') {
+            $fehltOhneEt = array_filter($ber['fehlend'] ?? [], fn($f) => stripos((string)($f['rolle'] ?? ''), 'etikett') === false);
+            if (!$fehltOhneEt) $r['_bereit'] = 'bis_etikett';
+        }
         // Fehlt nur noch Material, das schon bestellt ist -> eigener Reiter „Material bestellt“ mit Termin.
         if ($r['_bereit'] === 'wartet') {
             $mb = produktion_material_bestellt($ber['fehlend'] ?? [], (int)($r['auftrag_id'] ?? 0));
@@ -254,7 +260,7 @@ $kpi = function(string $label, int $wert, string $href, string $farbe = '', bool
 };
 echo '<div class="bx-cards" style="margin-bottom:16px">';
 if (has_role('admin')) $kpi('Beschaffungsweg offen', (int)$vorbereitungN, '?p=produktion_vorbereitung', '#f59e0b');
-$kpi('Startklar', $anzBereit, '?p=produktion&tab=plan', 'var(--gruen)', false);
+$kpi('Machbar', $anzBereit, '?p=produktion&tab=plan', 'var(--gruen)', false);   // Fable-5 T2.8: startklar + bis vor dem Etikettieren
 $kpi('Wartet auf Material', $anzWartet + $anzBestellt, '?p=produktion&tab=plan', '#f59e0b', false);
 $kpi('Läuft', $anzLaufend, '?p=produktion&tab=laufend', '', $tab === 'laufend');
 $kpi('Fertig', $anzErledigt, '?p=produktion&tab=erledigt', '', $tab === 'erledigt');

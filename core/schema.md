@@ -728,3 +728,6 @@ Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuc
 
 Neue Spalten: `item.kein_dokument`, `item.kein_dokument_grund`, `item.kein_dokument_von`, `charge.unterlagen_fehlt` (1 = Quarantäne, weil CoA/Spec fehlt; 2 = nachgereicht, QM gibt frei).
 `wareneingang_buchen()` ruft `lu_charge_nach_eingang()` auf (Charge immer Quarantäne, wenn die Unterlage fehlt). `charge_quarantaene_freigeben($cid, $admin_grund = '')` lehnt ab, solange die Unterlage fehlt (Grund in `$GLOBALS['bx_freigabe_fehler']`); Ausnahme nur Admin mit Grund (Vermerk Charge + Protokoll). `bestellung_direkt_abschliessen()`, `bestellung_als_bestellt_markieren()` und `bestellung_bestaetigen()` sperren nicht mehr wegen Unterlagen (nur Aufgabe). `bestellung_als_entwurf()` setzt `unterlagen_wartet` nie mehr.
+
+## Nachbesserung Fable-5 (13.11.2026, Teil 2)
+`produktion_gebucht()` = `pa_produziert()` (nur Fertigware in Stück, `core/pa_produziert.php`, oben geladen). `bereitschaft_badge('bis_etikett')` = „bis vor Etikettieren“.

@@ -171,14 +171,43 @@ function pa_unter_chargen(int $pa_id): array {
 function pa_qm_stationen(): array { return ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']; }
 // Was ist an einem PA noch zu tun? (13.11.2026, Werk-App Teil 2) – EINE Rechnung für Werk-App, Plan und „Läuft“:
 // offene Produktionsschritte (ohne QM-Stationen, in Reihenfolge) und offene Menge (Soll minus gebuchte Fertigware).
+// Fable-5 T2.7: „Rest storniert“ = nichts mehr offen; Mengen „bis vor dem Etikettieren“ sind durch die Produktion (es fehlt nur noch der
+// Schritt Etikettieren); Einheit des Auftrags (Bulk-PA: Einheit des Bulk-Artikels) statt fest „Stk“.
 function pa_noch_offen(int $pa_id): array {
     $qm = pa_qm_stationen();
     $schritte = [];
     foreach (all("SELECT station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id", [$pa_id]) as $s)
         if (!in_array((string)$s['station'], $qm, true) && !in_array((string)$s['station'], $schritte, true)) $schritte[] = (string)$s['station'];
-    $soll = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    $ist = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
-    return ['schritte' => $schritte, 'menge' => max(0.0, $soll - $ist)];
+    $pa = one("SELECT menge, produkt_id, rezeptur_id" . (pa_spalte_da('produktionsauftrag', 'menge_vor_etikett') ? ", menge_vor_etikett" : ", 0 AS menge_vor_etikett") . " FROM produktionsauftrag WHERE id=?", [$pa_id]) ?: [];
+    $soll = (float)($pa['menge'] ?? 0);
+    $ist = max(pa_produziert($pa_id), (float)($pa['menge_vor_etikett'] ?? 0));
+    $menge = pa_rest_storniert($pa_id) ? 0.0 : max(0.0, $soll - $ist);
+    return ['schritte' => $schritte, 'menge' => $menge, 'einheit' => pa_einheit($pa)];
+}
+// Einheit der PA-Menge: Produkt-PA = Stück (Packungen); Bulk-PA (nur Rezeptur) = Einheit des Bulk-Artikels, sonst Stk.
+function pa_einheit(array $pa): string {
+    if (empty($pa['produkt_id']) && !empty($pa['rezeptur_id'])) {
+        $e = trim((string) scalar("SELECT einheit FROM item WHERE rezeptur_id=? AND kategorie='fertig' ORDER BY id LIMIT 1", [(int)$pa['rezeptur_id']]));
+        if ($e !== '') return $e;
+    }
+    return 'Stk';
+}
+// EINE Regel „laufend“ (Fable-5 T2.4) für Dashboard und Werk-App: Status laufend oder schon etwas produziert.
+function pa_ist_laufend(string $status, float $produziert): bool { return $status === 'laufend' || $produziert > 1e-9; }
+// Offene Produktionsschritte, deren Reihenfolge VOR der ersten QM-Station liegt (Fable-5 T2.3). Ohne QM-Station: alle offenen.
+// „Einlagern (Bulk)“ nach der Qualitätsprüfung bleibt damit offen.
+function pa_schritte_vor_qm(int $pa_id): array {
+    $qm = pa_qm_stationen();
+    $grenze = null;
+    foreach (all("SELECT station, sort FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$pa_id]) as $s)
+        if (in_array((string)$s['station'], $qm, true)) { $grenze = (int)$s['sort']; break; }
+    $out = [];
+    foreach (all("SELECT id, station, sort FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id", [$pa_id]) as $s) {
+        if (in_array((string)$s['station'], $qm, true)) continue;
+        if ($grenze !== null && (int)$s['sort'] >= $grenze) continue;
+        $out[] = $s;
+    }
+    return $out;
 }
 // Zeile „Noch offen: Verpacken, Etikettieren · 825 Stk“ (+ „Etikett fehlt - nur bis vor dem Etikettieren“). $label übersetzt Stationen
 // (Werk-App DE/EN/UK), $vorlage/$etikettTxt kommen aus den Sprachtexten. '' = nichts mehr offen.
@@ -187,6 +216,9 @@ function pa_noch_offen_text(int $pa_id, bool $etikett_gesperrt = false, string $
     $o = pa_noch_offen($pa_id);
     if (!$o['schritte'] && $o['menge'] <= 0) return '';
     $st = $o['schritte'] ? implode(', ', array_map(fn($s) => $label ? $label($s) : $s, $o['schritte'])) : '–';
+    // Fable-5 T2.7: Rest 0 -> ohne „· 0 Stk“; Einheit des Auftrags statt fest „Stk“ (Vorlagen tragen „%2$s Stk/pcs/шт“).
+    if ($o['menge'] <= 0) $vorlage = (string) preg_replace('/\s*·\s*%2\$s.*$/u', '', $vorlage);
+    elseif (($o['einheit'] ?? 'Stk') !== 'Stk') $vorlage = (string) preg_replace('/%2\$s\s+\S+/u', '%2$s ' . str_replace('%', '%%', (string)$o['einheit']), $vorlage);
     return sprintf($vorlage, $st, pa_mz($o['menge'])) . ($etikett_gesperrt ? ' · ' . $etikettTxt : '');
 }
 // Voll produziert = Produktionsschritte erledigt (13.11.2026, Werk-App Teil 3). Erreicht die gebuchte Fertigware das Soll, werden alle
@@ -195,12 +227,11 @@ function pa_noch_offen_text(int $pa_id, bool $etikett_gesperrt = false, string $
 // „Etikettieren“ offen. $grund: bei der Datenprüfung (Altbestand, Admin) Pflicht. Rückgabe: Anzahl erledigter Schritte.
 function pa_voll_produziert_erledigen(int $pa_id, int $uc_id = 0, string $von = '', string $grund = ''): int {
     $soll = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    $ist = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+    $ist = pa_produziert($pa_id);   // Fable-5 T2.2: nur Fertigware in Stück
     if ($soll <= 0 || $ist + 1e-6 < $soll) return 0;
     $etSperre = (string) (pa_fn('produktion_etikett_sperre', 'erp_etikett_sperre', $pa_id) ?? '');
-    $qm = pa_qm_stationen(); $n = 0; $namen = [];
-    foreach (all("SELECT id, station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id", [$pa_id]) as $s) {
-        if (in_array((string)$s['station'], $qm, true)) continue;
+    $n = 0; $namen = [];
+    foreach (pa_schritte_vor_qm($pa_id) as $s) {   // Fable-5 T2.3: nur Schritte vor der ersten QM-Station
         if ($etSperre !== '' && (string)$s['station'] === 'Etikettieren') continue;   // ohne freigegebenes Etikett bleibt Etikettieren offen
         $n += q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=? AND erledigt=0", [gmdate('Y-m-d H:i:s'), mb_substr($von ?: 'System', 0, 100), (int)$s['id']])->rowCount();
         $namen[] = (string)$s['station'];
@@ -267,8 +298,8 @@ function pa_vorgabe(int $pa_id, int $bulk_charge_id = 0, int $prod_charge_id = 0
     $bs = pa_naechster_buchstabe($pa_id);
     return ['neu' => true, 'buchstabe' => $bs, 'charge_nr' => pa_basis($pa_id) . '.' . $bs, 'mhd' => pa_mhd_vorgabe($pa_id, $bulk_charge_id), 'unter_charge_id' => 0];
 }
-// Unter-Charge starten bzw. am nächsten Tag wieder anlaufen lassen. Fotos Linie leer + Stempel sind Pflicht ($fotos['linie'],
-// $fotos['stempel'] = gespeicherte Dateinamen). Anderer Bulk/Eimer als die laufende Unter-Charge = Chargenwechsel (die alte wird fertig,
+// Unter-Charge starten bzw. am nächsten Tag wieder anlaufen lassen. Pflicht: Haken „Linie leer“ ($d['linie_leer'], Name und Zeit ins
+// Protokoll, kein Foto mehr) und Foto vom Stempelbild ($d['foto_stempel']). Anderer Bulk/Eimer als die laufende Unter-Charge = Chargenwechsel (die alte wird fertig,
 // neuer Buchstabe). Charge abweichend von der Vorgabe nur mit Grund -> Aufgabe ans Büro.
 function pa_starten(int $pa_id, array $d, string $von): array {
     pa_schema();
@@ -477,7 +508,7 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     if (($tf = pa_uc_tag_pruefen($uc, $tagB)) !== '') return ['ok' => false, 'msg' => $tf];   // 13.11.2026: Tagesregel serverseitig
     $menge = round($menge);
     if ($menge <= 0) return ['ok' => false, 'msg' => 'Bitte eine Menge größer 0 angeben.'];
-    $gebucht = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+    $gebucht = pa_produziert($pa_id);   // Fable-5 T2.2
     $rest = max(0.0, (float)$pa['menge'] - $gebucht);
     if ($menge > $rest + 1e-6) return ['ok' => false, 'msg' => 'Es sind nur noch ' . pa_mz($rest) . ' Stk offen.'];
     $von = (string)($o['von'] ?? '');
@@ -592,7 +623,7 @@ function pa_abschliessen(int $pa_id, string $rest_wahl, string $von): array {
     $pa = one("SELECT * FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$pa) return ['ok' => false, 'msg' => 'Produktionsauftrag nicht gefunden.'];
     if ($akt = pa_aktuelle_unter_charge($pa_id)) pa_unter_charge_schliessen((int)$akt['id'], $von, 'Abschluss');
-    $ist = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+    $ist = pa_produziert($pa_id);   // Fable-5 T2.2
     $soll = (float)$pa['menge'];
     $txt = 'Abschluss: ' . pa_mz($ist) . ' von ' . pa_mz($soll) . ' Stk.';
     if ($ist + 0.0001 < $soll) {
@@ -600,8 +631,8 @@ function pa_abschliessen(int $pa_id, string $rest_wahl, string $von): array {
         else { $txt .= ' Rest ' . pa_mz($soll - $ist) . ' Stk kommt noch.'; pa_ereignis($pa_id, null, 'abschluss', $txt, 'rest_kommt', '', '', $von); return ['ok' => true, 'msg' => $txt . ' Der Auftrag bleibt offen.']; }
     }
     // Produktion fertig: alle Produktionsschritte (ohne QM-Stationen) erledigt – weiter geht es mit Qualitätsprüfung/Freigaben.
-    q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE pa_id=? AND erledigt=0 AND station NOT IN ('Qualitätsprüfung','Produktions-Freigabe','Versand-Freigabe')",
-      [gmdate('Y-m-d H:i:s'), mb_substr($von ?: 'Produktion', 0, 100), $pa_id]);
+    foreach (pa_schritte_vor_qm($pa_id) as $s)   // Fable-5 T2.3: nur Schritte vor der ersten QM-Station (z. B. „Einlagern (Bulk)“ bleibt offen)
+        q("UPDATE produktion_schritt SET erledigt=1, erledigt_at=?, erledigt_von=? WHERE id=? AND erledigt=0", [gmdate('Y-m-d H:i:s'), mb_substr($von ?: 'Produktion', 0, 100), (int)$s['id']]);
     if ($rest_wahl === 'storniert' && !empty($pa['auftrag_id']) && pa_spalte_da('auftrag', 'fortschritt_ziel'))
         q("UPDATE auftrag SET fortschritt_ziel=?, rest_status='storniert' WHERE id=?", [(int) round($ist), (int)$pa['auftrag_id']]);
     pa_ereignis($pa_id, null, 'abschluss', $txt, $rest_wahl, '', '', $von);

@@ -91,3 +91,9 @@ Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App,
 **Werk-App nur Machbares (13.11.2026, Teil 1):** Kachel-Liste nur sichtbare PAs; Direktaufruf und jede Buchung (POST mit pa_id) eines nicht machbaren / künftig geplanten PA: „Nicht freigegeben - bitte im Büro melden“ (DE/EN/UK).
 
 **Noch offen (13.11.2026, Werk-App Teil 2):** Jede Karte zeigt „Noch offen: Schritte · Menge“ (Stationen übersetzt, DE/EN/UK), bei „bis vor Etikettieren“ zusätzlich „Etikett fehlt - nur bis vor dem Etikettieren“.
+
+## Nachbesserung Fable-5 (13.11.2026, Teil 2)
+- **Buchungssperre (T2.6):** Der Auftrag kommt aus dem Schritt (`schritt_id` -> `produktion_schritt.pa_id`), nicht aus der mitgeschickten `pa_id`. Geprüft wird mit dem gespeicherten Machbar-Stand (keine zweite Neuberechnung je Buchung).
+- **Laufend (T2.1):** laufende PAs sind nie grau; fehlt Material für den Rest, steht „Läuft weiter – Material für den Rest fehlt: …“ rot auf der Karte.
+- **Fertig-Ansicht:** nach dem letzten Schritt (Status erledigt) wird die Seite wieder gezeigt statt „Nicht freigegeben“.
+- **Stand von HH:MM (T2.5):** Hinweis oben im Tagesplan, wenn die Machbar-Rechnung nicht erreichbar war.

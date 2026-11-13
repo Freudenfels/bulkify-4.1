@@ -179,3 +179,6 @@ Erkannt wird das am Öffnen-Link der Zeile bzw. an `_aid` (`dp_nur_offen()`, `dp
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Neue Liste `charge_quarantaene_unterlage` „Chargen in Quarantäne wegen fehlender Unterlage“ (nur offene Vorgänge: Unterlage fehlt bzw. nachgereicht und wartet auf QM; Lieferant nur als Nummer; auf Klick). Die Listen „Rohstoff angefragt ohne Dokument“ und „in Kunden-Anfragen ohne Dokumente“ blenden Artikel mit „kein Dokument nötig“ aus und haben je Zeile den Knopf „kein Dokument nötig“ (Pop-up, Admin/QM).
+
+## Nachbesserung Fable-5 (13.11.2026)
+Die Prüfung „voll produziert, Schritte offen“ rechnet „produziert“ mit `pa_produziert_sql()` (nur Fertigware in Stück).

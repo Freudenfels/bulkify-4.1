@@ -78,3 +78,7 @@ Die alten Seiten leiten weiter (`public/index.php`), nichts ist gelöscht. Ihre 
 **Produktion per KI melden (13.11.2026, Werk-App Teil 4):** Feld „Produktion melden (KI)“ oben auf der Seite (`_ki_melden.php`).
 
 **Reiter „Läuft“ (13.11.2026):** ohne eigene Spalten-Sortierung (kein `sort` in der Adresse) in derselben Reihenfolge wie die Werk-App: `plan_sort`, dann Startzeit (`pa_reihenfolge_laufend_zuerst()`). Klick auf eine Spaltenüberschrift sortiert wie bisher.
+
+## Nachbesserung Fable-5 (13.11.2026, Teil 2)
+- **Läuft (T2.4):** dieselbe Regel wie die Werk-App – Status laufend oder schon produziert (`pa_ist_laufend`, Spalte `produziert_stk`); geht vor „Eigen/Fremd offen“.
+- **Kachel „Machbar“ (T2.8):** startklar + „bis vor dem Etikettieren“ (fehlt nur Etikett bzw. ist es nicht freigegeben, `_bereit = bis_etikett`, Badge „bis vor Etikettieren“). „Wartet auf Material“ zählt diese nicht mehr.

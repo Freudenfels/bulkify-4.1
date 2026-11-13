@@ -1,8 +1,8 @@
 <?php
 // Werk-App, geführter Ablauf – Ansicht (Nico 11.11.2026, Teil 4). Eingebunden in werk.php (Schritt-Ansicht), wenn der nächste
 // offene Schritt Abfüllen/Verpacken/Etikettieren ist. Erwartet: $id (PA), $pa, $T, $werkName, $istAdminW.
-// Ablauf: Start (Bulk scannen -> Charge/MHD groß -> Linie leer + Stempel, je Pflichtfoto) -> Material scannen -> Kapselprobe/Sack ->
-// Kartons drucken -> „Teilmenge fertig" -> Chargenwechsel (Bulk leer) -> Abschluss. Wiederanlauf am nächsten Tag: erneut Fotos.
+// Ablauf: Start (Bulk scannen -> Charge/MHD groß -> Haken „Linie leer“ + Pflichtfoto Stempelbild) -> Material scannen -> Kapselprobe/Sack ->
+// Kartons drucken -> „Teilmenge fertig" -> Chargenwechsel (Bulk leer) -> Abschluss. Wiederanlauf: erneut Haken und Stempelfoto.
 require_once BX_ROOT . '/core/erp_ablauf.php';
 $uc = pa_aktuelle_unter_charge($id);
 $heute = (new DateTime('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d');

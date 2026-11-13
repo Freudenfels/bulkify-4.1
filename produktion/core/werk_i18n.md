@@ -11,3 +11,6 @@ Texte `return_box`, `return_closed`, `return_closed_req` (Rückgabe je Karton, 0
 **Noch offen (13.11.2026, Werk-App Teil 2):** Neue Texte `wa_not_released`, `wa_noch_offen_zeile` (Karte „Noch offen“, zwei Platzhalter), `wa_label_only_until` (DE/EN/UK).
 `wa_still_open` ist der Text im Abschluss-Block („Noch %s Stk offen:“, ein Platzhalter) – jeder Schlüssel nur einmal je Sprache (Fable-4 T0: der doppelte Schlüssel brach den Abschluss-Block mit ArgumentCountError ab).
 **Rückfrage Gewicht / ohne Tara (Fable-4 T1.3, T1.6):** `wa_gew_frage`, `wa_gew_hinweis`, `wa_gew_abbrechen`, `wa_tara_ohne`.
+
+## Nachbesserung Fable-5 (13.11.2026)
+Neue Texte DE/EN/UK: `wa_rest_material` (Läuft weiter – Material für den Rest fehlt), `wa_stand_von` (Stand von %s …).
