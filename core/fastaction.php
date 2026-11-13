@@ -65,6 +65,16 @@ function fastaction_analyse(string $text, ?string $pfad = null): array {
     return ['ok' => true, 'daten' => $d, 'usage' => $r['usage'] ?? [], 'modell' => $r['modell'] ?? ''];
 }
 
+// Rezeptur bzw. Produkt zu einem Namen finden – EINE Stelle (Fable-4 T4.6, 13.11.2026), nie inaktive. Genutzt fuer die erkannten
+// Haupt-Entitaeten und fuer jeden Aktionspunkt (Vorschlaege, Positionen). 0 = nicht gefunden.
+function fa_rezeptur_id(string $name): int {
+    $name = trim($name); if ($name === '') return 0;
+    return (int) scalar("SELECT id FROM rezeptur WHERE COALESCE(status,'')<>'inaktiv' AND name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $name . '%', $name]);
+}
+function fa_produkt_id(string $name): int {
+    $name = trim($name); if ($name === '') return 0;
+    return (int) scalar("SELECT id FROM produkt WHERE COALESCE(status,'')<>'inaktiv' AND COALESCE(NULLIF(kundenname,''),name) LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $name . '%', $name]);
+}
 // Erkannte Namen zu echten Datensaetzen aufloesen (fuer Direkt-Links). Gibt ['kunde'=>?,'rezeptur'=>?,'produkt'=>?].
 function fastaction_aufloesen(array $erkannt): array {
     $res = ['kunde' => null, 'rezeptur' => null, 'produkt' => null];
@@ -100,8 +110,8 @@ function fastaction_notiz_anlegen(array $d, array $auf_e, string $eingabe, ?stri
         // Haupt-Entitaeten der Nachricht.
         $rn = trim((string)($v['rezeptur'] ?? ''));
         $pn = trim((string)($v['produkt'] ?? ''));
-        $rid = $rn !== '' ? (int) scalar("SELECT id FROM rezeptur WHERE name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $rn . '%', $rn]) : 0;
-        $pid = $pn !== '' ? (int) scalar("SELECT id FROM produkt WHERE COALESCE(NULLIF(kundenname,''),name) LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $pn . '%', $pn]) : 0;
+        $rid = fa_rezeptur_id($rn);   // Fable-4 T4.6: ohne inaktive
+        $pid = fa_produkt_id($pn);
         if (!$rid && !$pid) { $rid = $auf_e['rezeptur']['id'] ?? 0; $pid = $auf_e['produkt']['id'] ?? 0; }
         if (!$pid && $rid) { }   // Rezeptur reicht fuer Angebot/Preisanfrage
         $menge = ($v['menge'] ?? null) !== null && $v['menge'] !== '' ? (float) str_replace(',', '.', (string)$v['menge']) : null;
@@ -118,8 +128,8 @@ function fastaction_notiz_anlegen(array $d, array $auf_e, string $eingabe, ?stri
         $pn = trim((string)($p['produkt'] ?? ''));
         $rn = trim((string)($p['rezeptur'] ?? ''));
         if ($pn === '' && $rn === '') continue;
-        $pid = $pn !== '' ? (int) scalar("SELECT id FROM produkt WHERE COALESCE(NULLIF(kundenname,''),name) LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $pn . '%', $pn]) : 0;
-        $rid = (!$pid && $rn !== '') ? (int) scalar("SELECT id FROM rezeptur WHERE name LIKE ? ORDER BY (LOWER(name)=LOWER(?)) DESC, LENGTH(name) LIMIT 1", ['%' . $rn . '%', $rn]) : 0;
+        $pid = fa_produkt_id($pn);   // Fable-4 T4.6: ohne inaktive
+        $rid = !$pid ? fa_rezeptur_id($rn) : 0;
         if (!$pid && $rid) { }   // Rezeptur reicht
         $menge = ($p['menge'] ?? null) !== null && $p['menge'] !== '' ? (float) str_replace(['.', ','], ['', '.'], (string)$p['menge']) : null;
         $einheit = mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20) ?: 'Stk';

@@ -7,3 +7,5 @@ Prompt + Auswertung für den Schnell-Posteingang (`module/system/fastaction.php`
 - `fastaction_prio($dringlichkeit)` – hoch=1, mittel=2, niedrig=3.
 
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Fastaction löst Rezeptur und Produkt nur unter nicht inaktiven auf.
+
+**Aktionspunkte ohne Inaktive (Fable-4 T4.6, 13.11.2026):** `fa_rezeptur_id()` / `fa_produkt_id()` sind die eine Stelle für Namens-Auflösung; auch die Aktionspunkte (Vorschläge und Positionen) finden nie inaktive Rezepturen/Produkte.
