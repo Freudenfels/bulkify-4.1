@@ -18,9 +18,23 @@ function bx_test_marker_da(): bool {
     static $da = null;
     if ($da !== null) return $da;
     // Fable-3 T4.4 (13.11.2026): auf app.bulkify.pro zählt die Datei nie – ein Bedienfehler (Marker im Live-Ordner) darf live nie
-    // in den Testmodus schalten.
-    if (PHP_SAPI !== 'cli' && preg_match('/^app\.bulkify\.pro$/i', (string)($_SERVER['HTTP_HOST'] ?? '')) === 1) return $da = false;
+    // in den Testmodus schalten. Fable-4 T4.7: auch mit Port oder Punkt am Ende („app.bulkify.pro:443“) und auf der Kommandozeile
+    // im Live-Ordner (bx_live_ordner()).
+    if (PHP_SAPI !== 'cli' && bx_host_ist_live((string)($_SERVER['HTTP_HOST'] ?? ''))) return $da = false;
+    if (bx_live_ordner()) return $da = false;
     return $da = is_file(dirname(__DIR__) . '/.testumgebung');
+}
+// Host app.bulkify.pro – auch mit Port oder Punkt am Ende (Fable-4 T4.7).
+function bx_host_ist_live(string $host): bool {
+    return preg_match('/^app\.bulkify\.pro\.?(:\d+)?$/i', trim($host)) === 1;
+}
+// Liegt dieser Code im Live-Ordner? (Fable-4 T4.7, 13.11.2026) Der Live-Deploy legt den Marker „.liveumgebung“ im Projektstamm an
+// (deploy.yml, Schritt „Deployten Stand merken“), der Test-Deploy nie; zusätzlich zählt ein Pfad mit „app.bulkify.pro“.
+function bx_live_ordner(): bool {
+    static $live = null;
+    if ($live !== null) return $live;
+    $root = dirname(__DIR__);
+    return $live = is_file($root . '/.liveumgebung') || stripos(str_replace('\\', '/', (string)(realpath($root) ?: $root)), '/app.bulkify.pro') !== false;
 }
 function bx_testumgebung(): bool {
     static $an = null;
@@ -47,7 +61,7 @@ function bx_test_riegel(PDO $pdo): void {
                 echo 'Abbruch: Testmodus ist an, aber die Datenbank ist die LIVE-Datenbank (app_meta umgebung=live). Bitte die secrets.php der Testumgebung prüfen.';
                 exit(1);
             }
-        } elseif (PHP_SAPI !== 'cli' && preg_match('/^app\.bulkify\.pro$/i', (string)($_SERVER['HTTP_HOST'] ?? '')) === 1) {
+        } elseif (PHP_SAPI !== 'cli' && bx_host_ist_live((string)($_SERVER['HTTP_HOST'] ?? ''))) {
             // Live markiert sich selbst (einmal je Anfrage geprüft, geschrieben nur, wenn er fehlt).
             $st = $pdo->prepare("SELECT v FROM app_meta WHERE k='umgebung'"); $st->execute();
             if ((string)($st->fetchColumn() ?: '') !== 'live') $pdo->prepare("INSERT INTO app_meta (k, v) VALUES ('umgebung', 'live') ON DUPLICATE KEY UPDATE v='live'")->execute();

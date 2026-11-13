@@ -122,4 +122,10 @@ jobs:
           SFTP_USER: ${{ secrets.SERVER_USERNAME }}
           SFTP_PASS: ${{ secrets.DEPLOY_PASSWORD }}
           SFTP_PATH: ${{ secrets.SERVER_PATH }}
-        run: python .github/scripts/sftp_deploy.py mark
+        # Fable-4 T4.7 (13.11.2026): zusätzlich der Live-Marker .liveumgebung – der Riegel (core/testumgebung.php) ignoriert damit einen
+        # versehentlichen .testumgebung-Marker auch auf der Kommandozeile. Fehlschlag stoppt nichts.
+        run: |
+          python .github/scripts/sftp_deploy.py mark
+          printf 'live\n' > live_marker.txt
+          python .github/scripts/sftp_deploy.py put live_marker.txt .liveumgebung || echo "Live-Marker nicht geschrieben (nicht schlimm)"
+

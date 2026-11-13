@@ -31,3 +31,5 @@ Live (app.bulkify.pro) ist nie betroffen.
 - Beleg-Abruf der Buchhaltung (`be_mail_abholen`) im Testmodus gesperrt.
 
 **Live ignoriert den Datei-Marker (13.11.2026, Fable-3 T4.4):** `bx_test_marker_da()` zählt die Datei `.testumgebung` bei Host `app.bulkify.pro` nie – ein von Hand in den Live-Ordner gelegter Marker schaltet live nicht in den Testmodus. Auf test./beta. und auf der Kommandozeile wirkt er weiter.
+
+**Riegel Host mit Port / Kommandozeile (Fable-4 T4.7, 13.11.2026):** `bx_host_ist_live()` erkennt app.bulkify.pro auch mit Port oder Punkt am Ende. `bx_live_ordner()`: liegt der Code im Live-Ordner (Marker `.liveumgebung`, vom Live-Deploy angelegt, oder Pfad mit „app.bulkify.pro“), zählt ein `.testumgebung`-Marker nie – auch auf der Kommandozeile.
