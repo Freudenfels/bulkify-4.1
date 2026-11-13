@@ -365,6 +365,19 @@ function bestellung_chargen_post(array $b, string $von, string $sprache = 'de'):
             benachrichtigung_add('CoA-Abweichung: ' . ($b['nummer'] ?? ('Bestellung ' . $bid)) . ' · Charge ' . $nr,
                 count($abw) . ' Wert(e) außerhalb des Grenzwerts: ' . implode(', ', array_map(fn($w) => $w['parameter'] . ' ' . $w['ergebnis'], $abw)),
                 '?p=bestellung&id=' . $bid . '#chargen', 'qm', true);
+        // 13.11.2026 (Paket Teil 5.4): CoA außerhalb der Spec -> eingebuchte Charge in Quarantäne + Aufgabe „CoA außerhalb Spec“ (dringend, QM).
+        // Ist die Ware noch nicht da, entsteht die Aufgabe an der Bestellung; beim Wareneingang zählt die Abweichung über den Prüf-Befund.
+        if ($abw && function_exists('aufgabe_neu')) {
+            $cidAbw = (int) scalar("SELECT id FROM charge WHERE item_id=? AND charge_nr=? AND menge>0 ORDER BY id DESC LIMIT 1", [$itemId, $nr]);
+            if ($cidAbw && (string) scalar("SELECT status FROM charge WHERE id=?", [$cidAbw]) === 'frei') q("UPDATE charge SET status='quarantaene' WHERE id=? AND status='frei'", [$cidAbw]);
+            $refT = $cidAbw ? 'charge' : 'bestellung'; $refI = $cidAbw ?: $bid;
+            if (!(int) scalar("SELECT COUNT(*) FROM aufgabe WHERE status='offen' AND ref_typ=? AND ref_id=? AND titel LIKE 'CoA außerhalb Spec%'", [$refT, $refI])) {
+                $qm = (int) scalar("SELECT id FROM benutzer WHERE aktiv=1 AND FIND_IN_SET('labor', REPLACE(rollen,' ',''))>0 ORDER BY id LIMIT 1");
+                aufgabe_neu('CoA außerhalb Spec – ' . (string) scalar("SELECT name FROM item WHERE id=?", [$itemId]) . ' Charge ' . $nr,
+                    'Bestellung ' . ($b['nummer'] ?? $bid) . ': ' . implode('; ', array_map(fn($w) => $w['parameter'] . ' ' . $w['ergebnis'] . ' (Grenze ' . ($w['unsere'] !== '' ? $w['unsere'] : $w['spezifikation']) . ')', $abw)) . ($cidAbw ? '. Die Charge steht in Quarantäne.' : '. Ware noch nicht eingebucht – beim Wareneingang in Quarantäne nehmen.'),
+                    1, $qm ?: null, null, null, $refT, $refI, '?p=bestellung&id=' . $bid . '#chargen');
+            }
+        }
         // Rohstoff: nur Fehlendes ergänzen (Grenzwerte/Wirkstoffe), nie überschreiben.
         $erg = bch_rohstoff_ergaenzen($itemId, $kd, $werte);
         if ($erg) $GLOBALS['bch_meldung'] = 'Am Rohstoff ergänzt: ' . implode(', ', $erg) . '.';
