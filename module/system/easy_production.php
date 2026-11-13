@@ -372,7 +372,7 @@ $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         <tr>
           <td><?= h($r['name']) ?><input type="hidden" name="mat_item[<?= $ri ?>]" value="<?= (int)$r['item_id'] ?>"><input type="hidden" name="mat_name[<?= $ri ?>]" value="<?= h($r['name']) ?>"><input type="hidden" name="mat_einheit[<?= $ri ?>]" value="<?= h($r['einheit']) ?>"></td>
           <td class="muted"><?= h($r['rolle'] ?: '–') ?></td>
-          <td class="bx-num"><input type="text" name="mat_menge[<?= $ri ?>]" value="<?= (float)$r['benoetigt'] > 1e-9 ? h($nf($r['benoetigt'])) : '' ?>" placeholder="<?= ($r['rolle'] ?? '') === 'Bulkware' ? 'Menge lt. Buch' : '0' ?>" style="width:110px;text-align:right" inputmode="decimal"></td>
+          <td class="bx-num"><input type="text" name="mat_menge[<?= $ri ?>]" value="<?= (float)$r['benoetigt'] > 1e-9 ? h(zahl_feld($r['benoetigt'])) : '' ?>" placeholder="<?= ($r['rolle'] ?? '') === 'Bulkware' ? 'Menge lt. Buch' : '0' ?>" style="width:110px;text-align:right" inputmode="decimal"></td>
           <td><?= h($r['einheit']) ?></td>
           <td>
             <?php if (!$istBulk): ?>

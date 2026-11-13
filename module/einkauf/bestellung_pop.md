@@ -6,3 +6,6 @@ Route `?p=bestellung_pop&id=…` (Rolle einkauf). In „Bestellt“ öffnet ein 
 - **Versand:** Versanddienst, voraussichtliches Lieferdatum (`eta_geplant`), Tracking-Nummern. Mehrere Nummern gehen eine je Zeile in die Tabelle `lieferung_paket`, die erste auch in `bestellung.tracking` (`bestellung_tracking_setzen()`).
 - **Sendung:** Art (Paket, Palette, Container), Anzahl, Palettenart (Euro, Einweg, Tausch/Wechselpalette), Kisten/Kartons, Gewicht gesamt, Maße, Stellplätze. Die Spalten liegen an `bestellung` (`bestellung_sendung_schema()`).
 - **Notiz:** intern.
+
+**Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Eingabefelder mit `zahl_feld()` vorbelegt (Komma, kein Tausenderpunkt).
+Gewicht gesamt wird mit `gewicht_lesen()` gelesen (vorher Preis-Lesart: Vorbelegung „1.250“ kg wurde beim Speichern 1,25 kg).

@@ -77,7 +77,7 @@ function pki_ui_render(int $pa_vorgabe): void {
         <?php endif; ?>
         <div class="bx-row" style="gap:12px;flex-wrap:wrap">
           <div class="bx-field" style="width:160px"><label>Produktionsdatum</label><input type="date" name="datum" value="<?= h($c['datum']) ?>" required></div>
-          <div class="bx-field" style="width:150px"><label>Menge (Stk)</label><input type="text" inputmode="numeric" name="menge" required value="<?= count($c['lesarten']) === 1 ? h($nf($c['lesarten'][0]['wert'])) : '' ?>" placeholder="max. <?= $nf($c['rest']) ?>"></div>
+          <div class="bx-field" style="width:150px"><label>Menge (Stk)</label><input type="text" inputmode="numeric" name="menge" required value="<?= count($c['lesarten']) === 1 ? h(zahl_feld($c['lesarten'][0]['wert'], 0)) : '' ?>" placeholder="max. <?= $nf($c['rest']) ?>"></div>
           <div class="bx-field" style="flex:1;min-width:220px"><label>Bulk-Charge</label>
             <select name="bulk_charge_id"><option value="0">ohne (kein Bulk-Bezug)</option><?php foreach ($c['bulk_wahl'] as $b): ?><option value="<?= (int)$b['id'] ?>"<?= (int)$b['id'] === (int)$c['bulk_id'] ? ' selected' : '' ?>><?= h(($b['charge_nr'] ?: '#' . $b['id']) . ' · ' . $nf($b['menge_verfuegbar']) . ' ' . $b['einheit'] . ($b['mhd'] ? ' · MHD ' . date('d.m.Y', strtotime((string)$b['mhd'])) : '')) ?></option><?php endforeach; ?></select></div>
         </div>

@@ -153,7 +153,7 @@ $paket = fn($stk, $pid = 0) => (int)$stk > 0 ? form_groessen_label(auftrag_darre
               <form method="post" class="bx-row" style="gap:6px;align-items:flex-end;margin:8px 0 0;flex-wrap:wrap">
                 <input type="hidden" name="aktion" value="preis_anpassen"><input type="hidden" name="nb_id" value="<?= (int)$n['id'] ?>">
                 <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Neuer Preis / Pkg (€)
-                  <input type="text" name="vk_neu" inputmode="decimal" value="<?= ($vk > 0 || $vor > 0) ? number_format($vk > 0 ? $vk : $vor, 2, ',', '.') : '' ?>" style="width:120px;text-align:right"></label>
+                  <input type="text" name="vk_neu" inputmode="decimal" value="<?= ($vk > 0 || $vor > 0) ? zahl_feld($vk > 0 ? $vk : $vor, 4) : '' ?>" style="width:120px;text-align:right"></label>
                 <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Hinweis an den Kunden (optional)
                   <input type="text" name="grund" style="min-width:220px" placeholder="z. B. Rohstoffpreis gestiegen"></label>
                 <button class="btn btn-ghost btn-sm" type="submit">An Kunde zur Freigabe</button>

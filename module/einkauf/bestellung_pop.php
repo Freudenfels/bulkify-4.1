@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $int = fn($k) => ($v = (int) zahl_lesen((string)($_POST[$k] ?? ''), true)) > 0 ? $v : null;
         $art = in_array($_POST['sendung_art'] ?? '', array_keys(bestellung_sendung_arten()), true) ? (string)$_POST['sendung_art'] : null;
         $pal = in_array($_POST['palettenart'] ?? '', array_keys(bestellung_palettenarten()), true) ? (string)$_POST['palettenart'] : null;
-        $gew = zahl_lesen((string)($_POST['gewicht_kg'] ?? ''));
+        $gew = gewicht_lesen((string)($_POST['gewicht_kg'] ?? ''));   // Fable-4 T2.4: Gewicht (vorher Preis-Lesart: „1.250“ kg = 1,25)
         q("UPDATE bestellung SET sendung_art=?, sendung_anzahl=?, palettenart=?, kisten_anzahl=?, gewicht_kg=?, masse=?, stellplaetze=? WHERE id=?",
           [$art, $int('sendung_anzahl'), $pal, $int('kisten_anzahl'), $gew > 0 ? $gew : null, mb_substr(trim((string)($_POST['masse'] ?? '')), 0, 120) ?: null, $int('stellplaetze'), $id]);
         log_aktivitaet('bestellung', $id, 'team', 'Sendung erfasst: ' . bestellung_sendung_text($id) . ' (' . $wer . ')', 'status');
@@ -90,7 +90,7 @@ render_header('einkauf', 'Bestellung ' . $b['nummer']);
       <div class="bx-field"><label>Anzahl (z. B. 2 Paletten, 5 Pakete)</label><input type="text" inputmode="numeric" name="sendung_anzahl" value="<?= h((string)($b['sendung_anzahl'] ?? '')) ?>"></div>
       <div class="bx-field"><label>Palettenart</label><select name="palettenart"><option value="">–</option><?= $sel(bestellung_palettenarten(), $b['palettenart'] ?? '') ?></select></div>
       <div class="bx-field"><label>Kisten / Kartons</label><input type="text" inputmode="numeric" name="kisten_anzahl" value="<?= h((string)($b['kisten_anzahl'] ?? '')) ?>"></div>
-      <div class="bx-field"><label>Gewicht gesamt (kg)</label><input type="text" inputmode="decimal" data-gewicht="kg" name="gewicht_kg" value="<?= $b['gewicht_kg'] !== null && $b['gewicht_kg'] !== '' ? h($nf($b['gewicht_kg'])) : '' ?>"></div>
+      <div class="bx-field"><label>Gewicht gesamt (kg)</label><input type="text" inputmode="decimal" data-gewicht="kg" name="gewicht_kg" value="<?= $b['gewicht_kg'] !== null && $b['gewicht_kg'] !== '' ? h(zahl_feld($b['gewicht_kg'])) : '' ?>"></div>
       <div class="bx-field"><label>Stellplätze</label><input type="text" inputmode="numeric" name="stellplaetze" value="<?= h((string)($b['stellplaetze'] ?? '')) ?>"></div>
       <div class="bx-field" style="grid-column:1/-1"><label>Maße</label><input type="text" name="masse" value="<?= h((string)($b['masse'] ?? '')) ?>" placeholder="z. B. 120 × 80 × 160 cm"></div>
     </div>

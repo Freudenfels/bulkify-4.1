@@ -50,3 +50,5 @@ bleiben als eigene Charge `…-RM` gesperrt. Die Kontrolle vor dem Versand kommt
 **Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
 
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Bulk-Artikel-Auswahl ohne gesperrte Artikel.
+
+**Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Eingabefelder mit `zahl_feld()` vorbelegt (Komma, kein Tausenderpunkt).
