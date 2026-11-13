@@ -206,7 +206,7 @@ flash_zeigen();
         </select>
       </div>
       <div class="bx-field" style="margin:0;max-width:120px"><label>Pakete</label><input type="number" name="pakete" min="1" step="1" value="<?= (int)($v['pakete'] ?? 1) ?>"></div>
-      <div class="bx-field" style="margin:0;max-width:160px"><label>Gewicht (kg)<?= (string)$v['typ'] === 'palette' ? ' <span class="muted">(gesamt)</span>' : '' ?></label><input type="text" name="gewicht_kg" inputmode="decimal" value="<?= $v['gewicht_kg'] !== null ? h(gewicht_feld($v['gewicht_kg'])) : '' ?>"></div>
+      <div class="bx-field" style="margin:0;max-width:160px"><label>Gewicht (kg)<?= (string)$v['typ'] === 'palette' ? ' <span class="muted">(gesamt)</span>' : '' ?></label><input type="text" name="gewicht_kg" data-gewicht="kg" inputmode="decimal" value="<?= $v['gewicht_kg'] !== null ? h(gewicht_feld($v['gewicht_kg'])) : '' ?>"></div>
       <?php $mz = fn($x) => $x !== null && $x !== '' ? h(rtrim(rtrim(number_format((float)$x,1,',',''),'0'),',')) : ''; ?>
       <div class="bx-field vs-masse" style="margin:0;max-width:110px"><label>Länge (cm)</label><input type="text" name="masse_l" inputmode="decimal" value="<?= $mz($v['masse_l'] ?? null) ?>" placeholder="120"></div>
       <div class="bx-field vs-masse" style="margin:0;max-width:110px"><label>Breite (cm)</label><input type="text" name="masse_b" inputmode="decimal" value="<?= $mz($v['masse_b'] ?? null) ?>" placeholder="80"></div>
@@ -297,7 +297,7 @@ flash_zeigen();
             <td data-label="HS-Code"><input type="text" name="z_hs[<?= $pid ?>]" value="<?= h((string)($p['zoll_hs'] ?? '')) ?>" placeholder="z. B. 21069092" style="max-width:140px"></td>
             <td data-label="Ursprung"><input type="text" name="z_ursprung[<?= $pid ?>]" maxlength="2" style="text-transform:uppercase;max-width:70px" value="<?= h($urs) ?>" placeholder="DE"></td>
             <td data-label="Wert/Stk (€)"><input type="text" name="z_wert[<?= $pid ?>]" inputmode="decimal" value="<?= $p['zoll_wert'] !== null ? h(rtrim(rtrim(number_format((float)$p['zoll_wert'],2,',','.'),'0'),',')) : '' ?>" style="max-width:110px"></td>
-            <td data-label="Gew./Stk (g)"><input type="text" name="z_gewicht[<?= $pid ?>]" inputmode="numeric" value="<?= $p['zoll_gewicht_g'] !== null ? (int)$p['zoll_gewicht_g'] : '' ?>" placeholder="auto" style="max-width:90px"></td>
+            <td data-label="Gew./Stk (g)"><input type="text" name="z_gewicht[<?= $pid ?>]" data-gewicht="g" inputmode="numeric" value="<?= $p['zoll_gewicht_g'] !== null ? (int)$p['zoll_gewicht_g'] : '' ?>" placeholder="auto" style="max-width:90px"></td>
           </tr>
         <?php endforeach; ?>
         </tbody>
@@ -349,7 +349,7 @@ flash_zeigen();
             <td><?= h((string)$x['charge_nr']) ?></td>
             <td class="bx-num"><?= $x['menge'] !== null ? h(menge_txt($x['menge'])) . ' Pkg' : '' ?></td>
             <td><?php if (!$istPal): $par = null; foreach ($psPal as $pp) if ((int)$pp['id'] === (int)$x['parent_id']) $par = $pp; ?><?= $par ? 'Palette ' . (int)$par['nr'] : '<span class="muted">–</span>' ?><?php endif; ?></td>
-            <td><?php if ($psGeplant && ($istPal || empty($x['parent_id']))): ?><input type="text" inputmode="decimal" name="gew[<?= (int)$x['id'] ?>]" value="<?= $x['gewicht_kg'] !== null ? h(rtrim(rtrim(number_format((float)$x['gewicht_kg'], 3, ',', ''), '0'), ',')) : '' ?>" style="width:90px"><?php else: ?><?= $x['gewicht_kg'] !== null ? h(menge_txt($x['gewicht_kg'])) : '' ?><?php endif; ?></td>
+            <td><?php if ($psGeplant && ($istPal || empty($x['parent_id']))): ?><input type="text" inputmode="decimal" data-gewicht="kg" name="gew[<?= (int)$x['id'] ?>]" value="<?= $x['gewicht_kg'] !== null ? h(rtrim(rtrim(number_format((float)$x['gewicht_kg'], 3, ',', ''), '0'), ',')) : '' ?>" style="width:90px"><?php else: ?><?= $x['gewicht_kg'] !== null ? h(menge_txt($x['gewicht_kg'])) : '' ?><?php endif; ?></td>
             <td style="text-align:right"><?php if ($psGeplant): ?><button class="btn btn-ghost btn-sm" type="submit" name="aktion" value="ps_del" onclick="this.form.ps_id.value='<?= (int)$x['id'] ?>'; return confirm('Packstück entfernen?')">×</button><?php endif; ?></td>
           </tr>
         <?php endforeach; ?>

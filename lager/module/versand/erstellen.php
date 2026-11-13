@@ -104,7 +104,7 @@ flash_zeigen();
         <select name="typ" id="typ" style="width:100%"><option value="paket">Paket</option><option value="palette">Palette / Fracht</option></select>
       </label>
       <label>Pakete / Packstücke<input type="number" name="pakete" id="pakete" min="1" value="1" style="width:100%"></label>
-      <label>Gewicht gesamt (kg)<input type="text" name="gewicht_kg" id="gewicht_kg" inputmode="decimal" style="width:100%"></label>
+      <label>Gewicht gesamt (kg)<input type="text" name="gewicht_kg" id="gewicht_kg" data-gewicht="kg" inputmode="decimal" style="width:100%"></label>
       <label>Versicherungswert (€)<input type="text" name="versicherung" id="versicherung" inputmode="decimal" style="width:100%"></label>
     </div>
     <div class="muted" style="font-size:12px;margin-top:6px">Pakete = Summe der Kartons (änderbar). Gewicht/Versicherung rechnen sich aus den Positionen – du kannst sie überschreiben. <span id="gewProPaket"></span></div>

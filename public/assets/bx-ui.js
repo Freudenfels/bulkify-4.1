@@ -202,6 +202,8 @@
   function start() {
     // Auswahl mit Suche überall (Portale und Sub-Apps laden sie sonst nicht): einmal nachladen
     if (!window.bxRsComboInit && !document.querySelector('script[src*="bx-rscombo.js"]')) { var sc = document.createElement('script'); sc.src = '/assets/bx-rscombo.js'; document.head.appendChild(sc); }
+    // Rückfrage bei mehrdeutigen Gewichten „1.250“ (Fable-4 T1.3): Felder mit data-gewicht.
+    if (!window.bxGewichtInit && !document.querySelector('script[src*="bx-gewicht.js"]')) { var sg = document.createElement('script'); sg.src = '/assets/bx-gewicht.js'; document.head.appendChild(sg); }
     alle(document);
     if (window.MutationObserver) new MutationObserver(function (ms) {
       ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.nodeType !== 1) return; if (n.matches && n.matches('dialog.bx-dialog')) aufwerten(n); else if (n.querySelector) alle(n); }); });

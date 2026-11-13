@@ -75,7 +75,7 @@ flash_zeigen();
     var h='';
     if(o.modus==='stk'){ h+='<div class="iz-zeile"><input type="text" inputmode="decimal" class="izMenge" placeholder="Menge"> <span class="iz-gross">'+esc(o.einheit)+'</span></div>';
       if(o.voll) h+='<button type="button" class="btn btn-ghost izVoll">voll, original verschlossen ('+fmt(o.voll)+' '+esc(o.einheit)+')</button>'; }
-    else { h+='<div class="iz-zeile"><input type="text" inputmode="decimal" class="izBrutto" placeholder="Brutto"> <span class="iz-gross">kg brutto</span></div>'
+    else { h+='<div class="iz-zeile"><input type="text" inputmode="decimal" class="izBrutto" data-gewicht="kg" placeholder="Brutto"> <span class="iz-gross">kg brutto</span></div>'
           +'<div class="iz-zeile">'+taraSelect()+' <input type="text" inputmode="decimal" class="izTaraKg" style="width:120px" placeholder="Tara"> <span>kg Tara</span></div>';
       if(o.modus==='kapsel') h+='<div class="iz-zeile"><input type="text" inputmode="decimal" class="izMg" style="width:120px" value="'+(o.kapsel_mg?fmtG(o.kapsel_mg,2):'')+'"> <span>mg je Kapsel</span></div>';
       h+='<div class="iz-gross izNetto muted">Netto: –</div>'; }
@@ -101,7 +101,7 @@ flash_zeigen();
       var box=karte.firstChild; verdrahte(box,o);
       var f=box.querySelector('.izMenge')||box.querySelector('.izBrutto'); if(f) f.focus();
       function senden(d){ d.bereich=bereich; d.obj=o.obj; d.oid=o.id; api('zaehlen',d,function(r){ msg(r.msg,r.ok); if(r.ok){ karte.innerHTML=''; scans(); nachzaehlen(); fokus(); } }); }
-      box.querySelector('.izSpeichern').addEventListener('click',function(){ senden(werte(box,o)); });
+      box.querySelector('.izSpeichern').addEventListener('click',function(){ var los=function(){ senden(werte(box,o)); }; if(!window.bxGewichtPruefen || window.bxGewichtPruefen(box,los)) los(); });
       box.addEventListener('keydown',function(e){ if(e.key==='Enter'&&e.target.tagName==='INPUT'){ e.preventDefault(); senden(werte(box,o)); } });
       var v=box.querySelector('.izVoll'); if(v) v.addEventListener('click',function(){ senden({art:'voll'}); });
       box.querySelector('.izLeer').addEventListener('click',function(){ if(confirm('Gebinde ist leer / verbraucht?')) senden({art:'leer'}); });

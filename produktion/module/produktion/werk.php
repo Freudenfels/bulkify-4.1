@@ -272,6 +272,8 @@ header('Content-Type: text/html; charset=utf-8');
   a.back{display:inline-flex;align-items:center;gap:8px;color:var(--text);text-decoration:none;font-size:17px;font-weight:700;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px 20px;min-height:48px}
   a.back:active{background:var(--gruen);color:#06130d}
 </style>
+<script>window.bxGewichtTexte = <?= json_encode(['frage' => $T['wa_gew_frage'], 'hinweis' => $T['wa_gew_hinweis'], 'abbrechen' => $T['wa_gew_abbrechen']], JSON_UNESCAPED_UNICODE) ?>;</script>
+<script src="/assets/bx-gewicht.js?v=20261113" defer></script>
 </head><body><div class="wrap">
 
 <?php if (!$werkUid): // ===================== PIN-LOGIN ===================== ?>
@@ -508,7 +510,7 @@ header('Content-Type: text/html; charset=utf-8');
         <form method="get" style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           <input type="hidden" name="p" value="werk"><input type="hidden" name="id" value="<?= (int)$id ?>">
           <div><div class="muted" style="font-size:14px;margin-bottom:4px"><?= h($T['kg_per_container']) ?></div>
-            <input type="text" inputmode="decimal" name="cap" value="<?= h($capM > 0 ? gewicht_feld($capM) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
+            <input type="text" inputmode="decimal" data-gewicht="kg" name="cap" value="<?= h($capM > 0 ? gewicht_feld($capM) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
           <button class="btn btn-ghost" type="submit" style="min-height:52px"><?= h($T['calc_containers']) ?></button>
         </form>
         <?php endif; ?>
@@ -588,7 +590,7 @@ header('Content-Type: text/html; charset=utf-8');
       <form method="get" style="margin-top:12px;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
         <input type="hidden" name="p" value="werk"><input type="hidden" name="id" value="<?= (int)$id ?>">
         <div><div class="muted" style="font-size:14px;margin-bottom:4px"><?= h($T['kg_per_container']) ?></div>
-          <input type="text" inputmode="decimal" name="cap" value="<?= h($cap > 0 ? gewicht_feld($cap) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
+          <input type="text" inputmode="decimal" data-gewicht="kg" name="cap" value="<?= h($cap > 0 ? gewicht_feld($cap) : '') ?>" placeholder="10" style="font-size:20px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:150px"></div>
         <button class="btn btn-ghost" type="submit" style="min-height:52px"><?= h($T['calc_containers']) ?></button>
       </form>
       <?php if (!empty($plan['gebinde'])): ?>
@@ -705,7 +707,7 @@ header('Content-Type: text/html; charset=utf-8');
     <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center" onsubmit="return confirm('<?= h($T['rest_save']) ?>?');">
       <input type="hidden" name="aktion" value="werk_restmischung">
       <input type="hidden" name="pa_id" value="<?= (int)$id ?>">
-      <input type="text" inputmode="decimal" name="menge" placeholder="<?= h($T['rest_ph']) ?>" required style="font-size:19px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:140px;text-align:right">
+      <input type="text" inputmode="decimal" data-gewicht="kg" name="menge" placeholder="<?= h($T['rest_ph']) ?>" required style="font-size:19px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--text);width:140px;text-align:right">
       <span style="font-weight:700">kg</span>
       <button class="btn btn-ghost btn-lg" type="submit"><?= h($T['rest_save']) ?></button>
     </form>

@@ -58,3 +58,19 @@ if (!function_exists('tara_aus_id')) {
         return $r ? ['id' => (int)$r['id'], 'name' => (string)$r['name'], 'kg' => (float)$r['tara_kg']] : null;
     }
 }
+
+// Mehrdeutiges Gewicht? (Fable-4 T1.3, 13.11.2026) „1.250“ (1-3 Ziffern, Punkt, genau 3 Ziffern, keine Einheit) kann 1,25 oder 1.250 sein.
+// Gewichtsfelder tragen data-gewicht="kg|g"; public/assets/bx-gewicht.js fragt dann vor dem Absenden nach (gleiches Muster).
+if (!function_exists('gewicht_mehrdeutig')) {
+    function gewicht_mehrdeutig($roh): bool { return (bool) preg_match('/^\s*-?\d{1,3}\.\d{3}\s*$/', (string) $roh); }
+}
+
+// Menge in der Einheit eines Artikels lesen (Fable-4 T1.3, 13.11.2026): kg/g/l… = Gewicht (gewicht_lesen), sonst Stückzahl mit
+// Tausenderpunkt („150.000“ Stk = 150000). Braucht zahl_lesen() (core/zahl_lesen.php) für die Stückzahl.
+if (!function_exists('menge_in_einheit_lesen')) {
+    function menge_in_einheit_lesen(string $roh, string $einheit): float {
+        if (einheit_ist_gewicht($einheit)) return gewicht_lesen($roh);
+        if (!function_exists('zahl_lesen')) require_once __DIR__ . '/zahl_lesen.php';
+        return zahl_lesen($roh, true);
+    }
+}

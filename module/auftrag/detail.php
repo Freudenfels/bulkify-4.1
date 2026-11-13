@@ -679,7 +679,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?
     }
     [$qTyp, $qId] = array_pad(explode(':', (string)($_POST['quelle'] ?? ''), 2), 2, '');
     $r = auftrag_material_zuordnen($id, (int)($_POST['item_id'] ?? 0), $qTyp === 'charge' ? 'charge' : 'bestellung', (int)$qId,
-                                   (float) zahl_lesen((string)($_POST['menge'] ?? '0')), (string)(current_user()['name'] ?? ''));
+                                   menge_in_einheit_lesen((string)($_POST['menge'] ?? '0'), (string) scalar("SELECT einheit FROM item WHERE id=?", [(int)($_POST['item_id'] ?? 0)])), (string)(current_user()['name'] ?? ''));   // Fable-4 T1.3: kg/g = Gewicht, sonst Stückzahl („150.000“ = 150000)
     header('Location: ?p=auftrag&id=' . $id . (!empty($r['ok']) ? '&mzok=' . rawurlencode((string)$r['meldung']) : '&expressfehler=' . urlencode((string)($r['fehler'] ?? 'Zuordnen nicht möglich.')))); exit;
 }
 
@@ -1659,7 +1659,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
                 : h((string)$q['nummer']) . ($q['lieferant'] !== '' ? ' · ' . h((string)$q['lieferant']) : '') . ' · ' . h(status_text((string)$q['status'])) . (!empty($q['eta_geplant']) ? ' · Termin ' . h(date('d.m.Y', strtotime((string)$q['eta_geplant']))) : '') ?> · frei <?= $mng((float)$q['frei'], $einh) ?></option>
             <?php endforeach; ?>
           </select>
-          <input type="text" inputmode="decimal" name="menge" value="<?= h(rtrim(rtrim(number_format(min($mzBedarf > 0 ? $mzBedarf : (float)$r['benoetigt'], (float)$mzQ[$mzArt][0]['frei']), 3, ',', ''), '0'), ',')) ?>" style="width:120px" title="Menge in <?= h($einh) ?>">
+          <input type="text" inputmode="decimal" name="menge"<?= einheit_ist_gewicht((string)$einh) ? ' data-gewicht="' . h(mb_strtolower((string)$einh)) . '"' : '' ?> value="<?= h(rtrim(rtrim(number_format(min($mzBedarf > 0 ? $mzBedarf : (float)$r['benoetigt'], (float)$mzQ[$mzArt][0]['frei']), 3, ',', ''), '0'), ',')) ?>" style="width:120px" title="Menge in <?= h($einh) ?>">
           <button class="btn btn-primary btn-sm" type="submit">Zuordnen</button>
         </div>
         <?php endif; ?>
@@ -1700,7 +1700,7 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
               <?php endforeach; ?>
             </optgroup><?php endforeach; ?>
           </select>
-          <input type="text" inputmode="<?= $bulkInM ?>" name="menge" <?= $bulkTaus ?> value="<?= $bulkInput($mbOffen) ?>" style="width:120px" title="Menge (<?= $bulkEinh ?>)">
+          <input type="text" inputmode="<?= $bulkInM ?>" name="menge" <?= $bulkTaus ?><?= $istFuellG ? ' data-gewicht="kg"' : '' ?> value="<?= $bulkInput($mbOffen) ?>" style="width:120px" title="Menge (<?= $bulkEinh ?>)">
           <button class="btn btn-primary btn-sm" type="submit">Binden</button>
         </div>
       </form>

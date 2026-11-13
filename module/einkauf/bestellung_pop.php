@@ -90,7 +90,7 @@ render_header('einkauf', 'Bestellung ' . $b['nummer']);
       <div class="bx-field"><label>Anzahl (z. B. 2 Paletten, 5 Pakete)</label><input type="text" inputmode="numeric" name="sendung_anzahl" value="<?= h((string)($b['sendung_anzahl'] ?? '')) ?>"></div>
       <div class="bx-field"><label>Palettenart</label><select name="palettenart"><option value="">–</option><?= $sel(bestellung_palettenarten(), $b['palettenart'] ?? '') ?></select></div>
       <div class="bx-field"><label>Kisten / Kartons</label><input type="text" inputmode="numeric" name="kisten_anzahl" value="<?= h((string)($b['kisten_anzahl'] ?? '')) ?>"></div>
-      <div class="bx-field"><label>Gewicht gesamt (kg)</label><input type="text" inputmode="decimal" name="gewicht_kg" value="<?= $b['gewicht_kg'] !== null && $b['gewicht_kg'] !== '' ? h($nf($b['gewicht_kg'])) : '' ?>"></div>
+      <div class="bx-field"><label>Gewicht gesamt (kg)</label><input type="text" inputmode="decimal" data-gewicht="kg" name="gewicht_kg" value="<?= $b['gewicht_kg'] !== null && $b['gewicht_kg'] !== '' ? h($nf($b['gewicht_kg'])) : '' ?>"></div>
       <div class="bx-field"><label>Stellplätze</label><input type="text" inputmode="numeric" name="stellplaetze" value="<?= h((string)($b['stellplaetze'] ?? '')) ?>"></div>
       <div class="bx-field" style="grid-column:1/-1"><label>Maße</label><input type="text" name="masse" value="<?= h((string)($b['masse'] ?? '')) ?>" placeholder="z. B. 120 × 80 × 160 cm"></div>
     </div>

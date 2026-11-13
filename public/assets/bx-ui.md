@@ -13,3 +13,5 @@ Ein gemeinsamer Baustein für alle Programme (Dashboard, Kunden- und Lieferanten
 3. **Lauftext:** Elemente mit `text-overflow: ellipsis` (z. B. `.bx-lauf`), deren Text nicht passt, laufen beim Darüberfahren (Handy: Antippen) langsam durch (~45 px/s).
 
 `public/assets/bx-rscombo.js` – die durchsuchbare Auswahl (vorher Inline-Skript in `core/layout.php`): jedes `<select>` mit mehr als 10 Einträgen (oder `class="rscombo"`) wird ein Suchfeld mit Trefferliste; `data-such` an der Option = zusätzliche Suchbegriffe (Synonyme, Nummern); Pfeiltasten + Enter; Ausnahme `data-norscombo`.
+
+**Gewichte (13.11.2026):** `start()` lädt `bx-gewicht.js` nach (Rückfrage bei „1.250“ in Feldern mit `data-gewicht`).
