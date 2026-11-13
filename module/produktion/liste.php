@@ -149,7 +149,9 @@ if ($q !== '') {
         return false;
     });
 }
-$rows = bx_sort_rows($rows, $sort, $dir);
+// 13.11.2026: Reiter „Läuft“ ohne eigene Sortierung = gleiche Reihenfolge wie die Werk-App (plan_sort, dann Startzeit).
+if ($tab === 'laufend' && !isset($_GET['sort'])) $rows = pa_reihenfolge_laufend_zuerst(array_values($rows), fn($r, $t) => true);
+else $rows = bx_sort_rows($rows, $sort, $dir);
 
 // Spalte „Etikett": je Auftrag prüfen, ob eine Etikett-Datei hinterlegt ist – in EINER Abfrage
 // für alle angezeigten Aufträge (statt je Zeile etikett_vorhanden() -> N+1).

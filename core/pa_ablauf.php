@@ -307,6 +307,30 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     return ['ok' => true, 'unter_charge_id' => $uc, 'charge_nr' => $charge, 'mhd' => $mhd, 'neu' => true, 'vorgabe' => $v['charge_nr'], 'grund' => $grund];
 }
 
+// ---- Reihenfolge Werk-App und Reiter „Läuft“ (13.11.2026) -----------------------------------------------------------------
+// Startzeit je PA: erste Unter-Charge, sonst der erste erledigte Produktionsschritt. [pa_id => 'Y-m-d H:i:s'] (nur PAs mit Start).
+function pa_startzeiten(array $ids): array {
+    $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+    if (!$ids) return [];
+    $in = implode(',', $ids); $out = [];
+    try { foreach (all("SELECT pa_id, MIN(angelegt) AS t FROM pa_unter_charge WHERE pa_id IN ($in) GROUP BY pa_id") as $r) if ($r['t']) $out[(int)$r['pa_id']] = (string)$r['t']; } catch (\Throwable $e) {}
+    try { foreach (all("SELECT pa_id, MIN(erledigt_at) AS t FROM produktion_schritt WHERE pa_id IN ($in) AND erledigt=1 AND erledigt_at IS NOT NULL GROUP BY pa_id") as $r)
+            if ($r['t'] && (!isset($out[(int)$r['pa_id']]) || (string)$r['t'] < $out[(int)$r['pa_id']])) $out[(int)$r['pa_id']] = (string)$r['t']; } catch (\Throwable $e) {}
+    return $out;
+}
+// Laufende PAs zuerst (untereinander nach plan_sort, dann Startzeit), danach die übrigen in Plan-Reihenfolge (plan_sort, geplant_am, id).
+// $laeuft(row, startzeit|null): bool entscheidet, was „läuft“. Zeilen brauchen id, plan_sort (darf fehlen), geplant_am (darf fehlen).
+function pa_reihenfolge_laufend_zuerst(array $rows, callable $laeuft): array {
+    $st = pa_startzeiten(array_map(fn($r) => (int)$r['id'], $rows));
+    $key = function ($r) use ($st, $laeuft) {
+        $t = $st[(int)$r['id']] ?? null; $l = (bool)$laeuft($r, $t);
+        $ps = $r['plan_sort'] ?? null;
+        return [$l ? 0 : 1, $ps === null || $ps === '', (int)$ps, $l ? ($t ?? '9999') : '', (string)(($r['geplant_am'] ?? '') ?: '9999'), (int)$r['id']];
+    };
+    usort($rows, fn($a, $b) => $key($a) <=> $key($b));
+    return $rows;
+}
+
 // Weicht die Charge wirklich von der Vorgabe ab? Leer = Vorgabe; Leerzeichen und Groß-/Kleinschreibung zählen nicht (13.11.2026).
 function pa_charge_abweichend(string $charge, string $vorgabe): bool {
     $charge = trim($charge);

@@ -76,3 +76,5 @@ Die alten Seiten leiten weiter (`public/index.php`), nichts ist gelöscht. Ihre 
 **Noch offen (13.11.2026, Werk-App Teil 2):** Reiter „Läuft“: unter dem Produkt „Noch offen: Schritte · Menge“ (gleiche Zeile wie Werk-App und Plan).
 
 **Produktion per KI melden (13.11.2026, Werk-App Teil 4):** Feld „Produktion melden (KI)“ oben auf der Seite (`_ki_melden.php`).
+
+**Reiter „Läuft“ (13.11.2026):** ohne eigene Spalten-Sortierung (kein `sort` in der Adresse) in derselben Reihenfolge wie die Werk-App: `plan_sort`, dann Startzeit (`pa_reihenfolge_laufend_zuerst()`). Klick auf eine Spaltenüberschrift sortiert wie bisher.

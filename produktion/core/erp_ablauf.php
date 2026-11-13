@@ -118,9 +118,9 @@ function erp_wa_tagesplan(): array {
         $r['_m'] = erp_wa_machbar((int)$r['id']); $r['_lauf'] = (string)$r['status'] === 'laufend'; $r['_heute'] = (string)($r['geplant_am'] ?? '') !== '' && (string)$r['geplant_am'] <= $heute;
         if (erp_wa_sichtbar_grund($r, $r['_m']) === '') $sicht[] = $r;
     }
-    usort($sicht, fn($a, $b) => [$a['plan_sort'] === null, (int)$a['plan_sort'], (string)($a['geplant_am'] ?? '9999'), (int)$a['id']]
-                           <=> [$b['plan_sort'] === null, (int)$b['plan_sort'], (string)($b['geplant_am'] ?? '9999'), (int)$b['id']]);
-    return $sicht;
+    // 13.11.2026: laufende PAs zuerst (untereinander plan_sort, dann Startzeit), danach die übrigen in Plan-Reihenfolge.
+    // Laufende stehen nicht im Reiter „Plan“ und lassen sich dort nicht ziehen – sonst rutschten sie ganz nach unten.
+    return pa_reihenfolge_laufend_zuerst($sicht, fn($r, $t) => !empty($r['_lauf']) || $t !== null);
 }
 function erp_wa_tara(): array { return tabelle_da('lg_tara') ? all("SELECT id, name, tara_kg FROM lg_tara WHERE aktiv=1 ORDER BY sort, name") : []; }
 // Kapseln je Packung + Kapsel-Bulk? (Gegenprobe Gläser × Kapseln je Glas gegen Kapselzahl aus dem Sackgewicht.)
