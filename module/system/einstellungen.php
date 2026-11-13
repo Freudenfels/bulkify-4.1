@@ -386,7 +386,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   </form>
 </div>
 
-<?php require_once BX_ROOT . '/core/kunde_neutral.php'; $kfBericht = kunde_filter_bericht(); ?>
+<?php require_once BX_ROOT . '/core/kunde_neutral.php'; $kfBericht = kunde_filter_bericht(); $kfArtikel = kunde_filter_artikel_treffer(); ?>
 <div class="bx-panel" id="kundenfilter">
   <h2 style="margin-top:0">Lieferantennamen für Kunden ersetzen <?= bx_hint('In Mails, Belegen, Dokumenten und im Portal ersetzt das System Lieferantennamen durch „bulkify“. Ersetzt wird der volle Firmenname (mit Rechtsform oder aus mindestens zwei Wörtern) und ein Ein-Wort-Name ab 6 Zeichen – außer er steht unten in der Liste allgemeiner Wörter. Zusätzlich jeder „Weitere Name“ am Lieferanten. Paketdienste (DHL, UPS, DPD, GLS, Hermes, FedEx, TNT) werden genannt.') ?></h2>
   <?php if (isset($_GET['kfok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Gespeichert.</div><?php endif; ?>
@@ -402,6 +402,15 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
     <?php foreach ($kfBericht as $kf): ?>
       <tr><td class="bx-lauf"><a href="?p=lieferant&id=<?= (int)$kf['id'] ?>"><?= h($kf['firma']) ?></a></td><td><?= h($kf['nr']) ?></td><td class="bx-lauf"><?= h($kf['alias']) ?: '<span class="muted">–</span>' ?></td>
         <td><?= $kf['ersetzt'] ? bx_badge('wird ersetzt', 'ok') : '<span class="muted">nicht ersetzt: ' . h($kf['grund']) . '</span>' ?></td></tr>
+    <?php endforeach; ?>
+    </tbody></table></div>
+  </details>
+  <details style="margin-top:10px">
+    <summary style="cursor:pointer">Artikelnamen mit Lieferantennamen (<?= count($kfArtikel) ?>) – Vorschlag, nichts wird automatisch umbenannt</summary>
+    <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table"><thead><tr><th>Artikel</th><th>Art</th><th>enthält</th><th>Lieferant</th><th>Vorschlag neuer Name</th></tr></thead><tbody>
+    <?php foreach ($kfArtikel as $ka): ?>
+      <tr><td class="bx-lauf"><a href="?p=rohstoff&id=<?= (int)$ka['item_id'] ?>"><?= h($ka['name']) ?></a><?= $ka['status'] === 'inaktiv' ? ' <span class="muted">(inaktiv)</span>' : '' ?></td>
+        <td><?= h($ka['kategorie']) ?></td><td><?= h($ka['treffer']) ?></td><td><?= h($ka['nr'] ?: $ka['lieferant']) ?></td><td class="bx-lauf"><?= h($ka['vorschlag']) ?></td></tr>
     <?php endforeach; ?>
     </tbody></table></div>
   </details>

@@ -186,6 +186,45 @@ function kunde_filter_bericht(): array {
     }
     return $out;
 }
+// Artikelnamen mit Lieferantennamen (Fable-4 T4.4, 13.11.2026): nur eine Liste mit Vorschlag – umbenannt wird nichts (Nico entscheidet).
+// Gesucht wird der volle Firmenname, jeder „Weitere Name“ und das erste Wort des Firmennamens ab 4 Zeichen (z. B. „Wellgreen“ aus
+// „Wellgreen Technology Co., Ltd.“), als ganzes Wort ohne Groß-/Kleinschreibung. Labore, Partner und Paketdienste zählen nicht.
+// Vorschlag = Name ohne den Lieferantennamen (samt Klammer/Bindestrich drumherum).
+function kunde_filter_artikel_treffer(): array {
+    $out = [];
+    if (!function_exists('all') || !kn_tabelle_da('lieferanten') || !kn_tabelle_da('item')) return $out;
+    $partner = kn_spalte_da('lieferanten', 'ist_partner') ? " AND COALESCE(ist_partner,0)=0" : '';
+    $aliasSql = kn_spalte_da('lieferanten', 'kunden_alias') ? "COALESCE(kunden_alias,'')" : "''";
+    $namen = [];
+    foreach (all("SELECT id, firma, lieferantennummer, COALESCE(kategorien,'') AS kat, $aliasSql AS alias FROM lieferanten WHERE firma IS NOT NULL AND firma<>''" . $partner) as $l) {
+        $kat = array_filter(array_map('trim', explode(',', (string)$l['kat'])));
+        if ($kat && !array_diff($kat, ['labor'])) continue;
+        $f = trim((string)$l['firma']);
+        if (kunde_filter_paketdienst($f) || preg_match('/bulkify|maniso|^L-\d+$/i', $f)) continue;
+        $v = [$f];
+        $erstes = (string)(preg_split('/[\s,]+/u', $f)[0] ?? '');
+        if (mb_strlen($erstes) >= 4 && !isset(kunde_filter_woerter()[mb_strtolower($erstes)])) $v[] = $erstes;
+        foreach (array_filter(array_map('trim', explode(',', (string)$l['alias']))) as $al) if (mb_strlen($al) >= 3) $v[] = $al;
+        foreach (array_unique($v) as $x) $namen[] = ['wort' => $x, 'lid' => (int)$l['id'], 'firma' => $f, 'nr' => (string)$l['lieferantennummer']];
+    }
+    usort($namen, fn($a, $b) => mb_strlen($b['wort']) <=> mb_strlen($a['wort']));
+    $status = kn_spalte_da('item', 'status') ? "COALESCE(status,'')" : "''";
+    foreach (all("SELECT id, name, kategorie, $status AS status FROM item WHERE name IS NOT NULL AND name<>'' ORDER BY name") as $it) {
+        $name = (string)$it['name'];
+        foreach ($namen as $n) {
+            $re = '/(?<![\p{L}\p{N}])' . preg_quote($n['wort'], '/') . '(?![\p{L}\p{N}])/iu';
+            if (!@preg_match($re, $name)) continue;
+            $vorschlag = (string)(preg_replace('/\s*[\(\[]\s*' . preg_quote($n['wort'], '/') . '\s*[\)\]]/iu', '', $name) ?? $name);
+            $vorschlag = (string)(preg_replace('/\s*[-–·|,]\s*' . preg_quote($n['wort'], '/') . '(?![\p{L}\p{N}])/iu', '', $vorschlag) ?? $vorschlag);
+            $vorschlag = (string)(preg_replace($re, '', $vorschlag) ?? $vorschlag);
+            $vorschlag = trim((string)(preg_replace('/\s{2,}/u', ' ', $vorschlag) ?? $vorschlag), " \t-–·|,()");
+            $out[] = ['item_id' => (int)$it['id'], 'name' => $name, 'kategorie' => (string)$it['kategorie'], 'status' => (string)$it['status'],
+                      'treffer' => $n['wort'], 'lieferant' => $n['firma'], 'nr' => $n['nr'], 'vorschlag' => $vorschlag];
+            break;
+        }
+    }
+    return $out;
+}
 // Lieferantennamen in Freitext ersetzen (ganze Wörter, ohne Groß-/Kleinschreibung).
 function kunde_text_neutral(?string $t, string $ersatz = 'bulkify'): string {
     $t = (string)$t;
