@@ -247,3 +247,5 @@ Unter der Stammdaten-Tabelle des KI-Vorschlags steht jetzt „Wirkstoffgehalt la
 **Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.
 
 **Spec-Vergleich (13.11.2026, Paket Teil 5.3):** Nach dem Upload einer Spec oder CoA öffnet sich das Pop-up „Vergleich mit der bulkify-Spec“ (`&vergleich=`). Aktionen: `spec_vgl_uebernehmen` und `spec_vgl_behalten`. Oben stehen die Knöpfe „Mit bulkify-Spec vergleichen“ je Dokument mit ausgelesenen Werten.
+
+**Reservierung ehrlich (Sofortfix 13.11.2026):** Kopf und Reiter Lager zeigen „reserviert X – im Lager, unterwegs, ungedeckt“; Reservierungsliste mit Spalten PR (Link, „einziger offener“ bei alten Reservierungen) und Deckung; Rückfrage im Pop-up beim Reservieren über Bestand; Hinweis „BE-…: Charge eingetragen, nicht eingebucht – jetzt einbuchen“.

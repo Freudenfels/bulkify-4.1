@@ -733,6 +733,7 @@ function init_schema(): void {
     // Bulk-Reservierung (dritter Beschaffungsweg): fertige Bulkware aus einer KONKRETEN Quelle einem Auftrag
     // zuteilen – entweder eine (ggf. noch nicht gelieferte) Bestellposition ODER eine vorhandene Charge.
     ensure_column('reservierung', 'bestellung_position_id', "INT NULL");
+    ensure_column('reservierung', 'ziel_pa_id', "INT NULL");   // Sofortfix 13.11.2026: manuelle Reservierung für diesen PR (pa_id bleibt „aus der Produktion“)
     ensure_column('reservierung', 'charge_id', "INT NULL");
 
     // aufgabe: „Das musst du machen"-Aufgaben für den Werk-Bereich. zugewiesen_an NULL = ganzes Team.
@@ -10010,17 +10011,36 @@ function item_reservierungen_liste(int $item_id): array {
 // Manuelle Reservierung eines Items für einen Auftrag SETZEN/ÄNDERN. Eine Zeile je Auftrag (pa_id NULL).
 // menge <= 0 hebt eine bestehende manuelle Reservierung auf. Über den physischen Bestand hinaus erlaubt
 // (z. B. Reservierung gegen eine noch erwartete Lieferung); die Netto-Verfügbarkeit fällt dann entsprechend.
-function item_reservierung_setzen(int $item_id, int $auftrag_id, float $menge): array {
+// Sofortfix 13.11.2026: Mehr als frei + unterwegs (abzüglich der anderen Reservierungen) nur nach Rückfrage ($trotzdem) – die
+// Reservierung bleibt möglich, zählt dann aber als ungedeckt (reservierung_deckung). Eine neue manuelle Reservierung bekommt den PR,
+// wenn der Auftrag genau einen offenen hat (ziel_pa_id).
+function item_reservierung_setzen(int $item_id, int $auftrag_id, float $menge, bool $trotzdem = false): array {
     if ($item_id <= 0 || $auftrag_id <= 0) return ['ok'=>false, 'msg'=>'Item oder Auftrag fehlt.'];
     $menge = max(0.0, $menge);
-    $row = one("SELECT id FROM reservierung WHERE item_id=? AND auftrag_id=? AND pa_id IS NULL AND status='aktiv'", [$item_id, $auftrag_id]);
+    $row = one("SELECT id, menge FROM reservierung WHERE item_id=? AND auftrag_id=? AND pa_id IS NULL AND status='aktiv'", [$item_id, $auftrag_id]);
+    if ($menge > 1e-9 && !$trotzdem) {
+        $verf = (float) item_bestand($item_id, true) + (function_exists('item_unterwegs') ? (float) item_unterwegs($item_id) : 0.0)
+              - (item_reserviert_gesamt($item_id) - (float)($row['menge'] ?? 0));
+        if ($menge > max(0.0, $verf) + 1e-9) {
+            $e = (string) scalar("SELECT einheit FROM item WHERE id=?", [$item_id]);
+            $f = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+            return ['ok' => false, 'rueckfrage' => true, 'menge' => $menge,
+                    'msg' => 'Nur ' . $f(max(0.0, $verf)) . ' ' . $e . ' da bzw. unterwegs. Trotzdem ' . $f($menge) . ' ' . $e . ' reservieren? Der Rest ist dann ungedeckt (Ware fehlt).'];
+        }
+    }
     if ($menge <= 1e-9) {
         if ($row) q("UPDATE reservierung SET status='storniert' WHERE id=?", [(int)$row['id']]);
         bedarf_bump();
         return ['ok'=>true, 'menge'=>0.0, 'msg'=>'Reservierung aufgehoben.'];
     }
     if ($row) q("UPDATE reservierung SET menge=? WHERE id=?", [$menge, (int)$row['id']]);
-    else      q("INSERT INTO reservierung (pa_id,auftrag_id,item_id,menge,status,angelegt) VALUES (NULL,?,?,?,'aktiv',?)", [$auftrag_id, $item_id, $menge, gmdate('Y-m-d H:i:s')]);
+    else {
+        q("INSERT INTO reservierung (pa_id,auftrag_id,item_id,menge,status,angelegt) VALUES (NULL,?,?,?,'aktiv',?)", [$auftrag_id, $item_id, $menge, gmdate('Y-m-d H:i:s')]);
+        $nid = (int) insert_id();
+        require_once __DIR__ . '/reservierung_deckung.php';
+        $pa = res_einzig_offener_pa($auftrag_id);
+        if ($pa && $nid) { try { q("UPDATE reservierung SET ziel_pa_id=? WHERE id=?", [$pa['id'], $nid]); } catch (\Throwable $e) {} }
+    }
     bedarf_bump();
     return ['ok'=>true, 'menge'=>$menge, 'msg'=>'Reservierung gespeichert.'];
 }

@@ -203,3 +203,5 @@ Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App,
 **Produktion per KI melden (13.11.2026, Werk-App Teil 4):** Feld „Produktion melden (KI)“ über dem Ablauf (PA vorgegeben). „Teilmenge nachtragen“ nimmt zusätzlich `umfang` (komplett / bis vor dem Etikettieren) und – von der KI-Karte – `ki_text`/`ki_von`: nach erfolgreicher Buchung Vermerk „per KI gemeldet von …, bestätigt von …: „Originaltext““ im Chargenprotokoll und Auftragsverlauf.
 
 **Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Mengen-/Preisfelder werden mit `zahl_feld()` (Komma, kein Tausenderpunkt) vorbelegt, damit Speichern ohne Änderung den Wert nicht verändert.
+
+**Reserviert (Sofortfix 13.11.2026):** Spalte zeigt im Lager / unterwegs / ungedeckt; bei „fehlt“ der Grund („reserviert, aber nicht im Lager“ / „reserviert, aber ungedeckt - Wareneingang fehlt?“) und Links „BE-…: Charge eingetragen, nicht eingebucht – jetzt einbuchen“.

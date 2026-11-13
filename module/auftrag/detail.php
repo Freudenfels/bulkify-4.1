@@ -1611,7 +1611,13 @@ if ($pa): $bedarfRows = auftrag_bedarf_rest((int)$pa['id']); if ($bedarfRows):
               if (!$bulkRes && !$lwZu) echo '<span class="muted">–</span>';
           } elseif ($mzListe) {
               foreach ($mzListe as $zr) echo '<div>' . ($zr['charge_nr'] ? 'Charge ' . h((string)$zr['charge_nr']) : ($zr['bestellung_nr'] ? 'Bestellung ' . h((string)$zr['bestellung_nr']) : 'Lager')) . ' · ' . $mng((float)$zr['menge'], $einh) . '</div>';
-          } else echo '<span class="muted">–</span>'; ?></td>
+          } else echo '<span class="muted">–</span>';
+          // Sofortfix 13.11.2026: manuelle/Produktions-Reservierung dieses Artikels: „reserviert für PR-xxxx“ mit Deckung und Link.
+          if ($iid > 0) { require_once BX_ROOT . '/core/reservierung_deckung.php'; $rdA = reservierung_deckung_auftrag($iid, (int)$a['id']);
+              if ($rdA['menge'] > 1e-9) echo '<div style="margin-top:4px">reserviert ' . $mng($rdA['menge'], $einh) . ($rdA['pa'] ? ' für <a href="?p=produktionsauftrag&id=' . (int)$rdA['pa']['id'] . '">' . h($rdA['pa']['nummer']) . '</a>' : '')
+                 . '<div class="muted" style="font-size:11px">' . reservierung_deckung_text($rdA, $einh) . '</div></div>';
+              foreach (item_nicht_eingebuchte_vormerkungen($iid) as $ne) echo '<div style="margin-top:4px;color:#8f231b"><a href="?p=bestellung&id=' . (int)$ne['bestellung_id'] . '">' . h($ne['nummer']) . '</a>: Charge ' . h($ne['charge_nr']) . ' eingetragen, nicht eingebucht – <a href="?p=wareneingang&bp=' . (int)$ne['bp_id'] . '&bch=' . (int)$ne['bch_id'] . '">jetzt einbuchen</a></div>';
+          } ?></td>
         <td class="bx-num"><?= $mng($frei, $einh) ?><?php if (isset($r['zugeordnet']) && $frei - (float)$r['zugeordnet'] > 1e-6): ?><br><span class="muted" style="font-size:11px"><?= (float)$r['zugeordnet'] > 1e-6 ? 'davon zugeordnet ' . $mng((float)$r['zugeordnet'], $einh) : 'noch nicht zugeordnet' ?></span><?php endif; ?></td>
         <td class="bx-num"><?= $quar > 1e-9 ? '<a href="' . h(quarantaene_freigabe_url($iid)) . '">' . $mng($quar, $einh) . '</a>' : '<span class="muted">–</span>' ?></td>
         <td class="bx-num"><?= $unterwegs > 1e-9 ? $mng($unterwegs, $einh) : '<span class="muted">–</span>' ?></td>

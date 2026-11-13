@@ -54,7 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'fremd
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'res_setzen' && !$neu) {
     $aid = (int)($_POST['auftrag_id'] ?? 0);
     $men = zahl_lesen((string)($_POST['menge'] ?? ''), true);   // Menge (13.11.2026: „12.5“ = 12,5)
-    $r = item_reservierung_setzen((int)$id, $aid, $men);
+    $r = item_reservierung_setzen((int)$id, $aid, $men, !empty($_POST['trotzdem']));
+    // Sofortfix 13.11.2026: mehr als da bzw. unterwegs -> Rückfrage im Pop-up (dann als ungedeckt sichtbar).
+    if (!empty($r['rueckfrage'])) { header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=lager&resfrage=1&rf_a=' . $aid . '&rf_m=' . rawurlencode(zahl_feld($men)) . '&rf_t=' . rawurlencode((string)$r['msg']) . '#reservierungen'); exit; }
     if ($r['ok'] && $aid) {
         $anr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]);
         log_aktivitaet('item', (int)$id, 'team', $men > 0
@@ -570,6 +572,10 @@ $bestandWert = function(array $je): string {
     return implode(' + ', $t);
 };
 $reserviert_gesamt = $neu ? 0 : item_reserviert_gesamt((int)$id);
+// Sofortfix 13.11.2026: Reservierung ehrlich – im Lager / unterwegs / ungedeckt (core/reservierung_deckung.php).
+require_once BX_ROOT . '/core/reservierung_deckung.php';
+$resDeck = $neu ? null : reservierung_deckung((int)$id);
+$resDeckHtml = ($resDeck && $resDeck['reserviert'] > 1e-9) ? '<div style="font-size:12px;font-weight:400;margin-top:4px">' . reservierung_deckung_text(['lager' => $resDeck['lager'], 'unterwegs' => $resDeck['unterwegs_res'], 'ungedeckt' => $resDeck['ungedeckt']], (string)($it['einheit'] ?? '')) . '</div>' : '';
 $reservierungen    = $neu ? [] : item_reservierungen_liste((int)$id);
 // Aufträge, auf die reserviert werden kann (laufend – nicht versendet/storniert), neueste zuerst.
 // Welche Aufträge brauchen DIESEN Artikel – und wie viel? Der Bedarf entsteht MIT dem Auftrag aus der
@@ -701,7 +707,7 @@ if (!$neu) {
     }
     echo '<div class="bx-card"><div class="k">Bestand (frei)</div><div class="v">' . $bestandWert($bestand_frei_je) . '</div></div>';
     if ($einheiten_gemischt && $bestand_qua_je) echo '<div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="color:var(--warn)">' . $bestandWert($bestand_qua_je) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Reserviert</div><div class="v"' . ($reserviert_gesamt > $bestand_frei + 1e-9 ? ' style="color:var(--warn)"' : '') . '>' . ($reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.h($it['einheit']) : '<span class="muted">0</span>') . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Reserviert</div><div class="v"' . ($reserviert_gesamt > $bestand_frei + 1e-9 ? ' style="color:var(--warn)"' : '') . '>' . ($reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.h($it['einheit']) . $resDeckHtml : '<span class="muted">0</span>') . '</div></div>';
     if ($fremd_gesamt > 0) echo '<div class="bx-card"><div class="k">Fremdlager (Kunden)</div><div class="v">' . $bestandWert($fremdJeEinheit) . '</div></div>';
     if (($it['kategorie'] ?? '') === 'rohstoff') {
         $nfm = novelfood_status_meta($it['novelfood_status'] ?? null);
@@ -1347,7 +1353,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
   <div class="bx-cards">
     <div class="bx-card"><div class="k">Bestand (frei)</div><div class="v"><?= $bestandWert($bestand_frei_je) ?></div></div>
     <div class="bx-card"><div class="k">Quarantäne</div><div class="v" style="<?= $bestand_qua_je?'color:var(--warn)':'' ?>"><?= $bestand_qua_je ? $bestandWert($bestand_qua_je) : '<span class="muted">0</span>' ?></div></div>
-    <div class="bx-card"><div class="k">Reserviert</div><div class="v" style="<?= $reserviert_gesamt>$bestand_frei+1e-9?'color:var(--warn)':'' ?>"><?= $reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.$v('einheit') : '<span class="muted">0</span>' ?></div></div>
+    <div class="bx-card"><div class="k">Reserviert</div><div class="v" style="<?= $reserviert_gesamt>$bestand_frei+1e-9?'color:var(--warn)':'' ?>"><?= $reserviert_gesamt>0 ? h(rtrim(rtrim(number_format($reserviert_gesamt,3,',','.'),'0'),',')).' '.$v('einheit') . $resDeckHtml : '<span class="muted">0</span>' ?></div></div>
     <div class="bx-card"><div class="k">Chargen</div><div class="v"><?= count($charges) ?></div></div>
     <?php $lgOrt = lager_ort_je_charge(array_column($charges, 'id')); $lgBl = lager_blinker_fuer_item((int)$id); ?>
     <div class="bx-card"><div class="k">Blinker</div><div class="v" style="font-size:<?= count($lgBl) > 2 ? '14px' : '' ?>"><?= $lgBl ? h(implode(', ', $lgBl)) : '<span class="muted">keiner</span>' ?></div></div>
@@ -1535,15 +1541,30 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
     </div>
     <?php if (isset($_GET['resok'])): ?><div class="badge-ok" style="padding:8px 12px;margin-top:10px">Reservierung aktualisiert. Die Netto-Verfügbarkeit für andere Aufträge rechnet neu.</div><?php endif; ?>
     <?php if (isset($_GET['resfehler'])): ?><div style="padding:8px 12px;margin-top:10px;color:#8f231b"><?= h((string)$_GET['resfehler']) ?></div><?php endif; ?>
+    <?php if (isset($_GET['resfrage'])): // Sofortfix 13.11.2026: Rückfrage „Nur X da bzw. unterwegs. Trotzdem Y reservieren?“ ?>
+    <dialog id="dlgResFrage" class="bx-dialog" style="max-width:560px"><h2 style="margin-top:0">Mehr reservieren als da ist?</h2>
+      <p><?= h((string)($_GET['rf_t'] ?? '')) ?></p>
+      <form method="post" class="bx-row" style="gap:8px;justify-content:flex-end">
+        <input type="hidden" name="aktion" value="res_setzen"><input type="hidden" name="auftrag_id" value="<?= (int)($_GET['rf_a'] ?? 0) ?>">
+        <input type="hidden" name="menge" value="<?= h((string)($_GET['rf_m'] ?? '')) ?>"><input type="hidden" name="trotzdem" value="1">
+        <a class="btn btn-ghost" href="?p=rohstoff&id=<?= (int)$id ?>&tab=lager">Abbrechen</a>
+        <button class="btn btn-primary" type="submit">Trotzdem reservieren (ungedeckt)</button>
+      </form></dialog>
+    <script>document.addEventListener('DOMContentLoaded',function(){ var d=document.getElementById('dlgResFrage'); if(d && d.showModal) d.showModal(); });</script>
+    <?php endif; ?>
+    <?php $nichtEin = item_nicht_eingebuchte_vormerkungen((int)$id); foreach ($nichtEin as $ne): ?>
+      <div style="padding:8px 12px;margin-top:10px;border:1px solid #c0392b;border-radius:8px;color:#8f231b"><a href="?p=bestellung&id=<?= (int)$ne['bestellung_id'] ?>"><?= h($ne['nummer']) ?></a>: Charge <?= h($ne['charge_nr']) ?> eingetragen, nicht eingebucht<?= $ne['zu'] ? ' (ohne Ware geschlossen)' : '' ?> – <a class="btn btn-primary btn-sm" href="?p=wareneingang&bp=<?= (int)$ne['bp_id'] ?>&bch=<?= (int)$ne['bch_id'] ?>">jetzt einbuchen</a></div>
+    <?php endforeach; ?>
 
-    <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
-      <thead><tr><th>Auftrag</th><th>Kunde</th><th class="bx-num">Reserviert</th><th class="bx-num">Benötigt</th><th>Seit</th><th>Herkunft</th><th></th></tr></thead>
+    <div class="bx-tablewrap" style="margin-top:10px" id="reservierungen"><table class="bx-table">
+      <thead><tr><th>Auftrag</th><th>PR</th><th>Kunde</th><th class="bx-num">Reserviert</th><th>Deckung</th><th class="bx-num">Benötigt</th><th>Seit</th><th>Herkunft</th><th></th></tr></thead>
       <tbody>
-      <?php if (!$reservierungen): ?><tr><td colspan="7" class="muted">Noch nichts reserviert. Unten einem Auftrag eine Menge zuteilen.</td></tr><?php endif; ?>
+      <?php if (!$reservierungen): ?><tr><td colspan="9" class="muted">Noch nichts reserviert. Unten einem Auftrag eine Menge zuteilen.</td></tr><?php endif; ?>
       <?php foreach ($reservierungen as $r): $ausProd = !empty($r['pa_id']);
           $mStr = rtrim(rtrim(number_format((float)$r['menge'],3,',','.'),'0'),','); ?>
         <tr>
           <td><?php if (!empty($r['auftrag_id'])): ?><a href="?p=auftrag&id=<?= (int)$r['auftrag_id'] ?>"><?= h((string)($r['auftrag_nr'] ?: '–')) ?></a><?php else: ?><span class="muted">–</span><?php endif; ?></td>
+          <td><?php $rPa = res_pa_anzeige($r); echo $rPa ? '<a href="?p=produktionsauftrag&id=' . (int)$rPa['id'] . '">' . h($rPa['nummer']) . '</a>' . ($rPa['abgeleitet'] ? ' <span class="muted" style="font-size:11px" title="einziger offener PR des Auftrags">(einziger offener)</span>' : '') : '<span class="muted">–</span>'; ?></td>
           <td style="max-width:220px;overflow-wrap:anywhere"><?= kunde_link($r['kunde_id'] ?? 0, $r['kunde_firma']) ?></td>
           <td class="bx-num">
             <?php if ($ausProd): ?>
@@ -1558,6 +1579,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
               </form>
             <?php endif; ?>
           </td>
+          <td style="font-size:12px;white-space:normal"><?= isset($resDeck['zeilen'][(int)$r['id']]) ? reservierung_deckung_text($resDeck['zeilen'][(int)$r['id']], $einheitLbl) : '–' ?></td>
           <td class="bx-num"><?php $nd = $needJeAuftrag[(int)$r['auftrag_id']] ?? null; echo $nd !== null ? h($resNum($nd)) . ' ' . h($einheitLbl) : '<span class="muted">–</span>'; ?></td>
           <td style="white-space:nowrap"><?= $r['angelegt'] ? h(fmt_zeit((string)$r['angelegt'], 'd.m.Y')) : '–' ?></td>
           <td><?= $ausProd ? bx_badge('aus Produktion' . ($r['pa_nr'] ? ' ' . h((string)$r['pa_nr']) : ''), 'info') : bx_badge('manuell') ?></td>

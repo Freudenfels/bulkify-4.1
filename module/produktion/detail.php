@@ -852,6 +852,7 @@ if ($bedarfListe):
         'Verpackung'=>bx_badge('Verpackung'), 'Deckel'=>bx_badge('Deckel'), 'Etikett'=>bx_badge('Etikett'),
         'Karton'=>bx_badge('Karton'), 'Beipackzettel'=>bx_badge('Beipack'), default=>bx_badge($r) };
 ?>
+<?php require_once BX_ROOT . '/core/reservierung_deckung.php'; ?>
 <div class="bx-panel"<?= $fehlListe ? ' style="border-color:#e6c4c0"' : '' ?>>
   <?php $hatReserviert = false; foreach ($bedarfListe as $rr) if (($rr['reserviert_eigen'] ?? 0) > 1e-6) { $hatReserviert = true; break; } ?>
   <div class="bx-row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
@@ -901,8 +902,14 @@ if ($bedarfListe):
           <td><?= $rolleBadge($r['rolle']) ?></td>
           <td class="bx-num"><?= $mfmt($r['benoetigt']) ?> <?= h($r['einheit']) ?></td>
           <td class="bx-num"><?= $mfmt($r['verfuegbar']) ?> <?= h($r['einheit']) ?></td>
-          <td class="bx-num"><?= $res > 1e-6 ? '<span class="bx-ok">' . $mfmt($res) . ' ' . h($r['einheit']) . '</span>' : '<span class="muted">–</span>' ?></td>
-          <td><?= $ok ? bx_badge('vorhanden','ok') : bx_fehlt_quar((float)$fehlt, (float)($r['quarantaene'] ?? 0), $mfmt($fehlt) . ' ' . $r['einheit'], $mfmt((float)($r['quarantaene'] ?? 0)) . ' ' . $r['einheit'], quarantaene_freigabe_url((int)($r['item_id'] ?? 0))) ?></td>
+          <?php // Sofortfix 13.11.2026: Reservierung ehrlich – im Lager / unterwegs / ungedeckt; Grund bei „fehlt“; nicht eingebuchte Charge verlinken.
+                $resD = ($res > 1e-6 && $mIid > 0 && !empty($pa['auftrag_id'])) ? reservierung_deckung_auftrag($mIid, (int)$pa['auftrag_id']) : null;
+                $nichtEinP = (!$ok && $mIid > 0) ? item_nicht_eingebuchte_vormerkungen($mIid) : []; ?>
+          <td class="bx-num"><?= $res > 1e-6 ? '<span class="' . ($resD && $resD['ungedeckt'] > 1e-9 ? '' : 'bx-ok') . '">' . $mfmt($res) . ' ' . h($r['einheit']) . '</span>'
+                . ($resD ? '<div style="font-size:11px;white-space:normal;text-align:right">' . reservierung_deckung_text($resD, (string)$r['einheit']) . '</div>' : '') : '<span class="muted">–</span>' ?></td>
+          <td><?= $ok ? bx_badge('vorhanden','ok') : bx_fehlt_quar((float)$fehlt, (float)($r['quarantaene'] ?? 0), $mfmt($fehlt) . ' ' . $r['einheit'], $mfmt((float)($r['quarantaene'] ?? 0)) . ' ' . $r['einheit'], quarantaene_freigabe_url((int)($r['item_id'] ?? 0))) ?>
+            <?php if (!$ok && $resD): ?><div style="font-size:12px;color:#8f231b;margin-top:4px"><?= $resD['ungedeckt'] > 1e-9 ? 'reserviert, aber ungedeckt - Wareneingang fehlt?' : ($resD['lager'] + 1e-9 < $resD['menge'] ? 'reserviert, aber nicht im Lager' : '') ?></div><?php endif; ?>
+            <?php foreach ($nichtEinP as $ne): ?><div style="font-size:12px;margin-top:4px"><a href="?p=bestellung&id=<?= (int)$ne['bestellung_id'] ?>"><?= h($ne['nummer']) ?></a>: Charge <?= h($ne['charge_nr']) ?> eingetragen, nicht eingebucht – <a href="?p=wareneingang&bp=<?= (int)$ne['bp_id'] ?>&bch=<?= (int)$ne['bch_id'] ?>">jetzt einbuchen</a></div><?php endforeach; ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
