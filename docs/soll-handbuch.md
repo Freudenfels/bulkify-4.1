@@ -127,6 +127,10 @@ Sobald ein Auftrag neu ist, fragt das System aktiv (Auftrag erscheint in "Zu erl
     - **Auto-EK:** Er wird nie aus einem abgelaufenen Preis gesetzt (Kennzeichen „aus abgelaufenem Preis“).
     - **Seit 13.11.2026 auch:** Fremdfertigungs-EK je Einheit und Zukauf-EK je Packung (speisen VK, Preismatrix, Angebot), Express-Zukauf (Hinweis übersteht die Weiterleitung), Zukaufpreise am Auftrag (Zeile markiert). Die Kopie für den bedruckten Behälter übernimmt „gültig bis“ und „Stand“ des Originals. Das Kennzeichen „aus abgelaufenem Preis“ verschwindet, wenn der EK von Hand gesetzt wird oder keine Preise mehr da sind.
     - **Bald ablaufend:** Bald ablaufende Rohstoff-, Zukauf- und Fremdfertigungspreise in offenen Angeboten melden sich täglich per Cron.
+    - **Täglicher Lauf (Cron, Fable-6 13.11.2026):** Der Webspace hat keine Cronjobs. GitHub Actions ruft täglich um 07:00 UTC `einkauf_cron.php` auf (`.github/workflows/cron-taeglich.yml`, Token im Secret `CRON_TOKEN`).
+      - Bestell-Erinnerungen gehen als eine Mail je Lieferant und Tag raus, nur für Bestellungen mit offenem Rest, höchstens 3 je Bestellung. Danach legt der Lauf die Aufgabe „Lieferant reagiert nicht“ an. Gesperrte Lieferanten bekommen keine Erinnerung.
+      - Etikett-Erinnerungen gehen nicht an gesperrte Kunden und nicht bei freigegebenem oder geerbtem Etikett.
+      - Eine Sperre verhindert einen Doppellauf. Mails gehen höchstens 20 je Minute raus, der Rest wartet in einer Warteschlange. Der Mail-Log steht unter Einstellungen → E-Mail.
 - Ein Angebot gilt standardmäßig nicht länger als der kürzeste EK-Preis darin. Ein späteres Datum ergibt nur einen Hinweis.
 - Ein abgelaufenes Angebot kann der Kunde nicht annehmen, nur eine Aktualisierung anfragen.
 - Nach der Annahme gilt der Auftragspreis.
@@ -623,3 +627,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 13.11.2026 | Nachbesserung Fable-Prüfung 2: abgelaufene Preise auch in Fremd-/Zukauf-EK, Express, Behälter-Kopie, Zukauf-Tabelle (4.2 „nie still“ gilt jetzt überall) | Nico / Claude Code |
 | 13.11.2026 | Nachbesserung Fable-Prüfung 2: gesperrt/inaktiv auch in globaler Suche (Schalter „auch inaktive“), Auswahlfeldern neuer Vorgänge, Vorbelegung Hauptlieferant (Hinweis „gesperrt“), „günstigster Lieferant“, Produkt-Treffer beim Anlegen und KI-/Namens-Zuordnung (1.9 stimmt jetzt) | Nico / Claude Code |
 | 13.11.2026 | Sofortfix „heute bestellt“: Unterlagen-Regel wird Quarantäne-Sperre statt Bestell-Sperre (4.3/4.4) – Bestellen und Einbuchen gehen immer, gelber Hinweis + Aufgabe „Unterlagen nachfordern“, Charge ohne CoA/Spec bleibt in Quarantäne (Freigabe erst mit Unterlage, Admin-Ausnahme mit Grund, QM-Aufgabe nach Nachreichen), „kein Dokument nötig“ am Artikel, „Schon bestellt am …“ an alten Sperr-Entwürfen |
+| 13.11.2026 | Fable-6 Teil 0: täglicher Lauf über GitHub Actions (07:00 UTC), Erinnerungs-Regeln (je Lieferant und Tag, offener Rest, max. 3, gesperrte raus), Mail-Bremse 20/Minute mit Warteschlange, Mail-Log unter Einstellungen → E-Mail | Nico / Claude Code |

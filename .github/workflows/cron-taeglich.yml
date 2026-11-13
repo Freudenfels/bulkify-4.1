@@ -1,0 +1,31 @@
+# Täglicher Lauf (Cron) für app.bulkify.pro – Fable-6 T0.6 (13.11.2026).
+# Der united-domains-Webspace hat keine Cronjobs, deshalb ruft GitHub Actions einmal am Tag public/einkauf_cron.php auf:
+# Bestell-Erinnerungen an Lieferanten, Preise bald ablaufend, Etikett-Erinnerungen an Kunden, Mail-Warteschlange.
+# 07:00 UTC = 08:00 Uhr Winterzeit (09:00 Uhr Sommerzeit). Rot bei HTTP-Fehler oder ok:false. Token kommt aus dem Secret CRON_TOKEN
+# und wird nie ausgegeben. Doku: public/einkauf_cron.md.
+name: Cron taeglich
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: cron-taeglich
+  cancel-in-progress: false
+
+jobs:
+  lauf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Taeglichen Lauf aufrufen
+        env:
+          CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
+        run: |
+          if [ -z "$CRON_TOKEN" ]; then echo "Secret CRON_TOKEN fehlt."; exit 1; fi
+          code=$(curl -sS --max-time 120 -o antwort.json -w '%{http_code}' -H "X-Cron-Token: $CRON_TOKEN" "https://app.bulkify.pro/einkauf_cron.php") || { echo "Aufruf fehlgeschlagen (Netz/Zeitlimit)."; exit 1; }
+          echo "HTTP $code"
+          cat antwort.json; echo
+          if [ "$code" -ge 400 ]; then echo "HTTP-Fehler $code"; exit 1; fi
+          python3 -c "import json,sys; d=json.load(open('antwort.json')); sys.exit(0 if d.get('ok') is True else 1)" || { echo "Antwort ok:false"; exit 1; }
