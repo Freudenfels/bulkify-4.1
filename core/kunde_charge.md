@@ -12,3 +12,5 @@ Ohne Abhängigkeiten, auch in der Lager-App ladbar. Geladen von `core/schema.php
 **Grundcharge (13.11.2026, Fable-3 T3.2):** Neu `kunde_charge_text($t)`: kürzt eigene Chargen in Freitext („Laboranalyse 2775.A“ → „Laboranalyse 2775“), Fremdchargen bleiben.
 
 **Ungültiges UTF-8 (Fable-4 T4.2, 13.11.2026):** `kunde_charge_text()` gibt bei einem preg-Fehler den Text unverändert zurück, nie leer.
+
+**Grundcharge an PA-Nummer gebunden (Fable-4 T4.3, 13.11.2026):** `kunde_charge_eigen()` prüft nur noch, ob die Grundcharge (vor .A/.B) die Nummer eines eigenen Produktionsauftrags ist (PR-2775 -> 2775, wie `pa_basis()`). Lieferantenchargen bei Zukauf „fertig“ (AB-12.C mit pa_id) bleiben unverändert; eigene Altware ohne pa_id und ohne Unter-Charge-Zeile (2739.A) wird gekürzt.

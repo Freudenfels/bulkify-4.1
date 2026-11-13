@@ -13,10 +13,16 @@ if (!function_exists('kunde_charge_anzeige')) {
         $nr = trim($charge_nr);
         if ($nr === '') return false;
         if (array_key_exists($nr, $cache)) return $cache[$nr];
+        // Fable-4 T4.3 (13.11.2026): „eigen“ heißt: die Grundcharge (vor .A/.B) ist die Nummer eines eigenen Produktionsauftrags
+        // (PR-2775 -> 2775, wie pa_basis()). Lieferantenchargen bei Zukauf „fertig“ (pa_id gesetzt, Nummer des Lieferanten) werden so
+        // nie gekürzt; eigene Altware ohne pa_id/Unter-Charge-Zeile („2739.A“ von Hand eingebucht) wird gekürzt.
         $eigen = false;
-        if (function_exists('scalar')) {
-            try { $eigen = (int) scalar("SELECT COUNT(*) FROM charge WHERE charge_nr=? AND pa_id IS NOT NULL", [$nr]) > 0; } catch (\Throwable $e) {}
-            if (!$eigen) { try { $eigen = (int) scalar("SELECT COUNT(*) FROM pa_unter_charge WHERE charge_nr=?", [$nr]) > 0; } catch (\Throwable $e) {} }
+        if (function_exists('scalar') && preg_match('/^(.+)\.[A-Za-z]{1,2}$/', $nr, $m)) {
+            $basis = trim($m[1]);
+            try {
+                $eigen = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE nummer IN (?, ?, ?)", ['PR-' . $basis, 'PR ' . $basis, $basis]) > 0
+                      || (preg_match('/^PR(\d+)$/i', $basis, $pm) && (int) scalar("SELECT COUNT(*) FROM produktionsauftrag WHERE id=? AND (nummer IS NULL OR nummer='')", [(int)$pm[1]]) > 0);
+            } catch (\Throwable $e) {}
         }
         return $cache[$nr] = $eigen;
     }
