@@ -1026,9 +1026,6 @@ function etp_texte(string $sp, bool $beutel, string $wer): array {
         'ki_nochmal'   => $t('Erneut prüfen', 'Check again'),
         'ki_test'      => $t('Testumgebung: eingespielte KI-Antwort', 'Test environment: replayed AI answer'),
         'verantwortlich' => $t('Verantwortlich für das Etikett ist der Inverkehrbringer.', 'The food business operator is responsible for the label.'),
-        'buchen'       => $t('Ausführlichen Etikett-Check durch bulkify buchen', 'Book a detailed label check by bulkify'),
-        'buchen_frage' => $t('Ausführlichen Etikett-Check durch bulkify anfragen? Wir melden uns mit Preis und Termin.', 'Request a detailed label check by bulkify? We will get back to you with price and date.'),
-        'buchen_ok'    => $t('Anfrage gesendet – wir melden uns mit Preis und Termin.', 'Request sent – we will get back to you with price and date.'),
         'haken'        => $t('Ich habe das ' . ($beutel ? 'Design' : 'Etikett') . ' geprüft (Text, Rechtschreibung, Pflichtangaben, Layout) und gebe es verbindlich für Druck und Produktion frei.',
                              'I have checked the ' . ($beutel ? 'design' : 'label') . ' (text, spelling, mandatory information, layout) and approve it bindingly for printing and production.'),
         'haftung_mehr' => $t('Haftungshinweis', 'Liability note'),
@@ -1146,15 +1143,8 @@ function etp_ajax(array $ctx): void {
         if (!empty($r['ok']) && !empty($ctx['nach_freigabe'])) ($ctx['nach_freigabe'])($aid);
         $raus(!empty($r['ok']) ? ['ok' => true] + $status() : $r);
     }
-    if ($a === 'buchen' && $wer === 'kunde') {
-        $nr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]);
-        if ((int) scalar("SELECT COUNT(*) FROM portal_anfrage WHERE kunde_id=? AND typ='dienstleistung' AND dienstleistung_typ='etikettcheck' AND betreff LIKE ? ESCAPE '='", [(int)$auf['kunde_id'], '%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], $nr) . '%']) === 0) {
-            q("INSERT INTO portal_anfrage (nummer,kunde_id,typ,dienstleistung_typ,betreff,notiz,status) VALUES (?,?, 'dienstleistung', 'etikettcheck', ?, ?, 'neu')",
-              [naechste_nummer('PAF'), (int)$auf['kunde_id'], 'Etikett-Check ' . $nr, 'Ausführlicher Etikett-Check durch bulkify, angefragt aus dem Etikett-Pop-up (Version ' . (int)($p['version'] ?? 0) . ').']);
-            log_aktivitaet('kunde', (int)$auf['kunde_id'], 'kunde', 'Ausführlichen Etikett-Check angefragt (Auftrag ' . $nr . ').', 'anfrage', 'auftrag', $aid);
-        }
-        $raus(['ok' => true]);
-    }
+    // 13.11.2026 (Nico: keine rechtliche Beratung): „Ausführlichen Etikett-Check durch bulkify buchen“ entfernt (Aktion buchen samt Anfrage).
+    // Der Dienstleistungs-Baustein 'etikettcheck' bleibt im Code (core/dienstleistung.php), wird aber nicht angeboten.
     $raus(['ok' => false, 'fehler' => 'Unbekannte Aktion.']);
 }
 

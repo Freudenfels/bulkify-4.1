@@ -604,7 +604,6 @@ pre{max-width:100%;overflow-x:auto;overflow-wrap:anywhere}
 .bx-et-spin{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--gruen);animation:bxEtSpin .9s linear infinite;flex:none;display:inline-block;vertical-align:middle;margin-right:8px}
 @keyframes bxEtSpin{to{transform:rotate(360deg)}}
 .bx-et-verantw{font-size:12px;color:var(--muted);margin-top:4px}
-.bx-et-buchen{font-size:13px;margin-top:8px}
 .bx-et-frei{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
 .bx-et-frei-ok{display:flex;gap:10px;align-items:center;font-size:14px}
 .bx-et-frei-ok .bx-et-ico{color:var(--ok)}

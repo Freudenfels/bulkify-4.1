@@ -18,3 +18,5 @@ Sofortfix 13.11.2026: Knopf „Erneut prüfen“ neben „Druck-Check“ (Kunde 
 13.11.2026 (Nico): Hinweise nach oben – Druck-Check und KI-Etikettencheck zeigen rot zuerst, dann gelb, dann Info, grün unten (`sortiert()`).
 
 Sofortfix 13.11.2026 (Bildauflösung): Zeilen mit `details` (Liste) bekommen darunter ein aufklappbares „Details“ (`.bx-et-details`).
+
+13.11.2026: Link „Ausführlichen Etikett-Check durch bulkify buchen“ (`data-et-buchen`) und sein Ablauf entfernt (keine rechtliche Beratung).

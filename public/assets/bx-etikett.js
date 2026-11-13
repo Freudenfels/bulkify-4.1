@@ -107,7 +107,7 @@
       // KI
       h += '<section class="bx-et-ki"><h3>' + esc(t.ki) + '</h3><div class="bx-et-kihinweis">' + esc(t.ki_hinweis) + '</div><div class="bx-et-kiinhalt">' + kiHtml(akt.ki) + '</div>'
         + '<div class="bx-et-verantw">' + esc(t.verantwortlich) + '</div>'
-        + (s.wer === 'kunde' ? '<div class="bx-et-buchen"><a href="#" data-et-buchen>' + esc(t.buchen) + '</a></div>' : '') + '</section>';
+        + '</section>';
       // Abschnitt 3: Freigeben
       if (akt.freigabe || s.freigegeben) {
         var f = akt.freigabe;
@@ -168,11 +168,6 @@
       var knopf = this; knopf.disabled = true;
       api('neu_pruefen', S.aid, { pid: S.aktuell.id }).then(function (r) { knopf.disabled = false; if (r && r.ok) { KI_LAEUFT = false; zeigen(r, true); } })
         .catch(function () { knopf.disabled = false; });
-    };
-    if ((b = d.querySelector('[data-et-buchen]'))) b.onclick = function (e) {
-      e.preventDefault(); var box = b.parentNode;
-      box.innerHTML = '<div>' + esc(t.buchen_frage) + '</div><button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px">' + esc(t.buchen) + '</button>';
-      box.querySelector('button').onclick = function () { api('buchen', S.aid, { pid: akt ? akt.id : 0 }).then(function (r) { box.textContent = r && r.ok ? t.buchen_ok : t.fehler; }); };
     };
   }
 

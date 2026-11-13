@@ -40,3 +40,6 @@ PDF von AB-3223: Seite 200 × 79 mm, TrimBox 194 × 73 mm = 188 × 67 mm Endform
 
 ## Sofortfix 13.11.2026: Bildauflösung nur Hinweis
 Ab 300 dpi grün, darunter immer gelb – nie rot, auch unter 150 dpi. Text kurz ohne Positionsangaben: „Hinweis: 2 Bilder unter 150 dpi (145 dpi). Im Druck evtl. leicht unscharf. Große Hintergrundbilder sind meist unkritisch.“ (Zahl und Grenze 150 bzw. 300, in Klammern der kleinste Wert; Englisch entsprechend). Die Liste je Bild (Pixel, Größe, Lage) steht in der Zeile als `details` und im Pop-up aufklappbar unter „Details“. Freigabe hängt nur an der Maß-Ampel, „x Abweichungen“ zählt nur die KI-Punkte – die Auflösung zählt dort nicht. Die Druck-Check-Zeilen werden bei jedem Öffnen aus den gespeicherten Messwerten neu gebaut; „Erneut prüfen“ misst neu.
+
+## 13.11.2026: Etikett-Check durch bulkify raus (Nico: keine rechtliche Beratung)
+Der Link „Ausführlichen Etikett-Check durch bulkify buchen“ samt Rückfrage, Texten (`buchen`, `buchen_frage`, `buchen_ok`) und Anfrage-Anlage (`portal_anfrage` mit `dienstleistung_typ='etikettcheck'`, Aktion `a=buchen`) ist entfernt – in Kunden- und Team-Ansicht. Der KI-Hinweis („kann Fehler machen, ersetzt keine fachliche oder rechtliche Prüfung“) bleibt. Der Baustein `etikettcheck` in `core/dienstleistung.php` bleibt im Code, wird aber nirgends angeboten.
