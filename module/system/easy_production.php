@@ -174,9 +174,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
                 // QM-Gate (St-11d, Quarantäne bis QM-Freigabe) gilt nicht mehr; die Kontrolle kommt mit der Prüfliste vor Versand.
                 q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)
                    VALUES (?,?,?,?, 'Stk', ?, ?, ?, ?, ?, ?)",
-                  [$chargeNr, $vf, $kundenmenge, $kundenmenge, $mhd, $datum, 'frei', $notiz, $paId, gmdate('Y-m-d H:i:s')]);
+                  [$chargeNr, $vf, $kundenmenge, $kundenmenge, $mhd, $datum, 'quarantaene', $notiz, $paId, gmdate('Y-m-d H:i:s')]);   // Fable-6 P12: bis QM
                 $kundenChargeId = (int) insert_id();
-                $protokoll[] = 'Fertigware (Fertigprodukte): +' . number_format($kundenmenge, 0, ',', '.') . ' Stk, Charge ' . $chargeNr . ', MHD ' . $mhd . ' (frei)';
+                $protokoll[] = 'Fertigware (Fertigprodukte): +' . number_format($kundenmenge, 0, ',', '.') . ' Stk, Charge ' . $chargeNr . ', MHD ' . $mhd . ' (Quarantäne bis QM-Freigabe)';
             }
             if ($rueckstell > 0) {
                 q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,angelegt)

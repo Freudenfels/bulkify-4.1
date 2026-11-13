@@ -1301,8 +1301,9 @@ function erp_teilmenge_einbuchen(int $pa_id, float $menge): ?int {
     $charge_nr = erp_charge_naechste_nr($pa_id);
     // Fertigcharge an den Auftrag binden (S-09, Spiegel von produktion_teilmenge_einbuchen): auftrag_id + pa_id.
     // Soll-Kette 5 (04.11.2026): eigene Fertigware ist sofort FREI (kein QM-Gate). Bericht + CoA entstehen im Dashboard (Loopback).
+    // Fable-6 P12 (13.11.2026): Fertigware in Quarantäne bis zur QM-Freigabe (Spiegel des Dashboards).
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, '" . heute_ort() . "', 'frei', ?, ?, ?, ?)",
+       VALUES (?,?,?,?, 'Stk', ?, '" . heute_ort() . "', 'quarantaene', ?, ?, ?, ?)",
       [$charge_nr, $item_id, $menge, $menge, erp_mhd_standard(), 'Aus Produktion ' . $pa['nummer'], $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
     $cid = (int) insert_id();
     erp_fertigware_dokumente_melden($cid, erp_produktion_rest($pa_id) <= 0.0001);

@@ -562,14 +562,16 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     // 3) Fertigware: die Charge der Unter-Charge wächst (eine Charge je Unter-Charge)
     $cid = (int)($uc['fertig_charge_id'] ?? 0);
     if ($cid > 0 && one("SELECT id FROM charge WHERE id=?", [$cid])) {
-        q("UPDATE charge SET menge=menge+?, menge_verfuegbar=menge_verfuegbar+?, status=IF(status='leer','frei',status) WHERE id=?", [$menge, $menge, $cid]);
+        q("UPDATE charge SET menge=menge+?, menge_verfuegbar=menge_verfuegbar+?, status=IF(status='leer','quarantaene',status) WHERE id=?", [$menge, $menge, $cid]);   // Fable-6 P12
         $neu = false;
     } else {
         $istBulk = empty($pa['produkt_id']) && !empty($pa['rezeptur_id']);
         $item = $istBulk ? (int) pa_fn('rezeptur_bulkitem', 'erp_rezeptur_bulkitem', (int)$pa['rezeptur_id']) : (int) pa_fn('produkt_lageritem', 'erp_produkt_lageritem', (int)$pa['produkt_id']);
         if ($item <= 0) return ['ok' => false, 'msg' => 'Lagerartikel zum Produkt fehlt – Teilmenge nicht eingebucht (Verbrauch ist gebucht, bitte Büro).', 'teilmenge_id' => $tm];
         if (!$istBulk && (pa_fn('auftrag_ist_fulfillment', 'erp_auftrag_ist_fulfillment', (int)($pa['auftrag_id'] ?? 0)))) pa_fn('bsku_ensure', 'erp_bsku_ensure', $item);
-        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt) VALUES (?,?,?,?, 'Stk', ?, ?, 'frei', ?, ?, ?, ?)",   /* Wareneingang = Produktionstag (Berlin), 13.11.2026 */
+        // Fable-6 P12 (13.11.2026, QM-Gate Handbuch): Fertigware aus der Produktion bleibt in Quarantäne bis zur QM-Freigabe.
+        // Bulk (Lager-Produktion ohne Produkt) ist Zwischenware und bleibt frei.
+        q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,pa_id,auftrag_id,angelegt) VALUES (?,?,?,?, 'Stk', ?, ?, '" . ($istBulk ? 'frei' : 'quarantaene') . "', ?, ?, ?, ?)",   /* Wareneingang = Produktionstag (Berlin), 13.11.2026 */
           [(string)$uc['charge_nr'], $item, $menge, $menge, (string)$uc['mhd'], $datum, 'Aus Produktion ' . $pa['nummer'] . ' (Unter-Charge ' . $uc['charge_nr'] . ')', $pa_id, ((int)($pa['auftrag_id'] ?? 0) ?: null), gmdate('Y-m-d H:i:s')]);
         $cid = insert_id();
         q("UPDATE pa_unter_charge SET fertig_charge_id=? WHERE id=?", [$cid, $uc_id]);

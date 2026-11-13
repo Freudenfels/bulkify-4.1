@@ -52,3 +52,5 @@ bleiben als eigene Charge `…-RM` gesperrt. Die Kontrolle vor dem Versand kommt
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Bulk-Artikel-Auswahl ohne gesperrte Artikel.
 
 **Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Eingabefelder mit `zahl_feld()` vorbelegt (Komma, kein Tausenderpunkt).
+
+**Fable-6 P12 (13.11.2026):** Die Kunden-Fertigware entsteht in Quarantäne bis zur QM-Freigabe, nicht mehr frei.
