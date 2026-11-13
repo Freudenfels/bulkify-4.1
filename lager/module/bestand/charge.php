@@ -129,7 +129,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             lg_charge_log_add($id, 'Standort', (string)($r['alt'] ?? ''), erp_standort_label($ziel));
             // Beim Wiedereinlagern (zurück nach Lager 1): optional das tatsächliche Ist-Gewicht erfassen (Spec 7.13).
             if ($ziel === 'lager1' && trim((string)($_POST['ist_menge'] ?? '')) !== '') {
-                $neu = erp_menge_parse((string)$_POST['ist_menge']);   // Tausenderpunkt (Block D)
+                $neu = erp_menge_einheit_lesen((string)$_POST['ist_menge'], (string)$c['einheit']);   // Fable-4 T1.4: kg/g = Gewicht, Stk mit Tausenderpunkt
+                if ($neu > (float)$c['menge_verfuegbar'] + 0.0005)   // Warnung: zurück mehr als vor der Ausgabe (Tippfehler?)
+                    $r['meldung'] = trim((string)$r['meldung'] . ' Achtung: Das Ist-Gewicht (' . menge_txt($neu) . ' ' . (string)$c['einheit'] . ') liegt über der Menge vor der Ausgabe (' . menge_txt($c['menge_verfuegbar']) . ') – bitte prüfen.');
                 $mr = erp_charge_menge_setzen($id, $neu, 'Ist-Gewicht bei Rückgabe aus Produktion');
                 if ($mr['ok']) {
                     $delta = (float)$mr['delta'];
@@ -437,7 +439,7 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
     <form method="post" class="bx-row" style="gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap">
       <input type="hidden" name="aktion" value="standort"><input type="hidden" name="standort" value="lager1">
       <div class="bx-field" style="margin:0;max-width:200px"><label>Ist-Gewicht/-Menge <span class="muted">(optional)</span></label>
-        <input type="text" inputmode="decimal" name="ist_menge" placeholder="<?= h(menge_txt($c['menge_verfuegbar'])) ?>"></div>
+        <input type="text" inputmode="decimal" name="ist_menge"<?= einheit_ist_gewicht((string)$c['einheit']) ? ' data-gewicht="' . h(mb_strtolower((string)$c['einheit'])) . '"' : '' ?> placeholder="<?= h(menge_txt($c['menge_verfuegbar'])) ?>"></div>
       <button type="submit" class="btn btn-primary">Wieder einlagern (Lager 1)</button>
     </form>
     <div class="muted" style="font-size:12px;margin-top:var(--sp-2)">Bei der Rückgabe aus der Produktion kannst du das tatsächliche Ist-Gewicht erfassen (Spec 7.13). Der Blinker bleibt an der Charge.</div>

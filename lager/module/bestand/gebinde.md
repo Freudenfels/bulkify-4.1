@@ -33,3 +33,5 @@ Auftrag**. Die Rolle ist ein `charge_gebinde`-Datensatz mit `inventar_nr` (siehe
 Suche (`?p=suche`/`?p=finden`) und Scan-Endpunkt (`public/lager/scan.php`) hierher geleitet.
 
 Scan eines Bestands-Gebindes `?bg=` (04.11.2026): zeigt aktuelles Gewicht (gewogen/gleichmäßig verteilt), ursprüngliche Menge, Ort mit Kiste/Blinker, Artikel, Charge, MHD. Darunter (nicht bei Etikettenrollen) „Entnehmen“ (`geb_entnehmen`: nur dieses Gebinde) und „Rückgabe aus der Produktion“ bzw. „Nachwiegen“ (`geb_rueckgabe`: Ist-Gewicht + Pflicht-Haken „ordentlich verschlossen“; Differenz als Verbrauch/Schwund, Änderungslog).
+
+**Ist-Gewicht (Fable-4 T1.4, 13.11.2026):** Nachwiegen/Rückgabe liest über `erp_menge_einheit_lesen()` in der Einheit des Gebindes; Feld mit `data-gewicht` (Rückfrage bei „1.250“). Liegt das Ist über der Gebindemenge, kommt eine gelbe Warnung.

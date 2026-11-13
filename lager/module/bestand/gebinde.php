@@ -35,9 +35,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), 
     } elseif (empty($_POST['verschlossen'])) {
         $r = ['ok' => false, 'meldung' => 'Bitte bestätigen, dass das Gebinde ordentlich verschlossen ist.'];
     } else {
-        $r = erp_gebinde_rueckgabe($gid, erp_menge_parse((string)$_POST['ist']), ((string)($_POST['anlass'] ?? '')) === 'nachwiegen' ? 'Nachwiegen' : 'Rückgabe');
+        // Fable-4 T1.4: Ist-Gewicht in der Einheit des Gebindes lesen – kg/g als Gewicht („24.850“ = 24,85 wie in der Werk-App).
+        $gE = erp_charge_gebinde($gid);
+        $r = erp_gebinde_rueckgabe($gid, erp_menge_einheit_lesen((string)$_POST['ist'], (string)($gE['einheit'] ?? 'kg')), ((string)($_POST['anlass'] ?? '')) === 'nachwiegen' ? 'Nachwiegen' : 'Rückgabe');
     }
-    flash((string)$r['meldung'], !empty($r['ok']) ? 'ok' : 'warn');
+    flash((string)$r['meldung'], !empty($r['ok']) && empty($r['warnung']) ? 'ok' : 'warn');
     weiter('?p=gebinde&bg=' . $gid);
 }
 
@@ -184,7 +186,7 @@ if ($bg > 0) {
         <p class="muted" style="margin-top:0">Gebinde wiegen und das Ist-Gewicht eintragen. Das Gebinde steht danach auf diesem Wert, die Differenz wird als Verbrauch bzw. Schwund gebucht.</p>
         <input type="hidden" name="anlass" value="<?= (string)$g['standort'] === 'produktion' ? 'rueckgabe' : 'nachwiegen' ?>">
         <div class="bx-row" style="gap:var(--sp-2);align-items:flex-end;flex-wrap:wrap">
-          <div class="bx-field" style="margin:0;flex:0 1 160px"><label>Ist-Gewicht (<?= h($einhG) ?>)</label><input type="text" name="ist" inputmode="decimal" placeholder="0" required></div>
+          <div class="bx-field" style="margin:0;flex:0 1 160px"><label>Ist-Gewicht (<?= h($einhG) ?>)</label><input type="text" name="ist" inputmode="decimal" placeholder="0" required<?= einheit_ist_gewicht($einhG) ? ' data-gewicht="' . h(mb_strtolower($einhG)) . '"' : '' ?>></div>
           <label style="display:flex;gap:8px;align-items:center;flex:1 1 200px;padding-bottom:10px"><input type="checkbox" name="verschlossen" value="1" required style="width:20px;height:20px"> Gebinde ist ordentlich verschlossen</label>
           <button class="btn btn-primary" type="submit">Speichern</button>
         </div>

@@ -1795,8 +1795,12 @@ function erp_gebinde_rueckgabe(int $gebinde_id, float $ist, string $anlass = 'R�
     $txt = $anlass . ' Gebinde ' . (int)$g['nummer'] . '/' . (int)$g['anzahl_gesamt'] . ': gewogen ' . $fmt($ist) . ', vorher ' . $fmt($alt) . ' ' . (string)$g['einheit'];
     if (function_exists('lg_bewegung_log') && abs($diff) > 0.0005)
         lg_bewegung_log($cid, $diff > 0 ? 'aus' : 'korrektur', abs($diff), (string)$g['einheit'], (string)$g['item_name'], $txt . ($diff > 0 ? ' (Verbrauch/Schwund)' : ' (mehr als gebucht)'));
+    // Fable-4 T1.4: Ist über der ursprünglichen Gebindemenge ist verdächtig (Tippfehler, Tara vergessen) – gebucht wird, aber mit Warnung.
+    $ueber = $ist > (float)$g['menge'] + 0.0005;
     return ['ok' => true, 'meldung' => 'Gebinde ' . (int)$g['nummer'] . '/' . (int)$g['anzahl_gesamt'] . ' steht auf ' . $fmt($ist) . ' ' . (string)$g['einheit']
-            . (abs($diff) > 0.0005 ? ' – ' . $fmt(abs($diff)) . ' ' . (string)$g['einheit'] . ($diff > 0 ? ' als Verbrauch/Schwund gebucht.' : ' mehr als gebucht.') : '.'), 'diff' => $diff];
+            . (abs($diff) > 0.0005 ? ' – ' . $fmt(abs($diff)) . ' ' . (string)$g['einheit'] . ($diff > 0 ? ' als Verbrauch/Schwund gebucht.' : ' mehr als gebucht.') : '.')
+            . ($ueber ? ' Achtung: Das Ist-Gewicht liegt über der Gebindemenge (' . $fmt((float)$g['menge']) . ' ' . (string)$g['einheit'] . ') – bitte prüfen.' : ''),
+            'diff' => $diff, 'warnung' => $ueber];
 }
 // N Gebinde für eine Charge anlegen (idempotent: nur wenn noch keine existieren). Rückgabe: Anzahl angelegt.
 function erp_charge_gebinde_anlegen(int $charge_id, int $anzahl): int {
@@ -2156,6 +2160,9 @@ function erp_charge_entnehmen(int $charge_id, float $menge, bool $gebindeAbgleic
 // alle nebeneinander im System stehen. Unbekanntes bleibt unveraendert (nur getrimmt).
 // Deutsche Mengen-Eingabe robust in float: "25.000" = 25000 (Tausenderpunkt), "25,5" = 25.5,
 // "1.234,5" = 1234.5. Ein einzelner Punkt mit genau 3er-Gruppen gilt als Tausender.
+// Menge in der Einheit lesen (Fable-4 T1.4, 13.11.2026): kg/g/l = Gewicht (gewicht_lesen, Punkt und Komma = Dezimal),
+// sonst Stückzahl mit Tausenderpunkt (erp_menge_parse). Eine Regel für Ist-Gewicht beim Nachwiegen/Rückgabe.
+function erp_menge_einheit_lesen(string $s, string $einheit): float { return einheit_ist_gewicht($einheit) ? gewicht_lesen($s) : erp_menge_parse($s); }
 function erp_menge_parse(string $s): float {
     $s = preg_replace('/[^0-9.,\-]/', '', trim($s));
     if ($s === '' || $s === null) return 0.0;

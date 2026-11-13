@@ -71,3 +71,5 @@ Unter „Dokumente“ stehen zuerst CoA und Spezifikation aus der Bestellpositio
 
 ## Menge korrigieren: Lesart (13.11.2026)
 Die Eingabe läuft über `erp_menge_parse()` wie alle Mengenfelder der Lager-App: „12.5“ = 12,5, „0.5“ = 0,5, „12.500“ = 12.500, „1.234,5“ = 1.234,5.
+
+**Ist-Gewicht bei Rückgabe aus der Produktion (Fable-4 T1.4, 13.11.2026):** gelesen über `erp_menge_einheit_lesen()` in der Einheit der Charge; Feld mit `data-gewicht`; Hinweis, wenn mehr zurückkommt als vor der Ausgabe da war.
