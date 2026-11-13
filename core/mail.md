@@ -111,3 +111,9 @@ Im Testmodus (`core/testumgebung.php`) gehen alle Mails nur an `BX_TEST_MAIL_AN`
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 Mails an Kunden (kunde_ist_mailadresse): Betreff und Text über kunde_position_text.
+
+**Fable-6 (13.11.2026):**
+- `mail_senden()` prüft die Mail-Bremse (`core/mail_protokoll.php`, höchstens 20 je Minute) und legt Mails darüber hinaus in die Warteschlange.
+- Der eigentliche Versand steht in `mail_senden_jetzt()`. Jeder Versuch kommt in `mail_protokoll`.
+- Neu ist `mail_lieferant_erinnerung_sammel($lieferant_id, $bestellungen)`: eine Erinnerung je Lieferant mit allen Bestellnummern (DE/EN/中文).
+- `mail_lieferant_erinnerung()` lädt `pdf_beleg.php`, falls `beleg_firma()` fehlt (Cron).

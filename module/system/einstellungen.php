@@ -973,6 +973,39 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
   </form>
 </div>
 <?php endif; ?>
+<?php if ($tab === 'mail' && has_role('admin')):   // Fable-6 T0.5: Mail-Log (letzte 200, Ortszeit, Suche nach Empfänger)
+    require_once BX_ROOT . '/core/mail_protokoll.php';
+    $mlSuch = trim((string)($_GET['mlq'] ?? ''));
+    $mlRows = mp_liste(200, $mlSuch);
+    $mlWs = mail_warteschlange_offen();
+    $mlSt = ['gesendet' => ['gesendet', 'ok'], 'log' => ['ok (laut Log)', 'ok'], 'fehler' => ['Fehler', 'err'], 'warteschlange' => ['Warteschlange', 'warn'],
+             'versuch' => ['im Versand', 'info'], 'aus' => ['nicht gesendet', 'warn'], 'test' => ['Testumgebung', 'info']]; ?>
+<div class="bx-panel" id="maillog" style="margin-top:16px;scroll-margin-top:16px">
+  <h2 style="margin-top:0">Mail-Log</h2>
+  <p class="muted" style="margin-top:0">Die letzten 200 Mails aus dem Dashboard (Zeit in Ortszeit). Mail-Bremse: höchstens <?= (int) MP_PRO_MINUTE ?> Mails je Minute, der Rest wartet kurz in einer Warteschlange.<?= $mlWs > 0 ? ' Gerade in der Warteschlange: <strong>' . (int)$mlWs . '</strong>.' : '' ?></p>
+  <form method="get" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
+    <input type="hidden" name="p" value="einstellungen"><input type="hidden" name="tab" value="mail">
+    <div class="bx-field" style="margin:0;min-width:240px"><label>Empfänger suchen</label><input type="search" name="mlq" value="<?= h($mlSuch) ?>" placeholder="z. B. wellgreen"></div>
+    <button class="btn btn-ghost" type="submit">Suchen</button>
+    <?php if ($mlSuch !== ''): ?><a class="btn btn-ghost" href="?p=einstellungen&tab=mail#maillog">Alle</a><?php endif; ?>
+  </form>
+  <?php if (!$mlRows): ?><p class="muted">Keine Mails gefunden.</p><?php else: ?>
+  <div class="bx-tablewrap"><table class="bx-table bx-karten-handy">
+    <thead><tr><th>Zeit</th><th>Empfänger</th><th>Betreff</th><th>Status</th></tr></thead>
+    <tbody>
+    <?php foreach ($mlRows as $mr): $st = $mlSt[$mr['status']] ?? [$mr['status'], '']; ?>
+      <tr>
+        <td style="white-space:nowrap"><?= h(fmt_zeit((string)$mr['zeit'], 'd.m.Y H:i:s')) ?></td>
+        <td><span class="bx-lauf" style="max-width:260px"><?= h((string)$mr['an']) ?></span></td>
+        <td><span class="bx-lauf" style="max-width:420px"><?= h((string)$mr['betreff']) ?></span></td>
+        <td style="white-space:nowrap"><?= bx_badge($st[0], $st[1]) ?><?= trim((string)($mr['fehler'] ?? '')) !== '' ? '<div class="muted" style="font-size:12px;white-space:normal;max-width:320px">' . h((string)$mr['fehler']) . '</div>' : '' ?></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table></div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 <?php if ($tab === 'mail'): ?>
 <div class="bx-panel" style="margin-top:16px">
   <h2>E-Mail-Texte an Kunden</h2>

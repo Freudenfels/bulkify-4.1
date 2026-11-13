@@ -384,5 +384,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && function_exists('aenderung_
 
 $file = BX_ROOT . '/module/' . $routes[$p];
 if (!is_file($file)) { http_response_code(404); echo 'Seite nicht gefunden'; exit; }
+// Mail-Bremse (Fable-6 T0.4): liegt etwas in der Warteschlange, nach der Antwort weiter abarbeiten.
+if (is_file(BX_ROOT . '/core/mail_protokoll.php')) { require_once BX_ROOT . '/core/mail_protokoll.php'; mail_warteschlange_pruefen(); }
 
 require $file;

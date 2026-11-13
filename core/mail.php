@@ -52,22 +52,38 @@ function mail_senden(string $to, string $betreff, string $text, ?string $signatu
     // Testumgebung: nie an Kunden/Lieferanten/Mitarbeiter – nur ans Test-Postfach (leer = nur Protokoll).
     if (function_exists('bx_testumgebung') && bx_testumgebung()) {
         [$to, $betreff] = bx_test_mail_umleiten($to, $betreff);
-        if ($to === '') { mail_log('(Testumgebung, nicht gesendet)', $betreff, $text); return ''; }
+        if ($to === '') { mail_log('(Testumgebung, nicht gesendet)', $betreff, $text); require_once __DIR__ . '/mail_protokoll.php'; mp_eintrag('(Testumgebung)', $betreff, 'test'); return ''; }
     }
     // Automatik: Signatur des aktuell eingeloggten Teamkontos (nicht im Kundenportal -> dort null, keine Signatur).
     if ($signatur_html === null) {
         $signatur_html = '';
         if (function_exists('current_user')) { $cu = current_user(); if ($cu && empty($cu['lieferant_id']) && !empty($cu['id'])) $signatur_html = mail_signatur_fuer((int)$cu['id']); }
     }
-    mail_log($to, $betreff, $text . ($signatur_html !== '' ? "\n[+ Signatur]" : '') . ($anhaenge ? "\n[+ Anhang: " . implode(', ', array_column($anhaenge, 'name')) . ']' : ''));
-
+    // Mail-Bremse (Fable-6 T0.4): höchstens 20 Versuche je Minute, der Rest in die Warteschlange (geht nach der Antwort raus).
+    require_once __DIR__ . '/mail_protokoll.php';
     $c = mail_config();
-    if (!$c['aktiv']) return 'Der E-Mail-Versand ist in den Einstellungen ausgeschaltet.';
-    if ($c['host'] === '') return 'Es ist kein SMTP-Server hinterlegt (Einstellungen → E-Mail).';
-    if ($c['from'] === '') return 'Es ist keine Absenderadresse hinterlegt (Einstellungen → E-Mail).';
+    if ($c['aktiv'] && $c['host'] !== '' && $c['from'] !== '' && mail_bremse_frei() <= 0
+        && mail_einreihen($to, $betreff, $text, (string)$signatur_html, $anhaenge)) {
+        mail_log($to, $betreff, "[Warteschlange: Mail-Bremse 20/Minute]\n" . $text);
+        return '';
+    }
+    return mail_senden_jetzt($to, $betreff, $text, (string)$signatur_html, $anhaenge);
+}
+
+// Der eigentliche Versand (ohne Bremse) – auch für die Warteschlange. $pid = vorhandener Protokoll-Eintrag (Warteschlange).
+function mail_senden_jetzt(string $to, string $betreff, string $text, string $signatur_html = '', array $anhaenge = [], int $pid = 0): string {
+    mail_log($to, $betreff, $text . ($signatur_html !== '' ? "\n[+ Signatur]" : '') . ($anhaenge ? "\n[+ Anhang: " . implode(', ', array_column($anhaenge, 'name')) . ']' : ''));
+    require_once __DIR__ . '/mail_protokoll.php';
+    $c = mail_config();
+    $grund = !$c['aktiv'] ? 'Der E-Mail-Versand ist in den Einstellungen ausgeschaltet.'
+           : ($c['host'] === '' ? 'Es ist kein SMTP-Server hinterlegt (Einstellungen → E-Mail).'
+           : ($c['from'] === '' ? 'Es ist keine Absenderadresse hinterlegt (Einstellungen → E-Mail).' : ''));
+    if ($grund !== '') { if ($pid) mp_status($pid, 'aus', $grund); else mp_eintrag($to, $betreff, 'aus', $grund); return $grund; }
+    if ($pid) mp_status($pid, 'versuch'); else $pid = mp_eintrag($to, $betreff, 'versuch');
 
     $fehler = smtp_senden($to, $betreff, $text, $c, $signatur_html, $anhaenge);
     if ($fehler !== '') mail_log($to, 'FEHLER: ' . $betreff, $fehler);
+    mp_status($pid, $fehler === '' ? 'gesendet' : 'fehler', $fehler);
     return $fehler;
 }
 
@@ -245,6 +261,7 @@ function mail_lieferant_erinnerung(int $bestellung_id): string {
               FROM bestellung b JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.id=?", [$bestellung_id]);
     if (!$b) return 'Bestellung oder Lieferant nicht gefunden.';
     if (trim((string)$b['email']) === '') return 'Für diesen Lieferanten ist keine E-Mail-Adresse hinterlegt.';
+    if (!function_exists('beleg_firma')) require_once __DIR__ . '/pdf_beleg.php';   // Fable-6 P1: der Cron lud die Datei nicht
     $fa = beleg_firma();
     $sp = mail_lief_sprache($b['sprache']);
     $anrede = trim((string)$b['ansprechpartner']) !== '' ? (string)$b['ansprechpartner'] : (string)$b['firma'];
@@ -265,6 +282,35 @@ function mail_lieferant_erinnerung(int $bestellung_id): string {
               . "Thank you and best regards\n" . $fa['name'];
     }
     return mail_senden((string)$b['email'], $betreff, $text);
+}
+
+// Fable-6 P2 (13.11.2026): EINE Erinnerung je Lieferant und Tag mit allen fälligen Bestellungen (Cron, core/bestellung_erinnerung.php).
+// $bestellungen = Zeilen aus bestellung. Rückgabe '' = verschickt.
+function mail_lieferant_erinnerung_sammel(int $lieferant_id, array $bestellungen): string {
+    $l = one("SELECT firma, ansprechpartner, email, sprache FROM lieferanten WHERE id=?", [$lieferant_id]);
+    if (!$l || !$bestellungen) return 'Lieferant oder Bestellungen fehlen.';
+    if (count($bestellungen) === 1) return mail_lieferant_erinnerung((int)$bestellungen[0]['id']);
+    if (trim((string)$l['email']) === '') return 'Für diesen Lieferanten ist keine E-Mail-Adresse hinterlegt.';
+    if (!function_exists('beleg_firma')) require_once __DIR__ . '/pdf_beleg.php';
+    $fa = beleg_firma();
+    $sp = mail_lief_sprache($l['sprache']);
+    $anrede = trim((string)$l['ansprechpartner']) !== '' ? (string)$l['ansprechpartner'] : (string)$l['firma'];
+    $link = mail_basis_url() . '/?p=lieferant_login';
+    $liste = implode("\n", array_map(fn($b) => '- ' . $b['nummer'], $bestellungen));
+    $n = count($bestellungen);
+    if ($sp === 'de') {
+        $betreff = 'Erinnerung: ' . $n . ' Bestellungen bitte bestätigen';
+        $text = "Guten Tag $anrede,\n\nfolgende Bestellungen sind noch offen und warten auf Ihre Bestätigung:\n\n$liste\n\n"
+              . "Bitte bestätigen Sie im Portal die Bestellungen und die geplanten Liefertermine:\n$link\n\nVielen Dank und viele Grüße\n" . $fa['name'];
+    } elseif ($sp === 'zh') {
+        $betreff = '提醒：请确认 ' . $n . ' 个订单';
+        $text = "$anrede 您好，\n\n以下订单仍待贵司确认：\n\n$liste\n\n请在门户中确认订单及计划交货日期：\n$link\n\n此致\n" . $fa['name'];
+    } else {
+        $betreff = 'Reminder: please confirm ' . $n . ' purchase orders';
+        $text = "Dear $anrede,\n\nthe following purchase orders are still pending your confirmation:\n\n$liste\n\n"
+              . "Please confirm the orders and the planned delivery dates in the portal:\n$link\n\nThank you and best regards\n" . $fa['name'];
+    }
+    return mail_senden((string)$l['email'], $betreff, $text);
 }
 
 // Preisanfrage an einen Lieferanten melden (Sprache je Lieferant). $anfrage_id = lieferant_anfrage.id

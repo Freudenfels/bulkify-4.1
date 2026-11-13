@@ -57,3 +57,5 @@ Firma: Feld „Produktions- bzw. Lieferadresse“ (firma_prod_adresse) = „Ship
 **13.11.2026:** Oben steht (Admin) „Täglicher Lauf (Cron): zuletzt …“ (`cron_lauf_hinweis()`).
 
 **Kunden-Filter (Fable-4 T4.1, 13.11.2026):** Reiter Firma, Block „Lieferantennamen für Kunden ersetzen“: Liste allgemeiner Wörter (Speichern `kunde_filter_save`) und Tabelle je Lieferant, ob der Name ersetzt wird und warum nicht.
+
+**Mail-Log (Fable-6 T0.5, 13.11.2026):** Im Reiter E-Mail sieht nur der Admin die letzten 200 Mails mit Zeit (Ortszeit), Empfänger, Betreff und Status (gesendet / Fehler mit Grund / Warteschlange / nicht gesendet), dazu eine Suche nach Empfänger (`mlq`), Anker `#maillog`. Quelle ist `mp_liste()` (`core/mail_protokoll.php`); ältere Mails kommen aus `data/mail.log`.
