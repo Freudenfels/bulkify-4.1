@@ -12,6 +12,12 @@ $bulkWahl = all("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.einheit, c.mhd 
                  WHERE i.kategorie='fertig' AND c.status='frei' AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL
                    AND (c.auftrag_id=? OR (c.auftrag_id IS NULL AND i.rezeptur_id=?)) ORDER BY (c.mhd IS NULL), c.mhd, c.id",
                 [(int)($pa['auftrag_id'] ?? 0), (int)($pa['rezeptur_id'] ?: scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]))]);
+// Fable-4 T1.1 (13.11.2026): die Bulk-Charge der laufenden Unter-Charge steht immer in der Auswahl (auch mit Bestand 0), dazu die Eimer
+// (Mischgebinde, prod_charge) dieses PA – Wert „e<id>“. So muss ein Nachtrag für heute nie „ohne“ nehmen.
+if ($akt && (int)$akt['bulk_charge_id'] > 0 && !in_array((int)$akt['bulk_charge_id'], array_map('intval', array_column($bulkWahl, 'id')), true))
+    if ($bAkt = one("SELECT id, charge_nr, menge_verfuegbar, einheit, mhd FROM charge WHERE id=?", [(int)$akt['bulk_charge_id']])) array_unshift($bulkWahl, $bAkt);
+$eimerWahl = [];
+try { $eimerWahl = all("SELECT id, nummer AS nr, menge, einheit FROM prod_charge WHERE pa_id=? OR id=? ORDER BY id DESC", [$id, $akt ? (int)$akt['prod_charge_id'] : 0]); } catch (\Throwable $e) {}
 $mitarbeiterA = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name");
 // Vorschlag für heute: gleicher Bulk wie die laufende Unter-Charge UND heute = gleicher Buchstabe, sonst der nächste (Nico 12.11.2026).
 $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl[0]['id'] ?? 0), $akt ? (int)$akt['prod_charge_id'] : 0);
@@ -71,7 +77,7 @@ $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl
       <div class="bx-field" style="width:160px"><label>Produktionsdatum</label><input type="date" name="datum" value="<?= h(heute_ort()) ?>" required></div>
       <div class="bx-field" style="width:150px"><label>Menge (Stk)</label><input type="text" inputmode="numeric" name="menge" required placeholder="max. <?= $nfA($restA) ?>"></div>
       <div class="bx-field" style="flex:1;min-width:240px"><label>Bulk-Charge</label>
-        <select name="bulk_charge_id" id="naBulk"><option value="0">ohne (kein Bulk-Bezug)</option><?php foreach ($bulkWahl as $b): ?><option value="<?= (int)$b['id'] ?>"<?= $akt && (int)$akt['bulk_charge_id'] === (int)$b['id'] ? ' selected' : '' ?>><?= h(($b['charge_nr'] ?: '#' . $b['id']) . ' · ' . $nfA($b['menge_verfuegbar']) . ' ' . $b['einheit'] . ($b['mhd'] ? ' · MHD ' . date('d.m.Y', strtotime((string)$b['mhd'])) : '')) ?></option><?php endforeach; ?></select></div>
+        <select name="bulk_charge_id" id="naBulk"><option value="0">ohne (kein Bulk-Bezug)</option><?php foreach ($bulkWahl as $b): ?><option value="<?= (int)$b['id'] ?>"<?= $akt && (int)$akt['bulk_charge_id'] === (int)$b['id'] ? ' selected' : '' ?>><?= h(($b['charge_nr'] ?: '#' . $b['id']) . ' · ' . $nfA($b['menge_verfuegbar']) . ' ' . $b['einheit'] . ($b['mhd'] ? ' · MHD ' . date('d.m.Y', strtotime((string)$b['mhd'])) : '') . ($akt && (int)$akt['bulk_charge_id'] === (int)$b['id'] ? ' · laufende Unter-Charge ' . $akt['charge_nr'] : '')) ?></option><?php endforeach; ?><?php foreach ($eimerWahl as $e): ?><option value="e<?= (int)$e['id'] ?>"<?= $akt && (int)$akt['prod_charge_id'] === (int)$e['id'] ? ' selected' : '' ?>><?= h('Eimer ' . $e['nr'] . ($akt && (int)$akt['prod_charge_id'] === (int)$e['id'] ? ' · laufende Unter-Charge ' . $akt['charge_nr'] : '')) ?></option><?php endforeach; ?></select></div>
     </div>
     <div class="bx-row" style="gap:12px;flex-wrap:wrap">
       <div class="bx-field" style="width:170px"><label>Charge (Vorschlag)</label><input type="text" name="charge_nr" value="<?= h($vorgabeA['charge_nr']) ?>" data-vorgabe="<?= h($vorgabeA['charge_nr']) ?>"><input type="hidden" name="charge_vorschlag" value="<?= h($vorgabeA['charge_nr']) ?>"><div class="muted" style="font-size:12px">Unverändert lassen: das System vergibt je Bulk und Produktionstag den richtigen Buchstaben.</div></div>

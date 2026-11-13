@@ -68,7 +68,9 @@ if ($id) pki_ui_post($id, '?p=produktionsauftrag&id=' . $id);
 // Ein Weg (11.11.2026): Teilmenge nachtragen (ersetzt Easy Production) – gleiche Buchung wie in der Werk-App (core/pa_ablauf.php).
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachtragen') {
     $wer = (string)(current_user()['name'] ?? 'Team');
-    $bulk = (int)($_POST['bulk_charge_id'] ?? 0);
+    $bulkWert = (string)($_POST['bulk_charge_id'] ?? '0');   // „<id>“ = Bulk-Charge, „e<id>“ = Eimer (Fable-4 T1.1)
+    $eimer = $bulkWert !== '' && $bulkWert[0] === 'e' ? (int) substr($bulkWert, 1) : 0;
+    $bulk = $eimer > 0 ? 0 : (int)$bulkWert;
     $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);
     $charge = trim((string)($_POST['charge_nr'] ?? ''));
     $datumN = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST['datum'] ?? '')) ? (string)$_POST['datum'] : pa_tag_heute();
@@ -76,7 +78,7 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     // 13.11.2026 (Fable-3 T1.4): ein Weg für jedes Datum – pa_nachtrag_buchen() findet bzw. legt die Unter-Charge des gewählten Tages an,
     // lässt die laufende Unter-Charge in Ruhe und verwirft bei einem Fehler alles (kein Buchstabe verbraucht).
     $foto = pa_foto_speichern($_FILES['foto'] ?? [], 'nachtrag' . $id);
-    $r = pa_nachtrag_buchen($id, $menge, ['bulk_charge_id' => $bulk, 'datum' => $datumN, 'charge_nr' => $charge, 'grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')],
+    $r = pa_nachtrag_buchen($id, $menge, ['bulk_charge_id' => $bulk, 'prod_charge_id' => $eimer, 'datum' => $datumN, 'charge_nr' => $charge, 'grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')],
         ['mitarbeiter' => (string)($_POST['mitarbeiter'] ?? ''), 'rueckstell' => (int) zahl_lesen((string)($_POST['rueckstell'] ?? '0'), true), 'foto' => $foto, 'geliefert' => !empty($_POST['geliefert']),
          'vor_etikett' => ($_POST['umfang'] ?? '') === 'vor_etikett'], $wer);
     $uc = (int)($r['unter_charge_id'] ?? 0);

@@ -277,6 +277,8 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     $tag = ($nachtrag && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($d['datum'] ?? ''))) ? (string)$d['datum'] : pa_tag_heute();
     $v = pa_vorgabe($pa_id, $bulk, $eimer, $tag);
     $akt = pa_aktuelle_unter_charge($pa_id);
+    if (!$v['neu'] && $akt && $nachtrag)   // Nachtrag: laufende Unter-Charge desselben Tages nur zurückgeben – kein Wiederanlauf (Fable-4 T1.1)
+        return ['ok' => true, 'unter_charge_id' => (int)$akt['id'], 'charge_nr' => (string)$akt['charge_nr'], 'mhd' => (string)$akt['mhd'], 'neu' => false];
     if (!$v['neu'] && $akt) {   // gleiche Bulk-Charge am selben Tag: gleicher Buchstabe, Wiederanlauf (z. B. nach der Pause)
         pa_ereignis($pa_id, (int)$akt['id'], 'wiederanlauf', 'Wiederanlauf ' . $akt['charge_nr'] . ': ' . $leerTxt . '. Stempel auf Charge ' . $akt['charge_nr'] . ' / MHD ' . date('d.m.Y', strtotime((string)$akt['mhd'])) . ' eingestellt.', (string)($d['linie'] ?? ''), '', (string)$d['foto_stempel'], $von);
         return ['ok' => true, 'unter_charge_id' => (int)$akt['id'], 'charge_nr' => (string)$akt['charge_nr'], 'mhd' => (string)$akt['mhd'], 'neu' => false];
@@ -351,23 +353,33 @@ function pa_grund_js(): string {
 // - Schlägt die Buchung fehl, wird die eben angelegte Unter-Charge samt Start-Ereignis verworfen: kein Buchstabe verbraucht.
 // - Gelingt sie: Nachtrag für heute ohne laufende Unter-Charge läuft weiter (wie bisher), sonst wird die Nachtrag-Unter-Charge abgeschlossen.
 // $d: bulk_charge_id, datum, charge_nr ('' = Vorgabe), grund, mhd. $o: Optionen für pa_teilmenge_buchen (rueckstell, foto, mitarbeiter, geliefert).
+// Welche vorhandene Unter-Charge nimmt ein Nachtrag für $tag? (Fable-4 T1.1, 13.11.2026) Gleicher Bulk bzw. Eimer am selben Tag = dieselbe
+// Unter-Charge (laufende zuerst). Ohne Bulk/Eimer („ohne“) am Tag der laufenden Unter-Charge = die laufende – sie bleibt offen.
+// null = keine passende, pa_starten() legt eine Nachtrag-Unter-Charge an.
+function pa_nachtrag_unter_charge(int $pa_id, int $bulk, int $eimer, string $tag): ?array {
+    foreach (all("SELECT * FROM pa_unter_charge WHERE pa_id=? AND COALESCE(bulk_charge_id,0)=? AND COALESCE(prod_charge_id,0)=? AND status IN ('laeuft','fertig') ORDER BY status='laeuft' DESC, id DESC", [$pa_id, $bulk, $eimer]) as $u)
+        if (pa_uc_tag($u) === $tag) return $u;
+    if ($bulk === 0 && $eimer === 0) { $akt = pa_aktuelle_unter_charge($pa_id); if ($akt && pa_uc_tag($akt) === $tag) return $akt; }
+    return null;
+}
 function pa_nachtrag_buchen(int $pa_id, float $menge, array $d, array $o, string $von): array {
     pa_schema();
     $tag = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($d['datum'] ?? '')) ? (string)$d['datum'] : pa_tag_heute();
     if ($tag > pa_tag_heute()) return ['ok' => false, 'msg' => 'Ein Nachtrag geht nicht in die Zukunft.'];
-    $bulk = (int)($d['bulk_charge_id'] ?? 0);
+    $bulk = (int)($d['bulk_charge_id'] ?? 0); $eimer = (int)($d['prod_charge_id'] ?? 0);
     $charge = trim((string)($d['charge_nr'] ?? ''));
-    $uc = null;
-    foreach (all("SELECT * FROM pa_unter_charge WHERE pa_id=? AND COALESCE(bulk_charge_id,0)=? AND COALESCE(prod_charge_id,0)=0 AND status IN ('laeuft','fertig') ORDER BY status='laeuft' DESC, id DESC", [$pa_id, $bulk]) as $u)
-        if (pa_uc_tag($u) === $tag) { $uc = $u; break; }
+    $uc = pa_nachtrag_unter_charge($pa_id, $bulk, $eimer, $tag);
     if ($uc && $charge !== '' && $charge !== (string)$uc['charge_nr'])
         return ['ok' => false, 'msg' => 'Gleicher Bulk am selben Tag = gleiche Charge ' . $uc['charge_nr'] . '. Ein neuer Buchstabe kommt nur bei anderem Bulk oder anderem Tag.'];
     $neu = null;
     if (!$uc) {
-        $neu = pa_starten($pa_id, ['bulk_charge_id' => $bulk, 'nachtrag' => true, 'datum' => $tag, 'charge_nr' => $charge,
+        $neu = pa_starten($pa_id, ['bulk_charge_id' => $bulk, 'prod_charge_id' => $eimer, 'nachtrag' => true, 'datum' => $tag, 'charge_nr' => $charge,
                                    'abweichung_grund' => (string)($d['grund'] ?? ''), 'mhd' => (string)($d['mhd'] ?? '')], $von);
         if (empty($neu['ok'])) return $neu;
         $uc = pa_unter_charge((int)$neu['unter_charge_id']);
+        // Fable-4 T1.1 (13.11.2026): hat pa_starten() keine neue angelegt (laufende Unter-Charge desselben Tages), ist sie nur „gefunden“ –
+        // der Nachtrag bucht darauf und lässt sie laufen (nie schließen, kein neuer Start in der Werk-App).
+        if (empty($neu['neu'])) $neu = null;
     }
     $r = pa_teilmenge_buchen($pa_id, (int)$uc['id'], $menge, ['art' => 'nachtrag', 'datum' => $tag, 'von' => $von, 'nachtrag_komplett' => empty($o['vor_etikett'])] + $o);
     $r['unter_charge_id'] = (int)$uc['id'];
