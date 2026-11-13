@@ -207,7 +207,12 @@ function bx_table(array $cols, array $rows, array $opts = []): void {
             }
         }
         $href = $rowUrl ? $rowUrl($row) : null;
-        echo '<tr' . ($href ? ' style="cursor:pointer" onclick="location.href=\'' . h($href) . '\'"' : '') . '>';
+        // 13.11.2026 (Oberflächen-Standard): 'rowPop' = Klick öffnet die Seite als Pop-up über der Liste (bx-ui.js), 'rowId' = id der Zeile
+        // (wird nach dem Speichern im Pop-up neu geladen).
+        $pop = isset($opts['rowPop']) ? $opts['rowPop']($row) : null;
+        $rid = isset($opts['rowId']) ? (string)$opts['rowId']($row) : '';
+        if ($pop) echo '<tr style="cursor:pointer"' . ($rid !== '' ? ' id="' . h($rid) . '"' : '') . ' data-pop-url="' . h($pop) . '" data-pop-titel="' . h(isset($opts['rowPopTitel']) ? (string)$opts['rowPopTitel']($row) : '') . '"' . ($rid !== '' ? ' data-pop-refresh="#' . h($rid) . '"' : '') . '>';
+        else echo '<tr' . ($rid !== '' ? ' id="' . h($rid) . '"' : '') . ($href ? ' style="cursor:pointer" onclick="location.href=\'' . h($href) . '\'"' : '') . '>';
         foreach ($cols as $key => $c) {
             $numcls = !empty($c['num']) ? ' class="bx-num"' : '';
             $val = isset($c['render']) ? $c['render']($row) : h((string)($row[$key] ?? ''));

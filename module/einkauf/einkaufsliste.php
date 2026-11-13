@@ -197,11 +197,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         if ($bid) { $n++; $finalOnline($bid); bestellung_doppelt_vermerken([$bid], $bxDoppelt); einkauf_rechnung_anhaengen($bid, 'on_rechnung'); }   // B3: Rechnung zum Beleg ablegen
     } else {
         // B1: je Position ein eigener Beleg (Rohstoff/Verpackung/frei/Nachbestellung).
+        $alleBids = [];
         foreach ($einzel as $e) {
             $bid = isset($e['frei'])
                 ? bestellung_erstellen([], [], $e['sup'] ?: null, $datum, [(int)$e['frei']])
                 : bestellung_erstellen([$e['pos']], [], $e['sup'] ?: null, $datum, []);
             if (!$bid) continue;
+            $alleBids[] = $bid;
             $n++; $finalLief($bid); bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         }
         // Bulk/Fremdfertigung: je Produkt ein EIGENER Beleg.
@@ -209,8 +211,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
             $bmap = $u['ov'] !== null ? [$u['pid'] => $u['ov']] : [];
             $bid = bestellung_erstellen([], [$u['pid']], $u['sup'] ?: null, $datum, [], $bmap);
             if (!$bid) continue;
+            $alleBids[] = $bid;
             $n++; $finalLief($bid); bestellung_doppelt_vermerken([$bid], $bxDoppelt);
         }
+        // 13.11.2026 (Paket Teil 6.2): „heute bestellt“ je Zeile – im Pop-up bestätigter Preis je Einheit gilt für diese eine Bestellung.
+        $preisEin = betrag_lesen(preg_replace('/[^0-9.,]/', '', (string)($_POST['el_preis'] ?? '')));
+        if ($direkt && $preisEin > 0 && count($alleBids) === 1) q("UPDATE bestellung_position SET ek_preis=? WHERE bestellung_id=?", [$preisEin, $alleBids[0]]);
     }
     header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal . ($skipGruende ? '&skipgr=' . urlencode(implode(' ', array_keys($skipGruende))) : '') : '') . ($luEntwurf ? '&lu_entwurf=' . implode(',', $luEntwurf) : '')); exit;
 }
@@ -241,9 +247,11 @@ $BM_KAT = betriebsmittel_kategorien();
 // Hauptlieferant steht – im Direkt-Weg je Zeile, im Online-Weg als Händler. Bleibt änderbar.
 $etLief = one("SELECT id, firma FROM lieferanten WHERE firma LIKE '%labelist%' AND COALESCE(gesperrt,0)=0 ORDER BY id LIMIT 1") ?: ['id' => 0, 'firma' => 'Labelisten'];   // Fable-3 T4.3: ohne gesperrte/inaktive
 
-$aktTyp = $_GET['typ'] ?? '';
-// Produktions-Typen + Nachbestellung (Meldebestand) + freie Betriebsmittel-Typen als eigene Reiter.
-$TYPEN = ['' => 'Alle', 'etikett' => 'Etiketten / Tüten', 'verpackung' => 'Verpackung', 'rohstoff' => 'Rohstoffe', 'fertig' => 'Fertige Produkte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT + ['wartet' => 'Wartet'];
+// 13.11.2026 (Paket Teil 6.1, Nico): nie alles durcheinander – Reiter je Art, kein „Alle“ mehr (Standard: Rohstoffe).
+$aktTyp = (string)($_GET['typ'] ?? '');
+if ($aktTyp === '') $aktTyp = 'rohstoff';
+$TYPEN = ['rohstoff' => 'Rohstoffe', 'verpackung' => 'Verpackung', 'etikett' => 'Etiketten', 'bulk' => 'Bulkware', 'fertig' => 'Fertigprodukte', 'nachbestell' => 'Nachbestellung'] + $BM_KAT + ['wartet' => 'Wartet'];
+$istBulkFertig = fn($b) => ($b['art'] ?? 'bulk') === 'fertig';   // Fertigware/Handelsware -> Reiter Fertigprodukte, sonst Bulkware
 // Ordnet eine freie Bedarfszeile einem Betriebsmittel-Reiter zu (ohne Kategorie = Sonstiges).
 $freiMatch = function($f, $t) {
     $k = (string)($f['kategorie'] ?? '');
@@ -252,15 +260,17 @@ $freiMatch = function($f, $t) {
 $istFreiTyp = isset($BM_KAT[$aktTyp]);
 $anzahlTyp = function($t) use ($aggBedarf, $aggWartet, $bulkBedarf, $freiBedarf, $nachBedarf, $BM_KAT, $freiMatch) {
     if ($t === 'wartet') return count($aggWartet);
-    if ($t === 'fertig') return count($bulkBedarf);
+    if ($t === 'bulk') return count(array_filter($bulkBedarf, fn($b) => ($b['art'] ?? 'bulk') !== 'fertig'));
+    if ($t === 'fertig') return count(array_filter($bulkBedarf, fn($b) => ($b['art'] ?? 'bulk') === 'fertig')) + count(array_filter($aggBedarf, fn($a) => $a['typ'] === 'fertig'));
     if ($t === 'nachbestell') return count($nachBedarf);
     if ($t === '') return count($aggBedarf) + count($bulkBedarf) + count($freiBedarf) + count($nachBedarf);
     if (isset($BM_KAT[$t])) return count(array_filter($freiBedarf, fn($f) => $freiMatch($f, $t)));
     return count(array_filter($aggBedarf, fn($a) => $a['typ'] === $t));
 };
 $aggTab  = $aktTyp === 'wartet' ? $aggWartet
-         : (($aktTyp === 'fertig' || $aktTyp === 'nachbestell' || $istFreiTyp) ? [] : array_values(array_filter($aggBedarf, fn($a) => $aktTyp === '' || $a['typ'] === $aktTyp)));
-$bulkTab = ($aktTyp === '' || $aktTyp === 'fertig') ? $bulkBedarf : [];
+         : (($aktTyp === 'bulk' || $aktTyp === 'nachbestell' || $istFreiTyp) ? [] : array_values(array_filter($aggBedarf, fn($a) => $a['typ'] === $aktTyp)));
+$bulkTab = $aktTyp === 'bulk' ? array_values(array_filter($bulkBedarf, fn($b) => !$istBulkFertig($b)))
+         : ($aktTyp === 'fertig' ? array_values(array_filter($bulkBedarf, $istBulkFertig)) : []);
 $freiTab = ($aktTyp === '') ? $freiBedarf : ($istFreiTyp ? array_values(array_filter($freiBedarf, fn($f) => $freiMatch($f, $aktTyp))) : []);
 $nachTab = ($aktTyp === '' || $aktTyp === 'nachbestell') ? $nachBedarf : [];
 $hatWas  = $aggTab || $bulkTab || $freiTab || $nachTab;
@@ -305,8 +315,13 @@ $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit =
     return $s . '</select>';
 };
 
+// 13.11.2026 (Paket Teil 6.2): je Zeile eine eigene Bestellung – „heute bestellt“ (Pop-up: Lieferant, Menge, Preis bestätigen,
+// Direkt-Weg ohne Mail) oder „über Portal senden“ (Lieferanten-Account). Keine Mehrfachauswahl, kein Sammelweg mehr.
+$elKnoepfe = fn(string $key) => '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">'
+    . '<button type="button" class="btn btn-primary btn-sm el-heute" data-key="' . h($key) . '">heute bestellt</button>'
+    . '<button type="button" class="btn btn-ghost btn-sm el-portal" data-key="' . h($key) . '">über Portal senden</button></div>';
 render_header('einkaufsliste', 'Bestellen');
-bx_head('Bestellen', 'Was bestellt werden sollte – auswählen und auf einem von drei Wegen bestellen: „Über Lieferant (Portal)" (nur bei aktivem Account UND hinterlegtem Preis – geht in seinen Account, wartet auf Bestätigung), „Direkt bestellt" (Telefon/Mail – sofort bestellt und bestätigt, keine Mail) oder „Online bestellt" (du hast selbst online gekauft – mit Händler, Zahlungsart und Preis). Alles landet unter „Bestellt".',
+bx_head('Bestellen', 'Getrennt nach Art. Jede Zeile wird einzeln bestellt (eigene Bestellnummer): „heute bestellt“ = schon beim Lieferanten bestellt (Telefon/Mail/online), im Pop-up Lieferant, Menge und Preis bestätigen – keine Mail; „über Portal senden“ = geht in den Account des Lieferanten (nur mit Account und Preis) und wartet auf Bestätigung.',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (Händler gespeichert, Preis falls angegeben)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : (trim((string)($_GET['skipgr'] ?? '')) !== '' ? h(trim((string)$_GET['skipgr'])) : 'Lieferant ohne aktiven Account/Preis.') . ' Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
 if (!empty($_GET['lu_entwurf'])) {   // Paket 12.11.2026 Teil 4: nicht gesendet, weil Unterlagen des Lieferanten fehlen
@@ -371,7 +386,6 @@ if ($ohneFestlegung): ?>
     <h2 style="margin:0">Zu bestellen</h2>
     <div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap">
       <input type="text" id="bestSuche" placeholder="Tabelle durchsuchen …" autocomplete="off" style="padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);min-width:200px">
-      <label class="muted" style="font-size:13px;cursor:pointer"><input type="checkbox" id="selAll" style="vertical-align:middle"> alle im Reiter</label>
     </div>
   </div>
   <?php if ($quarListe): ?>
@@ -394,12 +408,12 @@ if ($ohneFestlegung): ?>
   <?php endif; ?>
   <div class="settabs" style="margin:8px 0 4px">
     <?php foreach ($TYPEN as $t => $lbl): $n = $anzahlTyp($t); ?>
-      <a href="?p=einkaufsliste<?= $t ? '&typ=' . $t : '' ?>" class="<?= $aktTyp === $t ? 'on' : '' ?>"><?= h($lbl) ?><?= $n ? ' (' . $n . ')' : '' ?></a>
+      <a href="?p=einkaufsliste&typ=<?= h($t) ?>" class="<?= $aktTyp === $t ? 'on' : '' ?>"><?= h($lbl) ?> (<?= (int)$n ?>)</a>
     <?php endforeach; ?>
   </div>
   <?php if ($aktTyp === 'wartet'): ?><p class="muted" style="font-size:13px;margin:10px 0 0">Etiketten und bedruckte Beutel, deren Design der Kunde noch nicht freigegeben hat. Sie sind noch nicht bestellbar und stehen deshalb nicht unter „Zu bestellen". Nach der Freigabe erscheinen sie dort automatisch (Menge bereits netto gegen Lager und unterwegs).</p><?php endif; ?>
   <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
-    <thead><tr><th style="width:34px"></th><th>Artikel / Produkt</th><th></th><th class="bx-num">zu bestellen</th><th style="width:190px">Lieferant</th><th>Aufträge</th></tr></thead>
+    <thead><tr><th style="width:150px">Bestellen</th><th>Artikel / Produkt</th><th></th><th class="bx-num">zu bestellen</th><th style="width:190px">Lieferant</th><th>Aufträge</th></tr></thead>
     <tbody id="bestTbody">
       <?php if (!$hatWas): ?><tr><td colspan="6" class="muted"><?= $istFreiTyp
           ? 'Noch nichts unter „' . h($BM_KAT[$aktTyp]) . '" eingetragen – weiter unten unter „Neuen Bedarf eintragen" hinzufügen.'
@@ -411,7 +425,7 @@ if ($ohneFestlegung): ?>
           $ei = $istEtikett ? etikett_info((int)$a['auftrag_id']) : null;
       ?>
         <tr<?= $gesperrt ? ' style="opacity:.75"' : '' ?>>
-          <td><?php if ($gesperrt): ?><span title="<?= !empty($a['druck']) ? 'Beutel-Design noch nicht vom Kunden freigegeben' : 'Etikett noch nicht vom Kunden freigegeben' ?>">gesperrt</span><?php else: ?><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"<?= $istEtikett ? ' data-etikett="1"' : '' ?>><?php endif; ?></td>
+          <td><?php if ($gesperrt): ?><span title="<?= !empty($a['druck']) ? 'Beutel-Design noch nicht vom Kunden freigegeben' : 'Etikett noch nicht vom Kunden freigegeben' ?>">gesperrt</span><?php else: ?><?= $elKnoepfe($key) ?><?php endif; ?></td>
           <td><?= h($a['name']) ?>
             <?php if ($istEtikett): ?>
               <?php if ($gesperrt): ?> <?= bx_badge('wartet auf Kunden-Freigabe','warn') ?>
@@ -459,7 +473,7 @@ if ($ohneFestlegung): ?>
           $bSumme = $bAb !== null ? $bAb * (float)$b['zu_bestellen'] : null;
       ?>
         <tr>
-          <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
+          <td><?= $elKnoepfe($key) ?></td>
           <td><?= $bFertig ? 'Fertigware' : 'Bulk' ?>: <?= h($b['produkt'] ?: '–') ?></td>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
           <?php $bEinh = (string)($b['einheit'] ?? 'Stk'); $bGew = !empty($b['gewicht']);
@@ -474,7 +488,7 @@ if ($ohneFestlegung): ?>
       <?php endforeach; ?>
       <?php foreach ($nachTab as $nb): $key = 'nach:' . (int)$nb['item_id']; ?>
         <tr>
-          <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
+          <td><?= $elKnoepfe($key) ?></td>
           <td><a href="?p=rohstoff&id=<?= (int)$nb['item_id'] ?>" target="_blank" style="text-decoration:none"><?= h($nb['name']) ?></a></td>
           <td><?= bx_badge('Nachbestellung','warn') ?></td>
           <td class="bx-num"><?= $mengeInput($key, (float)$nb['zu_bestellen'], (string)$nb['einheit']) ?><div class="muted" style="font-size:11px">Meldebestand <?= $mfmt($nb['mindest']) ?> · Lager <?= $mfmt($nb['stock']) ?><?= $nb['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($nb['bestellt']) : '' ?></div></td>
@@ -484,7 +498,7 @@ if ($ohneFestlegung): ?>
       <?php endforeach; ?>
       <?php foreach ($freiTab as $f): $key = 'frei:' . (int)$f['id']; ?>
         <tr>
-          <td><input type="checkbox" class="bx-sel" name="sel[]" value="<?= h($key) ?>"></td>
+          <td><?= $elKnoepfe($key) ?></td>
           <td><?= h($f['bezeichnung']) ?>
             <?php if (!empty($f['elektrisch'])): ?> <?= bx_badge('elektr. – jährl. Prüfung','info') ?><?php endif; ?>
             <?php if (!empty($f['notiz'])): ?><div class="muted" style="font-size:11px"><?= h($f['notiz']) ?></div><?php endif; ?>
@@ -499,38 +513,10 @@ if ($ohneFestlegung): ?>
     </tbody>
   </table></div>
   <?php if ($hatWas && $aktTyp !== 'wartet'): ?>
-  <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:14px">
-    <input type="hidden" name="aktion" value="bestellen">
-    <div class="bx-field" style="margin:0;max-width:180px"><label>Bestellt am</label><input type="date" name="datum" value="<?= date('Y-m-d') ?>"></div>
-    <button class="btn btn-primary" id="btnBestellen" type="submit" name="modus" value="lieferant" disabled title="Nur portalfähige Lieferanten (aktiver Account UND hinterlegter Preis) – die Bestellung geht in deren Account und wartet auf Bestätigung.">Über Lieferant (Portal)</button>
-    <button class="btn btn-ghost" id="btnDirektSchnell" type="submit" name="modus" value="direkt" disabled title="Schon beim Lieferanten bestellt (Sammelorder, Telefon, Mail): als bestellt erfassen – keine Mail, kein Preis nötig, Lieferant je Zeile (Etiketten: Labelisten vorbelegt).">Als bestellt erfassen (direkt)</button>
-  </div>
-  <details id="direktBox" class="bx-panel" style="margin-top:12px;padding:12px 16px">
-    <summary style="cursor:pointer;font-weight:600">Direkt bestellt (Telefon/Mail) <span class="muted" style="font-weight:400;font-size:12px">– beim gewählten Lieferanten selbst bestellt, auch mit Portal-Account: keine Mail, keine Bestätigung nötig</span></summary>
-    <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
-      <div class="bx-field" style="margin:0;max-width:180px"><label>Erwartet am (optional)</label><input type="date" name="di_eta"></div>
-      <div class="bx-field" style="margin:0;min-width:260px;flex:1"><label>Notiz (optional)</label><input type="text" name="di_notiz" placeholder="z. B. telefonisch mit Herrn X"></div>
-      <button class="btn btn-primary" id="btnDirekt" type="submit" name="modus" value="direkt" disabled>Direkt bestellt erfassen</button>
-    </div>
-    <div id="direktHinweis" class="bx-fehlhinweis" hidden></div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">Je Position eine Bestellung beim gewählten Lieferanten (Preis aus dem Lieferantenpreis), Datum aus „Bestellt am“. Status sofort „bestellt“ und bestätigt; der Lieferant sieht sie im Portal (Tracking, Rechnung), muss aber nichts bestätigen.</p>
-  </details>
-  <details id="onlineBox" class="bx-panel" style="margin-top:12px;padding:12px 16px">
-    <summary style="cursor:pointer;font-weight:600">Online bestellt <span class="muted" style="font-weight:400;font-size:12px">– selbst online gekauft (Amazon, Shop, Druckerei …): wo, wie und zu welchem Preis</span></summary>
-    <div class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
-      <div class="bx-field" style="margin:0;min-width:220px"><label>Händler / Quelle (Pflicht)</label><input type="text" name="on_haendler" id="onHaendler" placeholder="z. B. Amazon, Etikettendruckerei XY" data-etikett-lief="<?= h((string)$etLief['firma']) ?>"></div>
-      <div class="bx-field" style="margin:0"><label>Zahlungsart</label>
-        <select name="on_zahlart"><option value="">– wählen –</option><?php foreach (bestellung_zahlarten() as $zk => $zl): ?><option value="<?= h($zk) ?>"><?= h($zl) ?></option><?php endforeach; ?></select>
-      </div>
-      <div class="bx-field" style="margin:0;max-width:170px"><label>Preis gesamt netto (optional)</label><input type="text" name="on_preis" id="onPreis" inputmode="decimal" placeholder="leer = folgt mit Rechnung"></div>
-      <div class="bx-field" style="margin:0;max-width:90px"><label>Währung</label><input type="text" name="on_waehrung" value="EUR" maxlength="8"></div>
-      <div class="bx-field" style="margin:0;min-width:220px"><label>Rechnung (optional)</label><input type="file" name="on_rechnung" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"></div>
-      <button class="btn btn-primary" id="btnOnline" type="submit" name="modus" value="online" disabled>Online bestellt erfassen</button>
-    </div>
-    <div id="onlineHinweis" class="bx-fehlhinweis" hidden></div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen oben setzen; die <strong>Menge je Zeile</strong> steht passend zur Warenart (Pulver in kg, Verpackung/Leerkapseln in Stk). Händler angeben (bei Etiketten mit Labelisten vorbelegt). Preis <strong>netto</strong> und Rechnung sind optional – sonst kommen sie später mit der Rechnung über die Buchhaltung. Legt EINE Bestellung ohne Lieferant an (Status „bestellt"); Händler, Zahlungsart, Preis und Rechnung werden für die spätere Abrechnung gespeichert.</p>
-  </details>
-  <p class="muted" style="font-size:12px;margin:10px 0 0">Häkchen setzen und einen Weg wählen. <strong>Über Lieferant (Portal)</strong> = je Position eine eigene Bestellung, geht in den Account des gewählten Lieferanten (nur mit aktivem Account und Preis). So kann er jede Position einzeln annehmen/ablehnen. <strong>Direkt bestellt</strong> = per Telefon/Mail beim Lieferanten bestellt, ohne Mail und Bestätigung. <strong>Online bestellt</strong> = du hast selbst online gekauft. In allen Fällen wandert die Position nach „Bestellt".</p>
+    <input type="hidden" name="aktion" value="bestellen"><input type="hidden" name="datum" value="<?= date('Y-m-d') ?>">
+    <input type="hidden" name="modus" id="elModus" value=""><input type="hidden" name="di_eta" id="elEta"><input type="hidden" name="di_notiz" id="elNotiz"><input type="hidden" name="el_preis" id="elPreisH">
+    <div id="elSel"></div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0">Jede Zeile wird eine eigene Bestellung (auch beim selben Lieferanten) – so gehört jede CoA, jede Lieferung und jedes fehlende Papier genau einer Bestellung.</p>
   <?php endif; ?>
 </div>
 </form>
@@ -605,62 +591,58 @@ if ($ohneFestlegung): ?>
     <p class="muted" style="font-size:12px;margin:10px 0 0">„Über Lieferant (Portal)" braucht einen Lieferanten mit aktivem Account und Preis. „Direkt bestellt" braucht nur den Lieferanten (Preis aus dem Lieferantenpreis, keine Mail). „Online bestellt" braucht den Händler; Preis (netto) und Zahlungsart sind optional.</p>
   </div>
 </form>
+<dialog id="dlgHeute" class="bx-dialog" style="max-width:560px"><h2>Heute bestellt</h2>
+  <p class="muted" style="margin-top:0" id="elArt"></p>
+  <div class="bx-grid">
+    <div class="bx-field" style="grid-column:1/-1"><label>Lieferant</label><select id="elLief"></select></div>
+    <div class="bx-field"><label>Menge</label><input type="text" inputmode="decimal" id="elMenge"></div>
+    <div class="bx-field"><label>Preis je Einheit netto (optional)</label><input type="text" inputmode="decimal" id="elPreis" placeholder="leer = Lieferantenpreis"></div>
+    <div class="bx-field"><label>Erwartet am (optional)</label><input type="date" id="elEtaIn"></div>
+    <div class="bx-field" style="grid-column:1/-1"><label>Notiz (optional)</label><input type="text" id="elNotizIn" placeholder="z. B. telefonisch mit Herrn X"></div>
+  </div>
+  <div class="bx-fehlhinweis" id="elHw" hidden></div>
+  <div class="bx-pop-fuss"><button type="button" class="btn btn-ghost" onclick="bxPopup.close('dlgHeute', true)">Abbrechen</button><button type="button" class="btn btn-primary" id="elOk">Als bestellt erfassen</button></div>
+</dialog>
 <script>(function(){
-  var boxes=document.querySelectorAll('.bx-sel'), btn=document.getElementById('btnBestellen'), bex=document.getElementById('btnOnline'), bdi=document.getElementById('btnDirekt'), a=document.getElementById('selAll');
-  var onH=document.getElementById('onHaendler'), onP=document.getElementById('onPreis'), onHw=document.getElementById('onlineHinweis'), diHw=document.getElementById('direktHinweis');
-  // Gleiche Regeln wie der Server (Nico 08.11.2026: Fehlendes gar nicht erst abschicken lassen, statt danach einen
-  // leicht zu übersehenden Hinweis zu zeigen). Online: Händler + Preis > 0. Direkt: jede angehakte Zeile braucht einen Lieferanten.
-  function preisOk(v){ var r=(v||'').replace(/[^0-9.,]/g,'').replace(/\./g,'').replace(',', '.'); var f=parseFloat(r); return isFinite(f) && f>0; }
-  function onlineFehlt(){ var f=[]; if(!onH || onH.value.trim()==='') f.push('Händler / Quelle'); return f; }   // Preis optional
-  var bds=document.getElementById('btnDirektSchnell'), onHAuto=false;
-  function etikettVorbelegen(){   // nur Etiketten angehakt + Händler leer (oder von uns vorbelegt) -> Labelisten
-    if(!onH) return; var any=false, nurEt=true;
-    boxes.forEach(function(c){ if(!c.checked) return; any=true; if(!c.dataset.etikett) nurEt=false; });
-    var v=onH.getAttribute('data-etikett-lief')||'';
-    if(any && nurEt && v && (onH.value.trim()==='' || onHAuto)){ onH.value=v; onHAuto=true; }
-    else if(onHAuto && (!any || !nurEt)){ onH.value=''; onHAuto=false; }
+  // Je Zeile eine Bestellung (13.11.2026): „heute bestellt“ öffnet das Pop-up, „über Portal senden“ schickt diese eine Zeile.
+  var form=document.getElementById('elSel'); form=form?form.closest('form'):null; if(!form) return;
+  function zeileAbsenden(key, modus){
+    var box=document.getElementById('elSel'); box.innerHTML='';
+    var i=document.createElement('input'); i.type='hidden'; i.name='sel[]'; i.value=key; box.appendChild(i);
+    document.getElementById('elModus').value=modus;
+    var b=document.createElement('button'); b.type='submit'; b.name='modus_btn'; b.value=modus; b.hidden=true; form.appendChild(b); b.click();
   }
-  if(onH) onH.addEventListener('input', function(){ onHAuto=false; });
-  function direktFehlt(){ var n=0; boxes.forEach(function(c){ if(!c.checked) return; var s=document.querySelector('select[name="lief['+c.value+']"]'); if(!s || !s.value) n++; }); return n; }
-  function hinweis(el, txt){ if(!el) return; el.hidden=!txt; el.textContent=txt||''; }
-  function upd(){
-    var any=false; boxes.forEach(function(c){if(c.checked)any=true;});
-    etikettVorbelegen();
-    if(btn)btn.disabled=!any;
-    var of=onlineFehlt(); if(bex) bex.disabled=!any || of.length>0;
-    hinweis(onHw, any && of.length ? 'Noch nicht bestellbar – es fehlt: ' + of.join(' und ') + '.' : '');
-    var dn=direktFehlt(); if(bdi) bdi.disabled=!any || dn>0; if(bds) bds.disabled=!any || dn>0;
-    hinweis(diHw, any && dn ? 'Noch nicht bestellbar – bei ' + dn + ' angehakten Zeile(n) fehlt der Lieferant.' : '');
-  }
-  boxes.forEach(function(c){c.addEventListener('change',upd);});
-  [onH,onP].forEach(function(el){ if(el){ el.addEventListener('input',upd); el.addEventListener('change',upd); } });
-  document.querySelectorAll('select[name^="lief["]').forEach(function(s){ s.addEventListener('change',upd); });
-  // Auch Enter im Feld oder ein anderer Weg darf nicht unvollständig absenden.
-  // Capture auf document und VOR dem allgemeinen Lade-Anzeiger (render_footer) registriert: gestoppt wird ganz, sonst
-  // bliebe der Knopf mit Spinner stehen.
-  var bf = bex ? bex.form : null;
-  if(bf) document.addEventListener('submit', function(ev){
-    if(ev.target!==bf) return;
-    var m = ev.submitter ? ev.submitter.value : '', stopp=false;
-    if(m==='online' && onlineFehlt().length){ stopp=true; var d=document.getElementById('onlineBox'); if(d) d.open=true; }
-    if(m==='direkt' && direktFehlt()) stopp=true;
-    if(stopp){ ev.preventDefault(); ev.stopImmediatePropagation(); upd(); var h=m==='online'?onHw:diHw; if(h) h.scrollIntoView({block:'center'}); }
-  }, true);
-  if(a) a.addEventListener('change',function(){boxes.forEach(function(c){ if(c.closest('tr').style.display!=='none') c.checked=a.checked; });upd();});
-  // Suche: Zeilen der "Zu bestellen"-Tabelle filtern; versteckte Zeilen werden abgewählt.
+  var aktKey='';
+  document.querySelectorAll('.el-portal').forEach(function(btn){ btn.addEventListener('click', function(){
+    var k=btn.dataset.key, s=form.querySelector('select[name="lief['+k+']"]');
+    if(!s || !s.value){ alert('Bitte zuerst in der Zeile einen Lieferanten wählen.'); return; }
+    zeileAbsenden(k, 'lieferant');
+  });});
+  document.querySelectorAll('.el-heute').forEach(function(btn){ btn.addEventListener('click', function(){
+    aktKey=btn.dataset.key; var tr=btn.closest('tr');
+    var s=form.querySelector('select[name="lief['+aktKey+']"]'), m=form.querySelector('input[name="menge['+aktKey+']"]');
+    var dl=document.getElementById('elLief'); dl.innerHTML=s?s.innerHTML:'<option value="">– Lieferant –</option>'; dl.value=s?s.value:'';
+    document.getElementById('elMenge').value=m?m.value:''; document.getElementById('elPreis').value='';
+    var opt=dl.options[dl.selectedIndex]; if(opt && opt.dataset.preis) document.getElementById('elPreis').placeholder='Lieferantenpreis '+String(opt.dataset.preis).replace('.',',')+' '+(opt.dataset.cur||'EUR');
+    document.getElementById('elArt').textContent=tr?(tr.children[1].innerText.split('\n')[0]):'';
+    document.getElementById('elHw').hidden=true;
+    bxPopup.open('dlgHeute');
+  });});
+  document.getElementById('elOk').addEventListener('click', function(){
+    var dl=document.getElementById('elLief'), hw=document.getElementById('elHw');
+    if(!dl.value){ hw.hidden=false; hw.textContent='Bitte den Lieferanten wählen.'; return; }
+    var s=form.querySelector('select[name="lief['+aktKey+']"]'), m=form.querySelector('input[name="menge['+aktKey+']"]');
+    if(s) s.value=dl.value; if(m) m.value=document.getElementById('elMenge').value;
+    if(!s){ var x=document.createElement('input'); x.type='hidden'; x.name='lief['+aktKey+']'; x.value=dl.value; form.appendChild(x); }
+    document.getElementById('elPreisH').value=document.getElementById('elPreis').value;
+    document.getElementById('elEta').value=document.getElementById('elEtaIn').value;
+    document.getElementById('elNotiz').value=document.getElementById('elNotizIn').value;
+    bxPopup.close('dlgHeute', true);
+    zeileAbsenden(aktKey, 'direkt');
+  });
+  // Suche: Zeilen der Tabelle filtern
   var q=document.getElementById('bestSuche'), tb=document.getElementById('bestTbody');
-  if(q && tb){
-    q.addEventListener('input', function(){
-      var s=q.value.trim().toLowerCase();
-      tb.querySelectorAll('tr').forEach(function(tr){
-        var hit = s==='' || tr.textContent.toLowerCase().indexOf(s)!==-1;
-        tr.style.display = hit ? '' : 'none';
-        if(!hit){ var cb=tr.querySelector('.bx-sel'); if(cb && cb.checked) cb.checked=false; }
-      });
-      upd();
-    });
-  }
-  upd();
+  if(q && tb) q.addEventListener('input', function(){ var t=q.value.trim().toLowerCase(); tb.querySelectorAll('tr').forEach(function(tr){ tr.style.display = t==='' || tr.textContent.toLowerCase().indexOf(t)!==-1 ? '' : 'none'; }); });
 })();</script>
 <script>(function(){
   // Bulk-Zeilen: die Summe folgt dem GEWÄHLTEN Lieferanten. Ohne Auswahl: günstigster Preis („ab").

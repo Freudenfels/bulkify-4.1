@@ -225,6 +225,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Leere Bestellung verhindern: ohne Position sieht der Lieferant im Portal nichts (BE-xxxx „–").
     // Zählt eingehende Lagerartikel-Positionen + (beim Bearbeiten) erhaltene Bulk-/Freitext-Positionen.
     $neuePosEin = 0; foreach (($_POST['p_item'] ?? []) as $iid) if ((int)$iid > 0) $neuePosEin++;
+    if ($neu && $neuePosEin > 1) {   // 13.11.2026 (Paket Teil 6.2/6.3): jede Bestellung genau eine Position
+        header('Location: ?p=bestellung&id=neu&fehler=' . urlencode('Eine Bestellung hat genau eine Position – bitte für jeden Artikel eine eigene Bestellung anlegen.')); exit;
+    }
     $bulkDa = (!$neu && (int)$id > 0) ? (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=? AND (item_id IS NULL OR rest_storniert_am IS NOT NULL OR geliefert_menge>0)", [(int)$id]) : 0;   // + gesperrte Positionen (Fable-3 T2.6)
     if ($neuePosEin + $bulkDa === 0) {
         header('Location: ?p=bestellung&id=' . ($neu ? 'neu' : (int)$id) . '&fehler=' . urlencode('Bitte mindestens eine Position (Artikel + Menge) hinzufügen, bevor die Bestellung gespeichert wird.')); exit;
@@ -261,10 +264,24 @@ $v = fn($k) => h((string)($b[$k] ?? ''));
 $geliefert = ($b['status'] ?? '') === 'geliefert';
 
 $lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 OR id=? ORDER BY firma", [(int)($b['lieferant_id'] ?? 0)]);   // Block C: gesperrte nicht auswählbar (der schon gewählte bleibt sichtbar)
-$items = all("SELECT i.id, i.name, i.einheit, i.ek_preis, i.kategorie, CONCAT_WS(' ', NULLIF(i.synonym,''), NULLIF(i.synonyme,'')) AS syn,
+// 13.11.2026 (Paket Teil 6.3): neue Bestellung = erst die Art, dann sucht die Artikelsuche NUR in dieser Art (Etikett: erst der Kunde).
+// Eine Bestellung = eine Position. Beim Bearbeiten einer vorhandenen Bestellung bleibt die volle Liste (Art ergibt sich aus der Position).
+$BE_ARTEN = ['rohstoff' => 'Rohstoff', 'verpackung' => 'Verpackung', 'etikett' => 'Etikett', 'bulk' => 'Bulkware', 'fertigprodukt' => 'Fertigprodukt'];
+$beArt = $neu ? (string)($_GET['art'] ?? '') : '';
+if (!isset($BE_ARTEN[$beArt])) $beArt = '';
+$beKunde = (int)($_GET['kunde'] ?? 0);
+$artWhere = match ($beArt) {
+    'rohstoff'      => "i.kategorie IN ('rohstoff','leerkapsel')",
+    'verpackung'    => "(i.kategorie='verbrauch' OR (i.kategorie='verpackung' AND COALESCE(i.verpackung_rolle,'')<>'etikett'))",
+    'etikett'       => "i.kategorie='verpackung' AND i.verpackung_rolle='etikett' AND i.kunde_id=" . $beKunde,
+    'bulk'          => "i.kategorie='fertig'",
+    'fertigprodukt' => "i.kategorie='verkaufsfertig'",
+    default         => "i.kategorie IN ('rohstoff','leerkapsel','verpackung','verbrauch','fertig','verkaufsfertig')",
+};
+$items = all("SELECT i.id, i.name, i.einheit, i.ek_preis, i.kategorie, CONCAT_WS(' ', NULLIF(i.synonym,''), NULLIF(i.synonyme,''), NULLIF(i.artikelnummer,'')) AS syn,
                      COALESCE(kgi.name, kgr.name) AS kg_name, IF(r.darreichungsform IN ('kapsel','softgel','tablette'), r.einheit_fuellmenge, NULL) AS fuell_mg
               FROM item i LEFT JOIN kapselgroesse kgi ON kgi.id=i.kapselgroesse_id LEFT JOIN rezeptur r ON r.id=i.rezeptur_id LEFT JOIN kapselgroesse kgr ON kgr.id=r.kapselgroesse_id
-              WHERE i.kategorie IN ('rohstoff','verpackung','verbrauch','fertig') AND i.gesperrt=0 ORDER BY i.name");
+              WHERE $artWhere AND i.gesperrt=0 ORDER BY i.name");
 $positionen = $neu ? [] : all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NOT NULL ORDER BY sort,id", [(int)$id]);
 $posGesamt  = $neu ? 0 : (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);   // inkl. Bulk-/Freitext-Positionen (item_id NULL)
 $bulkPositionen = $neu ? [] : all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL ORDER BY sort,id", [(int)$id]);
@@ -342,6 +359,23 @@ if (isset($_GET['okmsg']))     echo '<div class="bx-panel badge-ok" style="paddi
 if (isset($_GET['geliefert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Als geliefert verbucht – Chargen im Wareneingang (Quarantäne) angelegt.</div>';
 if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';
 if (isset($_GET['aufg']))      echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['aufg']) . '</div>';
+// 13.11.2026 (Paket Teil 6.3): Schritt 1 – Art wählen (bei Etikett zusätzlich den Kunden). Ohne Art kein Formular (außer KI-Vorbelegung/Rückkehr).
+$beVorbelegt = $neu && ($kiRaw !== null || !empty($positionen));
+if ($neu && !$beVorbelegt && ($beArt === '' || ($beArt === 'etikett' && $beKunde <= 0))) {
+    echo '<div class="bx-panel"><h2 style="margin-top:0">Was wird bestellt?</h2><p class="muted" style="margin-top:-4px">Erst die Art – die Artikelsuche zeigt danach nur Artikel dieser Art. Jede Bestellung hat genau eine Position.</p><div class="bx-cards">';
+    foreach ($BE_ARTEN as $ak => $al) echo '<a class="bx-card" style="text-decoration:none;min-width:150px' . ($beArt === $ak ? ';border-color:var(--gruen)' : '') . '" href="?p=bestellung&id=neu&art=' . $ak . '"><div class="v" style="font-size:18px">' . h($al) . '</div></a>';
+    echo '</div>';
+    if ($beArt === 'etikett') {
+        $kListe = all("SELECT DISTINCT k.id, k.firma FROM kunden k JOIN item i ON i.kunde_id=k.id AND i.kategorie='verpackung' AND i.verpackung_rolle='etikett' AND i.gesperrt=0 ORDER BY k.firma");
+        echo '<form method="get" style="margin-top:14px"><input type="hidden" name="p" value="bestellung"><input type="hidden" name="id" value="neu"><input type="hidden" name="art" value="etikett">'
+           . '<div class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap"><div class="bx-field" style="min-width:280px;margin:0"><label>Kunde (Etiketten sind kundenspezifisch)</label><select name="kunde" required class="rscombo"><option value="">– Kunde wählen –</option>';
+        foreach ($kListe as $kk) echo '<option value="' . (int)$kk['id'] . '">' . h((string)$kk['firma']) . '</option>';
+        echo '</select></div><button class="btn btn-primary" type="submit">Weiter</button></div>' . (!$kListe ? '<p class="muted">Noch keine Kundenetiketten angelegt.</p>' : '') . '</form>';
+    }
+    echo '</div>';
+    render_footer(); exit;
+}
+if ($neu && $beArt !== '') echo '<div class="muted" style="margin:-4px 0 10px">Art: <b style="font-weight:600">' . h($BE_ARTEN[$beArt]) . '</b>' . ($beArt === 'etikett' ? ' · Kunde: ' . h((string) scalar("SELECT firma FROM kunden WHERE id=?", [$beKunde])) : '') . ' · <a href="?p=bestellung&id=neu">andere Art wählen</a></div>';
 ?>
 <?php if ($neu && ki_bereit()): ?>
 <div class="bx-panel" style="border-color:var(--gruen)">
@@ -687,7 +721,7 @@ if (!$neu) {
       </tbody>
       <tfoot><tr><th colspan="4" style="text-align:right">Gesamt</th><th class="bx-num" id="pgesamt">–</th><th></th></tr></tfoot>
     </table>
-    <button type="button" class="btn btn-ghost btn-sm" id="addP">+ Position</button>
+    <?php if (!$neu && count($positionen) > 1): ?><button type="button" class="btn btn-ghost btn-sm" id="addP">+ Position</button><?php else: ?><span class="muted" style="font-size:12px">Eine Bestellung = eine Position (Regel 13.11.2026). Für einen weiteren Artikel eine neue Bestellung anlegen.</span><?php endif; ?>
   </div>
   </fieldset>
   <div class="bx-row" style="margin-top:var(--sp-4)">
@@ -713,7 +747,7 @@ function psum(){
   document.getElementById('pgesamt').textContent = g?eur(g):'–';
 }
 (function(){
-  document.getElementById('addP').addEventListener('click',function(){
+  var addP=document.getElementById('addP'); if(addP) addP.addEventListener('click',function(){
     var tr=document.createElement('tr'); tr.className='prow';
     tr.innerHTML='<td><input type="hidden" name="p_id[]" value="0"><select name="p_item[]" class="pitem rscombo" data-ph="Artikel suchen (Name, Synonym) …">'+OPT+'</select></td>'
       +'<td><select name="p_auftrag[]" class="pauf">'+OPTA+'</select></td>'

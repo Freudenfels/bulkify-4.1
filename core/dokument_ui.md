@@ -37,3 +37,5 @@ Im Upload-Formular von `dokument_panel()` wird die Lieferanten-Auswahl ab mehr a
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 dokumente_fuer_kunde() schließt Hersteller-/Lieferanten-Unterlagen aus; Freigabe-Schalter lehnt sie ab (Badge „intern · nie an Kunde“).
+
+**13.11.2026:** Neue Dokumentarten „Rechnung“ und „Lieferschein“ (Bestell-Pop-up).

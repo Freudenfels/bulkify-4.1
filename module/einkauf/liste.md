@@ -34,3 +34,8 @@ Kennzeichen „Unterlagen fehlen“ an offenen Bestellungen (Link auf die Liste 
 **Storno aus der Liste (13.11.2026, Fable-3 T2.8):** läuft über `bestellung_stornieren()`; ohne Grund kommt die Meldung „Bitte einen Grund für die Stornierung angeben.“
 
 **13.11.2026:** Über der Cron-Einrichtung steht „Täglicher Lauf (Cron): zuletzt …“ (`cron_lauf_hinweis()`); der Text nennt jetzt auch Preise und Etikett-Erinnerung.
+
+**Paket 13.11.2026, Teil 6.4/6.5:**
+- **Zeilenklick:** Ein Klick auf die Zeile öffnet das Bestell-Pop-up (`?p=bestellung_pop`). Die Bestellnummer führt weiter zur Bestellseite.
+- **Filter „Lieferant“:** Suchauswahl, Parameter `lief`.
+- **Ansicht „Offen je Lieferant“** (`ansicht=lieferant`): je Lieferant die offenen Bestellungen mit der Spalte „Fehlt noch“ (Bestätigung, CoA, Tracking, Lieferung; berechnet von `bestellung_fehlt()`).

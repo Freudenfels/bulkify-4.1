@@ -152,3 +152,7 @@ erp_la_scan() / erp_la_abschluss() / erp_charge_gebinde_anhaengen() / erp_la_auf
 `erp_la_scan()` belegt den Aufkleber zuerst (`UPDATE ... WHERE status='aktiv'`, genau eine Zeile) und bucht erst dann: gleichzeitige Scans buchen nie doppelt. Scheitert das Buchen, wird der Aufkleber wieder frei. Gesperrt sind nur stornierte Bestellungen und stornierte Aufkleber (Meldung, nichts gebucht). Eine schon „geliefert“ geschlossene Bestellung (98-%-Regel) nimmt aktive Aufkleber weiter an: das letzte Gebinde und jede Überlieferung werden gebucht (13.11.2026, Fable-3 T1.6).
 
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** `erp_rezeptur_liste()` ohne inaktive Rezepturen.
+
+**Paket 13.11.2026:**
+- `erp_lieferung_per_tracking()` sucht zusätzlich in den Paketnummern (`lieferung_paket`, erfasst im Bestell-Pop-up oder im Lieferantenportal). Das klappt auch, wenn der Scanner einen längeren Code liefert (ab 10 Zeichen reicht es, wenn die Paketnummer darin enthalten ist). So öffnet der Paket-Barcode direkt den Wareneingang der Bestellung.
+- `erp_erwartete_lieferungen()` liefert je Lieferung `sendung` (über `erp_sendung_text()`, eine Kopie der Dashboard-Regel) und `pakete`.

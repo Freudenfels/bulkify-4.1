@@ -4,7 +4,7 @@
 require_once __DIR__ . '/schema.php';
 
 function dokument_typen(): array {
-    return ['coa'=>'CoA (Analysenzertifikat)', 'spec'=>'Spezifikation', 'analyse'=>'Laboranalyse', 'zertifikat'=>'Zertifikat (ISO, HACCP, Bio …)', 'druckvorlage'=>'Druckvorlage (Umkarton/Verpackung)', 'sonstiges'=>'Sonstiges'];
+    return ['coa'=>'CoA (Analysenzertifikat)', 'spec'=>'Spezifikation', 'analyse'=>'Laboranalyse', 'zertifikat'=>'Zertifikat (ISO, HACCP, Bio …)', 'druckvorlage'=>'Druckvorlage (Umkarton/Verpackung)', 'rechnung'=>'Rechnung', 'lieferschein'=>'Lieferschein', 'sonstiges'=>'Sonstiges'];   // Rechnung/Lieferschein: Bestell-Pop-up 13.11.2026
 }
 
 // Upload verarbeiten (erwartet Datei-Feld „dok", dok_typ, dok_lieferant, dok_titel).

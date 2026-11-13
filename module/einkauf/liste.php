@@ -79,6 +79,11 @@ if ($q !== '') {
         return false;
     });
 }
+// 13.11.2026 (Paket Teil 6.5): nach Lieferant filtern (0 = ohne Lieferant/extern) und Ansicht „Offen je Lieferant“.
+$liefF = isset($_GET['lief']) && $_GET['lief'] !== '' ? (int)$_GET['lief'] : null;
+if ($liefF !== null) $rows = array_filter($rows, fn($r) => (int)($r['lieferant_id'] ?? 0) === $liefF);
+$ansicht = ($_GET['ansicht'] ?? '') === 'lieferant' && !$archiv ? 'lieferant' : '';
+require_once BX_ROOT . '/core/bestellung_einzeln.php';
 $rows = bx_sort_rows($rows, $sort, $dir);
 
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
@@ -164,7 +169,12 @@ if (!$archiv):
   <input type="hidden" name="p" value="einkauf">
   <?php if ($archiv): ?><input type="hidden" name="archiv" value="1"><?php endif; ?>
   <input class="bx-search" type="text" name="q" value="<?= h($q) ?>" placeholder="Suchen: Produkt, Lieferant, Bestellnummer …">
+  <?php $liefOpt = []; foreach ($best as $bx) $liefOpt[(int)($bx['lieferant_id'] ?? 0)] = $bx['lieferant_firma'] !== '' ? $bx['lieferant_firma'] : 'ohne Lieferant (extern)'; asort($liefOpt); ?>
+  <select name="lief" onchange="this.form.submit()" style="min-width:200px" class="rscombo" data-ph="Lieferant …"><option value="">alle Lieferanten</option>
+    <?php foreach ($liefOpt as $lk => $ll): ?><option value="<?= (int)$lk ?>"<?= $liefF === (int)$lk ? ' selected' : '' ?>><?= h($ll) ?></option><?php endforeach; ?></select>
+  <?php if ($ansicht): ?><input type="hidden" name="ansicht" value="lieferant"><?php endif; ?>
   <button class="btn btn-ghost btn-sm" type="submit">Suchen</button>
+  <?php if (!$archiv): ?><a class="btn btn-<?= $ansicht ? 'primary' : 'ghost' ?> btn-sm" href="?p=einkauf<?= $ansicht ? '' : '&ansicht=lieferant' ?>"><?= $ansicht ? 'Liste' : 'Offen je Lieferant' ?></a><?php endif; ?>
   <span style="flex:1"></span>
   <?php if ($archiv): ?>
     <a class="btn btn-ghost btn-sm" href="?p=einkauf">Zurück zu laufenden</a>
@@ -173,11 +183,32 @@ if (!$archiv):
   <?php endif; ?>
 </form>
 <?php
+if ($ansicht === 'lieferant') {
+    // „Offen je Lieferant“ (Teil 6.5): je Lieferant seine offenen Bestellungen mit dem, was noch fehlt.
+    $grp = [];
+    foreach ($rows as $r) $grp[$r['lieferant_firma'] !== '' ? $r['lieferant_firma'] : 'ohne Lieferant (extern)'][] = $r;
+    ksort($grp);
+    if (!$grp) echo '<div class="bx-panel muted">Keine offenen Bestellungen.</div>';
+    foreach ($grp as $lf => $lr) {
+        echo '<div class="bx-panel"><h2 style="margin-top:0">' . h($lf) . ' <span class="muted" style="font-size:14px;font-weight:400">· ' . count($lr) . ' offen</span></h2><div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Bestellung</th><th>Inhalt</th><th>Bestellt am</th><th>Status</th><th>Fehlt noch</th></tr></thead><tbody>';
+        foreach ($lr as $r) {
+            $fehlt = bestellung_fehlt($r);
+            echo '<tr id="be-row-' . (int)$r['id'] . '" style="cursor:pointer" data-pop-url="?p=bestellung_pop&id=' . (int)$r['id'] . '" data-pop-titel="' . h((string)$r['nummer']) . '" data-pop-refresh="#be-row-' . (int)$r['id'] . '">'
+               . '<td><a href="?p=bestellung&id=' . (int)$r['id'] . '" onclick="event.stopPropagation()">' . h((string)$r['nummer']) . '</a></td><td>' . $inhalt($r) . '</td>'
+               . '<td>' . (!empty($r['bestelldatum']) ? h(date('d.m.Y', strtotime((string)$r['bestelldatum']))) : '–') . '</td><td>' . $statusBadge($r) . '</td>'
+               . '<td>' . ($fehlt ? implode(' ', array_map(fn($x) => bx_badge($x, $x === 'Lieferung' ? 'info' : 'warn'), $fehlt)) : bx_badge('vollständig', 'ok')) . '</td></tr>';
+        }
+        echo '</tbody></table></div></div>';
+    }
+} else
 bx_table($cols, array_values($rows), [
-    'baseUrl' => '?p=einkauf' . ($archiv ? '&archiv=1' : '') . ($q !== '' ? '&q=' . urlencode($q) : ''),
+    'baseUrl' => '?p=einkauf' . ($archiv ? '&archiv=1' : '') . ($q !== '' ? '&q=' . urlencode($q) : '') . ($liefF !== null ? '&lief=' . $liefF : ''),
     'sort'    => $sort,
     'dir'     => $dir,
-    'rowUrl'  => fn($r) => '?p=bestellung&id=' . $r['bestellung_id'],
+    // 13.11.2026 (Paket Teil 6.4): Klick auf die Zeile öffnet das Bestell-Pop-up (Dokumente, Versand, Sendung, Notiz); die Nummer führt zur Seite.
+    'rowPop'  => fn($r) => '?p=bestellung_pop&id=' . $r['bestellung_id'],
+    'rowPopTitel' => fn($r) => 'Bestellung ' . $r['nummer'],
+    'rowId'   => fn($r) => 'be-row-' . $r['bestellung_id'],
     'empty'   => 'Noch nichts bestellt.',
 ]);
 render_footer();

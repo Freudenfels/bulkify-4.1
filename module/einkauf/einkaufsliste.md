@@ -127,3 +127,12 @@ Anlass: Beim „Vorsorglich bestellen“ bei Wellgreen kam „keinen aktiven Acc
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Vorbelegung „Labelisten“ nur, wenn der Lieferant nicht gesperrt ist.
 
 **Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.
+
+**Paket 13.11.2026, Teil 6.1/6.2:**
+- **Reiter je Art:** Rohstoffe · Verpackung · Etiketten · Bulkware · Fertigprodukte, dazu Nachbestellung, Betriebsmittel und Wartet, jeweils mit Zahl. Es gibt keinen Reiter „Alle“ mehr; Standard ist „Rohstoffe“.
+  - Bulkware = Fremdfertigung (`bedarf_bulk` mit Art bulk).
+  - Fertigprodukte = Fertigware/Handelsware (Art fertig) und Material mit Rolle Fertigware.
+- **Keine Mehrfachauswahl:** Jede Zeile hat „heute bestellt“ und „über Portal senden“ und wird eine eigene Bestellung.
+  - „heute bestellt“ öffnet ein Pop-up: Lieferant, Menge, Preis je Einheit (optional, `el_preis`), Erwartet am, Notiz. Gespeichert wird über den Direkt-Weg: bestellt und bestätigt, keine Mail.
+  - „über Portal senden“ geht in den Lieferanten-Account (nur mit Account und Preis).
+- **Online-Sammelweg** (alles in einer Bestellung): aus der Oberfläche entfernt.

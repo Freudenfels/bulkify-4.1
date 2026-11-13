@@ -64,7 +64,9 @@
   }
   function fuss(d) {
     // Knopfzeile: ausdrücklich .bx-pop-fuss, sonst je Formular das letzte direkte Kind mit einem Absenden-Knopf
-    Array.prototype.forEach.call(d.querySelectorAll('form'), function (f) {
+    var formen = d.querySelectorAll('form');
+    if (formen.length !== 1) return;   // mehrere Formulare (Abschnitte mit eigenem Speichern): keine feste Knopfzeile
+    Array.prototype.forEach.call(formen, function (f) {
       if (f.querySelector('.bx-pop-fuss')) return;
       var kids = f.children, z = null;
       for (var i = kids.length - 1; i >= 0; i--) {

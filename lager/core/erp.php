@@ -1137,6 +1137,16 @@ function erp_lieferung_per_tracking(string $tracking): array {
               WHERE b.tracking IS NOT NULL AND b.tracking<>'' AND REPLACE(b.tracking,' ','') = ?
                 AND b.angekommen_am IS NULL
               ORDER BY b.id DESC LIMIT 1", [$tc]);
+    // 13.11.2026 (Paket Teil 6.7): auch die einzelnen Paketnummern einer Bestellung (lieferung_paket, im Bestell-Pop-up bzw.
+    // vom Lieferanten im Portal erfasst). Scanner liefern teils längere Codes (Präfix/Prüfziffer) -> zusätzlich „enthalten in“.
+    if ($bid <= 0 && tabelle_da('lieferung_paket')) {
+        $bid = (int) scalar("SELECT lp.bestellung_id FROM lieferung_paket lp JOIN bestellung b ON b.id=lp.bestellung_id
+                  WHERE REPLACE(lp.tracking,' ','') = ? AND b.angekommen_am IS NULL AND b.status<>'storniert' ORDER BY lp.id DESC LIMIT 1", [$tc]);
+        if ($bid <= 0 && strlen($tc) >= 10)
+            $bid = (int) scalar("SELECT lp.bestellung_id FROM lieferung_paket lp JOIN bestellung b ON b.id=lp.bestellung_id
+                      WHERE CHAR_LENGTH(REPLACE(lp.tracking,' ','')) >= 10 AND LOCATE(REPLACE(lp.tracking,' ',''), ?) > 0
+                        AND b.angekommen_am IS NULL AND b.status<>'storniert' ORDER BY lp.id DESC LIMIT 1", [$tc]);
+    }
     // Einkauf gerade ziehen (Teil 1): dieselben Positionen wie „Aus Liste wählen" (fest an die Bestellposition).
     return $bid > 0 ? erp_lieferung_positionen($bid) : ['ok' => false];
 }
@@ -1596,7 +1606,9 @@ function erp_warenart_raten(string $name): string {
 
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
-    $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter,
+    $sendSp = '';   // 13.11.2026 (Teil 6.8): Sendung (Art, Anzahl, Palettenart, Kartons, Gewicht, Stellplätze) aus dem Bestell-Pop-up
+    foreach (['sendung_art', 'sendung_anzahl', 'palettenart', 'kisten_anzahl', 'gewicht_kg', 'masse', 'stellplaetze'] as $sp) $sendSp .= erp_spalte_da('bestellung', $sp) ? ", b.$sp" : ", NULL AS $sp";
+    $rows = all("SELECT b.id, b.nummer, b.bestelldatum, b.eta_geplant, b.tracking, b.versandanbieter" . $sendSp . ",
                         b.notiz, b.lieferant_id, b.status, lf.firma AS lieferant
                  FROM bestellung b LEFT JOIN lieferanten lf ON lf.id = b.lieferant_id
                  WHERE b.status IN ('bestellt','gesendet') AND b.angekommen_am IS NULL
@@ -1620,9 +1632,23 @@ function erp_erwartete_lieferungen(): array {
         }
         unset($p);
         $r['positionen'] = $pos;
+        $r['sendung'] = erp_sendung_text($r);
+        $r['pakete'] = tabelle_da('lieferung_paket') ? array_column(all("SELECT tracking FROM lieferung_paket WHERE bestellung_id=? ORDER BY id", [(int)$r['id']]), 'tracking') : [];
     }
     unset($r);
     return $rows;
+}
+// „2 × Palette (Euro), 12 Kartons, 840 kg, 2 Stellplätze“ – wie bestellung_sendung_text() im Dashboard (eigene Kopie, Lager bindet core/schema.php nicht ein).
+function erp_sendung_text(array $b): string {
+    $arten = ['paket' => 'Paket', 'palette' => 'Palette', 'container' => 'Container', 'sonstiges' => 'Sonstiges'];
+    $pal = ['euro' => 'Euro', 'einweg' => 'Einweg', 'tausch' => 'Tausch'];
+    $t = [];
+    if (!empty($b['sendung_art'])) $t[] = ((int)($b['sendung_anzahl'] ?? 0) > 0 ? (int)$b['sendung_anzahl'] . ' × ' : '') . ($arten[$b['sendung_art']] ?? $b['sendung_art']) . (!empty($b['palettenart']) ? ' (' . ($pal[$b['palettenart']] ?? $b['palettenart']) . ')' : '');
+    if ((int)($b['kisten_anzahl'] ?? 0) > 0) $t[] = (int)$b['kisten_anzahl'] . ' Kartons';
+    if ((float)($b['gewicht_kg'] ?? 0) > 0) $t[] = rtrim(rtrim(number_format((float)$b['gewicht_kg'], 2, ',', '.'), '0'), ',') . ' kg';
+    if ((int)($b['stellplaetze'] ?? 0) > 0) $t[] = (int)$b['stellplaetze'] . ' Stellplätze';
+    if (!empty($b['masse'])) $t[] = (string)$b['masse'];
+    return implode(', ', $t);
 }
 
 // Wareneingang buchen: legt eine Charge an (oder fuellt eine vorab aus einer CoA angelegte Charge).

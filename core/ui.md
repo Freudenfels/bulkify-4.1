@@ -39,3 +39,8 @@ Dark Mode (03.11.2026): Die Chat-Blasen von `bx_chat()` sind im Dark Mode dunkel
 **Schalter (Block C, 11.11.2026):** `bx_inaktiv_an()` / `bx_inaktiv_schalter($anzahl)` – Listen blenden Gesperrte/Inaktive standardmäßig aus, `?inaktiv=1` zeigt sie (Knopf im Seitenkopf mit Anzahl).
 
 **Lange Namen (13.11.2026):** `bx_table()` setzt Namens-Spalten (name, produkt_name, produkt, artikel, rohstoff, bezeichnung, titel, item_name) automatisch einzeilig mit „…“ (`.bx-lauf`, max. 320 px), beim Darüberfahren Lauftext. Je Spalte `'lauf' => px` oder `'lauf' => false`.
+
+**Pop-up je Zeile (13.11.2026):**
+- `rowPop` (Funktion → Adresse): Ein Klick öffnet die Seite als Pop-up (`data-pop-url`).
+- `rowPopTitel`: Titel des Pop-ups.
+- `rowId` (Funktion → id): id der Zeile. Nach dem Speichern im Pop-up wird genau diese Zeile neu geladen.

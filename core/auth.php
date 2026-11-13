@@ -132,6 +132,7 @@ function route_rollen_map(): array {
         'einkauf'            => ['einkauf'],
         'einkauf_mobil'      => ['einkauf'],
         'bestellung'         => ['einkauf'],
+        'bestellung_pop'     => ['einkauf'],   // 13.11.2026: Bestell-Pop-up (wie die Bestellung)
         'bestellung_pdf'     => ['einkauf'],
         'preis_anfragen'     => ['einkauf', 'sales'],
         'ek_import'          => ['einkauf'],   // EK-Preislisten-Import (Rohstoff-EK + interne Fertigprodukt-Preise)

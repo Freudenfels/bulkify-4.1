@@ -115,3 +115,10 @@ Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artik
 **Doppel-Warnung (13.11.2026, Fable-3 T2.10):** Nach der Warnung steht das Formular „Neue Bestellung“ wieder mit den Eingaben da (`bestellung_doppelt_vorbelegung()`); „Abbrechen“ leert nichts.
 
 **Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.
+
+**Neue Bestellung (Paket 13.11.2026, Teil 6.3):**
+- **Erst die Art:** Rohstoff, Verpackung, Etikett, Bulkware oder Fertigprodukt. Die Artikelsuche zeigt danach nur Artikel dieser Art.
+  - Bei „Etikett“ wird zuerst der Kunde gewählt; die Suche zeigt dann nur dessen Kundenetiketten.
+  - Fertigprodukte (`verkaufsfertig`) sind jetzt bestellbar.
+- **Eine Position:** Eine neue Bestellung hat genau eine Position. Es gibt kein „+ Position“ mehr, und der Server lehnt mehrere ab.
+- **Ohne Art-Auswahl:** Die KI-Vorbelegung und die Rückkehr von der Doppel-Warnung überspringen diesen Schritt.

@@ -36,3 +36,7 @@ Je Position „für AB-… · Kunde“, wenn die Bestellung für einen Auftrag i
 
 ## 10.11.2026
 „Freies Einbuchen“ heißt jetzt „Ohne Bestellung einbuchen“ (`?p=we&weg=regulaer`, nur mit Grund).
+
+**13.11.2026 (Paket Teil 6.8):**
+- **„Nächste Tage“ (oben):** Lieferungen bis 7 Tage voraus und überfällige, mit Datum, Lieferant, Bestellung, Sendung (Art, Anzahl, Palettenart, Kartons, Gewicht, Stellplätze) und Paketen. So lassen sich Platz und Stapler einplanen.
+- **Spalte „Sendung“:** zeigt zusätzlich die Sendungsangaben und die Zahl weiterer Pakete.

@@ -34,6 +34,8 @@ foreach ($lieferungen as $l) {
         'ueberfaellig'   => $eta !== '' && $eta < $heute,
         'tracking'       => (string)($l['tracking'] ?? ''),
         'versandanbieter'=> (string)($l['versandanbieter'] ?? ''),
+        'sendung'        => (string)($l['sendung'] ?? ''),
+        'pakete'         => (array)($l['pakete'] ?? []),
         'unbestaetigt'   => (string)($l['status'] ?? '') === 'gesendet',   // Portal-Bestellung, Lieferant hat noch nicht bestätigt
     ];
     $pos = $l['positionen'] ?? [];
@@ -75,6 +77,24 @@ if ($hatRest) $reiter['rest'] = 'Sonstiges';
 </div>
 <div id="erwLeer" class="bx-panel muted" hidden>Nichts gefunden.</div>
 
+<?php // 13.11.2026 (Paket Teil 6.8): „Nächste Tage“ – je Lieferung Lieferant, Sendungsart, Anzahl, Gewicht (Platz und Stapler einplanen)
+$naechste = [];
+$bis = date('Y-m-d', strtotime('+7 days'));
+foreach ($lieferungen as $l) { $e = (string)($l['eta_geplant'] ?? ''); if ($e !== '' && $e <= $bis) $naechste[] = $l; }
+usort($naechste, fn($a, $b) => strcmp((string)$a['eta_geplant'], (string)$b['eta_geplant']));
+if ($naechste): ?>
+<div class="bx-panel" style="margin-bottom:14px"><h2 style="margin-top:0">Nächste Tage</h2>
+  <table class="bx-table"><thead><tr><th>Datum</th><th>Lieferant</th><th>Bestellung</th><th>Sendung</th><th>Pakete / Tracking</th></tr></thead><tbody>
+  <?php foreach ($naechste as $l): $e = (string)$l['eta_geplant']; ?>
+    <tr><td data-label="Datum"><?= h(date('d.m.', strtotime($e))) ?><?= $e < date('Y-m-d') ? ' <span class="badge badge-warn">überfällig</span>' : ($e === date('Y-m-d') ? ' <b style="font-weight:600">heute</b>' : '') ?></td>
+      <td data-label="Lieferant"><?= $l['lieferant'] ? h((string)$l['lieferant']) : '<span class="muted">ohne Lieferant</span>' ?></td>
+      <td data-label="Bestellung"><?= h((string)$l['nummer']) ?></td>
+      <td data-label="Sendung"><?= ($l['sendung'] ?? '') !== '' ? h((string)$l['sendung']) : '<span class="muted">noch nicht angegeben</span>' ?></td>
+      <td data-label="Pakete"><?= $l['pakete'] ? count($l['pakete']) . ' · ' . h(implode(', ', array_slice($l['pakete'], 0, 3))) : ((string)($l['tracking'] ?? '') !== '' ? h((string)$l['tracking']) : '<span class="muted">–</span>') ?></td></tr>
+  <?php endforeach; ?>
+  </tbody></table>
+</div>
+<?php endif; ?>
 <div class="bx-tablewrap"><table class="bx-table lg-karten" id="erwTab">
   <thead><tr>
     <th>Artikel</th><th>Kategorie</th><th>Lieferant</th><th>Erwartet</th><th>Sendung</th><th>Menge</th><th></th>
@@ -104,9 +124,10 @@ if ($hatRest) $reiter['rest'] = 'Sonstiges';
         <?php if ($z['bestelldatum'] !== ''): ?><br><span class="muted" style="font-size:12px">best. <?= h(date('d.m.Y', strtotime($z['bestelldatum']))) ?></span><?php endif; ?>
       </td>
       <td data-label="Sendung">
-        <?php if ($z['tracking'] !== ''): ?><span class="lg-code"><?= h($z['tracking']) ?></span>
+        <?php if ($z['tracking'] !== ''): ?><span class="lg-code"><?= h($z['tracking']) ?></span><?= count($z['pakete']) > 1 ? ' <span class="muted" style="font-size:12px">+' . (count($z['pakete']) - 1) . ' Pakete</span>' : '' ?>
           <?php if ($z['versandanbieter'] !== ''): ?><br><span class="muted" style="font-size:12px"><?= h($z['versandanbieter']) ?></span><?php endif; ?>
-        <?php else: ?><span class="muted">–</span><?php endif; ?>
+        <?php elseif ($z['sendung'] === ''): ?><span class="muted">–</span><?php endif; ?>
+        <?php if ($z['sendung'] !== ''): ?><div style="font-size:12px;margin-top:2px"><?= h($z['sendung']) ?></div><?php endif; ?>
       </td>
       <td data-label="Menge"><?= h(menge_txt($z['menge'])) ?> <?= h($z['einheit']) ?></td>
       <td data-label="" style="text-align:right">

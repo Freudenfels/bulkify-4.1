@@ -332,6 +332,18 @@ Bevor Ware das Haus verlässt **oder** in Lager 2 für das Fulfillment verkaufba
 - Ändert sich die Rezeptur (Zutaten, Mengen, Angaben), muss das PIB neu geprüft werden. Neue CoA- oder Spec-Werte innerhalb der Spec lösen das nicht aus.
 - Gilt für neue Aufträge. Altaufträge haben keine Prüfpflicht.
 
+### 4.y Einkauf: getrennt nach Art, jede Bestellung einzeln (Nico 13.11.2026)
+- **Bestellliste:** Reiter Rohstoffe · Verpackung · Etiketten · Bulkware · Fertigprodukte, jeweils mit Zahl. Es gibt keine Mehrfachauswahl: Jede Zeile hat „heute bestellt“ (Pop-up: Lieferant, Menge, Preis bestätigen, keine Mail) und „über Portal senden“. Jede Zeile wird eine eigene Bestellung.
+- **Neue Bestellung:** Zuerst die Art wählen; die Suche zeigt dann nur diese Art. Bei Etiketten wird zuerst der Kunde gewählt. Jede Bestellung hat genau eine Position.
+- **Bestell-Pop-up:** Ein Klick auf eine Zeile in „Bestellt“ öffnet es. Inhalt:
+  - Dokumente (CoA je Charge, Spec, Rechnung, Lieferschein)
+  - Versand (Dienst, mehrere Tracking-Nummern, Lieferdatum)
+  - Sendung (Art, Anzahl, Palettenart, Kartons, Gewicht, Maße/Stellplätze)
+  - Notiz
+- **„Bestellt“:** Filter nach Lieferant und die Ansicht „Offen je Lieferant“ mit dem, was fehlt (Bestätigung, CoA, Tracking, Lieferung).
+- **Lager-App:** Der Scan des Paket-Barcodes (Tracking) öffnet den Wareneingang der Bestellung. „Erwartete Lieferungen“ zeigt die nächsten Tage mit Sendungsart, Anzahl und Gewicht.
+- **Bündel aufteilen:** `bestellung_aufteilen_je_position()` verschiebt die Positionen, statt sie zu kopieren; so geht nichts verloren. BE-2890 wurde damit einmalig aufgeteilt (Freigabe Nico 13.11.2026).
+
 ## 5. Die Auftragsseite (je Sache eine Stelle)
 
 Stand nach dem Umbau "Auftragsseite entschlacken" (live 08.11.2026):

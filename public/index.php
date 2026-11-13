@@ -262,6 +262,7 @@ $routes = [
     'einkauf'            => 'einkauf/liste.php',
     'einkauf_mobil'      => 'einkauf/mobil.php',
     'bestellung'         => 'einkauf/detail.php',
+    'bestellung_pop'     => 'einkauf/bestellung_pop.php',   // Pop-up an der Bestellung: Dokumente, Versand, Sendung, Notiz (13.11.2026)
     'bestellung_pdf'     => 'einkauf/pdf.php',
     'preis_anfragen'     => 'einkauf/preis_anfragen.php',
     'ek_import'          => 'einkauf/ek_import.php',   // eingelesene EK-Preislisten (CSV) + Zuordnung
