@@ -88,7 +88,7 @@ function pki_ui_render(int $pa_vorgabe): void {
           <div class="bx-field pa-grund" data-vorgabe="<?= h($c['charge_vorschlag']) ?>" style="flex:1;min-width:220px"><label>Grund für die andere Charge</label><input type="text" name="grund" style="border-color:var(--err)" placeholder="Pflicht: Charge weicht vom Vorschlag ab"></div>
           <div class="bx-field" style="width:170px"><label>MHD</label><input type="date" name="mhd" value="<?= h($c['mhd']) ?>"></div>
         </div>
-        <label style="display:flex;gap:8px;align-items:center;cursor:pointer<?= !empty($c['bulk_frage']) ? ';color:var(--err)' : '' ?>"><input type="checkbox" name="ohne_bulk" value="1" style="width:auto"> ohne Bulk buchen (kein Bulk-Bezug) – nur wenn wirklich kein Bulk dazugehört</label>
+        <label style="display:flex;gap:8px;align-items:center;cursor:pointer<?= !empty($c['bulk_frage']) ? ';color:var(--err)' : '' ?>"><input type="checkbox" name="ohne_bulk" value="1" style="width:auto"<?= !empty($c['ohne_bulk']) ? ' checked' : '' ?>> ohne Bulk buchen (kein Bulk-Bezug) – nur wenn wirklich kein Bulk dazugehört</label>
         <?= pa_grund_js() ?>
         <div class="bx-row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
           <div class="bx-field" style="flex:1;min-width:200px"><label>Mitarbeiter</label><input type="text" name="mitarbeiter" value="<?= h($c['mitarbeiter']) ?>"></div>
@@ -97,8 +97,12 @@ function pki_ui_render(int $pa_vorgabe): void {
             <option value="vor_etikett"<?= $c['vor_etikett'] ? ' selected' : '' ?>>bis vor dem Etikettieren</option></select></div>
           <div class="bx-field" style="width:140px"><label>Rückstellmuster</label><input type="text" inputmode="numeric" name="rueckstell" value="0"></div>
         </div>
+        <?php $kiRot = !empty($c['fragen']); $kiHart = (string)($c['charge_fremd'] ?? '') !== ''; ?>
+        <?php if ($kiRot && !$kiHart): ?>
+        <label style="display:flex;gap:8px;align-items:center;cursor:pointer;color:var(--err)"><input type="checkbox" name="fragen_geklaert" value="1" style="width:auto" onchange="this.form.querySelector('.pki-buchen').disabled=!this.checked"> Rote Rückfragen geprüft und geklärt</label>
+        <?php endif; ?>
         <div class="bx-row" style="gap:8px">
-          <button class="btn btn-primary" type="submit" onclick="return confirm('Jetzt buchen? Gebucht wird wie bei „Teilmenge nachtragen“.');">Buchen</button>
+          <button class="btn btn-primary pki-buchen" type="submit"<?= $kiRot ? ' disabled' : '' ?><?= $kiHart ? ' title="Charge gehört zu einem anderen Auftrag – so wird nicht gebucht."' : '' ?> onclick="return confirm('Jetzt buchen? Gebucht wird wie bei „Teilmenge nachtragen“.');">Buchen</button>
         </div>
       </form>
       <form method="post" style="margin-top:6px"><input type="hidden" name="aktion" value="ki_verwerfen"><button class="btn btn-ghost btn-sm" type="submit">Verwerfen</button></form>

@@ -14,7 +14,7 @@ function pki_darf(): bool { return function_exists('has_role') && (has_role('adm
 function pki_systemprompt(): string {
     return "Du wertest eine kurze Produktionsmeldung eines Nahrungsergänzungs-Lohnherstellers aus (getippt oder diktiert, deutsch). "
          . "Gib NUR ein JSON-Objekt mit genau diesen Schlüsseln zurück:\n"
-         . '{"produkt":"","kunde":"","pa_nummer":"","menge_text":"","menge":null,"einheit":"","charge":"","datum":"","bulk_charge":"","etikettiert":null,"verpackt":null,"mitarbeiter":"","notiz":""}' . "\n"
+         . '{"produkt":"","kunde":"","pa_nummer":"","menge_text":"","menge":null,"einheit":"","charge":"","datum":"","bulk_charge":"","ohne_bulk":false,"etikettiert":null,"verpackt":null,"mitarbeiter":"","notiz":""}' . "\n"
          . "Regeln: Nichts erfinden – was nicht im Text steht, bleibt leer bzw. null. "
          . "produkt = Produkt- oder Rezepturname wie genannt, OHNE die gemeldete Menge. pa_nummer = Produktionsauftrag wie „PR-2749“ (nur wenn genannt). "
          . "menge_text = die gemeldete Menge GENAU so, wie sie im Text steht (z. B. „1.000“ oder „43.092“), als Text. "
@@ -22,7 +22,8 @@ function pki_systemprompt(): string {
          . "einheit: „packung“ wenn Gläser/Dosen/Packungen/Beutel/Flaschen genannt sind, „kapsel“ bei Kapseln/Tabletten/Softgels, „kg“ bei kg, "
          . "sonst leer (auch bei „Stück“ – das ist mehrdeutig). charge = genannte Charge (z. B. 2766.B). bulk_charge = genannte Bulk-Charge. "
          . "datum im Format JJJJ-MM-TT, nur wenn ein Datum oder „gestern/heute“ genannt ist (heute ist " . heute_ort() . "). "
-         . "etikettiert/verpackt: true wenn „mit Etikett/etikettiert“ bzw. „verpackt“ genannt, false wenn „ohne Etikett/nicht etikettiert“, sonst null.";
+         . "etikettiert/verpackt: true wenn „mit Etikett/etikettiert“ bzw. „verpackt“ genannt, false wenn „ohne Etikett/nicht etikettiert“, sonst null. "
+         . "ohne_bulk: true nur wenn ausdrücklich „ohne Bulk“ (kein Bulk-Bezug) genannt ist, sonst false.";
 }
 
 // Zahlen im Originaltext (deutsche Schreibweise, Tausenderpunkt) – für den Abgleich mit der KI-Menge.
@@ -63,7 +64,10 @@ function pki_auswerten(string $text, ?array $ki_antwort = null): array {
           'menge' => $menge, 'einheit' => in_array($e, ['packung', 'kapsel', 'kg'], true) ? $e : '',
           'charge' => $s('charge'), 'datum' => preg_match('/^\d{4}-\d{2}-\d{2}$/', $s('datum')) ? $s('datum') : '',
           'bulk_charge' => $s('bulk_charge'), 'etikettiert' => $b('etikettiert'), 'verpackt' => $b('verpackt'),
-          'mitarbeiter' => $s('mitarbeiter'), 'notiz' => $s('notiz'), 'menge_aus_name' => false, 'menge_frage' => ''];
+          'mitarbeiter' => $s('mitarbeiter'), 'notiz' => $s('notiz'), 'menge_aus_name' => false, 'menge_frage' => '',
+          // Fable-6 P9: „ohne Bulk“ und „Etikett genannt“ zusätzlich direkt am Text erkennen (nicht nur der KI überlassen).
+          'ohne_bulk' => !empty($ki_antwort['ohne_bulk']) || preg_match('/\bohne\s+bulk/iu', $text) === 1,
+          'etikett_genannt' => preg_match('/etikett/iu', $text) === 1];
     // „Magnesium 500“ (P3): Zahl am Ende des Produktnamens und keine Menge erkannt -> als Menge werten (Rückfrage in der Karte).
     if ($f['menge'] === null && preg_match('/^(.*\D)\s+(\d{1,3}(?:\.\d{3})+|\d+)$/u', $f['produkt'], $m)) {
         $f['menge'] = zahl_lesen($m[2], true); $f['produkt'] = trim($m[1]); $f['menge_aus_name'] = true;
@@ -179,6 +183,9 @@ function pki_karte(array $f, array $pa): array {
         if ($bulkId > 0 && !array_filter($bulkWahl, fn($b) => (int)$b['id'] === $bulkId))   // Bulk der Unter-Charge auch zeigen, wenn nicht mehr frei
             if ($bz = one("SELECT id, charge_nr, menge_verfuegbar, einheit, mhd FROM charge WHERE id=?", [$bulkId])) array_unshift($bulkWahl, $bz);
         $hinweise[] = 'Charge ' . $ucTreffer['charge_nr'] . ' gibt es schon (Tag ' . date('d.m.Y', strtotime($datum)) . ') – es wird auf diese Unter-Charge nachgetragen.';
+    } elseif (!empty($f['ohne_bulk'])) {   // Fable-6 P9: „ohne Bulk“ im Text -> Haken gesetzt, kein Vorschlag
+        $bulkId = 0;
+        $hinweise[] = 'Gemeldet „ohne Bulk“ – der Haken „ohne Bulk buchen“ ist gesetzt.';
     } elseif (($f['bulk_charge'] ?? '') !== '') {
         foreach ($bulkWahl as $bw) if (pa_charge_gleich((string)$bw['charge_nr'], $f['bulk_charge'])) { $bulkId = (int)$bw['id']; break; }
         if (!$bulkId) { $fragen[] = 'Bulk-Charge „' . $f['bulk_charge'] . '“ nicht als freie Charge gefunden – bitte wählen oder ausdrücklich „ohne Bulk“ anhaken.'; $bulkFrage = true; }
@@ -201,11 +208,14 @@ function pki_karte(array $f, array $pa): array {
     if ($ucTreffer) $v = ['charge_nr' => (string)$ucTreffer['charge_nr'], 'mhd' => (string)$ucTreffer['mhd']];
     $charge = ($f['charge'] ?? '') !== '' ? ($ucTreffer ? (string)$ucTreffer['charge_nr'] : $f['charge']) : (string)$v['charge_nr'];
     $chargeAbw = pa_charge_abweichend($charge, (string)$v['charge_nr']);   // eine Regel mit pa_starten (13.11.2026)
-    if ($chargeAbw) $fragen[] = 'Charge ' . $charge . ' passt nicht zum Vorschlag ' . $v['charge_nr'] . ' – nur mit Grund.';
+    $chargeFremd = pki_charge_fremd($charge, $pid);
+    if ($chargeFremd !== '') $fragen[] = $chargeFremd;
+    elseif ($chargeAbw) $fragen[] = 'Charge ' . $charge . ' passt nicht zum Vorschlag ' . $v['charge_nr'] . ' – nur mit Grund.';
     // Etikett: fehlt/nicht freigegeben -> nur bis vor dem Etikettieren (der Server erzwingt das ebenfalls).
     $sperre = (string) (pa_fn('produktion_etikett_sperre', 'erp_etikett_sperre', $pid) ?? '');
     $vorEtikett = $sperre !== '' || ($f['etikettiert'] ?? null) === false;
-    if ($sperre !== '' && ($f['etikettiert'] ?? null) !== false) $hinweise[] = 'Gemeldet „mit Etikett“, aber: ' . $sperre . ' Gebucht wird nur bis vor dem Etikettieren.';
+    if ($sperre !== '' && ($f['etikettiert'] ?? null) === true && !empty($f['etikett_genannt'])) $hinweise[] = 'Gemeldet „mit Etikett“, aber: ' . $sperre . ' Gebucht wird nur bis vor dem Etikettieren.';
+    elseif ($sperre !== '') $hinweise[] = $sperre . ' Gebucht wird nur bis vor dem Etikettieren.';
     // Mitarbeiter: genannter Name, sonst die meldende Person.
     $ma = '';
     if (($f['mitarbeiter'] ?? '') !== '') { $ma = (string) scalar("SELECT name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL AND name LIKE ? ESCAPE '=' ORDER BY id LIMIT 1", ['%' . str_replace(['=', '%', '_'], ['==', '=%', '=_'], $f['mitarbeiter']) . '%']); }
@@ -215,6 +225,7 @@ function pki_karte(array $f, array $pa): array {
             'bulk_wahl' => $bulkWahl, 'bulk_id' => $bulkId, 'bulk_frage' => $bulkFrage, 'datum' => $datum, 'charge' => $charge,
             'charge_vorschlag' => (string)$v['charge_nr'], 'charge_abw' => $chargeAbw, 'mhd' => (string)$v['mhd'], 'vor_etikett' => $vorEtikett,
             'etikett_sperre' => $sperre, 'mitarbeiter' => $ma, 'rest' => $rest, 'fragen' => $fragen, 'hinweise' => $hinweise,
+            'ohne_bulk' => !empty($f['ohne_bulk']), 'charge_fremd' => $chargeFremd,
             'uc_treffer' => $ucTreffer ? (int)$ucTreffer['id'] : 0];
 }
 
@@ -240,6 +251,15 @@ function pki_karte_aus_sitzung(string $kid): ?array {
             return ['schluessel' => $k, 'meldung' => $m];
     return null;
 }
+// Fable-6 P9: gehört die Grundnummer der Charge zu einem ANDEREN Produktionsauftrag (2766.B an PR-2775)? Dann hart ablehnen – auch mit
+// Grund. '' = in Ordnung, sonst der Text der Rückfrage.
+function pki_charge_fremd(string $charge, int $pa_id): string {
+    if (!preg_match('/^\s*(\d{3,6})\s*[.\s]?\s*[A-Za-z]{0,2}\s*$/', $charge, $m)) return '';
+    $basis = pa_basis($pa_id);
+    if ($m[1] === $basis) return '';
+    $andere = (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id<>? AND (nummer=? OR nummer=?) LIMIT 1", [$pa_id, 'PR-' . $m[1], $m[1]]);
+    return $andere !== '' ? 'Charge ' . trim($charge) . ' gehört zu ' . $andere . ', nicht zu diesem Auftrag (PR-' . $basis . ') – so wird nicht gebucht. Bitte richtigen Auftrag wählen oder Charge korrigieren.' : '';
+}
 // Serverseitige Prüfung beim Buchen einer KI-Karte (P2). '' = darf buchen, sonst der Grund. $p = POST.
 function pki_buchen_pruefen(array $karte, array $p, int $pa_id): string {
     if (!pki_darf()) return 'Per KI melden dürfen nur Produktion und Admin.';
@@ -248,6 +268,9 @@ function pki_buchen_pruefen(array $karte, array $p, int $pa_id): string {
         $l = (string)($p['ki_lesart'] ?? '');
         if ($l === '' || !in_array((int)$l, (array)$karte['lesart_werte'], true)) return 'Bitte zuerst die Einheit wählen (Kapseln oder Packungen).';
     }
+    // Fable-6 P9: fremde Charge hart ablehnen; rote Rückfragen müssen ausdrücklich als geklärt bestätigt sein.
+    if (($fr = pki_charge_fremd((string)($p['charge_nr'] ?? ''), $pa_id)) !== '') return $fr;
+    if (!empty($karte['fragen']) && empty($p['fragen_geklaert'])) return 'Bitte die roten Rückfragen prüfen und „Rückfragen geklärt“ anhaken.';
     $bw = (string)($p['bulk_charge_id'] ?? '0');
     if (($bw === '' || $bw === '0') && empty($p['ohne_bulk'])) return 'Bitte die Bulk-Charge wählen oder ausdrücklich „ohne Bulk“ anhaken.';
     if ($bw !== '' && $bw !== '0' && !in_array((int)$bw, array_map(fn($b) => (int)$b['id'], (array)$karte['bulk_wahl']), true))

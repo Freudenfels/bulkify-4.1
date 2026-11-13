@@ -19,3 +19,9 @@ Gebucht wird nie hier: Die Karte schickt das Formular „Teilmenge nachtragen“
 - **Kein Bulk (T1.4):** keine freie Bulk-Charge = rote Rückfrage (Haken „ohne Bulk“ nötig); „Jetzt machbar: 0 (begrenzt durch …)“ als Hinweis.
 - **Genannte Charge (T1.5):** erst unter den Unter-Chargen des PA gesucht (`charge_gleich`); Treffer = deren Tag und Bulk, keine Abweichung.
 - **Zahl-Abgleich, PR-Nummer (T1.8):** die KI liefert `menge_text` wörtlich; `pki_menge_abgleich()` prüft gegen den Originaltext („1.000“ wird nie 1). Genannte PR-Nummer ohne offenen Treffer: Meldung `pa_nicht_offen` statt Namenssuche; auf der PA-Seite andere PR-Nummer: `pa_anders`. KI-Aufruf mit 30 s Zeitlimit, ein Versuch.
+
+**Fable-6 P9 (13.11.2026):**
+- **„ohne Bulk“** wird erkannt: über das KI-Feld `ohne_bulk` und zusätzlich direkt am Text (`/ohne bulk/`). Die Karte setzt dann den Haken „ohne Bulk buchen“ und schlägt keine Bulk-Charge vor.
+- **Fremde Charge:** `pki_charge_fremd()` prüft, ob die Grundnummer der genannten Charge zu einem anderen Produktionsauftrag gehört (z. B. 2766.B an PR-2775). Dann gibt es eine rote Rückfrage, der Knopf „Buchen“ bleibt gesperrt, und der Server lehnt hart ab, auch mit Grund (`pki_buchen_pruefen`).
+- **Buchen grau:** Solange rote Rückfragen offen sind, ist „Buchen“ grau. Es wird erst aktiv, wenn „Rote Rückfragen geprüft und geklärt“ angehakt ist; der Server prüft `fragen_geklaert`.
+- **Etikett-Hinweis:** „Gemeldet ‚mit Etikett‘ …“ erscheint nur, wenn der Text „Etikett“ nennt (`etikett_genannt`). Sonst steht nur der neutrale Sperr-Hinweis da.
