@@ -4,6 +4,11 @@ require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
 $hinweis = '';
+// Sofortfix 13.11.2026 (Teil 0b): Fehler beim Buchen -> Seite mit allen Eingaben zurück (kein Redirect ohne Daten), Feld rot + benannt.
+$weFehler = null;
+$weFx = function (string $feld) use (&$weFehler): string {
+    return ($weFehler['feld'] ?? '') === $feld ? ' class="bx-pflicht-fehlt" data-pflicht-msg="' . h((string)$weFehler['msg']) . '"' : '';
+};
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     // Einkauf gerade ziehen (Teil 1/2, 10.11.2026): erst die Bestellung. Artikel, Einheit, Lieferant und Auftrag kommen aus der
@@ -16,10 +21,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $weGrundNotiz = trim((string)($_POST['we_grund_notiz'] ?? ''));
     if (in_array($aktion, ['buchen', 'zukauf_buchen'], true) && !$bpR) {
         $liefG = (int)($_POST['lieferant_id'] ?? 0);
-        if (!in_array($weGrund, ['alt_bestellung', 'muster', 'sonstiges'], true)
-            || ($weGrund === 'alt_bestellung' && $liefG <= 0)
-            || ($weGrund !== 'alt_bestellung' && $weGrundNotiz === '')) { header('Location: ?p=wareneingang&grundfehler=1'); exit; }
+        if (!in_array($weGrund, ['alt_bestellung', 'muster', 'sonstiges'], true)) $weFehler = ['feld' => 'we_grund', 'msg' => 'Bestellung wählen – oder „Ohne Bestellung“ mit Grund: Grund fehlt'];
+        elseif ($weGrund === 'alt_bestellung' && $liefG <= 0) $weFehler = ['feld' => 'lieferant_id', 'msg' => 'Lieferant fehlt (bei „Alte Bestellung“ Pflicht)'];
+        elseif ($weGrund !== 'alt_bestellung' && $weGrundNotiz === '') $weFehler = ['feld' => 'we_grund_notiz', 'msg' => 'Notiz fehlt (bei Muster/Sonstiges Pflicht)'];
     }
+    // Immer Pflicht: Artikel (bzw. Auftrag beim Zukauf), Menge, Charge, MHD – vorher prüfen, nie halb buchen.
+    if (!$weFehler && in_array($aktion, ['buchen', 'zukauf_buchen'], true)) {
+        if ($aktion === 'buchen' && !$bpR && (int)($_POST['item_id'] ?? 0) <= 0) $weFehler = ['feld' => 'item', 'msg' => 'Artikel fehlt'];
+        elseif ($aktion === 'zukauf_buchen' && !$bpR && (int)($_POST['auftrag_id'] ?? 0) <= 0) $weFehler = ['feld' => 'auftrag', 'msg' => 'Auftrag fehlt'];
+        elseif (zahl_lesen((string)($_POST['menge'] ?? '0'), true) <= 0) $weFehler = ['feld' => 'menge', 'msg' => 'Menge fehlt'];
+        elseif (trim((string)($_POST['charge_nr'] ?? '')) === '') $weFehler = ['feld' => 'charge_nr', 'msg' => 'Charge fehlt'];
+        elseif (trim((string)($_POST['mhd'] ?? '')) === '') $weFehler = ['feld' => 'mhd', 'msg' => 'MHD fehlt'];
+    }
+    if ($weFehler) $aktion = '__fehler';   // nichts buchen, Seite mit den Eingaben zeigen
     if ($aktion === 'zukauf_buchen' && $bpR) $aktion = 'buchen';   // mit Bestellung: Artikel kommt aus der Position
     $weNachher = function (int $cid) use ($bpR, $weGrund, $weGrundNotiz): string {
         $wer = (string)(current_user()['name'] ?? '');
@@ -214,6 +228,13 @@ if (isset($_GET['bulkfehler'])) echo '<div class="bx-panel" style="border-color:
 if (isset($_GET['zkok']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zukauf-Fertigware gebucht und dem Auftrag zugeordnet. Nach dem Freigeben (unten) erkennt der Produktionsauftrag den Zukauf automatisch.</div>';
 if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Zukauf nicht gebucht – Auftrag ohne Rezeptur/Produkt oder Menge fehlt.</div>';
 ?>
+<?php if ($weFehler): // Teil 0b: Eingaben behalten – für die Wiederherstellung im Browser
+    $weAltPost = array_intersect_key($_POST, array_flip(['bp_id', 'we_grund', 'we_grund_notiz', 'menge', 'charge_nr', 'mhd', 'lieferant_id', 'tracking', 'notiz', 'item_id', 'problem', 'auftrag_id']));
+    $weAltPost['ohne'] = (int)($_POST['bp_id'] ?? 0) <= 0 ? 1 : 0;
+    $weAltPost['item_name'] = (int)($_POST['item_id'] ?? 0) > 0 ? (string) scalar("SELECT name FROM item WHERE id=?", [(int)$_POST['item_id']]) : '';
+    echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Nicht gebucht: ' . h((string)$weFehler['msg']) . '. Deine Eingaben sind noch da – bitte das markierte Feld ergänzen.</div>'
+       . '<script>window.weAlt=' . json_encode($weAltPost, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) . ';</script>';
+endif; ?>
 <form method="post" class="bx-form">
   <input type="hidden" name="aktion" id="weAktion" value="buchen">
   <div class="bx-panel">
@@ -235,15 +256,15 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       <label class="bx-row" style="gap:8px;align-items:center;margin:8px 0 0"><input type="checkbox" id="weOhne"> <span>Ohne Bestellung (nur mit Grund)</span></label>
     </div>
     <div class="bx-grid" id="weGrundBlock" style="display:none">
-      <div class="bx-field"><label>Grund *</label>
-        <select name="we_grund" id="weGrund">
+      <div class="bx-field"><label>Grund</label>
+        <select name="we_grund" id="weGrund" data-pflicht="#weOhne:checked" data-pflicht-text="Grund fehlt"<?= $weFx('we_grund') ?>>
           <option value="">– Grund wählen –</option>
           <option value="alt_bestellung">Alte Bestellung, nicht im System</option>
           <option value="muster">Muster</option>
           <option value="sonstiges">Sonstiges</option>
         </select>
       </div>
-      <div class="bx-field"><label>Notiz <span class="muted">(bei Muster/Sonstiges Pflicht)</span></label><input type="text" name="we_grund_notiz" id="weGrundNotiz" maxlength="250"></div>
+      <div class="bx-field"><label>Notiz <span class="muted">(bei Muster/Sonstiges Pflicht)</span></label><input type="text" name="we_grund_notiz" id="weGrundNotiz" maxlength="250" data-pflicht="#weGrund=muster,sonstiges" data-pflicht-text="Notiz fehlt"<?= $weFx('we_grund_notiz') ?>></div>
       <div class="muted" style="font-size:12px;grid-column:1/-1">Alte Bestellung: mit dem Lieferanten unten wird eine nachträgliche Bestellung angelegt (direkt bestellt, geliefert, Menge = Eingang) – bitte danach Preis und Daten prüfen. Kundenware bitte in der Lager-App über Lager 2 buchen.</div>
     </div>
     <div id="weFestInfo" class="bx-panel" style="display:none;margin:0 0 12px;padding:10px 14px;border-left:3px solid var(--gruen,#1D9E75)"></div>
@@ -259,13 +280,13 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
     <div class="bx-grid">
       <!-- 2a) Artikel-Feld (Rohstoff/Verpackung/Fertigware) -->
       <div class="bx-field bx-combo" id="weBlockArt"><label>Artikel</label>
-        <input type="text" id="weArtSuche" autocomplete="off" placeholder="Artikel suchen oder wählen…" required aria-expanded="false">
+        <input type="text" id="weArtSuche" autocomplete="off" placeholder="Artikel suchen oder wählen…" required aria-expanded="false" data-pflicht data-pflicht-text="Artikel fehlt"<?= $weFx('item') ?>>
         <input type="hidden" name="item_id" id="weArtId">
         <div id="weArtList" class="bx-combo-list" hidden></div>
       </div>
       <!-- 2b) Auftrag (nur Zukauf) – Fertigware-Artikel der Rezeptur wird automatisch angelegt -->
       <div class="bx-field" id="weBlockAuf" style="display:none"><label>Auftrag (Fremdproduktion)</label>
-        <select name="auftrag_id" id="weZukaufAuf" disabled>
+        <select name="auftrag_id" id="weZukaufAuf" disabled<?= $weFx('auftrag') ?>>
           <option value="">– Auftrag wählen –</option>
           <?php foreach ($zukaufAuftraege as $a): $zkF = auftrag_zukauf_fertig((int)$a['id']); ?><option value="<?= (int)$a['id'] ?>"><?= h($a['nummer'] . ' · ' . $a['produkt'] . ($a['firma'] ? ' · ' . $a['firma'] : '') . ($zkF ? ' · fertige Ware in Packungen' : '')) ?></option><?php endforeach; ?>
         </select>
@@ -273,15 +294,15 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
       </div>
       <div class="bx-field"><label>Menge</label>
         <div class="bx-row" style="gap:8px;align-items:center;margin:0">
-          <input type="text" inputmode="decimal" name="menge" required style="flex:1;min-width:0" placeholder="z. B. 7.000">
+          <input type="text" inputmode="decimal" name="menge" required style="flex:1;min-width:0" placeholder="z. B. 7.000" data-pflicht data-pflicht-text="Menge fehlt"<?= $weFx('menge') ?>>
           <span id="weEinheit" style="min-width:44px;font-weight:600;color:var(--muted)">–</span>
         </div>
         <div class="muted" id="weEinheitHint" style="font-size:12px;margin-top:4px">Erst Artikel wählen – die Einheit erscheint hier.</div>
       </div>
-      <div class="bx-field"><label>Charge (Lieferant) <?= bx_hint('Chargennummer laut Lieferant/CoA') ?></label><input type="text" name="charge_nr"></div>
-      <div class="bx-field"><label>MHD</label><input type="date" name="mhd"></div>
+      <div class="bx-field"><label>Charge (Lieferant) <?= bx_hint('Chargennummer laut Lieferant/CoA') ?></label><input type="text" name="charge_nr" data-pflicht data-pflicht-text="Charge fehlt"<?= $weFx('charge_nr') ?>></div>
+      <div class="bx-field"><label>MHD</label><input type="date" name="mhd" data-pflicht data-pflicht-text="MHD fehlt"<?= $weFx('mhd') ?>></div>
       <div class="bx-field"><label>Lieferant</label>
-        <select name="lieferant_id">
+        <select name="lieferant_id" data-pflicht="#weGrund=alt_bestellung" data-pflicht-text="Lieferant fehlt"<?= $weFx('lieferant_id') ?>>
           <option value="">– keiner –</option>
           <?php foreach ($lieferanten as $lf): ?><option value="<?= $lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?>
         </select>
@@ -483,8 +504,21 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
     e.preventDefault(); su.setCustomValidity('Bitte eine Bestellung wählen – oder „Ohne Bestellung“ mit Grund.'); su.reportValidity(); setTimeout(function(){ su.setCustomValidity(''); }, 2500);
   });
   var m=/[?&]bp=(\d+)/.exec(location.search); if(m){ var b=BP.filter(function(x){ return String(x.id)===m[1]; })[0]; if(b) waehle(b); }
+  // Sofortfix 13.11.2026 (Teil 0b): Seite kam nach einem Fehler mit den Eingaben zurück -> gewählte Bestellung wiederherstellen.
+  if(window.weAlt && weAlt.bp_id){ var b3=BP.filter(function(x){ return String(x.id)===String(weAlt.bp_id); })[0]; if(b3) waehle(b3); }
 })();
 </script>
+<?php if ($weFehler): // alle Eingaben zurück in die Felder (Teil 0b) ?>
+<script>
+(function(){
+  var A = window.weAlt || {}, f = document.getElementById('weBpSuche') ? document.getElementById('weBpSuche').form : null; if(!f) return;
+  var ohne=document.getElementById('weOhne'); if(A.ohne && ohne && !ohne.checked){ ohne.checked=true; ohne.dispatchEvent(new Event('change')); }
+  ['we_grund','we_grund_notiz','menge','charge_nr','mhd','lieferant_id','tracking','notiz'].forEach(function(n){ var el=f.querySelector('[name="'+n+'"]'); if(el && A[n]!=null && A[n]!==''){ el.value=A[n]; el.dispatchEvent(new Event('change')); } });
+  var ai=document.getElementById('weArtId'), as=document.getElementById('weArtSuche'); if(A.item_id && ai && !ai.value){ ai.value=A.item_id; if(as){ as.value=A.item_name||''; as.dispatchEvent(new Event('change')); } }
+  var pr=f.querySelector('[name="problem"]'); if(pr && A.problem) pr.checked=true;
+})();
+</script>
+<?php endif; ?>
 
 <div class="bx-panel">
   <div class="bx-row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">

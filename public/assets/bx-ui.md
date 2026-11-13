@@ -15,3 +15,5 @@ Ein gemeinsamer Baustein für alle Programme (Dashboard, Kunden- und Lieferanten
 `public/assets/bx-rscombo.js` – die durchsuchbare Auswahl (vorher Inline-Skript in `core/layout.php`): jedes `<select>` mit mehr als 10 Einträgen (oder `class="rscombo"`) wird ein Suchfeld mit Trefferliste; `data-such` an der Option = zusätzliche Suchbegriffe (Synonyme, Nummern); Pfeiltasten + Enter; Ausnahme `data-norscombo`.
 
 **Gewichte (13.11.2026):** `start()` lädt `bx-gewicht.js` nach (Rückfrage bei „1.250“ in Feldern mit `data-gewicht`).
+
+**Pflichtfelder (13.11.2026):** `start()` lädt `bx-pflicht.js`, wenn die Seite `data-pflicht` hat.

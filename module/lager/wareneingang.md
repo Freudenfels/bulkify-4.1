@@ -72,3 +72,5 @@ Beim Buchen mit „Zur Bestellung“ setzt `bestellung_lieferung_erfassen()` an 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
 
 **Geschlossen ohne Einbuchen (Sofortfix 13.11.2026):** Die Auswahl enthält zusätzlich Positionen, die ohne Ware geschlossen wurden (rot markiert); `?bp=` und `&bch=` belegen Charge, MHD und Menge aus „Chargen & Dokumente“ vor. Gebucht auf so eine Position: Vermerk, Bestellung bleibt geliefert.
+
+**Pflichtfelder (Sofortfix 13.11.2026, Teil 0b):** Artikel, Menge, Charge, MHD immer Pflicht; Grund bei „Ohne Bestellung“; Lieferant bei „Alte Bestellung“; Notiz bei Muster/Sonstiges (`data-pflicht`, Sternchen wechselt sofort). Der Server prüft dieselben Felder und gibt bei einem Fehler die Seite mit allen Eingaben zurück (`$weFehler`, `window.weAlt`), das Feld rot und benannt – kein Redirect `grundfehler` mehr.

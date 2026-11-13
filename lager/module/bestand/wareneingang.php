@@ -665,7 +665,7 @@ if ($gebucht):
           </select>
         </div>
         <div class="bx-field" style="margin:0;min-width:220px"><label>Lieferant <span class="muted">(optional – tippen, neue werden angelegt)</span></label>
-          <input type="text" name="lieferant_name" id="weLiefName" list="weLiefList" autocomplete="off" placeholder="Lieferant suchen oder neu eingeben">
+          <input type="text" name="lieferant_name" id="weLiefName" list="weLiefList" autocomplete="off" placeholder="Lieferant suchen oder neu eingeben" data-pflicht="#weGrund=alt_bestellung" data-pflicht-text="Lieferant fehlt (bei „Alte Bestellung“ Pflicht)">
           <input type="hidden" name="lieferant_id" id="weLief" value="">
           <input type="hidden" name="auftrag_nr" id="weAuftragNr" value="">
         </div>
@@ -683,15 +683,15 @@ if ($gebucht):
         </datalist>
         <?php endif; ?>
         <div class="bx-field" id="weGrundWrap" style="margin:0;min-width:260px;flex:1 1 100%;display:none">
-          <label>Ohne Bestellung – Grund *</label>
+          <label>Ohne Bestellung – Grund</label>
           <div class="bx-row" style="gap:var(--sp-3);flex-wrap:wrap;align-items:flex-start">
-            <select name="we_grund" id="weGrund" style="flex:0 1 280px">
+            <select name="we_grund" id="weGrund" style="flex:0 1 280px" data-pflicht data-pflicht-text="Grund fehlt (ohne Bestellung)">
               <option value="">– Grund wählen –</option>
               <option value="alt_bestellung">Alte Bestellung, nicht im System</option>
               <option value="muster">Muster</option>
               <option value="sonstiges">Sonstiges</option>
             </select>
-            <input type="text" name="we_grund_notiz" id="weGrundNotiz" maxlength="250" placeholder="Notiz (bei Muster/Sonstiges Pflicht)" style="flex:1 1 260px">
+            <input type="text" name="we_grund_notiz" id="weGrundNotiz" maxlength="250" placeholder="Notiz (bei Muster/Sonstiges Pflicht)" style="flex:1 1 260px" data-pflicht="#weGrund=muster,sonstiges" data-pflicht-text="Notiz fehlt (bei Muster/Sonstiges Pflicht)">
           </div>
           <div class="muted" id="weGrundInfo" style="font-size:12px;margin-top:4px">Mindestens eine Position hängt an keiner Bestellung. Bei „Alte Bestellung“ wird mit dem Lieferanten oben eine nachträgliche Bestellung angelegt (direkt bestellt, geliefert) – Nico prüft Preis und Daten. Kundenware bitte über Lager 2 buchen.</div>
         </div>

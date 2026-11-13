@@ -204,6 +204,8 @@
     if (!window.bxRsComboInit && !document.querySelector('script[src*="bx-rscombo.js"]')) { var sc = document.createElement('script'); sc.src = '/assets/bx-rscombo.js'; document.head.appendChild(sc); }
     // Rückfrage bei mehrdeutigen Gewichten „1.250“ (Fable-4 T1.3): Felder mit data-gewicht.
     if (!window.bxGewichtInit && !document.querySelector('script[src*="bx-gewicht.js"]')) { var sg = document.createElement('script'); sg.src = '/assets/bx-gewicht.js'; document.head.appendChild(sg); }
+    // Pflichtfelder (Sofortfix 13.11.2026): data-pflicht – Sternchen, Prüfung vor dem Absenden, Fehler am Feld (bx-pflicht.js).
+    if (!window.bxPflichtInit && document.querySelector('[data-pflicht],.bx-pflicht-fehlt') && !document.querySelector('script[src*="bx-pflicht.js"]')) { var sp = document.createElement('script'); sp.src = '/assets/bx-pflicht.js'; document.head.appendChild(sp); }
     alle(document);
     if (window.MutationObserver) new MutationObserver(function (ms) {
       ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.nodeType !== 1) return; if (n.matches && n.matches('dialog.bx-dialog')) aufwerten(n); else if (n.querySelector) alle(n); }); });

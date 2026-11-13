@@ -48,6 +48,7 @@ Ein Baustein: `public/assets/bx-ui.js` (in allen Layouts eingebunden). Details: 
 1. **Pop-up statt neuer Seite/neuem Fenster:** `<dialog class="bx-dialog">` – Titel + X oben, Knöpfe unten (Hauptknopf rechts), Inhalt scrollt innen, Escape/Klick daneben schließt (Rückfrage bei Ungespeichertem), Speichern ohne Seitenwechsel per `data-pop-ajax` + `data-pop-refresh`. Seite im Pop-up: `bxPopup.url()` / `data-pop-url`. Kein eigenes Dialog-CSS mehr bauen.
 2. **Auswahl mit Suche:** jedes `<select>` mit mehr als 10 Einträgen automatisch (`public/assets/bx-rscombo.js`); Synonyme/Nummern über `data-such` an der Option.
 3. **Lange Texte laufen:** einzeilig mit „…“ (`.bx-lauf`, in `bx_table()` automatisch für Namens-Spalten), beim Darüberfahren/Antippen Lauftext.
+4. **Pflichtfelder (13.11.2026):** Pflichtfelder mit Sternchen, Prüfung vor dem Absenden, bei Fehlern nie Eingaben verlieren. Baustein `data-pflicht` (`public/assets/bx-pflicht.js`, lädt `bx-ui.js`): `data-pflicht` = immer, `data-pflicht="#feld=wert1,wert2"` bzw. `"#haken:checked"` = abhängig; fehlt etwas, wird nicht gesendet, das Feld wird rot mit „… fehlt“. Lehnt der Server ab: Seite mit allen Eingaben zurück (kein Redirect ohne Daten), Feld mit `class="bx-pflicht-fehlt" data-pflicht-msg="…"`.
 
 ## Git-Rhythmus (Multi-PC & parallele Code-Chats)
 Pull am Start, commit+push nach jedem **fertigen, getesteten** Schritt. Einzige gemeinsame Wahrheit = GitHub.
