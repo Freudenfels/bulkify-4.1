@@ -39,6 +39,13 @@
     haken: '<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="currentColor"/><path d="M13 24.5l7.5 7.5L35 17" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     upload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0l-4.5 4.5M12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
   };
+  // Hinweise nach oben (Nico 13.11.2026): rot, dann gelb, dann Info, grün unten – innerhalb gleicher Ampel Reihenfolge wie geliefert.
+  var RANG = { rot: 0, gelb: 1, info: 2, gruen: 3 };
+  function sortiert(liste) {
+    return (liste || []).map(function (z, i) { return [z, i]; })
+      .sort(function (a, b) { return ((RANG[a[0].ampel] !== undefined ? RANG[a[0].ampel] : 2) - (RANG[b[0].ampel] !== undefined ? RANG[b[0].ampel] : 2)) || (a[1] - b[1]); })
+      .map(function (x) { return x[0]; });
+  }
   function zeile(z) {
     return '<div class="bx-et-amp bx-et-' + esc(z.ampel) + '"><span class="bx-et-ico">' + (ICO[z.ampel] || ICO.info) + '</span><div><div class="bx-et-amp-t">' + esc(z.titel) + '</div><div class="bx-et-amp-x">' + esc(z.text) + '</div></div></div>';
   }
@@ -94,7 +101,7 @@
         + (s.art === 'beutel' && s.soll.vorlage ? '<span><i class="l-zone"></i>' + esc(t.leg_zone) + '</span>' : '') + '</div>'
         + '<div class="bx-et-flaechen"></div>'
         + '<div class="muted bx-et-datei">' + esc(t.version) + ' ' + akt.version + ' · <a href="' + esc(akt.url) + '" target="_blank" rel="noopener">' + esc(akt.datei_orig) + '</a></div>'
-        + '</div><div class="bx-et-rechts"><div class="bx-et-tkopf"><h3>' + esc(t.technik) + '</h3><button type="button" class="btn btn-ghost btn-sm" data-et-neu>' + esc(t.neu_pruefen) + '</button></div><div class="bx-et-technik">' + akt.technik.map(zeile).join('') + '</div></div></div>';
+        + '</div><div class="bx-et-rechts"><div class="bx-et-tkopf"><h3>' + esc(t.technik) + '</h3><button type="button" class="btn btn-ghost btn-sm" data-et-neu>' + esc(t.neu_pruefen) + '</button></div><div class="bx-et-technik">' + sortiert(akt.technik).map(zeile).join('') + '</div></div></div>';
       // KI
       h += '<section class="bx-et-ki"><h3>' + esc(t.ki) + '</h3><div class="bx-et-kihinweis">' + esc(t.ki_hinweis) + '</div><div class="bx-et-kiinhalt">' + kiHtml(akt.ki) + '</div>'
         + '<div class="bx-et-verantw">' + esc(t.verantwortlich) + '</div>'
@@ -138,7 +145,7 @@
     if (!ki || !ki.status || ki.status === 'laeuft' || KI_LAEUFT) return '<div class="bx-et-laeuft"><span class="bx-et-spin"></span>' + esc(t.ki_laeuft) + '</div>';
     if (ki.status === 'nicht_moeglich') return '<div class="bx-et-amp bx-et-info"><span class="bx-et-ico">' + ICO.info + '</span><div><div class="bx-et-amp-x">' + esc(t.ki_nicht) + '</div></div></div><button type="button" class="btn btn-ghost btn-sm" data-et-kineu>' + esc(t.ki_nochmal) + '</button>';
     return '<div class="bx-et-kizus">' + esc(ki.zusammenfassung) + (ki.test ? ' <span class="muted">(' + esc(t.ki_test) + ')</span>' : '') + '</div>'
-      + (ki.punkte || []).map(function (p) { return zeile({ ampel: p.ampel, titel: p.titel, text: p.text }); }).join('');
+      + sortiert(ki.punkte).map(function (p) { return zeile({ ampel: p.ampel, titel: p.titel, text: p.text }); }).join('');
   }
   function binden() {
     var d = D, t = S.txt, akt = S.aktuell;
@@ -194,14 +201,14 @@
       SEITE = seite;
       zeichnen(box, seite);
       flaechenKnoepfe(seite);
-      if (!akt.client_da) return messen(seite).then(function (c) { return api('technik', S.aid, { pid: akt.id, client: c }); }).then(function (s) { if (s && s.ok) { S.aktuell.technik = s.aktuell.technik; S.aktuell.client_da = true; D.querySelector('.bx-et-technik').innerHTML = s.aktuell.technik.map(zeile).join(''); } });
+      if (!akt.client_da) return messen(seite).then(function (c) { return api('technik', S.aid, { pid: akt.id, client: c }); }).then(function (s) { if (s && s.ok) { S.aktuell.technik = s.aktuell.technik; S.aktuell.client_da = true; D.querySelector('.bx-et-technik').innerHTML = sortiert(s.aktuell.technik).map(zeile).join(''); } });
     }).then(function () {
       var ki = S.aktuell.ki || {};
       if (!ki.status && !KI_LAEUFT) kiStarten(false);
       else if (ki.status === 'laeuft' && !POLL) pollen();
     }).catch(function () {
       box.innerHTML = '<div class="muted" style="padding:12px 0">' + esc(t.vorschau_fehler) + '</div><a class="btn btn-ghost btn-sm" href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(t.oeffnen) + '</a>';
-      if (!S.aktuell.client_da) api('technik', S.aid, { pid: akt.id, client: { pdfjs: false } }).then(function (s) { if (s && s.ok) D.querySelector('.bx-et-technik').innerHTML = s.aktuell.technik.map(zeile).join(''); });
+      if (!S.aktuell.client_da) api('technik', S.aid, { pid: akt.id, client: { pdfjs: false } }).then(function (s) { if (s && s.ok) D.querySelector('.bx-et-technik').innerHTML = sortiert(s.aktuell.technik).map(zeile).join(''); });
       if (!(S.aktuell.ki || {}).status) kiAnzeigen({ status: 'nicht_moeglich' });
     });
   }
