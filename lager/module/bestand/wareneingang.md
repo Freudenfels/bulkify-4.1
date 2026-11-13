@@ -144,3 +144,9 @@ Felder aus der Bestellposition, die nicht änderbar sind (Klasse `we-fest`: Arti
 **Geschlossen ohne Einbuchen (Sofortfix 13.11.2026):** „Ankommende Sendung wählen“ zeigt zusätzlich Bestellungen mit Positionen, die ohne Ware geschlossen wurden (`erp_ohne_einbuchen_lieferungen()`); `erp_lieferung_positionen()` liefert diese Positionen (`zu` = 1) und belegt Charge/MHD aus „Chargen & Dokumente“ vor.
 
 **Pflichtfelder (Sofortfix 13.11.2026):** Grund (ohne Bestellung), Notiz (Muster/Sonstiges) und Lieferant (Alte Bestellung) mit `data-pflicht` – Prüfung vor dem Absenden.
+
+**Fable-6 T2.7 (13.11.2026):** Lehnt der Server einzelne Zeilen ab, gehen die Eingaben nicht mehr verloren.
+- Der Kopf (Ziel, Kunde, Lieferant, Grund, Notiz, Kiste, Tracking, Lieferung) und alle **nicht gebuchten** Zeilen werden in `$_SESSION['lg_we_zurueck']` gemerkt und nach der Weiterleitung wiederhergestellt.
+- Zu jeder Zeile gehören: Artikel, Warenart, Menge, Einheit, Charge, Art.-Nr., MHD, Blinker, Pakete und Paketnummern, Menge je Karton, Freigabe, Form, Kapselgröße, Rezeptur, Bestellposition.
+- Gebuchte Zeilen erscheinen nicht noch einmal.
+- Fotos kann der Browser nicht wiederherstellen; dann steht der Hinweis „Fotos bitte neu aufnehmen“.

@@ -151,6 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     $weGrundNotiz = trim((string)($_POST['we_grund_notiz'] ?? ''));
     if ($ziel === 'l2') $weGrund = 'kundenware';
     $bpMap = [];        // charge_id => bestellung_position_id
+    $iOk = [];          // Fable-6 T2.7: Zeilen, die gebucht wurden (die anderen kommen mit allen Eingaben zurück)
     $ohneBest = [];     // charge_ids ohne Bestellung
     $lgU = function_exists('lg_benutzer') ? (string)((lg_benutzer()['name'] ?? '')) : '';
     foreach ($names as $i => $nm) {
@@ -223,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             $cc = erp_charge((int)$cid);
             lg_bewegung_log((int)$cid, 'ein', $menge, $cc['einheit'] ?? null, (string)($cc['item_name'] ?? ''), $notiz . ' (' . (int)$rr['angelegt'] . ' Rolle(n))');
             if (!empty($rr['fehler'])) $fehler[] = 'Zeile ' . ($i + 1) . ' (' . h($name) . '): ' . implode(' · ', $rr['fehler']);
-            $gebucht[] = (int)$cid;
+            $gebucht[] = (int)$cid; $iOk[$i] = true;
             if ($bpRow) $bpMap[(int)$cid] = (int)$bpRow['id']; else $ohneBest[] = (int)$cid;
             continue;
         }
@@ -348,7 +349,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
             $lr = leiste_per_code($blinker);
             if ($lr) leiste_finden((int)$lr['id'], 'gruen', 3, false);
         }
-        $gebucht[] = (int)$cid;
+        $gebucht[] = (int)$cid; $iOk[$i] = true;
         if ($bpRow) $bpMap[(int)$cid] = (int)$bpRow['id']; else $ohneBest[] = (int)$cid;
         if ($neuAngelegt && function_exists('erp_hinweis_neuer_artikel'))
             erp_hinweis_neuer_artikel((int)$item_id, $name, (string)($def['label'] ?? $warenart), (int)$cid, rtrim(rtrim(number_format($menge, 3, ',', '.'), '0'), ',') . ' ' . $einheit);
@@ -387,6 +388,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'buche
     if ($gebucht) flash(count($gebucht) . ' Position(en) eingebucht' . ($kisteId > 0 ? ' (in Kiste gelegt).' : '.') . ($fehler ? ' ' . count($fehler) . ' Hinweis(e).' : ''));
     if ($fehler)  flash(implode(' · ', $fehler), $gebucht ? 'warn' : 'warn');
     if (!$gebucht && !$fehler) flash('Nichts zu buchen – keine Position erfasst.', 'warn');
+    // Fable-6 T2.7 (13.11.2026): Lehnt der Server Zeilen ab, kommen Kopf und alle NICHT gebuchten Zeilen mit allen Eingaben zurück
+    // (vorher war nach jedem Zeilenfehler alles weg). Fotos lassen sich im Browser nicht wiederherstellen – Hinweis im Formular.
+    if ($fehler) {
+        $zk = ['ziel' => $ziel, 'kunde_id' => $kunde_id, 'lieferant_id' => (string)($_POST['lieferant_id'] ?? ''), 'lieferant_name' => (string)($_POST['lieferant_name'] ?? ''),
+               'auftrag_nr' => $auftragNr, 'kiste_id' => $kisteId ?: '', 'fach' => $fachG, 'we_grund' => (string)($_POST['we_grund'] ?? ''), 'we_grund_notiz' => $weGrundNotiz,
+               'tracking' => (string)($_POST['tracking'] ?? ''), 'we_bestellung_id' => (string)($_POST['we_bestellung_id'] ?? ''), 'fotos' => !empty($_FILES)];
+        $zz = [];
+        foreach ($names as $i => $nm) {
+            if (!empty($iOk[$i])) continue;
+            $nm = trim((string)$nm); $iid = (int)($_POST['p_item'][$i] ?? 0);
+            if ($nm === '' && $iid <= 0) continue;
+            $key = (string)($_POST['p_key'][$i] ?? (string)$i);
+            $bpZ = (int)($_POST['p_bp'][$i] ?? 0);
+            $zz[] = ['name' => $nm, 'item_id' => $iid, 'warenart' => (string)($_POST['p_warenart'][$i] ?? ''), 'menge' => (string)($_POST['p_menge'][$i] ?? ''),
+                     'einheit' => (string)($_POST['p_einheit'][$i] ?? ''), 'charge_nr' => (string)($_POST['p_charge'][$i] ?? ''), 'artikelnummer' => (string)($_POST['p_artnr'][$i] ?? ''),
+                     'mhd' => (string)($_POST['p_mhd'][$i] ?? ''), 'blinker' => (string)($_POST['p_blinker'][$i] ?? ''), 'pakete' => (string)($_POST['p_pakete'][$i] ?? '1'),
+                     'paketnummern' => (string)($_POST['p_paketnummern'][$i] ?? ''), 'frei' => (string)($_POST['p_frei'][$i] ?? '1'), 'form' => (string)($_POST['p_form'][$i] ?? ''),
+                     'kapselgroesse' => (string)($_POST['p_kapselgroesse'][$i] ?? ''), 'rezeptur' => (string)($_POST['p_rezeptur'][$i] ?? ''), 'rezeptur_name' => (string)($_POST['p_rezeptur_name'][$i] ?? ''),
+                     'auftrag_id' => (string)($_POST['p_auftrag_id'][$i] ?? ''), 'neu' => (string)($_POST['p_neu'][$i] ?? '0'),
+                     'geb' => array_values((array)($_POST['p_geb'][$key] ?? [])),
+                     'bp_id' => $bpZ, 'bp_nummer' => $bpZ > 0 ? (string) scalar("SELECT b.nummer FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id WHERE bp.id=?", [$bpZ]) : ''];
+        }
+        if ($zz) $_SESSION['lg_we_zurueck'] = ['kopf' => $zk, 'zeilen' => $zz];
+    }
     weiter('?p=we' . ($gebucht ? '&gebucht=' . implode(',', $gebucht) : ''));
 }
 
@@ -395,6 +420,7 @@ $kunden  = erp_fulfillment_kunden();
 $liefers = erp_lieferanten();
 $kisten  = function_exists('kiste_alle') ? kiste_alle() : [];
 $items   = erp_items_eingang();
+$weZurueck = $_SESSION['lg_we_zurueck'] ?? null; unset($_SESSION['lg_we_zurueck']);   // Fable-6 T2.7
 $rezepturen = function_exists('erp_rezeptur_liste') ? erp_rezeptur_liste() : [];   // für Fertigware/Bulk: Rezeptur-Picker
 $ki      = lg_ki_bereit();
 $erwartet = erp_erwartete_lieferungen();   // für Kachel "aus Liste wählen"
@@ -1268,6 +1294,31 @@ if ($gebucht):
   document.getElementById('weAdd').addEventListener('click',function(){addRow();});
   rows.addEventListener('input',function(e){ var tr=e.target.closest('.we-pos'); if(tr)pflicht(tr); });
   addRow(); // Startzeile
+  // Fable-6 T2.7: abgelehnte Zeilen mit allen Eingaben zurück (Kopf + Positionen); Fotos müssen neu aufgenommen werden.
+  (function(){
+    var Z = <?= json_encode($weZurueck, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+    if (!Z || !Z.zeilen || !Z.zeilen.length) return;
+    var setze = function (n, v) { var el = document.querySelector('[name="' + n + '"]'); if (el && v !== null && v !== undefined && v !== '') { el.value = v; el.dispatchEvent(new Event('change', {bubbles:true})); } };
+    var k = Z.kopf || {};
+    if (k.ziel) { var r = document.querySelector('input[name="ziel"][value="' + k.ziel + '"]'); if (r) { r.checked = true; r.dispatchEvent(new Event('change', {bubbles:true})); } }
+    ['kunde_id','lieferant_name','lieferant_id','auftrag_nr','kiste_id','fach','we_grund','we_grund_notiz','tracking','we_bestellung_id'].forEach(function (n) { setze(n, k[n]); });
+    rows.innerHTML = '';
+    Z.zeilen.forEach(function (z) {
+      var card = addRow({item_id: z.item_id, item_name: z.name, warenart: z.warenart, menge: String(z.menge).replace(/\./g, '').replace(',', '.'), einheit: z.einheit,
+                         charge_nr: z.charge_nr, mhd: z.mhd, artikelnummer: z.artikelnummer, bp_id: z.bp_id, bp_nummer: z.bp_nummer});
+      if (!card) return;
+      var q = function (sel) { return card.querySelector(sel); };
+      var setF = function (sel, v) { var el = q(sel); if (el && v !== null && v !== undefined && v !== '') { el.value = v; el.dispatchEvent(new Event('input', {bubbles:true})); el.dispatchEvent(new Event('change', {bubbles:true})); } };
+      setF('[name="p_menge[]"]', z.menge); setF('.we-form', z.form); setF('.we-kgr', z.kapselgroesse); setF('.we-rez', z.rezeptur_name);
+      setF('[name="p_rezeptur[]"]', z.rezeptur); setF('.we-blinker', z.blinker); setF('.we-pakete', z.pakete);
+      var it = q('[name="p_item[]"]'); if (it && z.item_id) it.value = z.item_id;
+      var nu = q('[name="p_neu[]"]'); if (nu && z.neu === '1') nu.value = '1';
+      if (z.frei === '0') { var fr = q('.we-frei'); if (fr) { fr.checked = false; fr.dispatchEvent(new Event('change', {bubbles:true})); } }
+      if (z.paketnummern) { var nr = z.paketnummern.split(/[\r\n]+/); card.querySelectorAll('.we-pakscan input').forEach(function (inp, ix) { if (nr[ix]) { inp.value = nr[ix]; inp.dispatchEvent(new Event('input', {bubbles:true})); } }); }
+      if (z.geb && z.geb.length) card.querySelectorAll('.we-geb-liste input').forEach(function (inp, ix) { if (z.geb[ix] !== undefined && z.geb[ix] !== '') { inp.value = z.geb[ix]; inp.dispatchEvent(new Event('input', {bubbles:true})); } });
+    });
+    if (k.fotos) { var h = document.createElement('div'); h.className = 'bx-panel badge-warn'; h.style.cssText = 'padding:10px 14px;margin-bottom:10px'; h.textContent = 'Eingaben wiederhergestellt. Fotos bitte neu aufnehmen.'; rows.parentNode.insertBefore(h, rows); }
+  })();
 
   // --- Scan: Dateien/Kamera sammeln + senden ---
   var dateien=[]; // {blob, name, isPdf}
