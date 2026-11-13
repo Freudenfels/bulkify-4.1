@@ -20,8 +20,9 @@ function pa_kapselprobe(int $uc_id, float $gramm, int $anzahl, string $von): arr
     return ['ok' => true, 'msg' => 'Probe gespeichert: ' . pa_mz($mg) . ' mg je Kapsel. Ø aus ' . $n . ' Probe(n): ' . pa_mz($avg) . ' mg.' . ($n < 3 ? ' Bitte mehrmals wiegen (mind. 3 Proben).' : '')];
 }
 // 13.11.2026 (Fable-3 T1.1): Tara kommt nur als ID aus dem Formular, Wert und Name aus lg_tara (tara_aus_id()).
+// Fable-4 T1.6: $tara_id = -1 heißt „ohne Tara (0 kg)“ – ausdrücklich gewählt (z. B. kein passender Eintrag), Vermerk im Chargenprotokoll.
 function pa_sackgewicht(int $uc_id, float $brutto_kg, int $tara_id, string $von): array {
-    $tara = tara_aus_id($tara_id);
+    $tara = $tara_id === -1 ? ['id' => 0, 'name' => 'ohne Tara (0 kg), kein Tara-Eintrag gewählt', 'kg' => 0.0] : tara_aus_id($tara_id);
     if (!$tara) return ['ok' => false, 'msg' => 'Bitte den Gebindetyp (Tara) wählen.'];
     $tara_kg = (float)$tara['kg']; $tara_name = (string)$tara['name'];
     $uc = pa_unter_charge($uc_id);

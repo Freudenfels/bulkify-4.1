@@ -28,3 +28,5 @@ Ist das Etikettieren gesperrt, steht oben ein Hinweis. Teilmengen werden dann bi
 **Voll produziert / Linie leer (13.11.2026, Werk-App Teil 3):** Start/Chargenwechsel/Wiederanlauf: Haken „Linie leer, keine Reste der vorigen Charge“ statt Foto; Stempelfoto bleibt.
 
 **Charge-Abweichung nur bei echter Abweichung (13.11.2026):** `pa_charge_abweichend($charge, $vorgabe)` (core/pa_ablauf.php) ist die eine Regel: leer oder gleich der Vorgabe (Groß-/Kleinschreibung egal) = keine Abweichung. Nur dann gibt es das Ereignis „abweichung“ und die Aufgabe ans Büro (Start, Chargenwechsel, Nachtrag, KI-Karte); ein Grund ohne Abweichung wird ignoriert. Das Feld „Grund“ erscheint erst, wenn jemand die Charge ändert (`pa_grund_js()`, Element mit Klasse `pa-grund` und `data-vorgabe`).
+
+**Sack wiegen ohne Tara-Eintrag (Fable-4 T1.6, 13.11.2026):** Die Tara-Auswahl hat immer die Option „ohne Tara (0 kg)“ (Wert `ohne`, Text `wa_tara_ohne` DE/EN/UK); fehlt die Tara-Liste, ist das die einzige Option – kein Stopp mehr.

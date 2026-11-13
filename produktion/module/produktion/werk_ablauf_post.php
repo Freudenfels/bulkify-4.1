@@ -91,7 +91,8 @@ if ($aktion === 'wa_kapselprobe' && function_exists('pa_kapselprobe')) {
     $flash($r['msg'], $r['ok']); weiter($zur);
 }
 if ($aktion === 'wa_sack' && function_exists('pa_sackgewicht')) {
-    $r = pa_sackgewicht((int)$uc['id'], $dez('brutto'), (int)($_POST['tara_id'] ?? 0), $von);   // 13.11.2026: Tara nur als ID
+    $taraW = (string)($_POST['tara_id'] ?? '');   // 13.11.2026: Tara nur als ID; „ohne“ = ohne Tara (0 kg) mit Vermerk (Fable-4 T1.6)
+    $r = pa_sackgewicht((int)$uc['id'], $dez('brutto'), $taraW === 'ohne' ? -1 : (int)$taraW, $von);
     $flash($r['msg'], $r['ok']); weiter($zur);
 }
 if ($aktion === 'wa_abschluss') {
