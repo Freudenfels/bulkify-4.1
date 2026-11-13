@@ -426,14 +426,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     q("UPDATE auftrag SET bezahlt_am=NULL, bezahlt_betrag=NULL WHERE id=?", [$id]);
     header('Location: ?p=auftrag&id=' . $id . '&bezahltreset=1'); exit;
 }
-// Admin-Override: Rohstoff/Bulk als angekommen markieren (für Alt-Aufträge / Zukauf ohne verknüpfte
-// Charge). Setzt das Timeline-Signal; zusätzlich – falls vorhanden – die verknüpfte Bestellung.
+// Admin-Override: Rohstoff/Bulk als angekommen markieren (Alt-Aufträge / Zukauf ohne verknüpfte Charge).
+// Fable-6 P7 (13.11.2026): nur Admin, nur mit Grund, mit Verlauf – und es setzt NUR das Signal am Auftrag. Bestellungen werden hier nie
+// mehr geschlossen (vorher: angekommen_am an jeder Bestellung des Auftrags, ohne Ware/Grund/Verlauf). Eine Bestellung ohne Ware schließt
+// man an der Bestellung über „Altlasten: ohne Einbuchen schließen“ (Admin, Grund, Verlauf).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'rohstoff_angekommen') {
-    if (!has_role('admin') && !has_role('production') && !has_role('einkauf')) { header('Location: ?p=auftrag&id=' . $id); exit; }
-    // Reiner Helfer: nur SETZEN (kein Rückgängig über diese Eingabe) – einmal angekommen bleibt angekommen.
+    $rohGrund = trim((string)($_POST['grund'] ?? ''));
+    if (!has_role('admin') || $rohGrund === '') { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('„Material angekommen“ von Hand: nur Admin und nur mit Grund. Bestellungen ohne Ware an der Bestellung schließen (Altlasten).')); exit; }
     q("UPDATE auftrag SET rohstoff_angekommen_am=? WHERE id=? AND rohstoff_angekommen_am IS NULL", [gmdate('Y-m-d H:i:s'), $id]);
-    q("UPDATE bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id
-       SET b.angekommen_am=COALESCE(b.angekommen_am, CURDATE()) WHERE bp.auftrag_id=?", [$id]);
+    log_aktivitaet('auftrag', $id, 'team', 'Material von Hand als angekommen markiert (nur Signal am Auftrag, Bestellungen unverändert), Grund: ' . $rohGrund, 'status');
     header('Location: ?p=auftrag&id=' . $id . '&rohok=1'); exit;
 }
 // Alte Rechnung (PDF) am Auftrag hochladen -> als Dokument (typ='rechnung', kunde_sichtbar) -> Portal-Download.

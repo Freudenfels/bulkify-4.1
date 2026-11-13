@@ -408,3 +408,5 @@ Beschaffungsweg „Direkt bestellt“: keine Unterlagen-Sperre mehr; fehlende Un
 
 ## Direkt zur Rechnung (13.11.2026)
 Im Seitenkopf steht neben „PDF / Drucken“ der Knopf „Rechnung RE-…“ (öffnet die Rechnung in der Buchhaltung). Ohne Rechnung: „Rechnung erstellen“ (nicht bei storniertem Auftrag). Gibt es mehrere Rechnungen, zählt die neueste nicht stornierte.
+
+**Fable-6 P7 (13.11.2026):** `aktion=rohstoff_angekommen` geht nur noch als Admin und nur mit Grund. Gesetzt wird nur `auftrag.rohstoff_angekommen_am`, dazu ein Verlaufseintrag. Bestellungen bleiben unverändert; vorher setzte die Aktion `angekommen_am` an allen Bestellungen des Auftrags. Eine Bestellung ohne Ware schließt man an der Bestellung über „Altlasten: ohne Einbuchen schließen“.
