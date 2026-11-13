@@ -61,7 +61,9 @@ $kap = erp_wa_kapsel_info($id);
         <div class="wa-pflicht"><?= h(sprintf($T['wa_stamp_check'], (string)$v['charge_nr'], $fdate($v['mhd']))) ?> – <b><?= h($T['wa_photo_stamp']) ?></b> <input type="file" name="foto_stempel" accept="image/*" capture="environment" required></div>
         <?php if (!empty($v['neu'])): ?>
         <details style="margin:10px 0"><summary class="muted" style="cursor:pointer"><?= h($T['wa_deviate']) ?></summary>
-          <div class="wa-zeile"><input type="text" name="charge_nr" placeholder="<?= h((string)$v['charge_nr']) ?>"><input type="text" name="grund" placeholder="<?= h($T['wa_reason']) ?>" style="flex:1"></div></details>
+          <div class="wa-zeile"><input type="text" name="charge_nr" placeholder="<?= h((string)$v['charge_nr']) ?>"></div>
+          <div class="wa-zeile pa-grund" data-vorgabe="<?= h((string)$v['charge_nr']) ?>"><input type="text" name="grund" placeholder="<?= h($T['wa_reason']) ?>" style="flex:1"></div></details>
+        <?= pa_grund_js() /* 13.11.2026: Grund erst, wenn die Charge geändert wurde */ ?>
         <?php endif; ?>
         <?php if (isset($_GET['bulk']) && erp_wa_aeltere_bulk((int)$s['item_id'], (int)$s['charge_id'], (string)$s['mhd']) !== '' && $istAdminW): ?>
           <label class="wa-zeile"><input type="checkbox" name="aelter_ok" value="1"> <?= h($T['wa_admin_younger']) ?></label>

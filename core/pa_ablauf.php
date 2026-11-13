@@ -282,8 +282,12 @@ function pa_starten(int $pa_id, array $d, string $von): array {
         return ['ok' => true, 'unter_charge_id' => (int)$akt['id'], 'charge_nr' => (string)$akt['charge_nr'], 'mhd' => (string)$akt['mhd'], 'neu' => false];
     }
     $charge = trim((string)($d['charge_nr'] ?? '')) ?: $v['charge_nr'];
-    $grund = trim((string)($d['abweichung_grund'] ?? ''));
-    if ($charge !== $v['charge_nr'] && $grund === '') return ['ok' => false, 'msg' => 'Andere Charge als vorgegeben (' . $v['charge_nr'] . ') nur mit Grund.'];
+    // 13.11.2026: Abweichung nur, wenn die Charge wirklich anders ist als die Vorgabe (Groß-/Kleinschreibung egal).
+    // Ein Grund ohne Abweichung wird ignoriert – kein Ereignis „abweichung“, keine Aufgabe ans Büro (vorher „2775.B statt 2775.B“).
+    if (!pa_charge_abweichend($charge, (string)$v['charge_nr'])) $charge = (string)$v['charge_nr'];
+    $abw = $charge !== $v['charge_nr'];
+    $grund = $abw ? trim((string)($d['abweichung_grund'] ?? '')) : '';
+    if ($abw && $grund === '') return ['ok' => false, 'msg' => 'Andere Charge als vorgegeben (' . $v['charge_nr'] . ') nur mit Grund.'];
     // 13.11.2026 (Fable-3 T1.4): erst prüfen, dann schließen. Ein Nachtrag schließt die laufende Unter-Charge nie (eigene Unter-Charge
     // mit Status „nachtrag“, pa_nachtrag_buchen() schließt oder verwirft sie).
     if ($akt && !$nachtrag) pa_unter_charge_schliessen((int)$akt['id'], $von, ((int)$akt['bulk_charge_id'] === $bulk && (int)$akt['prod_charge_id'] === $eimer) ? 'neuer Produktionstag' : 'Chargenwechsel');
@@ -297,10 +301,24 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     if (pa_spalte_da('pa_unter_charge', 'tag')) q("UPDATE pa_unter_charge SET tag=? WHERE id=?", [$tag, $uc]);   // Produktionstag (13.11.2026)
     $bulkTxt = $bulk ? 'Bulk-Charge ' . (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#',id)) FROM charge WHERE id=?", [$bulk]) : ($eimer ? 'Eimer ' . (string) scalar("SELECT CONCAT(nummer, COALESCE(sub_kennung,'')) FROM prod_charge WHERE id=?", [$eimer]) : 'ohne Bulk-Scan');
     pa_ereignis($pa_id, $uc, $akt ? 'chargenwechsel' : 'start', ($akt ? 'Chargenwechsel: ' : 'Start: ') . 'Unter-Charge ' . $charge . ' (' . $bulkTxt . '), MHD ' . date('d.m.Y', strtotime($mhd)) . ($nachtrag ? '. Nachgetragen im Dashboard (ohne Fotos).' : '. ' . $leerTxt . '. Stempel eingestellt.'), (string)($d['linie'] ?? ''), '', (string)($d['foto_stempel'] ?? ''), $von);
-    if ($grund !== '') { pa_ereignis($pa_id, $uc, 'abweichung', 'Charge abweichend von der Vorgabe ' . $v['charge_nr'] . ': ' . $grund, '', '', '', $von);
+    if ($abw) { pa_ereignis($pa_id, $uc, 'abweichung', 'Charge abweichend von der Vorgabe ' . $v['charge_nr'] . ': ' . $grund, '', '', '', $von);
         if (!$nachtrag) pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $charge . ' statt ' . $v['charge_nr'] . ')', 'Grund: ' . $grund . ' · ' . $von, $von); }
     if (!$nachtrag && (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
     return ['ok' => true, 'unter_charge_id' => $uc, 'charge_nr' => $charge, 'mhd' => $mhd, 'neu' => true, 'vorgabe' => $v['charge_nr'], 'grund' => $grund];
+}
+
+// Weicht die Charge wirklich von der Vorgabe ab? Leer = Vorgabe; Leerzeichen und Groß-/Kleinschreibung zählen nicht (13.11.2026).
+function pa_charge_abweichend(string $charge, string $vorgabe): bool {
+    $charge = trim($charge);
+    return $charge !== '' && strcasecmp($charge, trim($vorgabe)) !== 0;
+}
+// Oberfläche: Feld „Grund“ erst zeigen (und Pflicht machen), wenn die Charge geändert wurde (13.11.2026). Gehört INS Formular
+// hinter das Feld charge_nr; das Grund-Feld steckt in einem Element mit Klasse „pa-grund“ und data-vorgabe = Vorgabe-Charge.
+function pa_grund_js(): string {
+    return '<script>(function(f){if(!f)return;var c=f.querySelector(\'[name=charge_nr]\'),g=f.querySelector(\'.pa-grund\');if(!c||!g)return;'
+         . 'var i=g.querySelector(\'[name=grund]\'),v=(g.getAttribute(\'data-vorgabe\')||\'\').trim().toUpperCase();'
+         . 'function t(){var w=c.value.trim(),a=w!==\'\'&&w.toUpperCase()!==v;g.style.display=a?\'\':\'none\';if(i){i.required=a;if(!a)i.value=\'\';}}'
+         . 'c.addEventListener(\'input\',t);t();})(document.currentScript&&document.currentScript.closest(\'form\'));</script>';
 }
 
 // Teilmenge nachtragen (Dashboard), EIN Weg für jedes Datum (13.11.2026, Fable-3 T1.4).
@@ -334,7 +352,8 @@ function pa_nachtrag_buchen(int $pa_id, float $menge, array $d, array $o, string
         $laeuft = (int) scalar("SELECT COUNT(*) FROM pa_unter_charge WHERE pa_id=? AND status='laeuft'", [$pa_id]);
         if ($tag === pa_tag_heute() && $laeuft === 0) q("UPDATE pa_unter_charge SET status='laeuft' WHERE id=?", [(int)$uc['id']]);
         else pa_unter_charge_schliessen((int)$uc['id'], $von, 'Nachtrag ' . date('d.m.Y', strtotime($tag)));
-        if (($neu['grund'] ?? '') !== '') pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $neu['charge_nr'] . ' statt ' . $neu['vorgabe'] . ')', 'Grund: ' . $neu['grund'] . ' · ' . $von, $von);
+        if (($neu['grund'] ?? '') !== '' && pa_charge_abweichend((string)$neu['charge_nr'], (string)($neu['vorgabe'] ?? '')))   // nur echte Abweichung (13.11.2026)
+            pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $neu['charge_nr'] . ' statt ' . $neu['vorgabe'] . ')', 'Grund: ' . $neu['grund'] . ' · ' . $von, $von);
         if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
     } elseif (!empty($r['ok']) && (string)$uc['status'] === 'fertig' && function_exists('pa_protokoll_ablegen')) {
         pa_protokoll_ablegen((int)$uc['id']);   // Chargenprotokoll der schon abgeschlossenen Unter-Charge neu ablegen

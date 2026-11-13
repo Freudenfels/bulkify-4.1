@@ -9,3 +9,5 @@ Produktion per KI melden (Nico 13.11.2026, Werk-App Teil 4). Dashboard-Datei.
 - `pki_meldung($text, $pa_vorgabe, $pa_wahl)`: alles zusammen; bei genau einem PA mit Karte, bei mehreren Auswahl.
 
 Gebucht wird nie hier: Die Karte schickt das Formular „Teilmenge nachtragen“ der PA-Seite ab (aktion=nachtragen → `pa_nachtrag_buchen()`), mit `ki_text`/`ki_von` für den Vermerk „per KI gemeldet von …, bestätigt von …“ samt Originaltext.
+
+**Charge-Abweichung nur bei echter Abweichung (13.11.2026):** `pa_charge_abweichend($charge, $vorgabe)` (core/pa_ablauf.php) ist die eine Regel: leer oder gleich der Vorgabe (Groß-/Kleinschreibung egal) = keine Abweichung. Nur dann gibt es das Ereignis „abweichung“ und die Aufgabe ans Büro (Start, Chargenwechsel, Nachtrag, KI-Karte); ein Grund ohne Abweichung wird ignoriert. Das Feld „Grund“ erscheint erst, wenn jemand die Charge ändert (`pa_grund_js()`, Element mit Klasse `pa-grund` und `data-vorgabe`).

@@ -75,9 +75,10 @@ $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl
     </div>
     <div class="bx-row" style="gap:12px;flex-wrap:wrap">
       <div class="bx-field" style="width:170px"><label>Charge (Vorschlag)</label><input type="text" name="charge_nr" value="<?= h($vorgabeA['charge_nr']) ?>" data-vorgabe="<?= h($vorgabeA['charge_nr']) ?>"><input type="hidden" name="charge_vorschlag" value="<?= h($vorgabeA['charge_nr']) ?>"><div class="muted" style="font-size:12px">Unverändert lassen: das System vergibt je Bulk und Produktionstag den richtigen Buchstaben.</div></div>
-      <div class="bx-field" style="flex:1;min-width:220px"><label>Grund, falls die Charge abweicht</label><input type="text" name="grund" placeholder="nur bei Abweichung"></div>
+      <div class="bx-field pa-grund" data-vorgabe="<?= h($vorgabeA['charge_nr']) ?>" style="flex:1;min-width:220px"><label>Grund für die andere Charge</label><input type="text" name="grund" placeholder="Pflicht, weil die Charge vom Vorschlag abweicht"></div>
       <div class="bx-field" style="width:170px"><label>MHD</label><input type="date" name="mhd" value="<?= h($vorgabeA['mhd']) ?>"></div>
     </div>
+    <?= pa_grund_js() ?>
     <div class="bx-row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
       <div class="bx-field" style="flex:1;min-width:220px"><label>Mitarbeiter</label><select name="mitarbeiter"><option value="">–</option><?php foreach ($mitarbeiterA as $m): ?><option><?= h((string)$m['name']) ?></option><?php endforeach; ?></select></div>
       <div class="bx-field" style="width:150px"><label>Rückstellmuster</label><input type="text" inputmode="numeric" name="rueckstell" value="0"></div>

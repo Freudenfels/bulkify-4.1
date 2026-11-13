@@ -115,7 +115,7 @@ function pki_karte(array $f, array $pa): array {
     $datum = ($f['datum'] ?? '') !== '' ? $f['datum'] : heute_ort();
     $v = pa_vorgabe($pid, $bulkId, 0, $datum);
     $charge = ($f['charge'] ?? '') !== '' ? $f['charge'] : (string)$v['charge_nr'];
-    $chargeAbw = strcasecmp($charge, (string)$v['charge_nr']) !== 0;
+    $chargeAbw = pa_charge_abweichend($charge, (string)$v['charge_nr']);   // eine Regel mit pa_starten (13.11.2026)
     if ($chargeAbw) $fragen[] = 'Charge ' . $charge . ' passt nicht zum Vorschlag ' . $v['charge_nr'] . ' – nur mit Grund.';
     // Etikett: fehlt/nicht freigegeben -> nur bis vor dem Etikettieren.
     $sperre = (string) (pa_fn('produktion_etikett_sperre', 'erp_etikett_sperre', $pid) ?? '');

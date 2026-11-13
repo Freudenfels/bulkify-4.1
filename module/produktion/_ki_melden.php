@@ -83,9 +83,10 @@ function pki_ui_render(int $pa_vorgabe): void {
         </div>
         <div class="bx-row" style="gap:12px;flex-wrap:wrap">
           <div class="bx-field" style="width:170px"><label>Charge</label><input type="text" name="charge_nr" value="<?= h($c['charge']) ?>"><input type="hidden" name="charge_vorschlag" value="<?= h($c['charge_vorschlag']) ?>"></div>
-          <div class="bx-field" style="flex:1;min-width:220px"><label>Grund, falls die Charge abweicht</label><input type="text" name="grund"<?= $c['charge_abw'] ? ' required style="border-color:var(--err)"' : '' ?> placeholder="<?= $c['charge_abw'] ? 'Pflicht: Charge weicht vom Vorschlag ab' : 'nur bei Abweichung' ?>"></div>
+          <div class="bx-field pa-grund" data-vorgabe="<?= h($c['charge_vorschlag']) ?>" style="flex:1;min-width:220px"><label>Grund für die andere Charge</label><input type="text" name="grund" style="border-color:var(--err)" placeholder="Pflicht: Charge weicht vom Vorschlag ab"></div>
           <div class="bx-field" style="width:170px"><label>MHD</label><input type="date" name="mhd" value="<?= h($c['mhd']) ?>"></div>
         </div>
+        <?= pa_grund_js() ?>
         <div class="bx-row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
           <div class="bx-field" style="flex:1;min-width:200px"><label>Mitarbeiter</label><input type="text" name="mitarbeiter" value="<?= h($c['mitarbeiter']) ?>"></div>
           <div class="bx-field" style="width:240px"><label>Umfang</label><select name="umfang">
