@@ -504,3 +504,10 @@ Nico: „Grundcharge ist 2775, die Buchstaben stehen nur für verschiedene Tage.
 
 ## Nachbesserung Fable-5 (13.11.2026)
 Kachel „Offene Rechnungen“ = `op_summe($kid, 'sichtbar')` (dieselbe Rechnung wie Dashboard und Buchhaltung, nur freigegebene Rechnungen); Überzahlung darunter als „Guthaben“. Die Offen-Spalte je Rechnung bleibt.
+
+## Etikett-Pop-up (13.11.2026)
+- Rotes Band oben auf jeder Portalseite (nur Rollen mit Bestellrecht): `etp_band_html(etp_band_liste())` – ein Auftrag „Für AB-… (Produkt) fehlt Ihr Etikett … Jetzt hochladen“ bzw. „Etikett hochgeladen – bitte noch freigeben“, mehrere „Für n Aufträge … Ansehen“ (Auswahl). Kein X.
+- Das alte automatische Freigabe-Pop-up beim Login und der rote Kasten „x Etiketten warten …“ sind entfernt.
+- Auftragsseite und Seite „Etiketten“: Knopf öffnet das Pop-up (`data-etp-oeffnen`) statt eigener Upload-/Freigabe-Formulare.
+- Endpunkt `v=etp` (AJAX, `etp_ajax`), Datei je Version `v=etikett_datei&aid=…&pid=…`, `&etikett=AID` öffnet das Pop-up.
+- Menü-Zähler „Etiketten“ und To-do kommen aus derselben Liste.

@@ -12,6 +12,7 @@ require_once __DIR__ . '/charge_norm.php';
 require_once __DIR__ . '/rohstoff_alternative.php';   // Alternative zu einer Rohstoff-Anfrage (Dashboard + Kundenportal)
 require_once __DIR__ . '/pib_pruefung.php';
 require_once __DIR__ . '/etikett_erinnerung.php';   // tägliche Etikett-Erinnerung an Kunden + Merker letzter Cron-Lauf (Paket 13.11.2026 Teil 4)   // PIB prüfen vor dem Kunden (Paket 13.11.2026 Teil 3)
+require_once __DIR__ . '/etikett_pruefung.php';      // Etikett hochladen, prüfen, freigeben in einem Pop-up (13.11.2026)
 require_once __DIR__ . '/pa_ablauf.php';   // Produktion ein Weg (11.11.2026): Unter-Chargen, Teilmengen, Kartons – gemeinsam mit der Werk-App
 require_once __DIR__ . '/wareneingang_bestellung.php';   // Wareneingang gegen Bestellung (Einkauf gerade ziehen, Teil 1-3) – eine Stelle für Dashboard + Lager-App   // toleranter Chargen-Vergleich (Handbuch 4.5/4.12) – eine Stelle für alle Programme
 

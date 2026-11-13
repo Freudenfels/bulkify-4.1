@@ -10,3 +10,5 @@
   - Pausierte Aufträge.
 - **Auftragsseite** (Pop-up Etikett): „Etikett-Erinnerung: 3 × gesendet, zuletzt 15.11.“ und der Knopf „Erinnerung pausieren / wieder aktivieren“ (`etikett_erinnerung_pause`). Spalten `auftrag.etikett_erinnert_anzahl`, `etikett_erinnert_am`, `etikett_erinnerung_pause`.
 - **Merker letzter Lauf:** `cron_lauf_merken()` schreibt `app_meta cron_letzter_lauf` (UTC) und eine Kurzinfo. `cron_lauf_hinweis()` zeigt sie auf „Bestellt“ (Admin) und in den Einstellungen; ist der Lauf nie oder vor mehr als 36 h gewesen, ist der Hinweis rot.
+
+Seit 13.11.2026 verlinkt die Mail mit `&etikett=AID` – das Etikett-Pop-up öffnet sich direkt.

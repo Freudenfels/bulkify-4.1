@@ -8,3 +8,6 @@ Block am Ende von `app.css`:
 - **Such-/Filterleisten am Handy:** Suchfeld und Auswahl volle Breite in eigener Zeile.
 - **Datei-Knopf:** `.bx-datei` (von `bx-datei.js`) und `::file-selector-button` im bulkify-Stil.
 - **Marken** `.bx-mark-ja` / `.bx-mark-nein` (Rohstoffliste), `.bx-zusatz` (Zusatzzeile unter Mengen), `.bx-sym` (SVG-Symbole).
+
+## Etikett-Pop-up (13.11.2026)
+Block `.bx-et-*` am Ende: Schrittanzeige, Ablagefläche, Vorschau mit Zoom, Legende, Ampel-Zeilen (SVG-Symbole, grün/gelb/rot/info), KI-Hinweis, Freigabe-Haken, lime Hauptknopf, Danke-Haken, Auswahl-Liste; am Handy einspaltig, Vorschau oben.

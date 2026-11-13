@@ -86,7 +86,7 @@ function etikett_erinnerung_mail(int $kunde_id, array $auftraege): string {
     foreach ($auftraege as $a) {
         $name = function_exists('produkt_kundenname') && $a['produkt_id'] ? produkt_kundenname((int)$a['produkt_id'], $kunde_id) : '';
         $name = $name !== '' ? $name : (string)$a['produkt'];
-        $zeilen[] = '- ' . $a['nummer'] . ($name !== '' ? ' (' . $name . ')' : '') . ': ' . (function_exists('mail_link_kundenportal') ? mail_link_kundenportal($kunde_id, 'bestellung&aid=' . (int)$a['id']) : '');
+        $zeilen[] = '- ' . $a['nummer'] . ($name !== '' ? ' (' . $name . ')' : '') . ': ' . (function_exists('mail_link_kundenportal') ? mail_link_kundenportal($kunde_id, 'bestellung&aid=' . (int)$a['id'] . '&etikett=' . (int)$a['id']) : '');
     }
     $nr = count($auftraege) === 1 ? (string)$auftraege[0]['nummer'] : '';
     if ($en) {

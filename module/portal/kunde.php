@@ -299,11 +299,25 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
     }
     header('Location: ?p=portal&token=' . $token . '&v=bestellung&aid=' . $aid); exit;
 }
-// Etikett-Design herunterladen (nur eigener Auftrag)
+// Etikett-Pop-up (13.11.2026, core/etikett_pruefung.php): Status, Hochladen, Druck-Check, KI-Etikettencheck, Freigabe – per fetch.
+if ($k && ($_GET['v'] ?? '') === 'etp') {
+    $etpNutzer = !empty($_SESSION['portal_subuser']) && empty($_GET['token']) ? (string) scalar("SELECT name FROM kunde_portal_user WHERE id=?", [(int)$_SESSION['portal_subuser']]) : '';
+    etp_ajax(['wer' => 'kunde', 'kunde_id' => (int)$k['id'], 'nutzer' => $etpNutzer !== '' ? $etpNutzer : (string)($k['ansprechpartner'] ?: $k['firma']),
+              'name_vor' => $etpNutzer !== '' ? $etpNutzer : (string)($k['ansprechpartner'] ?? ''),
+              'datei_url' => fn(int $dokId, int $pid) => '?p=portal&token=' . $token . '&v=etikett_datei&aid=' . (int)($_GET['aid'] ?? 0) . '&pid=' . $pid,
+              'nach_upload' => function (int $aid) { if (mail_bereit()) nach_antwort(fn() => mail_team_etikett_hochgeladen($aid)); },
+              'nach_freigabe' => function (int $aid) { if (mail_bereit()) nach_antwort(function () use ($aid) { mail_team_etikett_freigegeben($aid); mail_kunde_etikett_freigegeben($aid); }); }]);
+    exit;
+}
+// Etikett-Design herunterladen (nur eigener Auftrag). Mit &pid= eine bestimmte Version aus dem Verlauf (etikett_pruefung).
 if ($k && ($_GET['v'] ?? '') === 'etikett_datei') {
     $aid = (int)($_GET['aid'] ?? 0);
     $ok = $aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id'];
     $d = $ok ? etikett_datei_fuer_auftrag($aid) : null;   // Fable-4 T5.1: eigenes oder geerbtes Design – eine Stelle
+    if ($ok && ($etpV = (int)($_GET['pid'] ?? 0)) > 0 && ($etpZ = etp_pruefung($etpV)) && (int)$etpZ['auftrag_id'] === $aid) {
+        $pfV = BX_UPLOADS . '/' . basename((string)$etpZ['datei']);
+        $d = ['pfad' => $pfV, 'datei_da' => is_file($pfV), 'datei_orig' => (string)$etpZ['datei_orig']];
+    }
     $pf = $d ? (string)$d['pfad'] : '';
     if (!$d || empty($d['datei_da'])) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     // Richtiger MIME-Typ, damit PDF/Bild im Browser INLINE angezeigt werden (Vorschau), statt herunterzuladen.
@@ -2045,25 +2059,11 @@ $navKontingente = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AN
 // brauchen (Behälter gesetzt – auftrag_braucht_etikett). Sonst tauchen reine Bulkware-/Dienstleistungsaufträge
 // ohne Behälter (z. B. DB-…) auf, für die es gar kein Etikett gibt. Gleiche Bedingung wie die „Etikett fehlt"-
 // Liste in der Etiketten-Ansicht. Der Kunde muss diese noch hochladen -> roter Zähler.
-$etikettFehltKandidaten = all("SELECT a.id FROM auftrag a WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert')
-    AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='auftrag' AND d.objekt_id=a.id AND d.typ='etikett')", [(int)$k['id']]);
-$etikettFehltAnzahl = 0;
-foreach ($etikettFehltKandidaten as $ef) if (auftrag_braucht_etikett((int)$ef['id'])) $etikettFehltAnzahl++;
-// „Hochgeladen, aber noch NICHT freigegeben": Etiketten, die auf die verbindliche Freigabe des Kunden warten.
-// Diese sollen nicht in den Bestellungen „versteckt" bleiben -> prominente Erinnerung + Freigabe-Popup (auto).
-$etikettUnbestListe = [];
-foreach (all("SELECT a.id, a.nummer FROM auftrag a
-              WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert') AND COALESCE(a.etikett_freigegeben,0)=0
-              ORDER BY a.id DESC", [(int)$k['id']]) as $eu) {
-    if (!auftrag_braucht_etikett((int)$eu['id'])) continue;
-    // Fable-4 T5.1–T5.4: eine Stelle für „welche Datei“; geerbtes, schon freigegebenes Design gilt ohne Pop-up als freigegeben;
-    // fehlt die Datei auf dem Server, kein Pop-up (Aufgabe ans Team) – das Pop-up kommt nur mit auslieferbarer Datei.
-    if (etikett_geerbt_freigabe_pruefen((int)$eu['id'])) continue;
-    $dok = etikett_datei_fuer_auftrag((int)$eu['id']);   // es MUSS ein Design da sein (sonst nur „fehlt")
-    if (!$dok) continue;
-    if (empty($dok['datei_da'])) { etikett_datei_fehlt_melden((int)$eu['id']); continue; }
-    $etikettUnbestListe[] = ['id'=>(int)$eu['id'], 'nummer'=>(string)$eu['nummer'], 'datei'=>(string)($dok['datei_orig'] ?: 'Etikett-Design')];
-}
+// Band, Zähler und To-do aus EINER Liste (13.11.2026, etp_band_liste): offene Aufträge mit Etikett-Bedarf, deren Etikett fehlt
+// (zustand fehlt) oder hochgeladen, aber noch nicht freigegeben ist (zustand wartet). Regeln Fable-4 T5.1–T5.4 bleiben dort.
+$etBand = etp_band_liste((int)$k['id']);
+$etikettFehltAnzahl = count(array_filter($etBand, fn($e) => $e['zustand'] === 'fehlt'));
+$etikettUnbestListe = array_values(array_filter($etBand, fn($e) => $e['zustand'] === 'wartet'));
 $navBadges = [
     'meine_anfragen' => $offenAngebote + count($anfPruef),
     'angebote'       => $offenAngebote,
@@ -2502,7 +2502,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </nav>
   </aside>
   <?= bx_menue_scrim() ?>
-  <main class="bx-main"><?= bx_mobilbar() ?>
+  <main class="bx-main"><?= bx_mobilbar() ?><?= $darfBestellen ? etp_band_html($etBand, etp_sprache((int)$k['id'])) : '' ?>
   <?php if (isset($_GET['ok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – Ihre Bestätigung ist eingegangen. Wir starten die Bearbeitung.</div><?php endif; ?>
   <?php if (isset($_GET['anfrage'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rezepturanfrage ist eingegangen – wir prüfen sie und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['angenommen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – die Rezeptur ist angenommen. Sie ist jetzt verbindlich festgelegt.</div><?php endif; ?>
@@ -2513,19 +2513,6 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['admingeloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Angebot und zugehörige Anfrage gelöscht (Team).</div><?php endif; ?>
   <?php if (isset($_GET['adminsperre'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht löschbar: zu diesem Angebot gibt es bereits einen Auftrag. Erst den Auftrag stornieren.</div><?php endif; ?>
   <?php if (isset($_GET['loeschfehler'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Diese Anfrage lässt sich nicht mehr löschen – wir sind bereits dabei oder haben Ihnen schon ein Angebot gemacht. Melden Sie sich bei uns, dann klären wir das.</div><?php endif; ?>
-  <?php // Prominente Erinnerung: hochgeladene, aber noch nicht freigegebene Etiketten – auf jeder Portalseite sichtbar.
-        if (!empty($etikettUnbestListe) && $darfBestellen): ?>
-  <div class="bx-panel" style="border:2px solid var(--danger,#d64545);background:var(--panel-2);padding:14px 16px">
-    <strong style="color:var(--danger,#d64545)"><?= count($etikettUnbestListe) ?> Etikett<?= count($etikettUnbestListe) === 1 ? '' : 'en' ?> wartet auf Ihre verbindliche Freigabe.</strong>
-    <div class="muted" style="font-size:13px;margin:4px 0 10px">Erst nach Ihrer Freigabe können wir die Etiketten bestellen und produzieren. Bitte jetzt freigeben.</div>
-    <div class="bx-row" style="gap:8px;flex-wrap:wrap">
-      <?php foreach ($etikettUnbestListe as $eu): ?>
-        <button type="button" class="btn btn-primary btn-sm" onclick="etFreigabeOeffnen(<?= (int)$eu['id'] ?>, <?= htmlspecialchars(json_encode($eu['datei']), ENT_QUOTES) ?>)">Etikett zu <?= h($eu['nummer']) ?> ansehen &amp; freigeben</button>
-      <?php endforeach; ?>
-    </div>
-  </div>
-  <?php endif; ?>
-
 <?php if ($view === 'start'): ?>
   <h1 style="margin-bottom:4px">Willkommen, <?= h($k['ansprechpartner'] ?: $k['firma']) ?></h1>
   <p class="bx-sub">Ihr Überblick – tippen Sie unten auf einen Bereich oder nutzen Sie das Menü.</p>
@@ -2628,7 +2615,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         // „Neu für Sie" (was in den letzten 21 Tagen dazugekommen ist). Nur Einträge mit echtem Inhalt.
     $todo = [];
     foreach ($etikettUnbestListe as $eu)
-        $todo[] = [auftrag_design_label((int)$eu['id']) . ' freigeben', 'Bestellung ' . $eu['nummer'] . ' – Design liegt vor, Ihre Freigabe fehlt noch.', $portalLink('bestellung') . '&aid=' . (int)$eu['id']];
+        $todo[] = [auftrag_design_label((int)$eu['id']) . ' freigeben', 'Bestellung ' . $eu['nummer'] . ' – Design liegt vor, Ihre Freigabe fehlt noch.', $portalLink('bestellung') . '&aid=' . (int)$eu['id'] . '&etikett=' . (int)$eu['id']];
     if ($etikettFehltAnzahl > 0)
         $todo[] = ['Etikett hochladen', $etikettFehltAnzahl . ' Bestellung(en) warten auf Ihr Etikett-Design.', $portalLink('etiketten')];
     if (!empty($vorschlaege))
@@ -4822,55 +4809,26 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php elseif (!empty($__etbK['hat_etikett']) && $__etbK['bezahlt'] > 0): ?>
         <p class="muted" style="font-size:12px;margin:0 0 8px">Ihre Etiketten im Lager: <strong><?= number_format($__etbK['kunde_sichtbar'], 0, ',', '.') ?></strong> von <?= number_format($__etbK['bezahlt'], 0, ',', '.') ?> bestellten</p>
       <?php endif; ?>
-      <?php if (isset($_GET['etikett'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Etikett-Design gespeichert – bitte unten noch freigeben.</div><?php endif; ?>
-      <?php if (($_GET['etikettupfehler'] ?? '') === 'gross' || isset($_GET['uploadzugross'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Die Datei ist zu groß (max. <?= h((string) ini_get('upload_max_filesize')) ?> je Datei). Bitte als komprimiertes PDF oder kleineres Bild hochladen – dann erneut versuchen.</div><?php endif; ?>
-      <?php if (($_GET['etikettupfehler'] ?? '') === 'keine'): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Es wurde keine Datei ausgewählt. Bitte eine PDF- oder Bilddatei wählen.</div><?php endif; ?>
-      <?php if (($_GET['etikettupfehler'] ?? '') === 'fehler'): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Der Upload hat nicht geklappt. Bitte erneut versuchen (PDF oder Bild).</div><?php endif; ?>
-      <?php if (($_GET['etikettupfehler'] ?? '') === 'bestellt'): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Die Etiketten sind bereits bestellt – das Design ist damit fix und kann nicht mehr geändert werden.</div><?php endif; ?>
-      <?php if (isset($_GET['etikettfrei'])): ?><div class="bx-panel badge-ok" style="padding:8px 12px;margin-bottom:8px">Danke! Etikett ist freigegeben – die Produktion kann starten.</div><?php endif; ?>
-      <?php if (isset($_GET['etikettfehlt'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Bitte Ihren Namen für die Freigabe angeben.</div><?php endif; ?>
-      <?php if (isset($_GET['etiketthaftung'])): ?><div class="bx-panel" style="padding:8px 12px;margin-bottom:8px;border-color:var(--line);color:var(--danger,#d64545)">Bitte bestätigen Sie den Hinweis zum Etikett (Haken setzen), um verbindlich freizugeben.</div><?php endif; ?>
-
+      <?php // 13.11.2026: Hochladen, Prüfen und Freigeben laufen im Etikett-Pop-up (bx-etikett.js); hier nur Stand + Knopf.
+            $etPr = $etQuelle ? etp_aktuell((int)$a['id'], false) : null;
+            $etBestellt = etikett_bestellt_fuer_auftrag((int)$a['id']);
+            $etSym = fn(string $art) => function_exists('bx_sym') ? bx_sym($art) : ''; ?>
+      <div data-etp-neuladen hidden></div>
       <?php if ($etFrei): ?>
         <?php $fa = one("SELECT etikett_freigabe_am, etikett_freigabe_von FROM auftrag WHERE id=?", [(int)$a['id']]); ?>
-        <p style="margin:0 0 8px"><span class="bx-ok">✓ Freigegeben</span><?= !empty($fa['etikett_freigabe_am']) ? ' am ' . h(fmt_zeit($fa['etikett_freigabe_am'], 'd.m.Y')) : '' ?><?= !empty($fa['etikett_freigabe_von']) ? ' durch ' . h($fa['etikett_freigabe_von']) : '' ?>
-          <?php if ($etDok): ?> · <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)$a['id'] ?>" target="_blank"><?= h($etDok['datei_orig'] ?: 'Etikett-Design') ?></a><?php endif; ?></p>
-        <?php // Regel (Nico): Etikett bleibt änderbar, solange wir es noch nicht bestellt haben – danach fix.
-              $etBestellt = etikett_bestellt_fuer_auftrag((int)$a['id']); ?>
-        <?php if (!$etBestellt): ?>
-          <p class="muted" style="font-size:12px;margin:0 0 6px">Solange wir die Etiketten noch nicht bestellt haben, können Sie das Design hier noch ändern – danach ist es fix. Ein geändertes Design geben Sie anschließend erneut frei.</p>
-          <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit">Etikett ändern</button></form>
-        <?php else: ?>
-          <p class="muted" style="font-size:12px;margin:0">Die Etiketten sind bereits bestellt – das Design ist damit fix und kann nicht mehr geändert werden.</p>
-        <?php endif; ?>
-
+        <p style="margin:0 0 8px"><span class="bx-ok"><?= $etSym('ok') ?> Freigegeben</span><?= !empty($fa['etikett_freigabe_am']) ? ' am ' . h(fmt_zeit($fa['etikett_freigabe_am'], 'd.m.Y')) : '' ?><?= !empty($fa['etikett_freigabe_von']) ? ' durch ' . h($fa['etikett_freigabe_von']) : '' ?></p>
+        <p class="muted" style="font-size:12px;margin:0 0 8px"><?= $etBestellt ? 'Die Etiketten sind bereits bestellt – das Design ist damit fix und kann nicht mehr geändert werden.' : 'Solange wir die Etiketten noch nicht bestellt haben, können Sie das Design noch ändern – ein neues Design geben Sie anschließend erneut frei.' ?></p>
+        <button type="button" class="btn btn-ghost btn-sm" data-etp-oeffnen="<?= (int)$a['id'] ?>"><?= $etBestellt ? 'Etikett ansehen' : 'Etikett ansehen oder ändern' ?></button>
       <?php elseif ($etQuelle): ?>
         <?php $istAlt = !$etDok && !empty($etQuelle['alt']); ?>
-        <p style="margin:0 0 6px">
-          <?php if ($istAlt): ?><strong>Bisheriges Etikett</strong> aus Ihrer vorherigen Bestellung<?php else: ?><span class="bx-ok">✓ hochgeladen</span><?php endif; ?>
-          · <a href="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)($etQuelle['quell_auftrag_id'] ?? $a['id']) ?>" target="_blank"><?= h($etQuelle['datei_orig'] ?: 'Etikett-Design') ?></a>
-          <?php if (!empty($etQuelle['angelegt'])): ?><span class="muted">· <?= h(fmt_zeit($etQuelle['angelegt'], 'd.m.Y')) ?></span><?php endif; ?>
-        </p>
-        <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:0 0 10px;background:#fff;max-width:660px">
-          <iframe src="<?= $portalLink('etikett_datei') ?>&aid=<?= (int)($etQuelle['quell_auftrag_id'] ?? $a['id']) ?>" title="Etikett-Vorschau" style="width:100%;height:340px;border:0;display:block"></iframe>
-        </div>
-        <p style="margin:0 0 10px;color:var(--danger,#d64545);font-weight:600">Bitte dieses Etikett für die Produktion freigeben. <?= $istAlt ? 'Auch bei einer Nachbestellung brauchen wir Ihre erneute Freigabe des Etiketts.' : '' ?></p>
-        <form method="post" style="margin:0 0 8px">
-          <input type="hidden" name="aktion" value="etikett_freigeben"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>">
-          <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text);margin:0 0 10px;max-width:640px">
-            <input type="checkbox" name="haftung" value="1" required style="margin-top:3px">
-            <span><?= h(etikett_haftung_text()) ?></span>
-          </label>
-          <div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap">
-            <input type="text" name="freigabe_name" required placeholder="Ihr Name (Freigabe)" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:200px;background:var(--panel)">
-            <button class="btn btn-primary btn-sm" type="submit">Etikett verbindlich freigeben</button>
-          </div>
-        </form>
-        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-ghost btn-sm" type="submit"><?= $istAlt ? 'Anderes Etikett hochladen' : 'Neues Design hochladen' ?></button></form>
-
+        <p style="margin:0 0 6px"><?php if ($istAlt): ?><strong>Bisheriges Etikett</strong> aus Ihrer vorherigen Bestellung<?php else: ?><span class="bx-ok"><?= $etSym('ok') ?> hochgeladen</span><?php endif; ?>
+          · <?= h($etQuelle['datei_orig'] ?: 'Etikett-Design') ?><?php if (!empty($etQuelle['angelegt'])): ?><span class="muted"> · <?= h(fmt_zeit($etQuelle['angelegt'], 'd.m.Y')) ?></span><?php endif; ?></p>
+        <?php if ($etPr && $etPr['ki_zusammenfassung']): ?><p class="muted" style="font-size:13px;margin:0 0 6px">KI-Etikettencheck: <?= h($etPr['ki_zusammenfassung']) ?></p><?php endif; ?>
+        <p style="margin:0 0 10px;color:var(--danger,#d64545);font-weight:600">Bitte dieses Etikett prüfen und für die Produktion freigeben.<?= $istAlt ? ' Auch bei einer Nachbestellung brauchen wir Ihre erneute Freigabe.' : '' ?></p>
+        <button type="button" class="btn btn-primary" data-etp-oeffnen="<?= (int)$a['id'] ?>">Etikett prüfen und freigeben</button>
       <?php else: ?>
-        <p style="margin:0 0 8px"><strong style="color:var(--danger,#d64545)">✗ noch nicht hochgeladen</strong> – bitte laden Sie Ihr Etikett-Design (PDF oder Bild) hoch und geben es anschließend frei.</p>
-        <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0"><input type="hidden" name="aktion" value="etikett_upload"><input type="hidden" name="auftrag_id" value="<?= (int)$a['id'] ?>"><input type="file" name="etikett" required accept="application/pdf,image/*"><button class="btn btn-primary btn-sm" type="submit">Etikett-Design hochladen</button></form>
+        <p style="margin:0 0 8px"><strong style="color:var(--danger,#d64545)">Noch nicht hochgeladen</strong> – bitte laden Sie Ihre Druckdatei (PDF) hoch. Wir prüfen sie sofort und Sie geben sie im selben Schritt frei.</p>
+        <button type="button" class="btn btn-primary" data-etp-oeffnen="<?= (int)$a['id'] ?>"><?= auftrag_vollbedruckt((int)$a['id']) ? 'Druckdatei hochladen' : 'Etikett hochladen' ?></button>
       <?php endif; ?>
       <?php if ($etVorlage): ?><p style="margin:8px 0 0"><a class="btn btn-ghost btn-sm" href="<?= $portalLink('druckvorlage') ?>&aid=<?= (int)$a['id'] ?>" target="_blank">Etikett-Druckvorlage herunterladen</a> <span class="muted" style="font-size:12px">– mit Maßen/Stanzkontur</span></p><?php endif; ?>
       <?php $etHtml = ob_get_clean();
@@ -5251,7 +5209,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <td><?= bx_badge($sb[0], $sb[1]) ?></td>
           <td class="bx-num" style="white-space:nowrap">
             <?php if (function_exists('pib_kunde_darf') && !pib_kunde_darf((int)$f['id'])): ?><?= pib_gesperrt_html('PIB') ?><?php else: ?><a class="btn btn-ghost btn-sm" href="<?= $portalLink('pib') ?>&aid=<?= (int)$f['id'] ?>" download="PIB-<?= h($f['nummer']) ?>.pdf" title="Produktinformationsblatt herunterladen">PIB</a><?php endif; ?>
-            <a class="btn btn-primary btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$f['id'] ?>">Etikett hochladen</a>
+            <button type="button" class="btn btn-primary btn-sm" data-etp-oeffnen="<?= (int)$f['id'] ?>">Etikett hochladen</button>
           </td>
         </tr>
         <?php endforeach; ?>
@@ -6078,55 +6036,9 @@ document.addEventListener('keydown', function(e){ if (e.key === 'Escape') bxBest
 document.getElementById('bxBestOverlay').addEventListener('click', function(e){ if (e.target === this) bxBestZu(); });
 </script>
 
-<?php // Etikett-Freigabe-Popup: öffnet sich beim Betreten (Start) und direkt nach dem Upload automatisch, damit
-      // hochgeladene Etiketten nicht unbestätigt liegen bleiben. Nutzt den vorhandenen etikett_freigeben-Handler.
-      if ($darfBestellen):
-        $etAutoOpen = !empty($etikettUnbestListe) && ($view === 'start' || isset($_GET['etikett'])); ?>
-<div id="etFreiOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:16px">
-  <div role="dialog" aria-modal="true" class="bx-panel" style="max-width:780px;width:100%;max-height:94vh;overflow:auto;margin:0">
-    <div class="bx-row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
-      <h2 style="margin-top:0">Etikett prüfen &amp; verbindlich freigeben</h2>
-      <a id="etFreiNeu" href="#" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">In neuem Tab öffnen</a>
-    </div>
-    <p class="muted" id="etFreiDatei" style="font-size:13px;margin:0 0 6px"></p>
-    <p class="muted" style="font-size:12px;margin:0 0 10px">Bitte prüfen Sie das Etikett genau – Text, Rechtschreibung, Pflichtangaben und Layout. Nach Ihrer Freigabe geht es verbindlich in Druck/Produktion.</p>
-    <div style="border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px;background:#fff">
-      <iframe id="etFreiView" src="" title="Etikett-Vorschau" style="width:100%;height:460px;border:0;display:block"></iframe>
-    </div>
-    <form method="post">
-      <input type="hidden" name="aktion" value="etikett_freigeben">
-      <input type="hidden" name="auftrag_id" id="etFreiAid" value="">
-      <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.45;font-size:12px;margin:0 0 12px"><input type="checkbox" name="haftung" value="1" required style="margin-top:3px;flex:none"><span><?= h(etikett_haftung_text()) ?></span></label>
-      <div class="bx-field"><label>Ihr Name <span class="muted">(gilt als verbindliche Freigabe)</span></label>
-        <input type="text" name="freigabe_name" required autocomplete="name" placeholder="Vor- und Nachname" style="width:100%;box-sizing:border-box"></div>
-      <div class="bx-row" style="justify-content:flex-end;gap:10px;margin-top:16px">
-        <button type="button" class="btn btn-ghost" onclick="document.getElementById('etFreiOverlay').style.display='none'">Später</button>
-        <button type="submit" class="btn btn-primary">Verbindlich freigeben</button>
-      </div>
-    </form>
-  </div>
-</div>
-<script>
-var etFreiBase = <?= json_encode($portalLink('etikett_datei')) ?>;
-function etFreigabeOeffnen(aid, datei){
-  document.getElementById('etFreiAid').value = aid;
-  document.getElementById('etFreiDatei').textContent = datei ? ('Design: ' + datei) : '';
-  var url = etFreiBase + '&aid=' + aid;
-  var fr = document.getElementById('etFreiView'); if (fr) fr.src = url;        // Etikett (PDF/Bild) inline zeigen
-  var ln = document.getElementById('etFreiNeu');  if (ln) ln.href = url;        // größer in neuem Tab
-  document.getElementById('etFreiOverlay').style.display = 'flex';
-}
-document.getElementById('etFreiOverlay').addEventListener('click', function(e){ if (e.target === this) this.style.display='none'; });
-(function(){
-  <?php if ($etAutoOpen): $pend = array_map(fn($e) => ['id'=>$e['id'],'datei'=>$e['datei']], $etikettUnbestListe); ?>
-  var pend = <?= json_encode($pend) ?>;
-  var aidUp = parseInt(new URLSearchParams(location.search).get('aid') || '0', 10);
-  var ziel = pend.find(function(p){ return p.id === aidUp; }) || pend[0];
-  if (ziel) setTimeout(function(){ etFreigabeOeffnen(ziel.id, ziel.datei); }, 150);
-  <?php endif; ?>
-})();
-</script>
-<?php endif; ?>
+<?php // Etikett-Pop-up (13.11.2026): hochladen, prüfen, freigeben in einem Schritt. Kein automatisches Öffnen beim Login mehr –
+      // das rote Band oben führt hinein; &etikett=AID (Erinnerungs-Mail, To-do) öffnet es direkt.
+      if ($darfBestellen) echo etp_einbinden($portalLink('etp'), (int)($_GET['etikett'] ?? 0) > 1 ? (int)$_GET['etikett'] : 0, etp_sprache((int)$k['id'])); ?>
 <?php
 // ---------------------------------------------------------------------------------------------------
 // Baustein 4: Geführter Rundgang (Onboarding-Tour). Leichtgewichtig, ohne Fremd-Bibliothek.
