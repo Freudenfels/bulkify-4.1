@@ -749,3 +749,5 @@ Bindet `core/etikett_pruefung.php` ein (Etikett hochladen, prüfen, freigeben in
 - Hat ein Etikett-Artikel bei der Freigabe gar kein Maß, kommt es aus der Verpackung (`etikett_mass_auf_verpackung()`).
 - Einmaliges Zurücksetzen auf live: `dpf_etmass_einmal()`.
 - Siehe `core/etikett_mass.md`. Die älteren Absätze zum „Maß aus dem Endformat der PDF“ gelten nicht mehr.
+
+**Fable-6 P5 (13.11.2026):** `produktion_fertigware_entnehmen()` bucht auch bei einem PA **ohne Auftrag** (Lager-Produktion) die Bulkware: `produktion_fertigware_entnehmen_ohne_auftrag()`, Spiegel von `erp_fertigware_entnehmen`. Eine gewählte Bulk-Charge gilt exklusiv (`produktion_nur_gewaehlte_bulk()`). `produktion_etikett_entnehmen()` wählt das Etikett wie die Werk-App: zuerst das am Auftrag gebundene (auch ein generisches), dann das Kundenetikett, dann den generischen Produkt-Slot bzw. das Behälter-Etikett.

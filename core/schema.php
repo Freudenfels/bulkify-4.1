@@ -3467,9 +3467,70 @@ function produktion_zukauf_fertig_chargen(int $pa_id, bool $nurOhnePa = false): 
                 ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [(int)$pa['auftrag_id'], (int)$pa['produkt_id']]);
 }
 // Restbuchung: Soll bis $bis Packungen minus bereits für diesen Produktionsauftrag Verbrauchtes.
+// Fable-6 P5: ist für die laufende Unter-Charge eine Bulk-Charge gewählt ($GLOBALS['pa_nur_bulk'], core/pa_ablauf.php), wird NUR diese
+// gebucht (Rückverfolgung). Liegt sie nicht in der Liste (z. B. fremde Zuordnung), wird sie mit ihrem freien Bestand ergänzt.
+function produktion_nur_gewaehlte_bulk(array $chargen, string $feld): array {
+    $nur = (int)($GLOBALS['pa_nur_bulk'] ?? 0);
+    if ($nur <= 0) return $chargen;
+    $out = array_values(array_filter($chargen, fn($c) => (int)$c['id'] === $nur));
+    if (!$out && ($c = one("SELECT * FROM charge WHERE id=? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL", [$nur]))) { $c[$feld] = (float)$c['menge_verfuegbar']; $c['menge_ist'] = (float)$c['menge_verfuegbar']; $out = [$c]; }
+    return $out;
+}
+// Bulk für einen PA ohne Auftrag (Spiegel von erp_fertigware_chargen/erp_fertigware_entnehmen in produktion/core/erp.php).
+function produktion_fertigware_entnehmen_ohne_auftrag(int $pa_id, array $pa, ?float $bis, bool $trocken): array {
+    $rid = (int)($pa['rezeptur_id'] ?: 0);
+    if (!$rid && !empty($pa['produkt_id'])) $rid = (int) scalar("SELECT rezeptur_id FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    if ($rid > 0) $rid = rezeptur_stamm_id($rid);
+    if ($rid <= 0) return ['ok'=>true, 'fehlt'=>[]];
+    $ziel = produktion_ziel_pakete($pa_id, $bis) * produktion_stueck_je_packung($pa);
+    if ($ziel <= 0) return ['ok'=>true, 'fehlt'=>[]];
+    $rows = all("SELECT c.*, (SELECT COALESCE(SUM(r.menge),0) FROM reservierung r WHERE r.charge_id=c.id AND r.status='aktiv') AS res_andere
+                 FROM charge c JOIN item i ON i.id=c.item_id
+                 WHERE i.kategorie='fertig' AND i.rezeptur_id=? AND c.auftrag_id IS NULL AND c.fremd_kunde_id IS NULL AND c.status='frei' AND c.menge_verfuegbar>0
+                 ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$rid]);
+    $ids = array_values(array_unique(array_map(fn($c) => (int)$c['item_id'], $rows)));
+    if (!$ids) { $bi = (int) (rezeptur_bulkitem($rid) ?? 0); if ($bi) $ids = [$bi]; }
+    $schon = $ids ? (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id IN (" . implode(',', $ids) . ")", [$pa_id]) : 0.0;
+    $benoetigt = $ziel - $schon;
+    if ($benoetigt <= max(0.0001, $ziel * 0.001)) return ['ok'=>true, 'fehlt'=>[]];
+    $pool = [];
+    foreach ($ids as $iid) {
+        $summe = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei' AND auftrag_id IS NULL AND fremd_kunde_id IS NULL", [$iid]);
+        $andere = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv'", [$iid]);
+        $pool[$iid] = max(0.0, $summe - $andere);
+    }
+    $chargen = [];
+    foreach ($rows as $cf) {
+        $iid = (int)$cf['item_id'];
+        $n = min((float)$cf['menge_verfuegbar'] - (float)$cf['res_andere'], $pool[$iid] ?? 0.0);
+        if ($n <= 0.0001) continue;
+        $pool[$iid] -= $n; $cf['_nutzbar'] = $n; $chargen[] = $cf;
+    }
+    $chargen = produktion_nur_gewaehlte_bulk($chargen, '_nutzbar');
+    if (!empty($GLOBALS['pa_nur_bulk']) && !empty($GLOBALS['pa_tm_menge'])) $benoetigt = min($benoetigt, (float)$GLOBALS['pa_tm_menge'] * produktion_stueck_je_packung($pa));
+    $verf = array_sum(array_column($chargen, '_nutzbar'));
+    if ($verf + 0.0001 < $benoetigt)
+        return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>produktion_fertigware_einheit($pa)]]];
+    if ($trocken) return ['ok'=>true, 'fehlt'=>[]];
+    $rest = $benoetigt;
+    foreach ($chargen as $cc) {
+        if ($rest <= 0.0001) break;
+        $nimm = min($rest, (float)$cc['_nutzbar']);
+        $neu = (float)$cc['menge_verfuegbar'] - $nimm;
+        q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0001 ? 'leer' : 'frei', $cc['id']]);
+        q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt) VALUES (?,?,?,?,?,?)",
+          [$pa_id, (int)$cc['item_id'], $cc['id'], $nimm, (string)($cc['einheit'] ?? '') ?: produktion_fertigware_einheit($pa), gmdate('Y-m-d H:i:s')]);
+        if (!empty($GLOBALS['pa_teilmenge_id'])) q("UPDATE produktion_verbrauch SET teilmenge_id=? WHERE id=?", [(int)$GLOBALS['pa_teilmenge_id'], insert_id()]);
+        $rest -= $nimm;
+    }
+    return ['ok'=>true, 'fehlt'=>[]];
+}
 function produktion_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $trocken = false): array {
     $pa = one("SELECT menge, produkt_id, auftrag_id, rezeptur_id, zukauf_art FROM produktionsauftrag WHERE id=?", [$pa_id]);
-    if (!$pa || !$pa['auftrag_id']) return ['ok'=>true, 'fehlt'=>[]];
+    if (!$pa) return ['ok'=>true, 'fehlt'=>[]];
+    // Fable-6 P5 (13.11.2026): PA OHNE Auftrag (Lager-Produktion) bucht die Bulkware genauso wie die Werk-App (erp_fertigware_entnehmen):
+    // freie Bulkware der (Stamm-)Rezeptur ohne Auftrag, minus Reservierungen anderer Aufträge. Vorher buchte das Dashboard hier nichts.
+    if (!$pa['auftrag_id']) return produktion_fertigware_entnehmen_ohne_auftrag($pa_id, $pa, $bis, $trocken);
     if ((string)($pa['zukauf_art'] ?? '') === 'fertig') {
         $frei = 0.0; $quar = 0.0;
         foreach (produktion_zukauf_fertig_chargen($pa_id) as $c) { if ($c['status'] === 'frei') $frei += (float)$c['menge_verfuegbar']; else $quar += (float)$c['menge_verfuegbar']; }
@@ -3507,6 +3568,8 @@ function produktion_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $t
             $cf['_nutzbar'] = $n; $pool -= $n; $chargen[] = $cf;
         }
     }
+    $chargen = produktion_nur_gewaehlte_bulk($chargen, '_nutzbar');   // Fable-6 P5: gewählte Bulk-Charge der Unter-Charge – genau diese
+    if (!empty($GLOBALS['pa_nur_bulk']) && !empty($GLOBALS['pa_tm_menge'])) $benoetigt = min($benoetigt, (float)$GLOBALS['pa_tm_menge'] * $einh);
     $verf = array_sum(array_column($chargen, '_nutzbar'));
     if ($verf + 0.0001 < $benoetigt)
         return ['ok'=>false, 'fehlt'=>[['name'=>'Fertige Bulkware', 'benoetigt'=>$benoetigt, 'verfuegbar'=>$verf, 'fehlt'=>$benoetigt-$verf, 'einheit'=>produktion_fertigware_einheit($pa)]]];
@@ -12818,9 +12881,16 @@ function produktion_etikett_entnehmen(int $pa_id, ?float $bis = null, bool $troc
     if (!$pa || empty($pa['produkt_id'])) return ['ok'=>true, 'fehlt'=>[]];
     $auf = (int)($pa['auftrag_id'] ?? 0);
     if (verpackung_ist_bedruckt((int)($pa['verpackung_id'] ?? 0)) || ($auf > 0 && auftrag_vollbedruckt($auf))) return ['ok'=>true, 'fehlt'=>[]];   // vollbedruckt: kein Etikett
-    $eid = $auf > 0 ? etikett_item_fuer_auftrag_kunde($auf, (int)$pa['produkt_id']) : 0;
-    $vid = (int)($pa['verpackung_id'] ?? 0) ?: (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+    // Fable-6 P5 (13.11.2026): gleiche Auswahl wie die Werk-App (erp_etikett_item_id): das am Auftrag gebundene Etikett (auch ein
+    // generisches), sonst das Kundenetikett dieses Kunden, sonst der generische Produkt-Slot bzw. das Etikett des Behälters.
+    $bindE = $auf > 0 ? (int) scalar("SELECT COALESCE(a.etikett_item_id,0) FROM auftrag a JOIN item i ON i.id=a.etikett_item_id AND i.verpackung_rolle='etikett' WHERE a.id=?", [$auf]) : 0;
+    $eid = $bindE > 0 ? $bindE : ($auf > 0 ? etikett_item_fuer_auftrag_kunde($auf, (int)$pa['produkt_id']) : 0);
+    $vid = (int)($pa['verpackung_id'] ?? 0);
+    if ($vid <= 0 && $auf > 0) $vid = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM auftrag WHERE id=?", [$auf]);
+    if ($vid <= 0) $vid = (int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
     $gen = $vid > 0 ? (int)(etikett_id_fuer_behaelter($vid) ?? 0) : 0;
+    if ($eid <= 0) { $slot = (int) scalar("SELECT COALESCE(etikett_id,0) FROM produkt WHERE id=?", [(int)$pa['produkt_id']]);
+                     if ($slot > 0 && (int) scalar("SELECT 1 FROM item WHERE id=? AND verpackung_rolle='etikett' AND produkt_id IS NULL", [$slot])) $eid = $slot; }
     if ($eid <= 0) $eid = $gen;                                        // kein Kundenetikett -> generisches Etikett (neutrales Produkt, normal)
     if ($eid <= 0) return ['ok'=>true, 'fehlt'=>[]];                   // kein Etikett nötig/definiert
     // Früher (bis 11.11.) schon über den Ersatz gebuchte generische Etiketten dieses PA zählen weiter als verbraucht.

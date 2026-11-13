@@ -93,3 +93,8 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 - **Mehr:** der Unterschied wird wie ein Nachtrag gebucht (`pa_teilmenge_buchen`, Tag der Unter-Charge, Notiz „Korrektur: …“) – Material raus, Fertigware-Charge wächst.
 - **Weniger:** die Teilmengen der Unter-Charge werden von hinten verringert (ganz leere Teilmenge wird genau diese Zeile entfernt, Kartons gelöst); das Material dieser Teilmengen geht anteilig zurück (`produktion_verbrauch` mit Minus-Zeile je Charge, Charge wieder verfügbar, zuletzt für den Auftrag angebrochenes Gebinde mitgeführt); die Fertigware-Charge wird um den Unterschied kleiner. Geht nur, solange die Fertigware noch im Lager ist (sonst Meldung mit der kleinstmöglichen Menge). Danach `reservierung_abgleichen`.
 - Ereignis `korrektur` im Chargenprotokoll und Verlauf am Kunden.
+
+**Fable-6 P5 (13.11.2026) – eine Materialbuchung:** Dashboard-Nachtrag und Werk-App buchen über `pa_teilmenge_buchen()`, und die Stationen buchen jetzt in beiden Programmen gleich.
+- Nachgestellt am 13.11.: Der Nachtrag an PR-2722 (ohne Auftrag) buchte weder Etikett noch Bulk; die Werk-App holte danach alles nach (110 Etiketten für 10 Stk). Jetzt buchen beide Wege dieselben Artikel und Mengen.
+- Die gewählte Bulk-Charge der Unter-Charge geht als `$GLOBALS['pa_nur_bulk']` an die Station „Fertigware bereitstellen“. Gebucht wird **nur diese Charge** und nur die Menge dieser Teilmenge (`$GLOBALS['pa_tm_menge']`), damit die Rückverfolgung stimmt.
+- Hinweis: Lücken aus früheren Dashboard-Nachträgen (z. B. nicht gebuchte Etiketten) holt die nächste Teilmenge einmalig nach, wie die Restbuchung es vorsieht.

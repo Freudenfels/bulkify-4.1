@@ -1153,8 +1153,16 @@ function erp_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $trocken 
     if ($ziel <= 0) return ['ok'=>true, 'fehlt'=>[]];
     $chargen = erp_fertigware_chargen($pa_id, 'frei');
     $ids = array_values(array_unique(array_map('intval', array_column($chargen, 'item_id'))));
+    // Fable-6 P5: gewählte Bulk-Charge der Unter-Charge – genau diese buchen (Spiegel von produktion_nur_gewaehlte_bulk()).
+    if (($nurB = (int)($GLOBALS['pa_nur_bulk'] ?? 0)) > 0) {
+        $chargen = array_values(array_filter($chargen, fn($x) => (int)$x['id'] === $nurB));
+        if (!$chargen && ($cx = one("SELECT c.id, c.charge_nr, c.menge_verfuegbar, c.menge_verfuegbar AS menge_ist, c.einheit, c.item_id, c.auftrag_id FROM charge c WHERE c.id=? AND c.status='frei' AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL", [$nurB]))) $chargen = [$cx];
+        foreach ($chargen as $cx) if (!in_array((int)$cx['item_id'], $ids, true)) $ids[] = (int)$cx['item_id'];
+    }
+    $nurTm = (!empty($GLOBALS['pa_nur_bulk']) && !empty($GLOBALS['pa_tm_menge'])) ? (float)$GLOBALS['pa_tm_menge'] * erp_stueck_je_packung($pa) : 0.0;
     $schon = 0.0; foreach ($ids as $iid) $schon += erp_verbraucht($pa_id, $iid);
     $benoetigt = $ziel - $schon;
+    if ($nurTm > 0) $benoetigt = min($benoetigt, $nurTm);   // Fable-6 P5: nur die Menge dieser Teilmenge aus der gewählten Charge
     if ($benoetigt <= max(0.0001, $ziel * 0.001)) return ['ok'=>true, 'fehlt'=>[]];
     $verf = array_sum(array_map(fn($c)=> (float)$c['menge_verfuegbar'], $chargen));
     if ($verf + 0.0001 < $benoetigt)

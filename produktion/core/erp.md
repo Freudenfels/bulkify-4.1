@@ -133,3 +133,5 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `erp_rollen_abbuchen()` bucht alle G
 
 ## Nachbesserung Fable-5 (13.11.2026)
 `erp_produktion_gebucht()` = `pa_produziert()` – dieselbe Regel wie das Dashboard.
+
+**Fable-6 P5 (13.11.2026):** `erp_fertigware_entnehmen()` bucht bei gewählter Bulk-Charge der Unter-Charge (`$GLOBALS['pa_nur_bulk']`) nur diese Charge und nur die Menge dieser Teilmenge. Das Dashboard rechnet jetzt gleich (siehe `core/schema.md`).

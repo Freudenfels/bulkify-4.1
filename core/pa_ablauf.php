@@ -530,10 +530,13 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     }
     // 1) Material prüfen (alles oder nichts) …
     $GLOBALS['pa_bevorzugt'] = pa_gescannte_chargen($pa_id, $uc_id);
+    // Fable-6 P5 (13.11.2026): Dashboard-Nachtrag und Werk-App buchen die Bulkware genau aus der Bulk-Charge der Unter-Charge.
+    $GLOBALS['pa_nur_bulk'] = (int)($uc['bulk_charge_id'] ?? 0); $GLOBALS['pa_tm_menge'] = $menge;
+    if ($GLOBALS['pa_nur_bulk'] > 0) array_unshift($GLOBALS['pa_bevorzugt'], $GLOBALS['pa_nur_bulk']);
     $fehlt = [];
     foreach ($stationen as $st) { $r = pa_fn('produktion_station_entnahme', 'erp_station_entnahme', $pa_id, $st, $bis, true) ?? ['ok' => true];
         if (!($r['ok'] ?? true)) foreach (($r['fehlt'] ?? []) as $f) $fehlt[] = $f; }
-    if ($fehlt && empty($o['ohne_material'])) { unset($GLOBALS['pa_bevorzugt']);
+    if ($fehlt && empty($o['ohne_material'])) { unset($GLOBALS['pa_bevorzugt'], $GLOBALS['pa_nur_bulk'], $GLOBALS['pa_tm_menge']);
         return ['ok' => false, 'fehler' => 'mangel', 'fehlt' => $fehlt, 'msg' => 'Nicht genug Material für ' . pa_mz($menge) . ' Stk: ' . implode(', ', array_map(fn($f) => (string)$f['name'] . ' (fehlt ' . pa_mz($f['fehlt']) . ' ' . ($f['einheit'] ?? '') . ')', $fehlt)) . '.']; }
     // 2) … Teilmenge anlegen, dann buchen (Verbrauch trägt die Teilmenge)
     $datum = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($o['datum'] ?? '')) ? (string)$o['datum'] : pa_tag_heute();   // Produktionstag Berlin (Buchstabe je Tag)
@@ -545,7 +548,7 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     // Fable-5 T1.8 (M4): KI-Vermerk sofort an die Unter-Charge – vor dem Schließen/Ablegen des Chargenprotokolls, sonst fehlt er im PDF.
     if (trim((string)($o['ki_vermerk'] ?? '')) !== '') pa_ereignis($pa_id, $uc_id, 'ki_meldung', mb_substr((string)$o['ki_vermerk'], 0, 600), '', '', '', $von);
     if (!$fehlt) foreach ($stationen as $st) pa_fn('produktion_station_entnahme', 'erp_station_entnahme', $pa_id, $st, $bis, false);
-    unset($GLOBALS['pa_bevorzugt'], $GLOBALS['pa_teilmenge_id']);
+    unset($GLOBALS['pa_bevorzugt'], $GLOBALS['pa_teilmenge_id'], $GLOBALS['pa_nur_bulk'], $GLOBALS['pa_tm_menge']);
     if ($fehlt) pa_ereignis($pa_id, $uc_id, 'abweichung', 'Teilmenge ohne vollständige Materialbuchung nachgetragen (fehlt: ' . implode(', ', array_map(fn($f) => (string)$f['name'], $fehlt)) . ').', '', '', '', $von);
     if (!empty($o['kartons'])) foreach ((array)$o['kartons'] as $k) q("UPDATE pa_karton SET teilmenge_id=? WHERE id=? AND pa_id=? AND teilmenge_id IS NULL", [$tm, (int)$k, $pa_id]);
 
