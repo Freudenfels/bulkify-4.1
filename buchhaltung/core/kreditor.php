@@ -52,6 +52,15 @@ function kreditor_init(): void {
     ensure_column('lieferant_rechnung', 'datei', "VARCHAR(255) NULL");
     ensure_column('lieferant_rechnung', 'orig_name', "VARCHAR(255) NULL");
     ensure_column('lieferant_rechnung', 'mime', "VARCHAR(100) NULL");
+    // 13.11.2026: Entwürfe aus Lieferantenportal/Team-Upload (Dashboard core/eingangsrechnung.php), status='entwurf'
+    ensure_column('lieferant_rechnung', 'dokument_id', "INT NULL");
+    ensure_column('lieferant_rechnung', 'quelle', "VARCHAR(10) NULL");
+    ensure_column('lieferant_rechnung', 'ki_json', "MEDIUMTEXT NULL");
+    ensure_column('lieferant_rechnung', 'ki_unsicher', "VARCHAR(255) NULL");
+    ensure_column('lieferant_rechnung', 'bank_re', "VARCHAR(190) NULL");
+    ensure_column('lieferant_rechnung', 'bank_warnung', "VARCHAR(255) NULL");
+    ensure_column('lieferant_rechnung', 'geprueft_am', "DATETIME NULL");
+    ensure_column('lieferant_rechnung', 'geprueft_von', "VARCHAR(80) NULL");
 }
 
 // Verfügbare Währungen + Symbole.
@@ -131,6 +140,7 @@ function kr_zahlstatus(array $r): array {
     $bezahlt = kr_zahlung_summe((int) $r['id']);
     $rest = round($brutto - $bezahlt, 2);
     if (($r['status'] ?? '') === 'storniert') $status = 'storniert';
+    elseif (($r['status'] ?? '') === 'entwurf') $status = 'entwurf';   // erst nach „Prüfen und übernehmen“ offen
     elseif ($bezahlt <= 0.005)                $status = 'offen';
     elseif ($rest > 0.005)                    $status = 'teilbezahlt';
     else                                      $status = 'bezahlt';
@@ -265,6 +275,7 @@ function kr_liste(string $status = '', string $q = ''): array {
     $where = '1=1'; $args = [];
     if ($status === 'offen')  { $where .= " AND r.status IN ('offen','teilbezahlt')"; }
     elseif ($status !== '')   { $where .= " AND r.status=?"; $args[] = $status; }
+    else                      { $where .= " AND r.status<>'entwurf'"; }   // Entwürfe stehen in „Eingangsrechnungen zu prüfen“
     $rows = all(
         "SELECT r.*, l.firma, COALESCE(z.bez,0) AS bezahlt, (r.brutto - COALESCE(z.bez,0)) AS rest
            FROM lieferant_rechnung r
@@ -287,6 +298,45 @@ function kr_rechnung_get(int $id): ?array {
                   LEFT JOIN lieferanten l ON l.id=r.lieferant_id
                   LEFT JOIN bestellung b ON b.id=r.bestellung_id
                  WHERE r.id=?", [$id]);
+}
+
+// --- Entwürfe aus Lieferantenportal / Team-Upload (13.11.2026) ------------------
+function kr_entwuerfe(): array {
+    kreditor_init();
+    return all("SELECT r.*, l.firma, l.lieferantennummer, b.nummer AS bestell_nummer FROM lieferant_rechnung r
+                  LEFT JOIN lieferanten l ON l.id=r.lieferant_id LEFT JOIN bestellung b ON b.id=r.bestellung_id
+                 WHERE r.status='entwurf' ORDER BY (r.faellig IS NULL), r.faellig, r.id");
+}
+function kr_anz_entwurf(): int {
+    try { return (int) scalar("SELECT COUNT(*) FROM lieferant_rechnung WHERE status='entwurf'"); } catch (\Throwable $e) { return 0; }
+}
+// Abgleich Rechnung gegen Bestellwert: Hinweis bei Abweichung über 2 %.
+function kr_bestell_abgleich(array $r): array {
+    if (empty($r['bestellung_id'])) return ['ampel' => '', 'text' => ''];
+    $soll = kr_bestellung_netto((int)$r['bestellung_id']);
+    $ist  = (float)($r['waehrung'] === 'EUR' ? $r['netto'] : $r['fw_netto']);
+    if ($soll <= 0) return ['ampel' => 'info', 'text' => 'Bestellung ohne Positionswert – kein Abgleich möglich.'];
+    $abw = ($ist - $soll) / $soll * 100;
+    $txt = 'Bestellwert netto ' . number_format($soll, 2, ',', '.') . ', Rechnung netto ' . number_format($ist, 2, ',', '.') . ' ' . $r['waehrung'] . ' (' . ($abw >= 0 ? '+' : '') . number_format($abw, 1, ',', '.') . ' %)';
+    return abs($abw) > 2 ? ['ampel' => 'warn', 'text' => 'Abweichung über 2 %: ' . $txt] : ['ampel' => 'ok', 'text' => $txt];
+}
+// „Prüfen und übernehmen“: Felder setzen, Entwurf wird offene Eingangsrechnung. Doppelte Nummer beim Lieferanten wird abgewiesen.
+function kr_entwurf_uebernehmen(int $id, array $d, string $von): string {
+    $r = one("SELECT * FROM lieferant_rechnung WHERE id=? AND status='entwurf'", [$id]);
+    if (!$r) return 'Entwurf nicht gefunden.';
+    $nr = trim((string)($d['lief_nummer'] ?? ''));
+    if ($nr === '') return 'Bitte die Rechnungsnummer eintragen.';
+    if ((int) scalar("SELECT COUNT(*) FROM lieferant_rechnung WHERE lieferant_id=? AND lief_nummer=? AND id<>? AND status<>'storniert'", [(int)$r['lieferant_id'], $nr, $id]) > 0)
+        return 'Diese Rechnungsnummer gibt es beim Lieferanten schon – bitte prüfen (doppelte Rechnung).';
+    q("UPDATE lieferant_rechnung SET status='offen' WHERE id=?", [$id]);   // ab hier normale Eingangsrechnung
+    kr_rechnung_update($id, $d);
+    q("UPDATE lieferant_rechnung SET geprueft_am=UTC_TIMESTAMP(), geprueft_von=? WHERE id=?", [mb_substr($von, 0, 80), $id]);
+    if (function_exists('erp_aufgabe_erledigen')) erp_aufgabe_erledigen('eingangsrechnung', $id);
+    return '';
+}
+function kr_entwurf_verwerfen(int $id, string $grund, string $von): void {
+    q("UPDATE lieferant_rechnung SET status='storniert', notiz=TRIM(CONCAT(COALESCE(notiz,''), ?)) WHERE id=? AND status='entwurf'", ["\n[Entwurf verworfen von " . $von . "] " . trim($grund), $id]);
+    if (function_exists('erp_aufgabe_erledigen')) erp_aufgabe_erledigen('eingangsrechnung', $id);
 }
 
 // Wert einer Bestellung (Summe menge*ek) – für die Vorbefüllung beim Erfassen.

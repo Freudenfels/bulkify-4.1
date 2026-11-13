@@ -737,3 +737,5 @@ Neue Spalten: `item.kein_dokument`, `item.kein_dokument_grund`, `item.kein_dokum
 
 ## 13.11.2026
 Bindet `core/etikett_pruefung.php` ein (Etikett hochladen, prüfen, freigeben in einem Pop-up).
+
+13.11.2026: bindet `core/eingangsrechnung.php` ein.

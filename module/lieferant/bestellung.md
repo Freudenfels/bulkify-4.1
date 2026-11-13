@@ -55,3 +55,6 @@ Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuc
 Fehlen zu dieser Bestellung Unterlagen, steht oben ein Kasten „Unterlagen fehlen – Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.“ mit Link auf „Fehlende Unterlagen“ (DE/EN/ZH). „Bestellen erst mit Unterlagen“ gibt es nicht mehr.
 
 13.11.2026: Platzhalter „z. B.“ bei Tracking/Spediteur über `lp_t('zb')` übersetzt.
+
+## Zahlstatus aus der Buchhaltung (13.11.2026)
+Oberhalb von „Dokumente & Rechnung“ steht je Rechnung der Stand aus `lieferant_rechnung`: „eingegangen, wird geprüft“, „erfasst, noch nicht bezahlt (fällig …)“, „teilbezahlt, offen …“, „bezahlt am TT.MM.JJJJ“ (DE/EN/中文); dieselbe Angabe an der Rechnungszeile. Dokumenttabelle am Handy als Karten.

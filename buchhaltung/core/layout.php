@@ -36,6 +36,7 @@ function bu_nav(): array {
         ],
         'Eingang (Kreditoren)' => [
             'beleg_eingang'     => ['label' => 'Belege (KI)',         'href' => '?p=beleg_eingang'],
+            'lief_rechnung_pruefen' => ['label' => 'Zu prüfen' . (function () { try { $n = (int) scalar("SELECT COUNT(*) FROM lieferant_rechnung WHERE status='entwurf'"); return $n > 0 ? ' (' . $n . ')' : ''; } catch (\Throwable $e) { return ''; } })(), 'href' => '?p=lief_rechnung_pruefen'],
             'lief_rechnung_neu' => ['label' => 'Eingangsrechnung',    'href' => '?p=lief_rechnung_neu'],
             'op_kreditoren'     => ['label' => 'Offene Posten',       'href' => '?p=op_kreditoren'],
         ],

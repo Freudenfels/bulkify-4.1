@@ -31,6 +31,7 @@ $routen = [
     'beleg_export'      => 'buchhaltung/export.php',
     'lief_rechnung_neu' => 'buchhaltung/lief_rechnung_neu.php',
     'lief_rechnung'     => 'buchhaltung/lief_rechnung.php',
+    'lief_rechnung_pruefen' => 'buchhaltung/lief_rechnung_pruefen.php',   // Eingangsrechnungen zu prüfen (Entwürfe aus Portal/Team, 13.11.2026)
     'angebote_ansicht'  => 'buchhaltung/angebote_ansicht.php',   // Nur-Lese-Angebote + Abgleich Angebot/Auftrag/Rechnung
     'import_bulk'       => 'buchhaltung/import_bulk.php',         // Bulk-Import alter Angebote+Rechnungen (KI)
     'buchen'            => 'buchhaltung/buchen.php',             // Kontoauszug-Import + Zuordnung (Eingang/Ausgang)

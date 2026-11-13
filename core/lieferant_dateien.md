@@ -26,3 +26,5 @@ Intern `module/lieferant/detail.php` (Reiter „Dokumente"), Portal `module/lief
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 Ablageort rezeptur: Spezifikation des Gesamtprodukts je Lieferant (lieferant_unterlage_speichern, Liste, Download-Recht).
+
+13.11.2026: Rechnung zur Bestellung (Portal-Upload und Team) legt automatisch einen Entwurf einer Eingangsrechnung in der Buchhaltung an (`er_entwurf_aus_dokument`, nach der Antwort).

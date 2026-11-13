@@ -23,6 +23,9 @@ if ($id && isset($_GET['datei'])) {
     readfile($pf); exit;
 }
 
+// 13.11.2026: Entwürfe (aus Portal/Team) werden erst in „Eingangsrechnungen zu prüfen“ übernommen – keine Zahlung auf einen Entwurf.
+if ($id && (string) scalar("SELECT status FROM lieferant_rechnung WHERE id=?", [$id]) === 'entwurf') { header('Location: ?p=lief_rechnung_pruefen&id=' . $id); exit; }
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id) {
     $aktion = $_POST['aktion'] ?? '';
     if ($aktion === 'datei_upload') {

@@ -187,6 +187,10 @@ function bestell_dok_upload(int $bestellung_id, int $lieferant_id, string $typ, 
       [$bestellung_id, $typ, $lieferant_id, mb_substr(trim((string)($_POST['dok_titel'] ?? '')), 0, 190) ?: null, $fn, mb_substr($orig, 0, 255)]);
     $dokId = (int) insert_id();
     log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Datei zur Bestellung ' . $bestellung_id . ' hochgeladen (' . $typ . ').', 'dokument', 'dokument', $dokId);
+    // 13.11.2026: Rechnung -> Entwurf einer Eingangsrechnung in der Buchhaltung (KI liest nach der Antwort aus, core/eingangsrechnung.php)
+    if ($typ === 'rechnung' && function_exists('er_entwurf_aus_dokument')) {
+        if (function_exists('nach_antwort')) nach_antwort(fn() => er_entwurf_aus_dokument($dokId, 'portal')); else er_entwurf_aus_dokument($dokId, 'portal');
+    }
     return '';
 }
 // Dokumente einer Bestellung (Lieferant im Portal bzw. Team). $nur_allgemein: ohne die je Position abgelegten CoA/Spezifikationen
@@ -222,5 +226,9 @@ function bestellung_team_rechnung_hochladen(int $bestellung_id): string {
        $nr !== '' ? $nr : null, $dat, $btr, $wae]);
     $did = (int) insert_id();
     log_aktivitaet('bestellung', $bestellung_id, 'team', 'Lieferantenrechnung' . ($nr !== '' ? ' ' . $nr : '') . ' vom Team hochgeladen.', 'dokument', 'dokument', $did);
+    // 13.11.2026: Entwurf einer Eingangsrechnung in der Buchhaltung (eingetippte Nummer/Datum/Betrag haben Vorrang vor der KI)
+    if (function_exists('er_entwurf_aus_dokument')) {
+        if (function_exists('nach_antwort')) nach_antwort(fn() => er_entwurf_aus_dokument($did, 'team')); else er_entwurf_aus_dokument($did, 'team');
+    }
     return '';
 }

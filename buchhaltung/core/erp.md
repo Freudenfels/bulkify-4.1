@@ -23,3 +23,5 @@ Gleiche Logik wie im Dashboard – wird von `core/mail.php` für Portal-Links in
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
 
 **Gesperrt/inaktiv (13.11.2026, Fable-3 T4.3):** Auftrag-Import verwendet keine inaktive Rezeptur und kein inaktives Produkt wieder.
+
+13.11.2026: `erp_aufgabe_erledigen($ref_typ, $ref_id)` – erledigt die Dashboard-Aufgabe (z. B. „Eingangsrechnung prüfen“) nach dem Übernehmen.

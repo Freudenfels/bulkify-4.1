@@ -3,3 +3,5 @@ HTML-Hülle wie das Dashboard (lädt dasselbe /assets/app.css, gleiche bx-Klasse
 
 ## Navigation (gruppiert)
 bu_nav() ist in Gruppen unterteilt: Start (Übersicht), **Ausgang (Debitoren)** (Rechnungen, Rechnung erstellen, Storno/Gutschrift, Angebote-Ansicht, Auftrag importieren, Alt-Rechnungen) und **Eingang (Kreditoren)** (Belege (KI), Eingangsrechnung). render_header rendert je Gruppe einen bx-navgroup-Header.
+
+13.11.2026: Menüpunkt „Zu prüfen (n)“ unter Eingang (Kreditoren) -> `lief_rechnung_pruefen`.

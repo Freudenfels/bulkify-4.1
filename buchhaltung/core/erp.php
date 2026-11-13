@@ -19,6 +19,10 @@ function erp_benutzer(int $id): ?array {
     return $id ? one("SELECT * FROM benutzer WHERE id=? AND aktiv=1", [$id]) : null;
 }
 function erp_dashboard_url(): string { return '/'; }
+// Aufgabe im Dashboard erledigen (z. B. „Eingangsrechnung prüfen“ nach dem Übernehmen). Einzige Stelle der Buchhaltung, die aufgabe berührt.
+function erp_aufgabe_erledigen(string $ref_typ, int $ref_id): void {
+    try { q("UPDATE aufgabe SET status='erledigt' WHERE ref_typ=? AND ref_id=? AND status='offen'", [$ref_typ, $ref_id]); } catch (\Throwable $e) {}
+}
 // Portal-Token des Kunden (für Mail-Links ins Kundenportal, gleiche Logik wie im Dashboard) – wird von core/mail.php genutzt.
 if (!function_exists('kunde_portal_token')) {
     function kunde_portal_token(int $kid): string {
