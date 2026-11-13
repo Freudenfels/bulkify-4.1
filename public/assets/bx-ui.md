@@ -23,3 +23,6 @@ Lädt zusätzlich `bx-datei.js`, wenn die Seite ein Datei-Feld oder eine Tabelle
 
 ## Sprache (13.11.2026)
 Texte (Rückfrage bei ungespeicherten Eingaben, Schließen, Lädt, Fehler, Suchfeld, Datei-Knopf) richten sich nach `<html lang>` (de/en/zh/uk); `window.bxTx(key)` liefert sie auch für `bx-rscombo.js` und `bx-datei.js`.
+
+## Reiter (Bestellseite 13.11.2026)
+`.bs-reiter` mit `[data-bs-tab]`/`[data-bs-panel]`: Umschalten per Klick (am document, geht auch im nachgeladenen Pop-up), `window.bxReiter(k)`. Anker beim Laden und bei hashchange: #unterlagen/#wareneingang/#abgleich/#chargen → Wareneingang & Chargen, #versand, #zahlung/#rechnung/#bezahlt → Zahlung, #nachrichten/#rueckfragen, #verlauf; auch `&tab=`. #unterlagen, #rechnung, #bezahlt öffnen zusätzlich das Pop-up. Menü „⋯“ (`details.bs-menu`) schließt bei Klick daneben oder auf einen Eintrag.

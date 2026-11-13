@@ -26,3 +26,6 @@ Beides sind **dieselben Aktionen wie auf der Detailseite** (`einkauf/detail.php`
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 „als bestellt markieren“ ist nicht mehr wegen Unterlagen gesperrt (nur Aufgabe).
+
+## Gleiche Karte wie die Bestellseite (13.11.2026)
+Jede Bestellung = Kopf der Bestellseite (Status, Badges, Betrag, EIN Hauptknopf volle Breite) + Positions-Karte. Entwurf: „Bestellen“ (POST wie bisher, ohne Seitenwechsel zur Bestellseite); bestellt/gesendet: „Ware ist da - einbuchen“ (Wareneingang mit vorgemerkter Charge). Liste: offen, bestellt und gesendet, noch nicht eingegangen.

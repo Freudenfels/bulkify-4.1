@@ -21,7 +21,7 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
     };
     $h = fn($x) => htmlspecialchars((string)$x, ENT_QUOTES, 'UTF-8');
 
-    $o  = '<div class="bx-panel"><h2 style="margin-top:0">' . $t('Ablauf', 'Progress', '进度') . '</h2>';
+    $o  = '<div class="bx-panel"><h2 style="margin-top:0">' . ($wer === 'team' ? 'Termin und Versand' : $t('Ablauf', 'Progress', '进度')) . '</h2>';
 
     // 1) Bestätigung mit Termin – ohne sie geht nichts weiter.
     // 13.11.2026: fehlende Unterlagen sperren das Bestätigen nicht mehr (Ware bleibt nach dem Eingang in Quarantäne).
@@ -58,6 +58,9 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
         // 2) Stationen (Design 13.11.2026, Fable-5 D23): einheitliche Schritt-Leiste – erledigt (Haken), aktuell (hervorgehoben),
         //    offen (grau); keine Station sieht wie ein Knopf aus. Darunter genau EIN Knopf für den nächsten Schritt.
         //    „Wareneingang bei bulkify“ setzt nur der Wareneingang (Nacht 4b).
+        // Bestellseite 13.11.2026: im Team nur bei Portal-Lieferanten (bei „direkt bestellt“ nur Termin und Tracking).
+        $mitStationen = $wer !== 'team' || bestellung_ist_portal($b);
+        if ($mitStationen) {
         $o .= '<ol class="bx-schritte">';
         foreach ($keys as $i => $key) {
             $zust = $i <= $ist ? ($i === $ist ? 'jetzt' : 'fertig') : 'offen';
@@ -68,6 +71,7 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
         if (!$fertig && $naechster !== null && $naechster !== 'eingegangen')
             $o .= '<form method="post" style="margin:4px 0 0"><input type="hidden" name="aktion" value="lief_station"><input type="hidden" name="station" value="' . $h($naechster) . '">'
                 . '<button class="btn btn-primary btn-sm" type="submit">' . $h($t('Nächster Schritt', 'Next step', '下一步')) . ': ' . $h($stationen[$naechster]) . '</button></form>';
+        }
 
         // 3) Versanddaten – Pflicht, bevor „versendet" gesetzt werden kann.
         if (!$fertig) {

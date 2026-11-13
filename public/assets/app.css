@@ -685,3 +685,58 @@ pre{max-width:100%;overflow-x:auto;overflow-wrap:anywhere}
   .bx-order-row [style*="white-space:nowrap"]{white-space:normal !important}
 }
 .bx-et-tkopf{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.bx-et-tkopf h3{margin:0}
+
+/* ===== Bestellseite aufgeräumt (13.11.2026): Kopf, Unterlagen-Zeile, Positions-Karte, Reiter ===== */
+.bs-kopf{display:flex;gap:16px;justify-content:space-between;align-items:flex-start;padding:18px 20px}
+.bs-kopf-l{min-width:0;flex:1 1 auto}
+.bs-status{font-size:24px;font-weight:700;margin:2px 0 6px;line-height:1.2}
+.bs-meta{font-size:14px;color:var(--muted)}
+.bs-badges{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.bs-kopf-r{display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex:0 0 auto}
+.bs-betrag{font-size:20px;font-weight:600;white-space:nowrap}
+.bs-aktionen{display:flex;gap:8px;align-items:center}
+.bs-menu{position:relative}
+.bs-menu>summary{list-style:none;cursor:pointer;font-size:20px;line-height:1;padding:0 12px}
+.bs-menu>summary::-webkit-details-marker{display:none}
+.bs-menu-liste{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:250px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:6px;display:flex;flex-direction:column}
+.bs-menu-liste form{margin:0}
+.bs-mi{display:block;width:100%;text-align:left;background:none;border:0;padding:9px 12px;border-radius:6px;font:inherit;color:var(--text);cursor:pointer;text-decoration:none;white-space:nowrap}
+.bs-mi:hover{background:var(--panel-2,rgba(0,0,0,.04))}
+.bs-mi[disabled]{color:var(--muted);cursor:not-allowed}
+.bs-rot{color:#b3261e}
+.bs-mi-form{display:flex;gap:6px;align-items:center;padding:6px 8px}
+.bs-mi-form input[type=date]{width:150px}
+.bs-hinweis{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:8px 14px;margin:-6px 0 14px;border-left:3px solid #C9A227;background:rgba(201,162,39,.12);border-radius:8px;font-size:14px}
+.bs-hinweis span{min-width:0}
+.bs-pos-kopf{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.bs-pos-kopf h2{margin:0}
+.bs-pos-zeile{display:grid;grid-template-columns:minmax(0,2.4fr) repeat(4,minmax(0,1fr));gap:6px 16px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+.bs-pos-zeile:first-of-type{border-top:0}
+.bs-pos-art{min-width:0}
+.bs-pos-z .k{font-size:12px;color:var(--muted)}
+.bs-balken{grid-column:1/-1;height:6px;border-radius:999px;background:var(--line);overflow:hidden}
+.bs-balken span{display:block;height:100%;background:var(--gruen,#1D9E75);border-radius:999px}
+.bs-details{margin-top:10px}
+.bs-details>summary{cursor:pointer;color:var(--muted);font-size:14px;padding:4px 0}
+.bs-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:18px 0 14px;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.bs-tab{flex:0 0 auto;background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;color:var(--muted);cursor:pointer;white-space:nowrap}
+.bs-tab.on{color:var(--text);border-bottom-color:var(--gruen,#1D9E75);font-weight:600}
+.bs-tab-z{display:inline-block;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--lime);color:#10210f;font-size:11px;font-weight:600;line-height:18px;text-align:center;margin-left:4px}
+.bs-zeile{display:flex;gap:10px 16px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:12px 16px;margin-bottom:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.bs-zeile-knoepfe{display:flex;gap:8px;flex-wrap:wrap}
+.bs-doks{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:860px){
+  .bs-kopf{flex-direction:column;align-items:stretch}
+  .bs-kopf-r{align-items:stretch}
+  .bs-betrag{text-align:left}
+  .bs-aktionen{width:100%}
+  .bs-aktionen>form,.bs-aktionen>.bs-haupt{flex:1 1 auto}
+  .bs-aktionen .bs-haupt{width:100%;justify-content:center;text-align:center}
+  .bs-menu>summary{min-height:44px;display:flex;align-items:center}
+  .bs-menu-liste{min-width:240px;max-width:calc(100vw - 32px)}
+  .bs-mi{min-height:44px;white-space:normal}
+  .bs-tab{min-height:44px}
+  .bs-pos-zeile{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bs-pos-art{grid-column:1/-1}
+  .bs-hinweis{flex-wrap:wrap}
+}

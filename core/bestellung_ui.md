@@ -29,3 +29,6 @@ Das Team bestätigt einen Entwurf ohne Admin-Grund – das Feld „Grund (Unterl
 
 ## Schritt-Leiste (13.11.2026, Fable-5 D23)
 Stationen als einheitliche Leiste `ol.bx-schritte`: erledigt (grüner Haken), aktuell (hervorgehoben), offen (grau); keine Station sieht wie ein Knopf aus. Darunter ein Knopf „Nächster Schritt: …“. „Wareneingang bei bulkify“ setzt weiter nur der Wareneingang. Am Handy senkrecht.
+
+## Stationen nur bei Portal-Lieferanten (Bestellseite 13.11.2026)
+Im Team (`$wer = 'team'`) zeigt `bestellung_ablauf_panel()` die Stationen-Leiste und „Nächster Schritt“ nur, wenn `bestellung_ist_portal($b)`; bei „direkt bestellt“ nur Termin und Versanddaten. Überschrift im Team „Termin und Versand“. Im Lieferantenportal unverändert.

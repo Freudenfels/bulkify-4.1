@@ -189,6 +189,35 @@
     bxPopup.url(a.getAttribute('data-pop-url'), a.getAttribute('data-pop-titel') || a.textContent.trim(), a.getAttribute('data-pop-refresh') || '');
   });
 
+  // ---------------------------------------------------------------- Reiter (Bestellseite 13.11.2026)
+  // <div class="bs-reiter"> mit [data-bs-tab="k"] und [data-bs-panel="k"]; geht auch im nachgeladenen Pop-up (Ereignis am document).
+  function reiter(k, root) {
+    var r = root || document.querySelector('.bs-reiter'); if (!r) return false;
+    if (!r.querySelector('[data-bs-panel="' + k + '"]')) return false;
+    Array.prototype.forEach.call(r.querySelectorAll('[data-bs-tab]'), function (t) { t.classList.toggle('on', t.getAttribute('data-bs-tab') === k); });
+    Array.prototype.forEach.call(r.querySelectorAll('[data-bs-panel]'), function (p) { p.hidden = p.getAttribute('data-bs-panel') !== k; });
+    return true;
+  }
+  window.bxReiter = reiter;
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-bs-tab]');
+    if (t) { reiter(t.getAttribute('data-bs-tab'), t.closest('.bs-reiter')); return; }
+    // Menü „⋯“ (details.bs-menu) schließt bei Klick daneben
+    var mi = e.target.closest && e.target.closest('.bs-menu-liste button[onclick], .bs-menu-liste a');
+    Array.prototype.forEach.call(document.querySelectorAll('details.bs-menu[open]'), function (m) { if (!m.contains(e.target) || (mi && m.contains(mi))) m.removeAttribute('open'); });
+  });
+  // Anker öffnen den passenden Reiter (#unterlagen, #wareneingang, #zahlung …), #rechnung/#bezahlt/#unterlagen zusätzlich das Pop-up
+  function reiterAnker() {
+    if (!document.querySelector('.bs-reiter')) return;
+    var map = { unterlagen: 'wareneingang', wareneingang: 'wareneingang', abgleich: 'wareneingang', chargen: 'wareneingang', chargenbezug: 'wareneingang', aufkleber: 'wareneingang',
+                versand: 'versand', zahlung: 'zahlung', rechnung: 'zahlung', bezahlt: 'zahlung', nachrichten: 'nachrichten', rueckfragen: 'nachrichten', verlauf: 'verlauf' };
+    var pop = { unterlagen: 'dlgUnterlagen', rechnung: 'dlgRechnung', bezahlt: 'dlgBezahlt' };
+    var h = (location.hash || '').replace('#', ''), q = new URLSearchParams(location.search).get('tab') || '';
+    var k = map[h] || map[q]; if (k) reiter(k);
+    if (pop[h] && document.getElementById(pop[h])) setTimeout(function () { bxPopup.open(pop[h]); }, 150);
+  }
+  window.addEventListener('hashchange', reiterAnker);
+
   // ---------------------------------------------------------------- Lauftext
   function lauf(el) {
     if (el.__lauf || el.scrollWidth - el.clientWidth <= 2) return;
@@ -227,6 +256,7 @@
     // Datei-Knopf im bulkify-Stil + Karten je Zeile am Handy (Nachbesserung Fable-5, Teil 4): bx-datei.js.
     if (!window.bxDateiInit && document.querySelector('input[type=file],table.bx-karten-handy') && !document.querySelector('script[src*="bx-datei.js"]')) { var sd = document.createElement('script'); sd.src = '/assets/bx-datei.js'; document.head.appendChild(sd); }
     alle(document);
+    reiterAnker();
     if (window.MutationObserver) new MutationObserver(function (ms) {
       ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.nodeType !== 1) return; if (n.matches && n.matches('dialog.bx-dialog')) aufwerten(n); else if (n.querySelector) alle(n); }); });
     }).observe(document.body, { childList: true, subtree: true });

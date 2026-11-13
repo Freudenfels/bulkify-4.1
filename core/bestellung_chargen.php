@@ -436,7 +436,8 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
     $wer = fn(string $v) => $v === 'lieferant' ? $t('Lieferant', 'Supplier', '供应商') : 'bulkify';
 
     $o  = '<div class="bx-panel" id="chargen"><h2 style="margin-top:0">' . $t('Chargen & Dokumente', 'Batches & documents', '批次与文件') . '</h2>';
-    $o .= '<p class="muted" style="margin:0 0 12px;font-size:13px">' . $t(
+    if ($von === 'team') $o .= '<p class="muted" style="margin:0 0 12px;font-size:13px">Charge, MHD und CoA je Position. ' . bx_hint('Bei Teillieferung oder zwei Chargen eine Zeile je Charge, dazu die Spezifikation. Team und Lieferant pflegen dieselbe Liste. Beim Wareneingang gegen diese Bestellung hängen die Unterlagen automatisch an der Charge.') . '</p>';
+    else $o .= '<p class="muted" style="margin:0 0 12px;font-size:13px">' . $t(
           'Charge, MHD und CoA je Position (bei Teillieferung oder zwei Chargen eine Zeile je Charge), dazu die Spezifikation. Team und Lieferant pflegen dieselbe Liste. Beim Wareneingang gegen diese Bestellung hängen die Unterlagen automatisch an der Charge.',
           'Batch number, best-before date and CoA per item (one line per batch for partial deliveries or two batches), plus the specification. bulkify and you maintain the same list.',
           '每个项目的批号、保质期和 CoA（分批交货或两个批次时每个批次一行），以及规格书。bulkify 和您维护同一列表。') . '</p>';
@@ -449,7 +450,7 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
         $o .= '<div style="font-weight:600;margin-bottom:8px">' . $h($p['name']) . ' <span class="muted" style="font-weight:400">· ' . $mz($p['menge']) . ' ' . $h($p['einheit']) . '</span></div>';
         // Charge-Zeilen
         if ($zeilen) {
-            $o .= '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>' . $t('Charge', 'Batch', '批号') . '</th><th>' . $t('MHD', 'Best before', '保质期') . '</th><th class="bx-num">' . $t('Menge', 'Quantity', '数量') . '</th><th>CoA</th><th>' . $t('Eingebucht', 'Received', '已入库') . '</th><th></th></tr></thead><tbody>';
+            $o .= '<div class="bx-tablewrap"><table class="bx-table bx-karten-handy"><thead><tr><th>' . $t('Charge', 'Batch', '批号') . '</th><th>' . $t('MHD', 'Best before', '保质期') . '</th><th class="bx-num">' . $t('Menge', 'Quantity', '数量') . '</th><th>CoA</th><th>' . $t('Eingebucht', 'Received', '已入库') . '</th><th></th></tr></thead><tbody>';
             foreach ($zeilen as $z) {
                 $coas = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'coa' && charge_gleich((string)($d['charge_nr'] ?? ''), (string)$z['charge_nr'])));
                 $coaHtml = '';
@@ -458,7 +459,7 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
                 $ein = array_values(array_filter($einH, fn($c) => charge_gleich((string)$c['charge_nr'], (string)$z['charge_nr'])));
                 // Sofortfix 13.11.2026: vorgemerkt, aber nicht eingebucht -> rot „nicht im Lager“ + „Jetzt einbuchen“ (auch bei geschlossener Bestellung).
                 $einHtml = $ein ? $t('ja', 'yes', '是') . ', ' . $dat($ein[0]['wareneingang'])
-                    : ($von === 'team' ? '<span style="color:#8f231b;font-weight:600">nicht im Lager</span> <a class="btn btn-primary btn-sm" href="?p=wareneingang&bp=' . $bp . '&bch=' . (int)$z['id'] . '">Jetzt einbuchen</a>'
+                    : ($von === 'team' ? '<span style="color:#8f231b;font-weight:600">nicht im Lager</span> <a class="btn btn-primary btn-sm" href="?p=wareneingang&bp=' . $bp . '&bch=' . (int)$z['id'] . '">einbuchen</a>'
                                        : '<span class="muted">–</span>');
                 $del = ($von === 'team' || (string)$z['von'] === 'lieferant')
                     ? '<form method="post" style="margin:0" onsubmit="return confirm(' . $h(json_encode($t('Charge entfernen?', 'Remove batch?', '删除批次？'), JSON_UNESCAPED_UNICODE)) . ');"><input type="hidden" name="aktion" value="bch_del"><input type="hidden" name="zeile_id" value="' . (int)$z['id'] . '"><button class="btn btn-ghost btn-sm" type="submit">' . $t('entfernen', 'remove', '删除') . '</button></form>' : '';
@@ -471,20 +472,34 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
         // Zwei getrennte Wege (Nico 08.11.2026): ENTWEDER das CoA hochladen – Charge, MHD, Menge und Werte werden ausgelesen und
         // im Popup bestätigt – ODER die Charge ohne CoA eintippen. Kein gemischtes Formular mehr.
         // Links: Charge, MHD, Menge eintippen – „oder" – rechts: CoA hochladen, die KI liest es aus (Nico 08.11.2026).
-        $o .= '<div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px">';
-        $o .= '<form method="post" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin:0;flex:1 1 420px;min-width:0">'
-            . '<input type="hidden" name="aktion" value="bch_add"><input type="hidden" name="bp_id" value="' . $bp . '">'
+        // Bestellseite 13.11.2026 (Team): „Charge vormerken“ und „CoA mit KI auslesen“ als Knöpfe mit Pop-up; im Portal bleibt das Formular.
+        $fVorm = '<input type="hidden" name="aktion" value="bch_add"><input type="hidden" name="bp_id" value="' . $bp . '">'
             . '<div class="bx-field" style="margin:0;min-width:140px;flex:1"><label>' . $t('Charge des Lieferanten', 'Batch number', '批号') . '</label><input type="text" name="charge_nr" required maxlength="80"></div>'
             . '<div class="bx-field" style="margin:0;max-width:160px"><label>' . $t('MHD', 'Best before', '保质期') . '</label><input type="date" name="mhd"></div>'
-            . '<div class="bx-field" style="margin:0;max-width:110px"><label>' . $t('Menge', 'Quantity', '数量') . '</label><input type="text" name="menge" inputmode="decimal" placeholder="' . $h($p['einheit']) . '"></div>'
-            . '<button class="btn btn-primary btn-sm" type="submit">' . ($von === 'team' ? 'Charge vormerken (noch nicht im Lager)' : $t('Eintragen', 'Save', '保存')) . '</button></form>';
+            . '<div class="bx-field" style="margin:0;max-width:110px"><label>' . $t('Menge', 'Quantity', '数量') . '</label><input type="text" name="menge" inputmode="decimal" placeholder="' . $h($p['einheit']) . '"></div>';
+        $fCoa = '<input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '"><input type="hidden" name="dok_typ" value="coa">';
+        if ($von === 'team') {
+            $o .= '<div class="bx-row" style="gap:8px;flex-wrap:wrap;margin-top:10px">'
+                . '<button type="button" class="btn btn-ghost btn-sm" onclick="bxPopup.open(\'dlgBch' . $bp . '\')">Charge vormerken</button>'
+                . '<button type="button" class="btn btn-ghost btn-sm" onclick="bxPopup.open(\'dlgBchCoa' . $bp . '\')">CoA hochladen (KI liest aus)</button></div>'
+                . '<dialog id="dlgBch' . $bp . '" class="bx-dialog"><h2>Charge vormerken</h2><form method="post"><div class="bx-grid">' . $fVorm . '</div>'
+                . '<p class="muted" style="font-size:13px;margin:10px 0 0">Noch nicht im Lager – eingebucht wird beim Wareneingang.</p>'
+                . '<div class="bx-pop-fuss"><button class="btn btn-primary" type="submit">Charge vormerken</button></div></form></dialog>'
+                . '<dialog id="dlgBchCoa' . $bp . '" class="bx-dialog"><h2>CoA hochladen</h2><form method="post" enctype="multipart/form-data">' . $fCoa
+                . '<div class="bx-field"><label>CoA (PDF oder Foto)</label><input type="file" name="bch_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp"></div>'
+                . '<p class="muted" style="font-size:13px;margin:6px 0 0">Die KI liest Charge, MHD, Menge und Werte aus – danach bestätigen.</p>'
+                . '<div class="bx-pop-fuss"><button class="btn btn-primary" type="submit">Hochladen</button></div></form></dialog>';
+        } else {
+        $o .= '<div class="bx-row" style="gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px">';
+        $o .= '<form method="post" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap;margin:0;flex:1 1 420px;min-width:0">' . $fVorm
+            . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Eintragen', 'Save', '保存') . '</button></form>';
         $o .= '<div class="muted" style="font-weight:600;padding:0 6px">' . $t('oder', 'or', '或') . '</div>';
-        $o .= '<form method="post" enctype="multipart/form-data" style="margin:0;flex:1 1 300px;min-width:0">'
-            . '<input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '"><input type="hidden" name="dok_typ" value="coa">'
+        $o .= '<form method="post" enctype="multipart/form-data" style="margin:0;flex:1 1 300px;min-width:0">' . $fCoa
             . '<div class="bx-field" style="margin:0"><label>' . $t('CoA mit KI auslesen', 'Read CoA automatically', '自动读取 CoA') . '</label>'
             . '<div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap"><input type="file" name="bch_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp" style="max-width:240px">'
             . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Hochladen', 'Upload', '上传') . '</button></div></div></form>';
         $o .= '</div>';
+        }
         // CoA ohne Charge-Zeile (z. B. erst die Datei, Charge später / per KI) + Spezifikation
         $lose = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'coa' && trim((string)($d['charge_nr'] ?? '')) === ''));
         $specs = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'spec'));

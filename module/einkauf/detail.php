@@ -372,8 +372,7 @@ function auftrag_options(array $auftraege, $sel): string {
 
 render_header('einkauf', $neu ? 'Neue Bestellung' : ($b['nummer'] ?? 'Bestellung'));
 bx_head($neu ? 'Neue Bestellung' : $v('nummer'), $neu ? 'Beim Lieferanten bestellen' : 'Bestellung bearbeiten',
-        ($neu ? '' : '<a class="btn btn-ghost" style="margin-right:8px" target="_blank" title="Bestellung als PDF – das schickst du dem Lieferanten" href="?p=bestellung_pdf&id=' . (int)$id . '">&#8681; PDF</a>')
-        . bx_btn('Zurück zur Liste', '?p=einkauf', 'ghost'));
+        bx_btn('Zurück zur Liste', '?p=einkauf', 'ghost'));
 if (isset($_GET['ok']))        echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['okmsg']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['okmsg']) . '</div>';   // Block B: Korrektur/Lösen
 if (isset($_GET['geliefert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Als geliefert verbucht – Chargen im Wareneingang (Quarantäne) angelegt.</div>';
@@ -428,284 +427,207 @@ if ($neu && $beArt !== '') echo '<div class="muted" style="margin:-4px 0 10px">A
 <?php endif; ?>
 <?php
 if (!$neu) {
-    // B6: Status GROSS ganz oben, darunter Lieferant + Bestelldatum + zugesagter Termin.
-    $stufe = bestellung_stufe($b);
-    $liefName = (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [(int)($b['lieferant_id'] ?? 0)]);
-    $stufeFarbe = ['ok'=>'var(--gruen,#1D9E75)','warn'=>'var(--warn,#8a5a12)','err'=>'#8f231b','info'=>'inherit',''=>'inherit'][$stufe['kind']] ?? 'inherit';
-    echo '<div class="bx-panel" style="padding:18px 20px">'
-       . '<div style="font-size:13px;color:var(--muted)">Bestellung ' . h((string)$b['nummer']) . '</div>'
-       . '<div style="font-size:24px;font-weight:700;margin:2px 0 6px;color:' . $stufeFarbe . '">' . h($stufe['label']) . '</div>'
-       . '<div class="muted" style="font-size:14px">Lieferant: <strong>' . ($liefName !== '' ? h($liefName) : (($b['bestellart'] ?? '') === 'online' ? 'Online-Einkauf (ohne Lieferant)' : '–')) . '</strong>'
-       . (!empty($b['bestelldatum']) ? ' · bestellt am ' . h(date('d.m.Y', strtotime((string)$b['bestelldatum']))) : '')
-       . (!empty($b['eta_geplant']) && (empty($b['bestelldatum']) || (string)$b['eta_geplant'] > (string)$b['bestelldatum']) ? ' · ' . (($b['bestellart'] ?? '') === 'direkt' ? 'erwartet am ' : 'zugesagter Termin ') . h(date('d.m.Y', strtotime((string)$b['eta_geplant']))) : '')
-       . (!empty($b['angekommen_am']) ? ' · angekommen ' . h(date('d.m.Y', strtotime((string)$b['angekommen_am']))) : '')
-       . '</div></div>';
-    // B6: Aktionen erst sammeln (Output-Buffer) und GANZ UNTEN ausgeben.
-    ob_start();
-    echo '<div class="bx-panel"><div class="bx-row" style="justify-content:space-between;align-items:center">';
-    echo '<div>Status: ' . (match($b['status']){'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge(status_text($b['status']))}) . '</div><div class="bx-row">';
-    if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" title="Diesen Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form> ';
-    if ($b['status'] !== 'offen' && $posGesamt === 0) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese leere Bestellung löschen?\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Diese Bestellung hat keine Positionen – löschen">Leere Bestellung löschen</button></form> ';
-    $zgSperre = ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) ? bestellung_zurueckziehen_grund((int)$id) : '';
-    if ($zgSperre !== '') echo '<button class="btn btn-ghost btn-sm" type="button" disabled title="' . h($zgSperre) . '">Bestellung zurückziehen</button> ';
-    elseif ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung zurückziehen und löschen? Der Bedarf erscheint wieder unter „Zu bestellen“.\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung ist noch nicht angekommen – zurückziehen und löschen (Bedarf kommt zurück)">Bestellung zurückziehen</button></form> ';
-    if ($b['status'] === 'offen') {
-        // 13.11.2026: immer bestellbar – fehlende Unterlagen sind nur ein Hinweis (Kasten „Unterlagen des Lieferanten fehlen“).
-        echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form> ';
-        if ((int)($b['unterlagen_wartet'] ?? 0) === 1)   // alter Sperr-Entwurf: war schon beim Lieferanten bestellt?
-            echo '<form method="post" id="schonbestellt" style="display:inline-flex;gap:6px;align-items:center"><input type="hidden" name="aktion" value="schon_bestellt">'
-               . '<input type="date" name="datum" value="' . h(heute_ort()) . '" style="width:150px" title="Bestelldatum beim Lieferanten">'
-               . '<button class="btn btn-primary btn-sm" type="submit" title="Wie „heute bestellt“: Direkt bestellt, ohne Mail an den Lieferanten">Schon bestellt am …</button></form> ';
-    }
-    if ($b['status'] === 'gesendet' && (int)($b['bestaetigt'] ?? 0) !== 1)
-        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung als telefonisch bestätigt markieren? Status bestellt, keine Mail.\');"><input type="hidden" name="aktion" value="telefonisch_bestaetigt"><button class="btn btn-primary btn-sm" type="submit" title="Lieferant hat am Telefon bestätigt – ohne weitere Mail">Telefonisch bestätigt</button></form>';
-    if (in_array((string)$b['status'], ['bestellt', 'gesendet'], true) && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="liefern"><button class="btn btn-primary btn-sm" type="submit" title="Öffnet den Wareneingang mit dieser Bestellung">Wareneingang buchen</button></form> ';
-    // Teil 3: Teillieferung -> „Rest storniert" schließt die Bestellung (Rest zählt nicht mehr als unterwegs).
-    $teilGel = (float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);
-    if ($teilGel > 0 && !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
-        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Rest stornieren? Die Bestellung wird geschlossen, die noch offene Menge zählt nicht mehr als unterwegs.\');"><input type="hidden" name="aktion" value="rest_storno"><button class="btn btn-ghost btn-sm" type="submit" title="Teillieferung: den Rest nicht mehr erwarten">Rest storniert</button></form> ';
-    // Aufteilen: nur bei >= 2 verschiedenen Bulk-Produkten und solange nicht geliefert/storniert.
-    $bulkProdGrp = (int) scalar("SELECT COUNT(DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING(bezeichnung,7),' (',1)))
-                                 FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL AND bezeichnung LIKE 'Bulk%'", [(int)$id]);
-    if ($bulkProdGrp >= 2 && !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']))
-        echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese Bestellung in ' . (int)$bulkProdGrp . ' Einzelbestellungen je Produkt aufteilen? Ein bereits bestätigter Stand (Annahme/Termin) wird übernommen. Die alte wird storniert und der Lieferant informiert.\');"><input type="hidden" name="aktion" value="aufteilen"><button class="btn btn-ghost btn-sm" type="submit" title="Je Produkt eine eigene Bestellung – ein schon zugesagter Stand wird übernommen, sonst kann der Lieferant jedes Produkt einzeln annehmen/ablehnen">In Einzelbestellungen aufteilen</button></form>';
-    // B4: Erinnern (Portal-Lieferant, noch nicht bestätigt) + Stornieren (solange nicht geliefert/angekommen).
-    if (bestellung_ist_portal($b) && (int)($b['bestaetigt'] ?? 0) !== 1 && !in_array((string)$b['status'], ['geliefert','storniert','offen'], true)) {
-        $ueberf = bestellung_ueberfaellig($b);
-        echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="erinnern"><button class="btn ' . ($ueberf ? 'btn-primary' : 'btn-ghost') . ' btn-sm" type="submit" title="Erinnerungsmail an den Lieferanten senden">Erinnern' . ($ueberf ? ' (überfällig · T+' . bestellung_tage_offen($b) . ')' : (!empty($b['erinnert_am']) ? ' (erneut)' : '')) . '</button></form>';
-    }
-    if (!in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am'])) {
-        // Nico 12.11.2026: Grund Pflicht; ein Portal-Lieferant wird immer informiert (Nachricht + Mail).
-        $stPortal = bestellung_ist_portal($b);
-        echo '<details style="display:inline-block;vertical-align:top"><summary class="btn btn-ghost btn-sm" style="color:#8f231b;list-style:none;cursor:pointer" title="Bestellung stornieren">Stornieren</summary>'
-           . '<form method="post" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap" onsubmit="return confirm(\'Diese Bestellung stornieren?\');">'
-           . '<input type="hidden" name="aktion" value="storno"><input type="text" name="grund" required maxlength="180" placeholder="Grund der Stornierung" style="width:240px">'
-           . ($stPortal ? '<span class="muted" style="font-size:12px">Der Lieferant wird informiert.</span>' : '')
-           . '<button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Jetzt stornieren</button></form></details>';
-    }
-    echo '</div></div></div>';
-    $aktionenHtml = ob_get_clean();   // B6: unten ausgeben
-
-    // B6: Positionen-Überblick (bestellt / geliefert) mit Auftragsbezug – read-only, ganz oben.
-    $posUeb = all("SELECT bp.id, bp.menge, bp.einheit, bp.item_id, bp.auftrag_id,
-                          COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS pname, a.nummer AS auftrag_nr,
-                          COALESCE(bp.geliefert_menge,0) AS geliefert, bp.rest_storniert_am, bp.pos_storno_grund,   -- Summe der verknüpften Chargen (webe_position_neu_rechnen)
-                          (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_chargen
-                   FROM bestellung_position bp
-                   LEFT JOIN item i ON i.id=bp.item_id
-                   LEFT JOIN auftrag a ON a.id=bp.auftrag_id
-                   WHERE bp.bestellung_id=? ORDER BY bp.sort, bp.id", [(int)$id]);
-    if ($posUeb) {
-        // Bulk-Positionen desselben Produkts zu einer Zeile bündeln (bestellt + geliefert summieren).
-        $basis = fn(string $p) => trim(preg_replace('/\s*\(.*$/', '', preg_replace('/^Bulk:\s*/', '', $p)));
-        $zeilen = [];
-        foreach ($posUeb as $p) {
-            $istBulk = empty($p['item_id']) && strncmp((string)$p['pname'], 'Bulk', 4) === 0;
-            $name = $istBulk ? $basis((string)$p['pname']) : (string)$p['pname'];
-            $key = $istBulk ? 'b:' . mb_strtolower($name) : 'p:' . (int)$p['id'];
-            if (!isset($zeilen[$key])) $zeilen[$key] = ['name'=>$name, 'einheit'=>(string)$p['einheit'], 'bestellt'=>0.0, 'geliefert'=>0.0, 'auftraege'=>[], 'storno'=>false, 'chargen'=>0, 'bp'=>(int)$p['id'], 'bps'=>[], 'grund'=>''];
-            $zeilen[$key]['bps'][] = (int)$p['id'];
-            if (!empty($p['pos_storno_grund'])) $zeilen[$key]['grund'] = (string)$p['pos_storno_grund'];
-            $zeilen[$key]['bestellt']  += (float)$p['menge'];
-            $zeilen[$key]['geliefert'] += (float)$p['geliefert'];
-            $zeilen[$key]['chargen']   += (int)$p['n_chargen'];
-            if (!empty($p['rest_storniert_am'])) $zeilen[$key]['storno'] = true;
-            if (!empty($p['auftrag_nr'])) $zeilen[$key]['auftraege'][(string)$p['auftrag_nr']] = (int)$p['auftrag_id'];
-        }
-        $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
-        echo '<div class="bx-panel"><h2 style="margin-top:0">Positionen</h2>';
-        $posStornoOk = has_role('admin') && (string)$b['status'] !== 'storniert';
-        $posPortal = bestellung_ist_portal($b) && empty($b['angekommen_am']) && (string)$b['status'] !== 'geliefert';
-        echo '<div class="bx-tablewrap"><table class="bx-table bx-karten-handy"><thead><tr><th>Position</th><th>Für Auftrag</th><th class="bx-num">bestellt</th><th class="bx-num">geliefert</th><th class="bx-num">offen</th>' . ($posStornoOk ? '<th></th>' : '') . '</tr></thead><tbody>';
-        $bOffen = !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']);
-        foreach ($zeilen as $z) {
-            $auf = '<span class="muted">Lager / allgemein</span>';
-            if ($z['auftraege']) { $parts = []; foreach ($z['auftraege'] as $nr => $aid) $parts[] = '<a href="?p=auftrag&id=' . (int)$aid . '">' . h((string)$nr) . '</a>'; $auf = implode(', ', $parts); }
-            $gel = (float)$z['geliefert'];
-            $gelHtml = $gel > 0.0001 ? $mz($gel) . ' ' . h($z['einheit']) : '<span class="muted">–</span>';
-            if ($gel + 0.0001 >= (float)$z['bestellt'] && (float)$z['bestellt'] > 0) $gelHtml = '<span class="bx-ok">' . $mz($gel) . ' ' . h($z['einheit']) . '</span>';
-            $rest = max(0.0, (float)$z['bestellt'] - $gel);
-            if ($gel > (float)$z['bestellt'] * 1.02 && (float)$z['bestellt'] > 0) $gelHtml .= ' <span class="muted" style="font-size:11px">Mehrlieferung</span>';
-            if ((string)$b['status'] === 'storniert' && !$z['storno']) $rest = 0.0;   // Fable-3 T2.8: stornierte Bestellung – offen 0
-            // Fable-4 T3.7: stornierte Position = offen 0 (der stornierte Rest steht klein daneben)
-            // Fable-5 T4.5 (D7): stornierte Position = offen 0 (Menge und Grund nur noch im Tooltip und in der Positionszeile)
-            $restHtml = $z['storno'] ? '<span class="muted" title="' . h('storniert: ' . $mz($rest) . ' ' . $z['einheit'] . ($z['grund'] !== '' ? ' · Grund: ' . $z['grund'] : '')) . '">0</span>'
-                      : ($rest > 0.0001 ? ($bOffen ? '<a href="?p=wareneingang&bp=' . (int)$z['bp'] . '" title="Wareneingang zu dieser Position buchen">' . $mz($rest) . ' ' . h($z['einheit']) . '</a>' : $mz($rest) . ' ' . h($z['einheit'])) : '<span class="muted">–</span>');
-            if ((string)$b['status'] === 'storniert' && !$z['storno']) $restHtml = '<span class="muted" title="Bestellung storniert">0 ' . h($z['einheit']) . '</span>';
-            echo '<tr><td><span class="bx-lauf" style="max-width:320px">' . h($z['name']) . '</span>' . ($z['storno'] ? ' ' . bx_badge('storniert', 'err') : '') . ($z['chargen'] ? ' <span class="muted" style="font-size:11px">' . (int)$z['chargen'] . ' Charge(n)</span>' : '') . '</td><td style="font-size:13px">' . $auf . '</td>'
-               . '<td class="bx-num">' . $mz($z['bestellt']) . ' ' . h($z['einheit']) . '</td>'
-               . '<td class="bx-num">' . $gelHtml . '</td><td class="bx-num">' . $restHtml . '</td>';
-            if ($posStornoOk) {
-                // Position stornieren: nur bei genau einer Position je Zeile, ohne eingebuchte Ware und noch nicht storniert.
-                $kannPS = count($z['bps']) === 1 && !$z['storno'] && $gel <= 0.0001 && (int)$z['chargen'] === 0;
-                echo '<td style="text-align:right;white-space:nowrap">' . ($kannPS
-                    ? '<details style="display:inline-block;text-align:left"><summary class="btn btn-ghost btn-sm" style="list-style:none;cursor:pointer" title="Nur diese Position stornieren (bleibt sichtbar, zählt nicht mehr als unterwegs)">Position stornieren</summary>'
-                      . '<form method="post" style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap" onsubmit="return confirm(\'Diese Position stornieren?\');"><input type="hidden" name="aktion" value="pos_storno"><input type="hidden" name="bp_id" value="' . (int)$z['bps'][0] . '">'
-                      . '<input type="text" name="grund" required maxlength="180" placeholder="Grund" style="width:200px">'
-                      . ($posPortal ? '<span class="muted" style="font-size:12px">Der Lieferant wird informiert.</span>' : '')
-                      . '<button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">Stornieren</button></form></details>'
-                    : '') . '</td>';
-            }
-            echo '</tr>';
-        }
-        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Bestellte vs. gelieferte Menge je Position (geliefert = Summe der verknüpften Chargen). Ist alles da, schließt sich die Bestellung selbst. Bei einer Teillieferung bleibt sie offen, der Rest zählt weiter als unterwegs – „Rest storniert“ schließt sie. Bearbeiten unten im Formular.</p></div>';
-        // Block B Teil 3 (11.11.2026): verknüpfte Chargen einzeln, mit „Verknüpfung lösen" (falsch verknüpft) und Link zum Korrigieren.
-        $vkCh = all("SELECT c.id, c.charge_nr, c.menge, c.menge_verfuegbar, c.einheit, c.wareneingang, COALESCE(NULLIF(bp.bezeichnung,''), i.name) AS pname
-                     FROM charge c JOIN bestellung_position bp ON bp.id=c.bestellung_position_id LEFT JOIN item i ON i.id=bp.item_id
-                     WHERE bp.bestellung_id=? ORDER BY c.id", [(int)$id]);
-        if ($vkCh) {
-            echo '<div class="bx-panel" id="chargenbezug"><h2 style="margin-top:0">Verknüpfte Chargen</h2><div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Charge</th><th>Position</th><th class="bx-num">Menge</th><th>Eingang</th><th></th></tr></thead><tbody>';
-            foreach ($vkCh as $vc)
-                echo '<tr><td><a href="?p=chargen&id=' . (int)$vc['id'] . '">' . h((string)($vc['charge_nr'] ?: '#' . $vc['id'])) . '</a></td><td>' . h((string)$vc['pname']) . '</td>'
-                   . '<td class="bx-num">' . $mz($vc['menge']) . ' ' . h((string)$vc['einheit']) . '</td><td>' . ($vc['wareneingang'] ? h(date('d.m.Y', strtotime((string)$vc['wareneingang']))) : '–') . '</td>'
-                   . '<td style="text-align:right;white-space:nowrap">' . (has_role('admin') ? '<a class="btn btn-ghost btn-sm" href="?p=chargen&id=' . (int)$vc['id'] . '" title="Menge auf der Chargenseite korrigieren">Menge korrigieren</a> '
-                   . '<form method="post" style="display:inline" onsubmit="return confirm(\'Verknüpfung lösen? Die Charge ist danach frei, die Bestellung rechnet neu und geht ggf. wieder auf.\');"><input type="hidden" name="aktion" value="abgl_loesen"><input type="hidden" name="charge_id" value="' . (int)$vc['id'] . '"><button class="btn btn-ghost btn-sm" type="submit">Verknüpfung lösen</button></form>' : '') . '</td></tr>';
-            echo '</tbody></table></div></div>';
-        }
-    }
-
-    // Teil 4: Wareneingang zuordnen (Altlasten) – Vorschläge vorhandener Chargen je offener Position, nur auf Klick.
+    // ===== Bestellseite aufgeräumt (13.11.2026, Anweisung „Bestellseite aufräumen“): Kopf mit EINEM Hauptknopf und Menü „⋯“,
+    // Unterlagen-Zeile, eine Positions-Karte (Bearbeiten im Pop-up), darunter Reiter statt elf Blöcke. Funktionen unverändert.
+    // Bausteine gemeinsam mit Pop-up „Bestellt“ und Einkauf mobil: core/bestellung_seite.php.
+    require_once BX_ROOT . '/core/bestellung_seite.php';
     require_once BX_ROOT . '/core/bestellung_abgleich.php';
-    echo bestellung_abgleich_panel($b);
-    // Chargen & Dokumente je Position: Charge, MHD, CoA, Spezifikation – Team und Lieferant (Portal) pflegen dieselbe Liste.
     require_once BX_ROOT . '/core/bestellung_chargen.php';
-    // Welche Unterlagen des Lieferanten fehlen noch. Seit 13.11.2026 keine Bestell-Sperre mehr: die Ware bleibt nach dem Eingang in
-    // Quarantäne, bis die Unterlage da ist (lu_charge_nach_eingang); bis dahin Aufgabe „Unterlagen nachfordern“ an den Einkauf.
-    require_once BX_ROOT . '/core/lieferant_unterlagen.php';
-    lu_abgleich();
-    $luF = (string)$b['status'] !== 'storniert' ? lu_bestellung_fehlt((int)$id) : [];   // auch geliefert: Charge wartet in Quarantäne auf die Unterlage
-    if ($luF) {
-        echo '<div class="bx-panel" id="unterlagen" style="border-left:3px solid #C9A227"><h2 style="margin-top:0">Unterlagen des Lieferanten fehlen</h2>'
-           . '<p style="margin-top:0;padding:8px 12px;background:rgba(201,162,39,.10)">' . h(lu_hinweis_text($luF)) . '</p>'
-           . '<p class="muted" style="margin-top:0">Bestellen geht trotzdem. Der Lieferant sieht dieselbe Liste im Portal unter „Fehlende Unterlagen“; die Aufgabe „Unterlagen nachfordern“ erledigt sich, sobald alles da ist.</p>'
-           . lu_panel((int)$b['lieferant_id'], '?p=bestellung&id=' . (int)$id, 'de', ['liste' => $luF], true) . '</div>';
-    }
-    echo bestellung_chargen_panel($b, 'team', 'de');
     require_once BX_ROOT . '/core/lief_aufkleber_ui.php';
-    echo la_panel($b, '?p=bestellung&id=' . (int)$id, 'team', 'de');   // Paket 12.11.2026 Teil 5: Labels / Aufkleber (auch für Direkt-Bestellungen)
-
-    // Online-Einkauf (Mitarbeiter hat selbst online gekauft): Händler/Zahlart/Preis – fürs Gegenrechnen.
-    if (($b['bestellart'] ?? '') === 'online') {
-        $zl = bestellung_zahlarten();
-        $za = $zl[(string)($b['online_zahlart'] ?? '')] ?? '';
-        $pr = ($b['online_preis'] ?? null) !== null ? number_format((float)$b['online_preis'], 2, ',', '.') . ' ' . h((string)($b['online_waehrung'] ?: 'EUR')) : '–';
-        // B3: zur Bestellung abgelegte Rechnung(en) (dokument typ='rechnung').
-        $rechn = all("SELECT id, titel, datei_orig FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [(int)$id]);
-        $rechnHtml = '';
-        foreach ($rechn as $rd) $rechnHtml .= '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">' . h((string)($rd['datei_orig'] ?: $rd['titel'] ?: 'Rechnung')) . '</a>';
-        echo '<div class="bx-panel"><h2 style="margin-top:0">Online-Einkauf</h2><div class="bx-cards">'
-           . '<div class="bx-card"><div class="k">Händler / Quelle</div><div class="v">' . (((string)($b['online_haendler'] ?? '')) !== '' ? h((string)$b['online_haendler']) : '<span class="muted">–</span>') . '</div></div>'
-           . '<div class="bx-card"><div class="k">Zahlungsart</div><div class="v">' . ($za !== '' ? h($za) : '<span class="muted">–</span>') . '</div></div>'
-           . '<div class="bx-card"><div class="k">Preis (gesamt)</div><div class="v">' . $pr . '</div></div>'
-           . '<div class="bx-card"><div class="k">Rechnung</div><div class="v" style="font-size:14px">' . ($rechnHtml !== '' ? $rechnHtml : '<span class="muted">keine hochgeladen</span>') . '</div></div>'
-           . '</div><p class="muted" style="font-size:12px;margin:8px 0 0">Selbst online gekauft – diese Angaben helfen der Buchhaltung beim Gegenrechnen von Einnahmen und Ausgaben.</p></div>';
-    }
-
-    // E8: Zahlung der Lieferantenrechnung (nur bei Lieferanten-Bestellungen; online ist bereits selbst bezahlt).
-    if (!empty($b['lieferant_id'])) {
-        $rechnDocs = all("SELECT id, datei_orig, titel, rechnung_nr, dok_datum, betrag, waehrung, hochgeladen_von FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [(int)$id]);
-        $zbeleg = all("SELECT id, datei_orig, titel FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='zahlungsbeleg' ORDER BY id DESC", [(int)$id]);
-        $istBezahlt = !empty($b['bezahlt_am']);
-        echo '<div class="bx-panel"><h2 style="margin-top:0">Zahlung</h2>';
-        // Rechnung(en) des Lieferanten zum Download
-        echo '<div class="bx-row" style="gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px">';
-        echo '<div><div class="muted" style="font-size:12px">Rechnung des Lieferanten</div><div>';
-        if ($rechnDocs) { foreach ($rechnDocs as $rd) {
-            $rInfo = array_filter([(string)($rd['rechnung_nr'] ?? '') !== '' ? 'Nr. ' . $rd['rechnung_nr'] : '',
-                                   !empty($rd['dok_datum']) ? 'vom ' . date('d.m.Y', strtotime((string)$rd['dok_datum'])) : '',
-                                   ($rd['betrag'] ?? null) !== null ? number_format((float)$rd['betrag'], 2, ',', '.') . ' ' . ((string)($rd['waehrung'] ?? '') ?: 'EUR') : '',
-                                   (string)($rd['hochgeladen_von'] ?? '') === 'team' ? 'vom Team hochgeladen' : 'vom Lieferanten im Portal']);
-            echo '<a href="?p=dokument&id=' . (int)$rd['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none;margin-right:12px">' . h((string)($rd['datei_orig'] ?: 'Rechnung')) . '</a>'
-               . '<span class="muted" style="font-size:12px;margin-right:12px">' . h(implode(' · ', $rInfo)) . '</span>';
-        } }
-        else echo '<span class="muted">noch keine hochgeladen - Lieferant im Portal oder hier hochladen</span>';
-        echo '</div></div>';
-        echo '<div><div class="muted" style="font-size:12px">Status</div><div>' . ($istBezahlt ? bx_badge('bezahlt am ' . date('d.m.Y', strtotime((string)$b['bezahlt_am'])) . ((string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : ''), 'ok') : bx_badge('offen', 'warn')) . '</div></div>';
-        echo '</div>';
-        if (!$rechnDocs) {
-            echo '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">'
-               . '<input type="hidden" name="aktion" value="team_rechnung">'
-               . '<div class="bx-field" style="margin:0;min-width:220px"><label>Rechnung hochladen (PDF)</label><input type="file" name="re_datei" required accept=".pdf,.jpg,.jpeg,.png,.webp"></div>'
-               . '<div class="bx-field" style="margin:0;min-width:150px"><label>Rechnungsnummer</label><input type="text" name="re_nr" maxlength="80"></div>'
-               . '<div class="bx-field" style="margin:0;max-width:170px"><label>Rechnungsdatum</label><input type="date" name="re_datum"></div>'
-               . '<div class="bx-field" style="margin:0;max-width:140px"><label>Betrag</label><input type="text" name="re_betrag" inputmode="decimal" placeholder="z. B. 1.250,00"></div>'
-               . '<div class="bx-field" style="margin:0;max-width:90px"><label>Währung</label><input type="text" name="re_waehrung" value="' . h((string) scalar("SELECT COALESCE(NULLIF(waehrung,''),'EUR') FROM lieferanten WHERE id=?", [(int)$b['lieferant_id']]) ?: 'EUR') . '" maxlength="8"></div>'
-               . '<button class="btn btn-ghost btn-sm" type="submit">Rechnung speichern</button></form>';
-        }
-        if (!$istBezahlt) {
-            echo '<form method="post" enctype="multipart/form-data" class="bx-row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">'
-               . '<input type="hidden" name="aktion" value="bezahlt">'
-               . '<div class="bx-field" style="margin:0;max-width:170px"><label>Bezahlt am</label><input type="date" name="bezahlt_am" value="' . date('Y-m-d') . '"></div>'
-               . '<div class="bx-field" style="margin:0;min-width:200px"><label>Zahlungsweg</label><input type="text" name="zahlungsweg" placeholder="z. B. Konto XY / Alipay"></div>'
-               . '<div class="bx-field" style="margin:0;min-width:220px"><label>Überweisungsbestätigung (optional)</label><input type="file" name="zahlbeleg" accept=".pdf,.jpg,.jpeg,.png,.webp"></div>'
-               . '<button class="btn btn-primary btn-sm" type="submit">Als bezahlt markieren</button></form>';
-        } elseif ($zbeleg) {
-            echo '<div class="muted" style="font-size:12px">Überweisungsbestätigung: ';
-            foreach ($zbeleg as $zd) echo '<a href="?p=dokument&id=' . (int)$zd['id'] . '" target="_blank" style="margin-right:12px">' . h((string)($zd['datei_orig'] ?: 'Beleg')) . '</a>';
-            echo '</div>';
-        }
-        echo '</div>';
-    }
-
-    // Ablauf beim Lieferanten – dasselbe Panel sieht der Lieferant in seinem Portal.
     require_once BX_ROOT . '/core/bestellung_ui.php';
-    echo bestellung_ablauf_panel($b, 'team', 'de');
-    // Rückfragen zu dieser Bestellung – dasselbe Gespräch sieht der Lieferant im Portal.
-    if ($b['lieferant_id']) { require_once BX_ROOT . '/core/nachricht.php'; echo nachricht_panel((int)$b['lieferant_id'], 'team', 'de', 'bestellung', (int)$id); }
+    require_once BX_ROOT . '/core/lieferant_dateien.php';
+    $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $bd = bs_daten($b);
+    $st = $bd['st']; $offenBest = $bd['offen']; $istPortal = $bd['portal']; $luF = $bd['luF']; $rechnDocs = $bd['rechnungen']; $istBezahlt = $bd['bezahlt'];
+    $hp = bs_haupt($b, $bd);
 
-    // Kontext: für welche(n) Auftrag/Produkt/Kunde wird bestellt? Damit die Dringlichkeit einschätzbar ist.
-    $kontext = all("SELECT DISTINCT a.id, a.nummer, a.menge, a.stueck,
-                           COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma AS kunde, a.kunde_id,
-                           pa.id AS pa_id, pa.prio, pa.geplant_am
-                    FROM bestellung_position bp
-                    JOIN auftrag a ON a.id=bp.auftrag_id
-                    LEFT JOIN produkt p ON p.id=a.produkt_id
-                    LEFT JOIN kunden k ON k.id=a.kunde_id
-                    LEFT JOIN produktionsauftrag pa ON pa.auftrag_id=a.id
-                    WHERE bp.bestellung_id=? ORDER BY pa.prio, a.nummer", [(int)$id]);
-    if ($kontext) {
-        echo '<div class="bx-panel"><h2 style="margin-top:0">Wofür wird bestellt</h2>';
-        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Auftrag</th><th>Produkt</th><th>Kunde</th><th class="bx-num">Menge</th><th>Priorität</th><th>Geplant am</th><th>Bereitschaft</th></tr></thead><tbody>';
-        foreach ($kontext as $c) {
-            $mengeTxt = number_format((int)$c['menge'], 0, ',', '.') . ' Pkg' . ((int)$c['stueck'] ? ' &times; ' . (int)$c['stueck'] : '');
-            $ber  = $c['pa_id'] ? bereitschaft_badge(produktion_bereitschaft((int)$c['pa_id'])['status']) : '<span class="muted">–</span>';
-            $ziel = $c['pa_id'] ? '?p=produktionsauftrag&id=' . (int)$c['pa_id'] : '?p=auftrag&id=' . (int)$c['id'];
-            echo '<tr onclick="location.href=\'' . $ziel . '\'" style="cursor:pointer">';
-            echo '<td>' . h($c['nummer']) . '</td>';
-            echo '<td>' . h($c['produkt'] ?: '–') . '</td>';
-            echo '<td>' . kunde_link($c['kunde_id'], $c['kunde']) . '</td>';
-            echo '<td class="bx-num">' . $mengeTxt . '</td>';
-            echo '<td>' . prio_badge((int)($c['prio'] ?? 2)) . '</td>';
-            echo '<td>' . ($c['geplant_am'] ? h(date('d.m.Y', strtotime($c['geplant_am']))) : '<span class="muted">–</span>') . '</td>';
-            echo '<td>' . $ber . '</td>';
-            echo '</tr>';
-        }
-        echo '</tbody></table></div>';
-        echo '<p class="muted" style="font-size:12px;margin:10px 0 0">Priorität und geplantes Produktionsdatum zeigen, wie dringend diese Bestellung ist. Zeile öffnet den Produktionsauftrag.</p>';
-        echo '</div>';
+    // ---- Hauptknopf je Stand
+    $haupt = match ($hp['art']) {
+        'bestellen' => '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-primary bs-haupt" type="submit">Bestellen</button></form>',
+        'einbuchen' => '<a class="btn btn-primary bs-haupt" href="' . h($bd['einbuchen_url']) . '">Ware ist da - einbuchen</a>',
+        'rechnung'  => '<button type="button" class="btn btn-primary bs-haupt" onclick="bxPopup.open(\'dlgRechnung\')">Rechnung erfassen</button>',
+        'bezahlt'   => '<button type="button" class="btn btn-primary bs-haupt" onclick="bxPopup.open(\'dlgBezahlt\')">Als bezahlt markieren</button>',
+        default     => '',
+    };
+
+    // ---- Menü „⋯“: alle übrigen Aktionen
+    $menu = [];
+    $menu[] = '<button type="button" class="bs-mi" onclick="bxPopup.open(\'dlgBearbeiten\')">Bearbeiten</button>';
+    $menu[] = '<a class="bs-mi" target="_blank" href="?p=bestellung_pdf&id=' . (int)$id . '">PDF für den Lieferanten</a>';
+    if ($hp['art'] !== 'rechnung' && !empty($b['lieferant_id']) && !$rechnDocs && $st !== 'storniert') $menu[] = '<button type="button" class="bs-mi" onclick="bxPopup.open(\'dlgRechnung\')">Rechnung erfassen</button>';
+    if ($hp['art'] !== 'bezahlt' && !empty($b['lieferant_id']) && !$istBezahlt && $st !== 'storniert') $menu[] = '<button type="button" class="bs-mi" onclick="bxPopup.open(\'dlgBezahlt\')">Als bezahlt markieren</button>';
+    if ($st === 'offen') $menu[] = '<form method="post"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="bs-mi" type="submit" title="Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form>';
+    if ($st !== 'offen' && $posGesamt === 0) $menu[] = '<form method="post" onsubmit="return confirm(\'Diese leere Bestellung löschen?\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="bs-mi bs-rot" type="submit">Leere Bestellung löschen</button></form>';
+    if ($st === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) {
+        $zgSperre = bestellung_zurueckziehen_grund((int)$id);
+        $menu[] = $zgSperre !== '' ? '<button class="bs-mi" type="button" disabled title="' . h($zgSperre) . '">Zurückziehen</button>'
+                : '<form method="post" onsubmit="return confirm(\'Bestellung zurückziehen und löschen? Der Bedarf erscheint wieder unter „Zu bestellen“.\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="bs-mi bs-rot" type="submit">Zurückziehen</button></form>';
     }
-    // (Bulk-Positionen sind oben in der Positionen-Übersicht enthalten – inkl. bestellt/geliefert je Produkt.)
-    // Etiketten dieser Bestellung: Druckdatei zum Herunterladen (für den Lieferanten/die Druckerei) + Maße + Produkt.
-    $etikettPos = all("SELECT bp.auftrag_id, i.name FROM bestellung_position bp
-                       JOIN item i ON i.id=bp.item_id
-                       WHERE bp.bestellung_id=? AND i.verpackung_rolle='etikett' AND bp.auftrag_id IS NOT NULL
-                       GROUP BY bp.auftrag_id, i.name", [(int)$id]);
+    if ($st === 'offen' && (int)($b['unterlagen_wartet'] ?? 0) === 1)
+        $menu[] = '<form method="post" class="bs-mi-form"><input type="hidden" name="aktion" value="schon_bestellt"><input type="date" name="datum" value="' . h(heute_ort()) . '" title="Bestelldatum beim Lieferanten"><button class="btn btn-ghost btn-sm" type="submit">Schon bestellt am …</button></form>';
+    if ($st === 'gesendet' && (int)($b['bestaetigt'] ?? 0) !== 1)
+        $menu[] = '<form method="post" onsubmit="return confirm(\'Bestellung als telefonisch bestätigt markieren? Status bestellt, keine Mail.\');"><input type="hidden" name="aktion" value="telefonisch_bestaetigt"><button class="bs-mi" type="submit">Telefonisch bestätigt</button></form>';
+    if ($istPortal && (int)($b['bestaetigt'] ?? 0) !== 1 && !in_array($st, ['geliefert', 'storniert', 'offen'], true))
+        $menu[] = '<form method="post"><input type="hidden" name="aktion" value="erinnern"><button class="bs-mi" type="submit">Lieferanten erinnern' . (!empty($b['erinnert_am']) ? ' (erneut)' : '') . '</button></form>';
+    $bulkProdGrp = (int) scalar("SELECT COUNT(DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING(bezeichnung,7),' (',1))) FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL AND bezeichnung LIKE 'Bulk%'", [(int)$id]);
+    if ($bulkProdGrp >= 2 && $offenBest)
+        $menu[] = '<form method="post" onsubmit="return confirm(\'Diese Bestellung in ' . $bulkProdGrp . ' Einzelbestellungen je Produkt aufteilen? Die alte wird storniert und der Lieferant informiert.\');"><input type="hidden" name="aktion" value="aufteilen"><button class="bs-mi" type="submit">In Einzelbestellungen aufteilen</button></form>';
+    if ($bd['teil'] > 0 && $offenBest)
+        $menu[] = '<form method="post" onsubmit="return confirm(\'Rest stornieren? Die Bestellung wird geschlossen, die noch offene Menge zählt nicht mehr als unterwegs.\');"><input type="hidden" name="aktion" value="rest_storno"><button class="bs-mi" type="submit">Rest stornieren</button></form>';
+    if ($offenBest) $menu[] = '<button type="button" class="bs-mi bs-rot" onclick="bxPopup.open(\'dlgStorno\')">Stornieren</button>';
+    $altlast = has_role('admin') && !in_array($st, ['storniert', 'offen'], true) && bestellung_abgleich_panel($b) !== '';
+    if ($altlast) $menu[] = '<button type="button" class="bs-mi" onclick="document.getElementById(\'dlgAltlast' . (int)$id . '\').showModal()">Altlasten: ohne Einbuchen schließen</button>';
+    $menuHtml = '<details class="bs-menu"><summary class="btn btn-ghost" aria-label="Weitere Aktionen" title="Weitere Aktionen">&#8943;</summary><div class="bs-menu-liste">' . implode('', $menu) . '</div></details>';
+
+    echo bs_kopf_html($b, $bd, $haupt . $menuHtml);
+
+    // ---- Unterlagen-Zeile direkt unter dem Kopf (Hochladen im Pop-up)
+    if ($luF) {
+        echo '<div class="bs-hinweis" id="unterlagen"><span>' . h(lu_hinweis_text($luF)) . '</span>'
+           . '<button type="button" class="btn btn-ghost btn-sm" onclick="bxPopup.open(\'dlgUnterlagen\')">Hochladen</button></div>';
+        echo '<dialog id="dlgUnterlagen" class="bx-dialog" style="max-width:760px"><h2>Unterlagen des Lieferanten</h2>'
+           . '<div>' . lu_panel((int)$b['lieferant_id'], '?p=bestellung&id=' . (int)$id, 'de', ['liste' => $luF], true) . '</div></dialog>';
+    }
+
+    // ---- Position (eine Karte), darunter eingeklappt: Wofür wird bestellt, Etiketten-Druckdateien
+    $posHtml = bs_position_html($b, 'dlgBearbeiten');
+    $kontext = all("SELECT DISTINCT a.id, a.nummer, COALESCE(NULLIF(p.kundenname,''), p.name) AS produkt, k.firma AS kunde, a.kunde_id, pa.id AS pa_id, pa.prio, pa.geplant_am
+                    FROM bestellung_position bp JOIN auftrag a ON a.id=bp.auftrag_id LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN kunden k ON k.id=a.kunde_id
+                    LEFT JOIN produktionsauftrag pa ON pa.auftrag_id=a.id WHERE bp.bestellung_id=? ORDER BY pa.prio, a.nummer", [(int)$id]);
+    $zusatz = '';
+    if ($kontext) {
+        $zusatz .= '<details class="bs-details"><summary>Wofür wird bestellt (Priorität, Produktionstermin)</summary><div class="bx-tablewrap"><table class="bx-table bx-karten-handy"><thead><tr><th>Auftrag</th><th>Produkt</th><th>Kunde</th><th>Priorität</th><th>Geplant am</th><th>Bereitschaft</th></tr></thead><tbody>';
+        foreach ($kontext as $c)
+            $zusatz .= '<tr><td><a href="' . ($c['pa_id'] ? '?p=produktionsauftrag&id=' . (int)$c['pa_id'] : '?p=auftrag&id=' . (int)$c['id']) . '">' . h($c['nummer']) . '</a></td><td>' . h($c['produkt'] ?: '–') . '</td><td>' . kunde_link($c['kunde_id'], $c['kunde']) . '</td>'
+                     . '<td>' . prio_badge((int)($c['prio'] ?? 2)) . '</td><td>' . ($c['geplant_am'] ? h(date('d.m.Y', strtotime($c['geplant_am']))) : '–') . '</td>'
+                     . '<td>' . ($c['pa_id'] ? bereitschaft_badge(produktion_bereitschaft((int)$c['pa_id'])['status']) : '–') . '</td></tr>';
+        $zusatz .= '</tbody></table></div></details>';
+    }
+    $etikettPos = all("SELECT bp.auftrag_id, i.name FROM bestellung_position bp JOIN item i ON i.id=bp.item_id WHERE bp.bestellung_id=? AND i.verpackung_rolle='etikett' AND bp.auftrag_id IS NOT NULL GROUP BY bp.auftrag_id, i.name", [(int)$id]);
     if ($etikettPos) {
-        echo '<div class="bx-panel"><h2 style="margin-top:0">Etiketten (Druckdateien)</h2>';
-        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Etikett</th><th>Produkt</th><th>Maße</th><th>Druckdatei</th></tr></thead><tbody>';
+        $zusatz .= '<details class="bs-details"><summary>Etiketten-Druckdateien</summary><div class="bx-tablewrap"><table class="bx-table bx-karten-handy"><thead><tr><th>Etikett</th><th>Produkt</th><th>Maße</th><th>Druckdatei</th></tr></thead><tbody>';
         foreach ($etikettPos as $ep) {
             $ei = etikett_info((int)$ep['auftrag_id']);
-            $dl = !empty($ei['dok'])
-                ? '<a href="?p=dokument&id=' . (int)$ei['dok']['id'] . '" target="_blank" style="white-space:nowrap;text-decoration:none">' . h($ei['dok']['datei_orig'] ?: 'Etikett') . '</a>'
-                : bx_badge('kein Design hochgeladen', 'warn');
-            echo '<tr><td>' . h($ep['name']) . '</td>'
-               . '<td>' . ($ei['produkt'] ? h($ei['produkt']) : '<span class="muted">–</span>') . '</td>'
-               . '<td>' . ($ei['masse'] ? h($ei['masse']['label']) : '<span class="muted">–</span>') . '</td>'
-               . '<td>' . $dl . '</td></tr>';
+            $zusatz .= '<tr><td>' . h($ep['name']) . '</td><td>' . ($ei['produkt'] ? h($ei['produkt']) : '–') . '</td><td>' . ($ei['masse'] ? h($ei['masse']['label']) : '–') . '</td><td>'
+                     . (!empty($ei['dok']) ? '<a href="?p=dokument&id=' . (int)$ei['dok']['id'] . '" target="_blank">' . h($ei['dok']['datei_orig'] ?: 'Etikett') . '</a>' : bx_badge('kein Design hochgeladen', 'warn')) . '</td></tr>';
         }
-        echo '</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">Kundenspezifische Etiketten. Druckdatei herunterladen und an die Druckerei/den Lieferanten weitergeben.</p></div>';
+        $zusatz .= '</tbody></table></div></details>';
     }
+    if ($posHtml !== '' && $zusatz !== '') $posHtml = substr($posHtml, 0, -6) . $zusatz . '</div>';
+    echo $posHtml;
+
+    // ---- Reiter 1: Wareneingang & Chargen
+    ob_start();
+    echo bestellung_abgleich_panel($b, true);   // nur „schon im Lager? verknüpfen“ – Einbuchen = Hauptknopf, Stornieren/Altlasten im Menü
+    echo bestellung_chargen_panel($b, 'team', 'de');
+    if ($bd['chargen'] > 0) echo la_panel($b, '?p=bestellung&id=' . (int)$id, 'team', 'de');   // Aufkleber nur, wenn eine Charge da ist
+    $vkCh = all("SELECT c.id, c.charge_nr, c.menge, c.einheit, c.wareneingang FROM charge c JOIN bestellung_position bp ON bp.id=c.bestellung_position_id WHERE bp.bestellung_id=? ORDER BY c.id", [(int)$id]);
+    if ($vkCh) {
+        echo '<div class="bx-panel" id="chargenbezug"><h2 style="margin-top:0">Eingebuchte Chargen</h2><div class="bx-tablewrap"><table class="bx-table bx-karten-handy"><thead><tr><th>Charge</th><th class="bx-num">Menge</th><th>Eingang</th><th></th></tr></thead><tbody>';
+        foreach ($vkCh as $vc)
+            echo '<tr><td><a href="?p=chargen&id=' . (int)$vc['id'] . '">' . h((string)($vc['charge_nr'] ?: '#' . $vc['id'])) . '</a></td><td class="bx-num">' . $mz($vc['menge']) . ' ' . h((string)$vc['einheit']) . '</td>'
+               . '<td>' . ($vc['wareneingang'] ? h(date('d.m.Y', strtotime((string)$vc['wareneingang']))) : '–') . '</td><td style="text-align:right">'
+               . (has_role('admin') ? '<a class="btn btn-ghost btn-sm" href="?p=chargen&id=' . (int)$vc['id'] . '">Menge korrigieren</a> <form method="post" style="display:inline" onsubmit="return confirm(\'Verknüpfung lösen? Die Charge ist danach frei, die Bestellung rechnet neu.\');"><input type="hidden" name="aktion" value="abgl_loesen"><input type="hidden" name="charge_id" value="' . (int)$vc['id'] . '"><button class="btn btn-ghost btn-sm" type="submit">Verknüpfung lösen</button></form>' : '') . '</td></tr>';
+        echo '</tbody></table></div></div>';
+    }
+    $bdoks = bestell_dokumente((int)$id, true);
+    $BDTYP = ['coa' => 'CoA', 'rechnung' => 'Rechnung', 'lieferschein' => 'Lieferschein', 'spec' => 'Spezifikation', 'analyse' => 'Laboranalyse', 'sonstiges' => 'Sonstiges'];
+    if ($bdoks) {
+        echo '<div class="bx-panel"><h2 style="margin-top:0">Weitere Dokumente</h2><div class="bs-doks">';
+        foreach ($bdoks as $d) echo '<a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=' . (int)$d['id'] . '">' . h(($BDTYP[$d['typ']] ?? $d['typ']) . ' · ' . ($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument'))) . '</a>';
+        echo '</div></div>';
+    }
+    $tabWE = ob_get_clean();
+
+    // ---- Reiter 2: Versand (Stationen-Leiste nur bei Portal-Lieferanten – in bestellung_ablauf_panel)
+    ob_start();
+    echo bestellung_ablauf_panel($b, 'team', 'de');
+    require_once BX_ROOT . '/core/bestellung_einzeln.php';
+    $pak = bestellung_tracking_liste((int)$id);
+    $sendTxt = bestellung_sendung_text((int)$id);
+    echo '<div class="bs-zeile"><span>' . ($pak ? 'Sendung: ' . h(implode(', ', array_map(fn($pk) => trim((string)($pk['spediteur'] ?? '') . ' ' . $pk['tracking']), $pak))) : '<span class="muted">Noch keine Sendungsnummer.</span>')
+       . ($sendTxt !== '' ? ' · ' . h($sendTxt) : '') . '</span>'
+       . '<button type="button" class="btn btn-ghost btn-sm" data-pop-url="?p=bestellung_pop&id=' . (int)$id . '&nur=versand" data-pop-titel="Versand und Sendung">Versand / Sendung erfassen</button></div>';
+    $tabVersand = ob_get_clean();
+
+    // ---- Reiter 3: Zahlung (eine Statuszeile, Formulare nur im Pop-up)
+    ob_start();
+    if (($b['bestellart'] ?? '') === 'online') {
+        $za = bestellung_zahlarten()[(string)($b['online_zahlart'] ?? '')] ?? '';
+        echo '<div class="bs-zeile"><span>Online-Einkauf · ' . h((string)($b['online_haendler'] ?? '') ?: 'Händler –') . ' · ' . h($za ?: 'Zahlart –') . ' · '
+           . (($b['online_preis'] ?? null) !== null ? h(number_format((float)$b['online_preis'], 2, ',', '.') . ' ' . ((string)($b['online_waehrung'] ?? '') ?: 'EUR')) : 'Preis –') . '</span>'
+           . '<span class="bs-zeile-knoepfe">' . implode('', array_map(fn($rd) => '<a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=' . (int)$rd['id'] . '">Rechnung öffnen</a>', $rechnDocs)) . '</span></div>';
+    }
+    if (!empty($b['lieferant_id'])) {
+        $re = $rechnDocs[0] ?? null; $er0 = $bd['er'][0] ?? null;
+        if (!$re) $zeile = 'offen · keine Rechnung';
+        else $zeile = 'Rechnung' . ((string)($re['rechnung_nr'] ?? '') !== '' ? ' ' . $re['rechnung_nr'] : '')
+                    . (($re['betrag'] ?? null) !== null ? ' · ' . number_format((float)$re['betrag'], 2, ',', '.') . ' ' . (((string)($re['waehrung'] ?? '') ?: 'EUR') === 'EUR' ? '€' : $re['waehrung']) : '')
+                    . ($er0 && !empty($er0['faellig']) && !$istBezahlt ? ' · fällig ' . date('d.m.', strtotime((string)$er0['faellig'])) : '');
+        if ($istBezahlt && $bd['bezahlt_am'] !== '') $zeile .= ' · bezahlt am ' . date('d.m.Y', strtotime($bd['bezahlt_am'])) . ((string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . $b['zahlungsweg'] : '');
+        elseif ($er0) $zeile .= ' · Buchhaltung: ' . er_status_text($er0, 'de');
+        echo '<div class="bs-zeile"><span>' . h($zeile) . '</span><span class="bs-zeile-knoepfe">';
+        foreach ($rechnDocs as $rd) echo '<a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=' . (int)$rd['id'] . '">Rechnung öffnen</a>';
+        foreach (all("SELECT id FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='zahlungsbeleg' ORDER BY id DESC", [(int)$id]) as $zd)
+            echo '<a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=' . (int)$zd['id'] . '">Zahlungsbeleg</a>';
+        if (!$rechnDocs && $st !== 'storniert') echo '<button type="button" class="btn btn-primary btn-sm" onclick="bxPopup.open(\'dlgRechnung\')">Rechnung erfassen</button>';
+        elseif ($rechnDocs && !$istBezahlt && $st !== 'storniert') echo '<button type="button" class="btn btn-primary btn-sm" onclick="bxPopup.open(\'dlgBezahlt\')">Als bezahlt markieren</button>';
+        echo '</span></div>';
+    }
+    $tabZahlung = ob_get_clean();
+
+    // ---- Reiter 4: Nachrichten (Rückfragen mit dem Lieferanten)
+    ob_start();
+    if (!empty($b['lieferant_id'])) { require_once BX_ROOT . '/core/nachricht.php'; echo nachricht_panel((int)$b['lieferant_id'], 'team', 'de', 'bestellung', (int)$id); }
+    else echo '<p class="muted">Ohne Lieferant keine Rückfragen.</p>';
+    $tabNachr = ob_get_clean();
+
+    // ---- Reiter 5: Verlauf und interne Notiz
+    ob_start();
+    echo '<div class="bs-zeile"><span><span class="muted">Interne Notiz:</span> ' . (trim((string)($b['notiz'] ?? '')) !== '' ? h((string)$b['notiz']) : '–') . '</span>'
+       . (trim((string)($b['hinweis_lieferant'] ?? '')) !== '' ? '<span><span class="muted">Hinweis an den Lieferanten:</span> ' . h((string)$b['hinweis_lieferant']) . '</span>' : '')
+       . '<button type="button" class="btn btn-ghost btn-sm" onclick="bxPopup.open(\'dlgBearbeiten\')">Ändern</button></div>';
+    $vb = function_exists('verlauf_fuer') ? verlauf_fuer('bestellung', (int)$id) : [];
+    if ($vb) { echo '<div class="bx-panel">'; bx_chat($vb, (string)$b['nummer']); echo '</div>'; }
+    $tabVerlauf = ob_get_clean();
+
+    // ---- Reiter (Standard = wo der nächste Schritt liegt)
+    $weOffen = $offenBest && in_array($st, ['bestellt', 'gesendet'], true);
+    $zahlOffen = in_array($hp['art'], ['rechnung', 'bezahlt'], true);
+    $standard = ($weOffen || $st === 'offen') ? 'wareneingang' : ($zahlOffen ? 'zahlung' : 'wareneingang');
+    echo bs_reiter_html([
+        'wareneingang' => ['Wareneingang & Chargen', ($weOffen || $luF) ? '•' : '', $tabWE],
+        'versand'      => ['Versand', '', $tabVersand],
+        'zahlung'      => ['Zahlung', $zahlOffen ? '•' : '', $tabZahlung],
+        'nachrichten'  => ['Nachrichten', $bd['ungelesen'] > 0 ? (string)$bd['ungelesen'] : '', $tabNachr],
+        'verlauf'      => ['Verlauf', '', $tabVerlauf],
+    ], $standard);
+
+    // ---- Pop-ups: Rechnung erfassen, Als bezahlt markieren, Stornieren, Altlasten
+    if (!empty($b['lieferant_id'])) {
+        echo '<dialog id="dlgRechnung" class="bx-dialog"><h2>Rechnung erfassen</h2><form method="post" enctype="multipart/form-data">'
+           . '<input type="hidden" name="aktion" value="team_rechnung">'
+           . '<div class="bx-field"><label>Rechnung (PDF oder Foto)</label><input type="file" name="re_datei" required accept=".pdf,.jpg,.jpeg,.png,.webp"></div>'
+           . '<div class="bx-grid"><div class="bx-field"><label>Rechnungsnummer</label><input type="text" name="re_nr" maxlength="80"></div>'
+           . '<div class="bx-field"><label>Rechnungsdatum</label><input type="date" name="re_datum"></div>'
+           . '<div class="bx-field"><label>Betrag</label><input type="text" name="re_betrag" inputmode="decimal" placeholder="z. B. 1.250,00"></div>'
+           . '<div class="bx-field"><label>Währung</label><input type="text" name="re_waehrung" maxlength="8" value="' . h((string) scalar("SELECT COALESCE(NULLIF(waehrung,''),'EUR') FROM lieferanten WHERE id=?", [(int)$b['lieferant_id']]) ?: 'EUR') . '"></div></div>'
+           . '<div class="bx-pop-fuss"><button class="btn btn-primary" type="submit">Rechnung speichern</button></div></form></dialog>';
+        echo '<dialog id="dlgBezahlt" class="bx-dialog"><h2>Als bezahlt markieren</h2><form method="post" enctype="multipart/form-data">'
+           . '<input type="hidden" name="aktion" value="bezahlt">'
+           . '<div class="bx-grid"><div class="bx-field"><label>Bezahlt am</label><input type="date" name="bezahlt_am" value="' . date('Y-m-d') . '"></div>'
+           . '<div class="bx-field"><label>Zahlungsweg</label><input type="text" name="zahlungsweg" placeholder="z. B. Konto XY / Alipay"></div></div>'
+           . '<div class="bx-field"><label>Überweisungsbestätigung (optional)</label><input type="file" name="zahlbeleg" accept=".pdf,.jpg,.jpeg,.png,.webp"></div>'
+           . '<div class="bx-pop-fuss"><button class="btn btn-primary" type="submit">Als bezahlt markieren</button></div></form></dialog>';
+    }
+    if ($offenBest)
+        echo '<dialog id="dlgStorno" class="bx-dialog"><h2>Bestellung stornieren</h2><form method="post" onsubmit="return confirm(\'Diese Bestellung stornieren?\');">'
+           . '<input type="hidden" name="aktion" value="storno"><div class="bx-field"><label>Grund</label><input type="text" name="grund" required data-pflicht maxlength="180"></div>'
+           . ($istPortal ? '<p class="muted" style="font-size:13px;margin:0">Der Lieferant wird informiert.</p>' : '')
+           . '<div class="bx-pop-fuss"><button class="btn btn-primary" type="submit" style="background:#b3261e;border-color:#b3261e;color:#fff">Jetzt stornieren</button></div></form></dialog>';
+    if ($altlast) echo bestellung_altlast_dialog((int)$id);
 }
+if (!$neu) echo '<dialog id="dlgBearbeiten" class="bx-dialog" style="max-width:980px"><h2>Bestellung bearbeiten</h2><div>';
 ?>
 <form method="post" class="bx-form">
   <fieldset <?= $geliefert ? 'disabled' : '' ?> style="border:0;padding:0;margin:0;min-width:0">
@@ -752,9 +674,10 @@ if (!$neu) {
   </fieldset>
   <div class="bx-row" style="margin-top:var(--sp-4)">
     <?php if (!$geliefert): ?><button class="btn btn-primary" type="submit">Speichern</button><?php endif; ?>
-    <a class="btn btn-ghost" href="?p=einkauf">Zurück</a>
+    <?php if ($neu): ?><a class="btn btn-ghost" href="?p=einkauf">Zurück</a><?php endif; ?>
   </div>
 </form>
+<?php if (!$neu) echo '</div></dialog>'; ?>
 
 <script>
 var EK = <?= json_encode($EK, JSON_UNESCAPED_UNICODE) ?>;
@@ -792,34 +715,4 @@ function psum(){
   psum();
 })();
 </script>
-<?php // Vom Lieferanten zu dieser Bestellung hochgeladene Dokumente (CoA, Rechnung zum Bezahlen …).
-if (!$neu):
-  require_once BX_ROOT . '/core/lieferant_dateien.php';
-  $bdoks = bestell_dokumente((int)$id, true);   // je Position abgelegte CoA/Spezifikationen stehen im Block „Chargen & Dokumente"
-  $BDTYP = ['coa'=>'CoA / Analysenzertifikat','rechnung'=>'Rechnung','lieferschein'=>'Lieferschein','spec'=>'Spezifikation','analyse'=>'Laboranalyse','sonstiges'=>'Sonstiges'];
-  if ($bdoks): ?>
-  <div class="bx-panel">
-    <h2 style="margin-top:0">Weitere Dokumente zur Bestellung</h2>
-    <div class="bx-tablewrap"><table class="bx-table">
-      <thead><tr><th>Typ</th><th>Datei</th><th>Datum</th><th></th></tr></thead>
-      <tbody>
-      <?php foreach ($bdoks as $d): ?>
-        <tr><td><?= h($BDTYP[$d['typ']] ?? $d['typ']) ?><?= $d['typ']==='rechnung' ? ' ' . bx_badge('Rechnung','warn') : '' ?></td>
-            <td><?= h($d['titel'] ?: ($d['datei_orig'] ?: 'Dokument')) ?></td>
-            <td class="muted"><?= h(date('d.m.Y', strtotime((string)$d['angelegt']))) ?></td>
-            <td style="text-align:right"><a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=<?= (int)$d['id'] ?>">öffnen</a></td></tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table></div>
-  </div>
-  <?php endif; endif; ?>
-<?php
-// B6: Aktionen GANZ UNTEN (oben nur der große Status-Kopf). Panel wurde oben in $aktionenHtml gepuffert.
-if (!$neu && isset($aktionenHtml)) {
-    echo '<h2 style="margin:18px 0 8px">Aktionen</h2>';
-    echo $aktionenHtml;
-    // Verlauf dieser Bestellung (Aktivitätslog).
-    $vb = function_exists('verlauf_fuer') ? verlauf_fuer('bestellung', (int)$id) : [];
-    if ($vb) { echo '<div class="bx-panel"><h2 style="margin-top:0">Verlauf</h2>'; bx_chat($vb, (string)$b['nummer']); echo '</div>'; }
-}
-render_footer(); ?>
+<?php // Bestellseite 13.11.2026: „Weitere Dokumente“ steht im Reiter Wareneingang & Chargen, Aktionen im Menü „⋯“, Verlauf im Reiter Verlauf.

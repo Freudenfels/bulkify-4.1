@@ -75,7 +75,9 @@ function bestellung_abgleich_treffer(int $bestellung_id): int {
 
 // Block auf der Bestellseite: je Position ohne (volle) Charge die Vorschläge mit „verknüpfen". Plus „als geliefert schließen"
 // (Ware kam, ist aber nicht einzeln eingebucht) und „stornieren". Erscheint nur, wenn es offene/unverknüpfte Positionen gibt.
-function bestellung_abgleich_panel(array $b): string {
+// $kompakt (Bestellseite 13.11.2026): nur „schon im Lager? verknüpfen“ – Einbuchen ist der Hauptknopf im Kopf, Stornieren und Altlasten
+// stehen im Menü „⋯“. Ausnahme: „ohne Ware geschlossen“ behält den Knopf zum Nachbuchen.
+function bestellung_abgleich_panel(array $b, bool $kompakt = false): string {
     if (in_array((string)$b['status'], ['storniert', 'offen'], true)) return '';
     $pos = all("SELECT bp.*, i.name AS artikel, (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_chargen
                 FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id WHERE bp.bestellung_id=? AND bp.menge>0 ORDER BY bp.sort, bp.id", [(int)$b['id']]);
@@ -86,7 +88,10 @@ function bestellung_abgleich_panel(array $b): string {
     if (!$offen) return '';
     $eingegangen = (string)$b['status'] === 'geliefert' || !empty($b['angekommen_am']);
     $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
-    $h = '<div class="bx-panel" id="abgleich"><h2 style="margin-top:0">Wareneingang</h2>'
+    if ($kompakt) $offen = array_filter($offen, fn($p) => $ohneWare($p) || bestellung_abgleich_vorschlaege((int)$p['id']));
+    if (!$offen) return '';
+    $h = $kompakt ? '<details class="bx-panel bs-details" id="abgleich"><summary>Schon im Lager (ohne Bestellung gebucht)? Passende Chargen verknüpfen</summary>'
+       : '<div class="bx-panel" id="abgleich"><h2 style="margin-top:0">Wareneingang</h2>'
        . '<p class="muted" style="margin:0 0 12px">' . ($eingegangen ? 'Die Bestellung steht auf eingegangen, aber nicht jede Position hängt an einer eingebuchten Charge.' : 'Noch nicht (vollständig) eingegangen.')
        . ' Ware ist da: „Ware ist da - einbuchen“. Liegt sie schon im Lager (ohne Bestellung gebucht), unten verknüpfen.</p>';
     foreach ($offen as $p) {
@@ -96,8 +101,8 @@ function bestellung_abgleich_panel(array $b): string {
             . ' · geliefert ' . $mz($p['geliefert_menge']) . ($p['n_chargen'] ? ' (' . (int)$p['n_chargen'] . ' Charge(n))' : '') . '</span>'
             . ($ohneWare($p) ? ' <span style="color:#8f231b;font-weight:600">ohne Ware geschlossen – nicht im Lager</span>' : '') . '</div>'
             // Hauptknopf: Ware ist da -> Wareneingang dieser Position (Charge/MHD/Menge aus „Chargen & Dokumente“ vorbelegt)
-            . '<div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0 4px"><a class="btn btn-primary" href="?p=wareneingang&bp=' . (int)$p['id'] . ($vor ? '&bch=' . (int)$vor['id'] : '') . '">Ware ist da - einbuchen</a>'
-            . ($vor ? '<span class="muted" style="font-size:13px">vorbelegt: Charge ' . h((string)$vor['charge_nr']) . ($vor['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$vor['mhd']))) : '') . ($vor['menge'] !== null ? ' · ' . $mz($vor['menge']) . ' ' . h((string)$p['einheit']) : '') . '</span>' : '') . '</div>';
+            . (($kompakt && !$ohneWare($p)) ? '' : '<div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0 4px"><a class="btn btn-primary" href="?p=wareneingang&bp=' . (int)$p['id'] . ($vor ? '&bch=' . (int)$vor['id'] : '') . '">Ware ist da - einbuchen</a>'
+            . ($vor ? '<span class="muted" style="font-size:13px">vorbelegt: Charge ' . h((string)$vor['charge_nr']) . ($vor['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$vor['mhd']))) : '') . ($vor['menge'] !== null ? ' · ' . $mz($vor['menge']) . ' ' . h((string)$p['einheit']) : '') . '</span>' : '') . '</div>');
         if (!$v) { $h .= '</div>'; continue; }
         $h .= '<div class="muted" style="font-size:13px;margin-top:6px">Schon im Lager (ohne Bestellung gebucht)? Passende Chargen:</div>';
         $h .= '<div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table"><thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>Eingang</th><th>Lieferant</th><th>Warum</th><th></th></tr></thead><tbody>';
@@ -114,6 +119,7 @@ function bestellung_abgleich_panel(array $b): string {
     }
     // Sofortfix 13.11.2026: „als geliefert schließen“ (ohne Charge) war die Falle – sah aus wie „Lieferung bestätigen“. Jetzt nur Admin,
     // eingeklappt unter „Altlasten“, mit Rückfrage „Ist die Ware im Lager?“ (bestellung_altlast_dialog).
+    if ($kompakt) return $h . '</details>';
     $h .= '<div class="bx-row" style="gap:8px;flex-wrap:wrap;align-items:center">';
     if (!$eingegangen) $h .= '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung stornieren?\');"><input type="hidden" name="aktion" value="storno"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">stornieren</button></form>';
     if (function_exists('has_role') && has_role('admin'))

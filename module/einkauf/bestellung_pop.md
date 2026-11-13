@@ -11,3 +11,6 @@ Route `?p=bestellung_pop&id=…` (Rolle einkauf). In „Bestellt“ öffnet ein 
 Gewicht gesamt wird mit `gewicht_lesen()` gelesen (vorher Preis-Lesart: Vorbelegung „1.250“ kg wurde beim Speichern 1,25 kg).
 
 **Ware ist da (Sofortfix 13.11.2026):** oben je offener Position „Ware ist da - einbuchen“ -> Wareneingang, vorbelegt.
+
+## Gleiche Gliederung wie die Bestellseite (13.11.2026)
+Kopf (`bs_kopf_html`: Status, Badges, Betrag, Hauptknopf als Link, „Ganze Bestellung“), Unterlagen-Zeile (Link auf `#unterlagen`), Position (`bs_position_html`), Reiter Dokumente · Versand · Notiz. `&nur=versand` zeigt nur Versand und Sendung – das ist das Pop-up hinter „Versand / Sendung erfassen“ im Reiter Versand der Bestellseite. Speichern wie bisher (pop_versand, pop_sendung, pop_dok, pop_notiz), danach zurück ins Pop-up.

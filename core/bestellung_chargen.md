@@ -52,3 +52,6 @@ Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuc
 Nach dem Upload einer CoA/Spec an der Bestellposition läuft `lu_abgleich()`: Aufgabe „Unterlagen nachfordern“ erledigt sich, eine Charge in Quarantäne bekommt die QM-Aufgabe. Eine CoA/Spec an einer Bestellposition zählt als Unterlage des Artikels.
 
 13.11.2026: 中文-Texte schreiben „CoA“ einheitlich.
+
+## Team: Knöpfe mit Pop-up (Bestellseite 13.11.2026)
+Im Team: Erklärung eine Zeile, der Rest hinter dem i-Symbol; „Charge vormerken“ und „CoA hochladen (KI liest aus)“ sind Knöpfe, die Formulare stehen im Pop-up (`dlgBch<bp>`, `dlgBchCoa<bp>`); je vorgemerkter, nicht eingebuchter Charge „einbuchen“; Charge-Tabelle am Handy als Karten. Im Lieferantenportal unverändert.

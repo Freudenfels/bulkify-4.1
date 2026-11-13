@@ -3,6 +3,8 @@
 //   offen (Entwurf) -> "Als bestellt markieren"  -> bestellt
 //   bestellt         -> "Ware eingegangen"        -> geliefert (bucht Wareneingang)
 // Nutzt dieselben Funktionen wie die Detailseite (einkauf/detail.php).
+// Bestellseite aufgeräumt (13.11.2026): jede Karte = Kopf der Bestellseite (Status, Badges, Betrag, EIN Hauptknopf volle Breite)
+// + Position (bestellt / geliefert / offen, Balken) – Bausteine aus core/bestellung_seite.php.
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 
@@ -24,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $q  = trim((string)($_GET['q'] ?? ''));
-$wo = "b.status IN ('offen','bestellt')";
+$wo = "b.status IN ('offen','bestellt','gesendet') AND b.angekommen_am IS NULL";
 $args = [];
 if ($q !== '') { $wo .= " AND (b.nummer LIKE ? OR l.firma LIKE ?)"; $args[] = '%' . $q . '%'; $args[] = '%' . $q . '%'; }
 $rows = all("SELECT b.*, l.firma AS lieferant_firma,
@@ -33,7 +35,8 @@ $rows = all("SELECT b.*, l.firma AS lieferant_firma,
              FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
              WHERE $wo ORDER BY (b.status='bestellt'), b.angelegt DESC", $args);
 $offen    = array_values(array_filter($rows, fn($r) => $r['status'] === 'offen'));
-$bestellt = array_values(array_filter($rows, fn($r) => $r['status'] === 'bestellt'));
+$bestellt = array_values(array_filter($rows, fn($r) => $r['status'] !== 'offen'));
+require_once BX_ROOT . '/core/bestellung_seite.php';
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
 render_header('einkauf_mobil', 'Einkauf schnell');
@@ -66,35 +69,20 @@ render_header('einkauf_mobil', 'Einkauf schnell');
 
   <?php if ($offen): ?>
     <div class="em-sec">Zu bestellen (<?= count($offen) ?>)</div>
-    <?php foreach ($offen as $r): ?>
-    <div class="em-card" id="b<?= (int)$r['id'] ?>">
-      <div class="em-firma"><?= h($r['lieferant_firma'] ?: 'Ohne Lieferant') ?></div>
-      <div class="em-meta"><?= h($r['nummer']) ?> · <?= (int)$r['pos_anzahl'] ?> Position<?= (int)$r['pos_anzahl'] === 1 ? '' : 'en' ?><?= (float)$r['summe'] > 0 ? ' · ' . $eur($r['summe']) : '' ?></div>
-      <form method="post"><input type="hidden" name="aktion" value="bestellt"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-        <button class="em-btn em-btn-order" type="submit">Als bestellt markieren</button>
-      </form>
-      <a class="em-sub" href="?p=bestellung&id=<?= (int)$r['id'] ?>">Details öffnen</a>
+    <?php foreach ($offen as $r): $bd = bs_daten($r); ?>
+    <div id="b<?= (int)$r['id'] ?>">
+      <?= bs_kopf_html($r, $bd, '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="bestellt"><input type="hidden" name="id" value="' . (int)$r['id'] . '"><button class="btn btn-primary bs-haupt" type="submit">Bestellen</button></form>') ?>
+      <?= bs_position_html($r) ?>
     </div>
     <?php endforeach; ?>
   <?php endif; ?>
 
   <?php if ($bestellt): ?>
     <div class="em-sec" style="margin-top:18px">Unterwegs – auf Wareneingang wartend (<?= count($bestellt) ?>)</div>
-    <?php foreach ($bestellt as $r): ?>
-    <div class="em-card" id="b<?= (int)$r['id'] ?>">
-      <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:8px">
-        <div>
-          <div class="em-firma"><?= h($r['lieferant_firma'] ?: 'Ohne Lieferant') ?></div>
-          <div class="em-meta"><?= h($r['nummer']) ?> · <?= (int)$r['pos_anzahl'] ?> Position<?= (int)$r['pos_anzahl'] === 1 ? '' : 'en' ?><?= (float)$r['summe'] > 0 ? ' · ' . $eur($r['summe']) : '' ?></div>
-          <?php if (!empty($r['bestelldatum'])): ?><div class="em-meta">bestellt am <?= h(date('d.m.Y', strtotime((string)$r['bestelldatum']))) ?><?= !empty($r['eta_geplant']) ? ' · erwartet ' . h(date('d.m.Y', strtotime((string)$r['eta_geplant']))) : '' ?></div><?php endif; ?>
-        </div>
-        <span class="em-badge">bestellt</span>
-      </div>
-      <form method="post"><!-- Sofortfix 13.11.2026: führt in den Wareneingang (Charge, MHD, Menge) – kein Schließen ohne Charge -->
-        <input type="hidden" name="aktion" value="liefern"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-        <button class="em-btn em-btn-in" type="submit">Ware ist da - einbuchen</button>
-      </form>
-      <a class="em-sub" href="?p=bestellung&id=<?= (int)$r['id'] ?>">Details / Charge &amp; MHD anpassen</a>
+    <?php foreach ($bestellt as $r): $bd = bs_daten($r); ?>
+    <div id="b<?= (int)$r['id'] ?>">
+      <?= bs_kopf_html($r, $bd, bs_haupt_link($r, $bd)) ?>
+      <?= bs_position_html($r) ?>
     </div>
     <?php endforeach; ?>
   <?php endif; ?>

@@ -16,3 +16,6 @@ Schließen-X aller Pop-ups (`.bx-dialog .bx-pop-x`) am Handy 44 × 44 px (Etiket
 
 ## 13.11.2026 Portale
 `.bx-schritte` (Schritt-Leiste Lieferanten-Bestellung); Kunden-Fortschritt am Handy: `.bx-htrack` senkrecht mit hervorgehobenem aktuellen Schritt, `.bx-steps` (Bestellliste) nur Punkte; Portal-Menü `.bx-pnav`/`.bx-pmob`.
+
+## Bestellseite aufgeräumt (13.11.2026)
+Block `.bs-*` am Ende: Kopf-Karte (`.bs-kopf`, Status 24 px, Betrag, Hauptknopf + Menü „⋯“), Unterlagen-Zeile `.bs-hinweis`, Positions-Karte mit Balken, Reiter-Leiste `.bs-tabs` (waagerecht scrollbar), Statuszeile `.bs-zeile`. Am Handy: Kopf untereinander, Hauptknopf volle Breite, Menüzeilen und Reiter 44 px.

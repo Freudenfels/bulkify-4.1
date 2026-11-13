@@ -6,6 +6,9 @@
 // - Sendung: Art (Paket/Palette/Container), Anzahl, Palettenart, Kisten/Kartons, Gewicht, Maße/Stellplätze
 // - Notiz (intern)
 // Gespeichert wird ohne Seitenwechsel (bx-ui.js); danach aktualisiert sich die Zeile in „Bestellt“.
+// Bestellseite aufgeräumt (13.11.2026): gleiche Gliederung wie die Bestellseite – Kopf (Status, Badges, Betrag, EIN Hauptknopf),
+// Position, Reiter (Dokumente, Versand, Notiz); Bausteine aus core/bestellung_seite.php. &nur=versand = nur Versand und Sendung
+// (Knopf „Versand / Sendung erfassen“ im Reiter Versand der Bestellseite).
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
@@ -16,6 +19,7 @@ $id = (int)($_GET['id'] ?? 0);
 $b = $id ? one("SELECT b.*, l.firma AS lieferant_firma, l.lieferantennummer FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.id=?", [$id]) : null;
 if (!$b) { http_response_code(404); echo 'Bestellung nicht gefunden.'; exit; }
 $wer = (string)(current_user()['name'] ?? 'Team');
+$nurVersand = ($_GET['nur'] ?? '') === 'versand';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $a = (string)($_POST['aktion'] ?? '');
@@ -41,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $bp = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? ORDER BY sort, id LIMIT 1", [$id]);
         if ($did && $bp) q("UPDATE dokument SET bestellung_position_id=COALESCE(bestellung_position_id, ?) WHERE id=?", [$bp, $did]);
     }
-    header('Location: ?p=bestellung_pop&id=' . $id); exit;
+    header('Location: ?p=bestellung_pop&id=' . $id . ($nurVersand ? '&nur=versand' : '')); exit;
 }
 
 $doks = all("SELECT id, typ, titel, datei_orig, charge_nr FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? ORDER BY id DESC", [$id]);
@@ -53,34 +57,11 @@ $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 render_header('einkauf', 'Bestellung ' . $b['nummer']);
 ?>
 <div data-pop-inhalt>
-  <div class="muted" style="margin-bottom:10px"><a href="?p=bestellung&id=<?= $id ?>"><b style="font-weight:600"><?= h((string)$b['nummer']) ?></b></a> · <?= $b['lieferant_firma'] ? h((string)$b['lieferant_firma']) : 'ohne Lieferant' ?>
-    · <?= h(implode(', ', array_map(fn($p) => $p['name'] . ' ' . $nf($p['menge']) . ' ' . $p['einheit'], $pos))) ?></div>
-
-  <?php // Sofortfix 13.11.2026: Lieferung bestätigen = Wareneingang buchen (Charge, MHD, Menge), je offener Position.
-  require_once BX_ROOT . '/core/wareneingang_bestellung.php';
-  if (in_array((string)$b['status'], ['bestellt', 'gesendet'], true) && empty($b['angekommen_am']))
-      foreach (all("SELECT bp.id, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS name FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
-                    WHERE bp.bestellung_id=? AND bp.menge>0 AND bp.rest_storniert_am IS NULL AND COALESCE(bp.geliefert_menge,0) < bp.menge*0.98 ORDER BY bp.sort, bp.id", [$id]) as $wp):
-          $wv = webe_vormerkung((int)$wp['id']); ?>
-    <a class="btn btn-primary" style="margin:0 8px 8px 0" href="?p=wareneingang&bp=<?= (int)$wp['id'] ?><?= $wv ? '&bch=' . (int)$wv['id'] : '' ?>">Ware ist da - einbuchen<?= count($pos) > 1 ? ': ' . h((string)$wp['name']) : '' ?></a>
-  <?php endforeach; ?>
-  <h3 style="margin:8px 0 6px">Dokumente</h3>
-  <?php if ($doks): ?><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"><?php foreach ($doks as $d): ?>
-    <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="?p=dokument&id=<?= (int)$d['id'] ?>"><?= h((dokument_typen()[$d['typ']] ?? $d['typ']) . ($d['charge_nr'] ? ' · ' . $d['charge_nr'] : '') . ' · ' . ($d['datei_orig'] ?: '#' . $d['id'])) ?></a>
-  <?php endforeach; ?></div><?php else: ?><p class="muted" style="margin:0 0 8px">Noch keine Dokumente.</p><?php endif; ?>
-  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="aktion" value="pop_dok">
-    <div class="bx-field" style="margin:0"><label>Art</label><select name="dok_typ"><?= $sel(['coa' => 'CoA (je Charge)', 'spec' => 'Spec', 'rechnung' => 'Rechnung', 'lieferschein' => 'Lieferschein', 'sonstiges' => 'Sonstiges'], 'coa') ?></select></div>
-    <div class="bx-field" style="margin:0;width:150px"><label>Charge (bei CoA)</label><input type="text" name="charge_nr"></div>
-    <div class="bx-field" style="margin:0;min-width:220px"><label>Datei</label><input type="file" name="dok" required></div>
-    <input type="hidden" name="dok_lieferant" value="<?= (int)($b['lieferant_id'] ?? 0) ?: '' ?>">
-    <button class="btn btn-ghost" type="submit">Hochladen</button>
-  </form>
-  <p class="muted" style="font-size:12px;margin:4px 0 0">CoA mit KI-Prüfung und Vergleich gegen die bulkify-Spec: an der Bestellung im Block „Chargen und Dokumente“.</p>
-
-  <h3 style="margin:18px 0 6px">Versand</h3>
+<?php
+ob_start(); ?>
   <form method="post">
     <input type="hidden" name="aktion" value="pop_versand">
+    <h3 style="margin:0 0 6px">Versand</h3>
     <div class="bx-grid">
       <div class="bx-field"><label>Versanddienst</label><input type="text" name="versandanbieter" list="dlVersand" value="<?= h((string)($b['versandanbieter'] ?? '')) ?>" placeholder="DHL, UPS, DPD, Spedition …">
         <datalist id="dlVersand"><option>DHL</option><option>UPS</option><option>DPD</option><option>GLS</option><option>FedEx</option><option>TNT</option><option>Spedition</option><option>Kühne + Nagel</option><option>DB Schenker</option></datalist></div>
@@ -89,10 +70,9 @@ render_header('einkauf', 'Bestellung ' . $b['nummer']);
     </div>
     <div class="bx-row" style="justify-content:flex-end;margin-top:8px"><button class="btn btn-primary" type="submit">Versand speichern</button></div>
   </form>
-
-  <h3 style="margin:18px 0 6px">Sendung</h3>
   <form method="post">
     <input type="hidden" name="aktion" value="pop_sendung">
+    <h3 style="margin:18px 0 6px">Sendung</h3>
     <div class="bx-grid">
       <div class="bx-field"><label>Art</label><select name="sendung_art"><option value="">–</option><?= $sel(bestellung_sendung_arten(), $b['sendung_art'] ?? '') ?></select></div>
       <div class="bx-field"><label>Anzahl (z. B. 2 Paletten, 5 Pakete)</label><input type="text" inputmode="numeric" name="sendung_anzahl" value="<?= h((string)($b['sendung_anzahl'] ?? '')) ?>"></div>
@@ -104,12 +84,38 @@ render_header('einkauf', 'Bestellung ' . $b['nummer']);
     </div>
     <div class="bx-row" style="justify-content:flex-end;margin-top:8px"><button class="btn btn-primary" type="submit">Sendung speichern</button></div>
   </form>
+<?php
+$tabVersand = ob_get_clean();
+if ($nurVersand) { echo $tabVersand . '</div>'; render_footer(); exit; }
 
-  <h3 style="margin:18px 0 6px">Notiz</h3>
+require_once BX_ROOT . '/core/bestellung_seite.php';
+$bd = bs_daten($b);
+echo bs_kopf_html($b, $bd, bs_haupt_link($b, $bd) . '<a class="btn btn-ghost" href="?p=bestellung&id=' . $id . '">Ganze Bestellung</a>');
+if ($bd['luF']) echo '<div class="bs-hinweis"><span>' . h(lu_hinweis_text($bd['luF'])) . '</span><a class="btn btn-ghost btn-sm" href="?p=bestellung&id=' . $id . '#unterlagen">Hochladen</a></div>';
+echo bs_position_html($b);
+
+ob_start(); ?>
+  <?php if ($doks): ?><div class="bs-doks" style="margin-bottom:10px"><?php foreach ($doks as $d): ?>
+    <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="?p=dokument&id=<?= (int)$d['id'] ?>"><?= h((dokument_typen()[$d['typ']] ?? $d['typ']) . ($d['charge_nr'] ? ' · ' . $d['charge_nr'] : '') . ' · ' . ($d['datei_orig'] ?: '#' . $d['id'])) ?></a>
+  <?php endforeach; ?></div><?php else: ?><p class="muted" style="margin:0 0 8px">Noch keine Dokumente.</p><?php endif; ?>
+  <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:flex-end;flex-wrap:wrap">
+    <input type="hidden" name="aktion" value="pop_dok">
+    <div class="bx-field" style="margin:0"><label>Art</label><select name="dok_typ"><?= $sel(['coa' => 'CoA (je Charge)', 'spec' => 'Spec', 'rechnung' => 'Rechnung', 'lieferschein' => 'Lieferschein', 'sonstiges' => 'Sonstiges'], 'coa') ?></select></div>
+    <div class="bx-field" style="margin:0;width:150px"><label>Charge (bei CoA)</label><input type="text" name="charge_nr"></div>
+    <div class="bx-field" style="margin:0;min-width:220px"><label>Datei</label><input type="file" name="dok" required></div>
+    <input type="hidden" name="dok_lieferant" value="<?= (int)($b['lieferant_id'] ?? 0) ?: '' ?>">
+    <button class="btn btn-ghost" type="submit">Hochladen</button>
+  </form>
+  <p class="muted" style="font-size:12px;margin:4px 0 0">CoA mit KI-Prüfung: an der Bestellung im Reiter „Wareneingang & Chargen“.</p>
+<?php $tabDoks = ob_get_clean();
+ob_start(); ?>
   <form method="post">
     <input type="hidden" name="aktion" value="pop_notiz">
     <textarea name="notiz" rows="2" style="width:100%" placeholder="nur intern"><?= h((string)($b['notiz'] ?? '')) ?></textarea>
-    <div class="bx-row" style="justify-content:flex-end;gap:8px;margin-top:8px"><a class="btn btn-ghost" href="?p=bestellung&id=<?= $id ?>">Ganze Bestellung öffnen</a><button class="btn btn-primary" type="submit">Notiz speichern</button></div>
+    <div class="bx-row" style="justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn btn-primary" type="submit">Notiz speichern</button></div>
   </form>
+<?php $tabNotiz = ob_get_clean();
+echo bs_reiter_html(['dokumente' => ['Dokumente', $bd['luF'] ? '•' : '', $tabDoks], 'versand' => ['Versand', '', $tabVersand], 'notiz' => ['Notiz', '', $tabNotiz]], 'dokumente');
+?>
 </div>
 <?php render_footer();
