@@ -16,3 +16,9 @@ Seit 11.11.2026. Schreibende Naht. Sie wird **nur nach Nicos Entscheidung** in d
   - Dazu kommt ein Gebinde mit der beim Zählen gedruckten Inventarnummer.
   - Eine Bestellung lässt sich danach an der Bestellung („Wareneingang zuordnen“) bzw. in der Datenprüfung zuordnen.
 - `erp_inv_benachrichtigen()` erzeugt eine Dashboard-Benachrichtigung, z. B. bei einer Korrektur an Kundenware in Lager 2.
+
+**Fable-6 P13 (13.11.2026):** `erp_inv_korrektur()` ändert den Status nie.
+- Wird eine Charge auf 0 gezählt, wird sie „leer“; der Status davor bleibt in `charge.status_vor_leer` gemerkt.
+- Wird sie wiedergefunden, kommt genau dieser Status zurück. Eine Quarantäne-Charge bleibt also Quarantäne.
+- Ohne Merker gilt: mit `unterlagen_fehlt` Quarantäne, sonst frei.
+- Jeder Statuswechsel steht im Inventur-Protokoll.

@@ -28,7 +28,15 @@ function erp_inv_korrektur(int $charge_id, int $gebinde_id, float $delta): array
     }
     $neu = round(max(0.0, $alt + $delta), 3);
     $st = (string)$c['status'];
-    q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $neu <= 0.0005 ? 'leer' : ($st === 'leer' ? 'frei' : $st), $charge_id]);
+    // Fable-6 P13 (13.11.2026): Den Status nie ändern. Auf 0 gezählt -> „leer“, der Status davor bleibt in status_vor_leer gemerkt;
+    // wiedergefunden -> genau dieser Status zurück (Quarantäne bleibt Quarantäne). Ohne Merker: mit fehlenden Unterlagen Quarantäne, sonst frei.
+    $vorLeer = trim((string)($c['status_vor_leer'] ?? ''));
+    if ($neu <= 0.0005)      { $stNeu = 'leer'; $merk = $st !== 'leer' ? $st : ($vorLeer !== '' ? $vorLeer : null); }
+    elseif ($st === 'leer')  { $stNeu = $vorLeer !== '' ? $vorLeer : (!empty($c['unterlagen_fehlt']) ? 'quarantaene' : 'frei'); $merk = null; }
+    else                     { $stNeu = $st; $merk = $vorLeer !== '' ? $vorLeer : null; }
+    try { q("UPDATE charge SET menge_verfuegbar=?, status=?, status_vor_leer=? WHERE id=?", [$neu, $stNeu, $merk, $charge_id]); }
+    catch (\Throwable $e) { q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$neu, $stNeu, $charge_id]); }   // Spalte fehlt noch
+    if ($stNeu !== $st) erp_inv_log('charge', $charge_id, 'status', $st, $stNeu);
     erp_inv_log('charge', $charge_id, 'menge_verfuegbar', $alt, $neu);
     erp_bedarf_bump();
     return ['ok' => true, 'alt' => $alt, 'neu' => $neu, 'delta' => round($neu - $alt, 3), 'einheit' => (string)$c['einheit'], 'item_name' => (string)$c['item_name']];
