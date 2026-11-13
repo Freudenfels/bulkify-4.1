@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../core/zeit_ort.php';   // heute_ort() statt CURDATE() (Fable-6 T5.3)
 // Beleg-/Rechnungs-/Gutschrift-Funktionen – VERBATIM aus dem Dashboard-core/schema.php übernommen
 // (bewusste Doppelung, da die Sub-App die Dashboard-schema.php nicht einbinden darf: db()-Kollision).
 // Abhängigkeiten liefern db.php (q/all/one/scalar/insert_id), erp.php (meta_get, naechste_nummer,
@@ -416,7 +417,7 @@ function kunde_guthaben(int $kunde_id): float {
     return round($gut - $ver, 2);
 }
 function guthaben_bewegung_add(int $kunde_id, float $betrag, string $typ, ?int $ref_beleg_id = null, string $notiz = '', ?int $gutschrift_id = null): void {
-    q("INSERT INTO guthaben_bewegung (kunde_id,gutschrift_id,betrag,typ,ref_beleg_id,notiz,datum) VALUES (?,?,?,?,?,?,CURDATE())",
+    q("INSERT INTO guthaben_bewegung (kunde_id,gutschrift_id,betrag,typ,ref_beleg_id,notiz,datum) VALUES (?,?,?,?,?,?,'" . heute_ort() . "')",
       [$kunde_id, $gutschrift_id ?: null, round($betrag, 2), $typ, $ref_beleg_id ?: null, $notiz ?: null]);
 }
 // Guthaben auf eine Rechnung anrechnen: als Zahlung (art=guthaben) verbuchen + Verbrauch protokollieren. Gibt den angerechneten Betrag.

@@ -25,7 +25,7 @@ function op_rechnungen(string $filter = '', int $kunde_id = 0): array {
     $where = "b.typ='rechnung' AND b.status IN ('offen','teilbezahlt')";
     $args = [];
     if ($kunde_id) { $where .= " AND b.kunde_id=?"; $args[] = $kunde_id; }
-    if ($filter === 'ueberfaellig') $where .= " AND b.faellig IS NOT NULL AND b.faellig < CURDATE()";
+    if ($filter === 'ueberfaellig') $where .= " AND b.faellig IS NOT NULL AND b.faellig < '" . heute_ort() . "'";
     if ($filter === 'sichtbar' && isset($sp['kunde_sichtbar'])) $where .= " AND b.kunde_sichtbar=1";
     return all(
         "SELECT b.id, b.nummer, b.datum, b.faellig, b.brutto, b.status, b.kunde_id,
@@ -34,8 +34,8 @@ function op_rechnungen(string $filter = '', int $kunde_id = 0): array {
                 k.firma AS kunde_firma,
                 COALESCE(z.bez,0) AS bezahlt,
                 (b.brutto - COALESCE(z.bez,0)) AS rest,
-                CASE WHEN b.faellig IS NOT NULL AND b.faellig < CURDATE()
-                     THEN DATEDIFF(CURDATE(), b.faellig) ELSE 0 END AS tage_ueberfaellig
+                CASE WHEN b.faellig IS NOT NULL AND b.faellig < '" . heute_ort() . "'
+                     THEN DATEDIFF('" . heute_ort() . "', b.faellig) ELSE 0 END AS tage_ueberfaellig
            FROM beleg b
            LEFT JOIN kunden k ON k.id=b.kunde_id
            LEFT JOIN (SELECT beleg_id, SUM(betrag) bez FROM zahlung GROUP BY beleg_id) z ON z.beleg_id=b.id

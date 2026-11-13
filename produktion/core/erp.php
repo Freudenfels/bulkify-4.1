@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../core/zeit_ort.php';   // heute_ort() statt CURDATE() (Fable-6 T5.3)
 // DIE NAHT ZUM DASHBOARD. Einzige Datei im Produktions-Programm, die Dashboard-Tabellen kennt
 // (produktionsauftrag, produktion_schritt, charge, auftrag, produkt, kunden, benutzer).
 //
@@ -568,7 +569,7 @@ function erp_auftrag_labor_versendet(int $pa_id): void {
     $auf = (int) scalar("SELECT auftrag_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if (!$auf || !tabelle_da('auftrag')) return;
     if (erp_spalte_da('auftrag', 'labor_versendet_am'))
-        q("UPDATE auftrag SET labor_versendet_am=CURDATE() WHERE id=? AND labor_versendet_am IS NULL", [$auf]);
+        q("UPDATE auftrag SET labor_versendet_am='" . heute_ort() . "' WHERE id=? AND labor_versendet_am IS NULL", [$auf]);
 }
 
 // --- Kunden-Etikett am Auftrag --------------------------------------------------------------
@@ -840,7 +841,7 @@ function erp_schritt_abschliessen(int $schritt_id, string $akteur, int $uid = 0)
             // war per Teilversand während der Produktion schon alles geliefert -> direkt 'versendet' (Spiegel auftrag_nach_produktion_status)
             $av = one("SELECT menge, versendet_menge FROM auftrag WHERE id=?", [(int)$pa['auftrag_id']]);
             $allesRaus = $av && (int)$av['menge'] > 0 && (int)($av['versendet_menge'] ?? 0) >= (int)$av['menge'];
-            q("UPDATE auftrag SET status=?" . ($allesRaus ? ", status_datum=CURDATE()" : "") . " WHERE id=?", [$allesRaus ? 'versendet' : 'erledigt', (int)$pa['auftrag_id']]);
+            q("UPDATE auftrag SET status=?" . ($allesRaus ? ", status_datum='" . heute_ort() . "'" : "") . " WHERE id=?", [$allesRaus ? 'versendet' : 'erledigt', (int)$pa['auftrag_id']]);
             if ($pa['kunde_id'])
                 erp_log_aktivitaet('kunde', (int)$pa['kunde_id'], 'team',
                     'Produktion ' . $pa['nummer'] . ' abgeschlossen – an Lager zum Einlagern übergeben.',

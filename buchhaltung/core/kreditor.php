@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../core/zeit_ort.php';   // heute_ort() statt CURDATE() (Fable-6 T5.3)
 // Kreditoren / Verbindlichkeiten: Eingangsrechnungen von Lieferanten + unsere Zahlungen darauf.
 // Spiegelbild zur Debitorenseite (beleg/zahlung). Eigene Tabellen (lieferant_rechnung,
 // lieferant_zahlung) – kollisionsarm, kein Eingriff in core/schema.php. Geld in EUR (DECIMAL).
@@ -251,7 +252,7 @@ function kr_op_ueberfaellig_summe(): float {
     return (float) scalar(
         "SELECT COALESCE(SUM(r.brutto - COALESCE(z.bez,0)),0) FROM lieferant_rechnung r
            LEFT JOIN (SELECT lief_rechnung_id, SUM(betrag) bez FROM lieferant_zahlung GROUP BY lief_rechnung_id) z ON z.lief_rechnung_id=r.id
-          WHERE r.status IN ('offen','teilbezahlt') AND r.faellig IS NOT NULL AND r.faellig < CURDATE()");
+          WHERE r.status IN ('offen','teilbezahlt') AND r.faellig IS NOT NULL AND r.faellig < '" . heute_ort() . "'");
 }
 function kr_anz_offen(): int {
     return (int) scalar("SELECT COUNT(*) FROM lieferant_rechnung WHERE status IN ('offen','teilbezahlt')");
@@ -262,7 +263,7 @@ function kr_op_je_lieferant(): array {
         "SELECT l.id AS lieferant_id, l.firma,
                 COUNT(*) AS anz,
                 SUM(r.brutto - COALESCE(z.bez,0)) AS offen,
-                SUM(CASE WHEN r.faellig IS NOT NULL AND r.faellig < CURDATE() THEN r.brutto - COALESCE(z.bez,0) ELSE 0 END) AS ueberfaellig
+                SUM(CASE WHEN r.faellig IS NOT NULL AND r.faellig < '" . heute_ort() . "' THEN r.brutto - COALESCE(z.bez,0) ELSE 0 END) AS ueberfaellig
            FROM lieferant_rechnung r
            LEFT JOIN lieferanten l ON l.id=r.lieferant_id
            LEFT JOIN (SELECT lief_rechnung_id, SUM(betrag) bez FROM lieferant_zahlung GROUP BY lief_rechnung_id) z ON z.lief_rechnung_id=r.id

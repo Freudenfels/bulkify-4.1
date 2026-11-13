@@ -1748,7 +1748,7 @@ function init_schema(): void {
                 $pe = ((int)$r['basis']) === 1000 ? (float)$r['preis'] / 1000 : (float)$r['preis'];
                 $rform = (string) scalar("SELECT darreichungsform FROM rezeptur WHERE id=?", [$rez]);
                 $re = in_array($rform, ['kapsel','softgel'], true) ? 'Kapsel' : ($rform === 'tablette' ? 'Tablette' : ($rform === 'stick' ? 'Stick' : 'Stk'));
-                q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt) VALUES (?,?,?,?, 'angeboten', CURDATE(), NOW())",
+                q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt) VALUES (?,?,?,?, 'angeboten', '" . heute_ort() . "', NOW())",
                   [$rez, $lief, $pe > 0 ? $pe : null, $re]);
             }
         meta_set('fix_la_rez_spiegel_v1', '1');
@@ -3663,7 +3663,7 @@ function fremdlager_umbuchen(int $item_id, int $kunde_id, float $menge, ?string 
     }
     // Neue Fremd-Charge (Kundenware) anlegen.
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,standort,notiz,angelegt)
-       VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,'lager2',?,?)",
+       VALUES (?,?,?,?,?,?,'" . heute_ort() . "','frei',?,'lager2',?,?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $mhd ?: null, $kunde_id, $notiz ?: 'Umbuchung ins Fremdlager', gmdate('Y-m-d H:i:s')]);
     $cid = insert_id();
     $kfirma = (string) scalar("SELECT firma FROM kunden WHERE id=?", [$kunde_id]);
@@ -4116,7 +4116,7 @@ function lager2_einbuchen(int $produkt_id, float $menge, ?string $charge_nr, ?st
     if ($besitzer <= 0) return null;   // ohne Besitzer keine Kundenware (Lager 2 nur für Fulfillment-Kunden)
     bsku_ensure($item_id);
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,notiz,fremd_kunde_id,standort,angelegt)
-       VALUES (?,?,?,?, 'Stk', ?, CURDATE(), 'frei', ?, ?, 'lager2', ?)",
+       VALUES (?,?,?,?, 'Stk', ?, '" . heute_ort() . "', 'frei', ?, ?, 'lager2', ?)",
       [$charge_nr ?: null, $item_id, $menge, $menge, $mhd ?: null, $notiz ?: 'Lager-2-Einbuchung', $besitzer, gmdate('Y-m-d H:i:s')]);
     $cid = (int) insert_id();
     // Energetisierung: bei freigeschalteten Kunden (kunden.zeige_energetisierung) wird JEDE Einlagerung energetisiert.
@@ -4168,7 +4168,7 @@ function lager2_retoure(int $item_id, float $menge, string $ref): array {
     // Retoure gehört dem Kunden (S-16) – sonst würde sie zu unserem Bestand in Lager 1.
     $besitzer = lager2_besitzer_item($item_id);
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,wareneingang,status,notiz,fremd_kunde_id,standort,angelegt)
-       VALUES ('RETOURE',?,?,?, 'Stk', CURDATE(), 'frei', ?, ?, ?, ?)",
+       VALUES ('RETOURE',?,?,?, 'Stk', '" . heute_ort() . "', 'frei', ?, ?, ?, ?)",
       [$item_id, $menge, $menge, 'Retoure (Fulfillment) ' . $ref, $besitzer > 0 ? $besitzer : null, $besitzer > 0 ? 'lager2' : 'lager1', gmdate('Y-m-d H:i:s')]);
     q("INSERT INTO lager2_bewegung (item_id,typ,menge,ref) VALUES (?,?,?,?)", [$item_id, 'retoure', $menge, $ref]);
     return ['ok'=>true];
@@ -4785,7 +4785,7 @@ function bestellung_eingang_melden(int $bestellung_id, bool $komplett, int $offe
 }
 function bestellung_als_angekommen(int $bestellung_id): void {
     if ($bestellung_id <= 0) return;
-    q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+    q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, '" . heute_ort() . "') WHERE id=?", [$bestellung_id]);
     q("UPDATE bestellung SET status='geliefert' WHERE id=? AND status IN ('offen','gesendet','bestellt')", [$bestellung_id]);
     bedarf_bump();
 }
@@ -4808,7 +4808,7 @@ function bestellung_wareneingang(int $bestellung_id): bool {
             $b['lieferant_id'] ? (int)$b['lieferant_id'] : null, 'Aus Bestellung ' . $b['nummer'],
             !empty($p['auftrag_id']) ? (int)$p['auftrag_id'] : null, (int)$p['id']);
     }
-    q("UPDATE bestellung SET status='geliefert', angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+    q("UPDATE bestellung SET status='geliefert', angekommen_am=COALESCE(angekommen_am, '" . heute_ort() . "') WHERE id=?", [$bestellung_id]);
     if (column_exists('bestellung_position', 'geliefert_menge')) q("UPDATE bestellung_position SET geliefert_menge=GREATEST(geliefert_menge, menge) WHERE bestellung_id=?", [$bestellung_id]);
     if (!empty($b['lieferant_id'])) q("UPDATE bestellung SET station='eingegangen' WHERE id=?", [$bestellung_id]);   // Portal-Statuskette (Nacht 4b), ohne Mail
     return true;
@@ -4829,7 +4829,7 @@ function seed_charge_if_empty(): void {
         $iid = scalar("SELECT id FROM item WHERE name=?", [$d[0]]);
         if (!$iid) continue;
         q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,angelegt)
-           VALUES (?,?,?,?, 'kg', DATE_ADD(CURDATE(), INTERVAL 2 YEAR), CURDATE(), ?, ?)",
+           VALUES (?,?,?,?, 'kg', DATE_ADD('" . heute_ort() . "', INTERVAL 2 YEAR), '" . heute_ort() . "', ?, ?)",
           [$d[2], (int)$iid, $d[1], $d[1], $d[3], gmdate('Y-m-d H:i:s')]);
     }
 }
@@ -4849,7 +4849,7 @@ function seed_lieferant_preis_if_empty(): void {
     foreach ($demo as $d) {
         $iid = scalar("SELECT id FROM item WHERE name=?", [$d[0]]);
         $lid = scalar("SELECT id FROM lieferanten WHERE firma=?", [$d[1]]);
-        if ($iid && $lid) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand) VALUES (?,?,?,?, 'EUR', CURDATE())", [(int)$iid, (int)$lid, $d[2], $d[3]]);
+        if ($iid && $lid) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand) VALUES (?,?,?,?, 'EUR', '" . heute_ort() . "')", [(int)$iid, (int)$lid, $d[2], $d[3]]);
     }
 }
 
@@ -7623,7 +7623,7 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
             lp_verlauf_sichern($pm, $lieferant_id);
             q("DELETE FROM lieferant_preis WHERE item_id=? AND lieferant_id=?", [$pm, $lieferant_id]);
             foreach ($zeilen as [$zm, $zp])
-                q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?,?,CURDATE(),?,?,?)",
+                q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?,?,'" . heute_ort() . "',?,?,?)",
                   [$pm, $lieferant_id, $zm, $zp, 'EUR', $inco, $vers, $gBis]);
             if (function_exists('item_ek_aus_lieferantenpreis')) item_ek_aus_lieferantenpreis($pm);
             log_aktivitaet('item', $pm, 'lieferant', 'Premix-Preis ' . number_format($pe, 2, ',', '.') . ' €/kg' . (count($zeilen) > 1 ? ' (+' . (count($zeilen) - 1) . ' Staffel)' : '') . ' aus ' . $a['nummer'] . '.', 'angebot', 'lieferant_anfrage', $anfrage_id);
@@ -7661,11 +7661,11 @@ function lieferant_angebot_speichern(int $anfrage_id, int $lieferant_id, float $
                    ?: one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? ORDER BY id LIMIT 1", [$rezId, $lieferant_id]))
                 : one("SELECT id, preis FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=? AND menge=? ORDER BY id LIMIT 1", [$rezId, $lieferant_id, $zm]);
             if (!$ex) {
-                q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,menge,status,stand,quelle_anfrage_id,angelegt,gueltig_bis) VALUES (?,?,?,?,?, 'angeboten', CURDATE(), ?, NOW(), ?)",
+                q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,menge,status,stand,quelle_anfrage_id,angelegt,gueltig_bis) VALUES (?,?,?,?,?, 'angeboten', '" . heute_ort() . "', ?, NOW(), ?)",
                   [$rezId, $lieferant_id, $zp > 0 ? $zp : null, $rEinheit, $zm, $anfrage_id, $gBis]);
                 $neu = true;
             } elseif (abs((float)$ex['preis'] - $zp) < 0.00005) {
-                q("UPDATE rezeptur_lief_angebot SET einheit=?, stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL, quelle_anfrage_id=?, gueltig_bis=? WHERE id=?", [$rEinheit, $anfrage_id, $gBis, (int)$ex['id']]);
+                q("UPDATE rezeptur_lief_angebot SET einheit=?, stand='" . heute_ort() . "', preis_vorschlag=NULL, vorschlag_am=NULL, quelle_anfrage_id=?, gueltig_bis=? WHERE id=?", [$rEinheit, $anfrage_id, $gBis, (int)$ex['id']]);
             } else {
                 q("UPDATE rezeptur_lief_angebot SET einheit=?, preis_vorschlag=?, vorschlag_am=NOW(), quelle_anfrage_id=? WHERE id=?", [$rEinheit, $zp > 0 ? $zp : null, $anfrage_id, (int)$ex['id']]);
                 $vorschlag = true;
@@ -7686,7 +7686,7 @@ function rezeptur_lief_preis_freigeben(int $id): void {
     if ($id <= 0 || !table_exists('rezeptur_lief_angebot')) return;
     $r = one("SELECT rezeptur_id, preis_vorschlag FROM rezeptur_lief_angebot WHERE id=?", [$id]);
     if (!$r || $r['preis_vorschlag'] === null) return;
-    q("UPDATE rezeptur_lief_angebot SET preis=?, preis_vorschlag=NULL, vorschlag_am=NULL, stand=CURDATE() WHERE id=?", [(float)$r['preis_vorschlag'], $id]);
+    q("UPDATE rezeptur_lief_angebot SET preis=?, preis_vorschlag=NULL, vorschlag_am=NULL, stand='" . heute_ort() . "' WHERE id=?", [(float)$r['preis_vorschlag'], $id]);
     if (function_exists('rezeptur_produkt_matrizen_auffrischen')) rezeptur_produkt_matrizen_auffrischen((int)$r['rezeptur_id']);
 }
 // Preis-Vorschlag ABLEHNEN: der alte freigegebene Preis bleibt, der Vorschlag wird verworfen.
@@ -7723,7 +7723,7 @@ function lieferant_angebot_annehmen(int $angebot_id): string {
     $basis = ((int)($an['preis_basis'] ?? 1)) === 1000 ? 1000 : 1;
     $inco = $an['incoterm'] ?: null; $vers = $an['versandart'] ?: null;   // Lieferbedingung vom Angebot mitnehmen
     foreach ($zeilen as $z)
-        q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?,?,CURDATE(),?,?,?)",
+        q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?,?,'" . heute_ort() . "',?,?,?)",
           [$item, $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, (string)($an['waehrung'] ?: 'EUR'), $inco, $vers, ($an['gueltig_bis'] ?? null) ?: null]);
     item_ek_aus_lieferantenpreis($item);
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
@@ -7750,7 +7750,7 @@ function lieferant_fertig_angebot_annehmen(int $angebot_id, array $an): string {
         $groesse = (int)($p['einheiten_pro_packung'] ?? 0) > 0 ? ((int)$p['einheiten_pro_packung'] . ' Stk') : null;
         foreach ($zeilen as $z)
             q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,menge_ab,preis,einheit,groesse,waehrung,incoterm,versandart,stand,quelle,gueltig_bis)
-               VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),'angebot',?)",
+               VALUES (?,?,?,?,?,?,?,?,?,'" . heute_ort() . "','angebot',?)",
               [(int)$p['id'], $lief, (float)$z['menge_ab'], (float)$z['preis'] / $basis, $form, $groesse, $wae, $inco, $vers, ($an['gueltig_bis'] ?? null) ?: null]);
     }
     q("UPDATE lieferant_angebot SET status='angenommen' WHERE id=?", [$angebot_id]);
@@ -9901,13 +9901,13 @@ function produktion_nachbuchen_versendet(int $pa_id, bool $lieferschein = false,
     // Status auf „versendet“ (letzte Stufe), auch wenn er zwischendurch zurückgestellt wurde.
     $letzte = count(auftrag_phasen(false)) - 1;
     q("UPDATE auftrag SET versendet_menge=GREATEST(COALESCE(versendet_menge,0), menge),
-       status_datum=IF(status='versendet', status_datum, CURDATE()), status='versendet', phase_override=? WHERE id=?", [$letzte, $aid]);
+       status_datum=IF(status='versendet', status_datum, '" . heute_ort() . "'), status='versendet', phase_override=? WHERE id=?", [$letzte, $aid]);
     // 4) optional Lieferschein (ohne Mail)
     $lsNr = '';
     if ($lieferschein) {
         $lsNr = naechste_nummer('LS');
         q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,menge,netto,ust_prozent,ust_betrag,brutto,status,datum)
-           VALUES (?,'lieferschein',?,?,?,?,0,0,?,'offen',CURDATE())", [$lsNr, $aid, $a['kunde_id'], (int)$a['menge'], (float)$a['gesamt_netto'], (float)$a['gesamt_netto']]);
+           VALUES (?,'lieferschein',?,?,?,?,0,0,?,'offen','" . heute_ort() . "')", [$lsNr, $aid, $a['kunde_id'], (int)$a['menge'], (float)$a['gesamt_netto'], (float)$a['gesamt_netto']]);
         $txt[] = 'Lieferschein ' . $lsNr;
     }
     log_aktivitaet('auftrag', $aid, 'team', 'Nachgebucht (bereits versendet, ' . $wer . '): ' . implode(', ', $txt) . '.'
@@ -11265,7 +11265,7 @@ function lieferant_preise_veraltet(int $lieferant_id): bool {
 }
 // Alle Preise des Lieferanten als „heute aktuell" bestätigen (Stand = heute) – erfüllt die 4-Wochen-Regel in einem Klick.
 function lieferant_preise_bestaetigen(int $lieferant_id): int {
-    q("UPDATE lieferant_preisliste SET stand=CURDATE() WHERE lieferant_id=?", [$lieferant_id]);
+    q("UPDATE lieferant_preisliste SET stand='" . heute_ort() . "' WHERE lieferant_id=?", [$lieferant_id]);
     return (int) scalar("SELECT COUNT(*) FROM lieferant_preisliste WHERE lieferant_id=?", [$lieferant_id]);
 }
 // Offener Fehlbedarf (nur bestellbare Positionen mit item_id, abzüglich schon offen bestellter Menge für diesen Auftrag).
@@ -11691,7 +11691,7 @@ function verpackung_kundenspezifisch_sicherstellen(int $produkt_id, int $basis_i
     if (table_exists('lieferant_preis'))
         // 13.11.2026: „gültig bis“ und „Stand“ vom Original übernehmen – sonst wäre ein abgelaufener Preis in der Kopie wieder frisch.
         foreach (all("SELECT lieferant_id, menge_ab, preis, waehrung, lieferant_name, stand, gueltig_bis FROM lieferant_preis WHERE item_id=?", [(int)$b['id']]) as $lp)
-            q("INSERT INTO lieferant_preis (item_id, lieferant_id, menge_ab, preis, waehrung, stand, gueltig_bis, lieferant_name, quelle) VALUES (?,?,?,?,?,COALESCE(?, CURDATE()),?,?,'kopie_neutral')",
+            q("INSERT INTO lieferant_preis (item_id, lieferant_id, menge_ab, preis, waehrung, stand, gueltig_bis, lieferant_name, quelle) VALUES (?,?,?,?,?,COALESCE(?, '" . heute_ort() . "'),?,?,'kopie_neutral')",
               [$nid, $lp['lieferant_id'], $lp['menge_ab'], $lp['preis'], $lp['waehrung'] ?: 'EUR', $lp['stand'] ?: null, $lp['gueltig_bis'] ?: null, $lp['lieferant_name']]);
     if ($slot) q("UPDATE produkt SET verpackung_id=? WHERE id=?", [$nid, $produkt_id]);
     if (function_exists('bedarf_bump')) bedarf_bump();
@@ -12632,7 +12632,7 @@ function auftrag_express_bestellung(int $auftrag_id, int $lieferant_id): ?int {
         $pos[] = ['item_id' => (int)$b['item_id'], 'menge' => $menge, 'ek' => $preis, 'einheit' => (string)$b['einheit']];
     }
     if (!$pos) return null;
-    q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,CURDATE())",
+    q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,'" . heute_ort() . "')",
       [naechste_nummer('BE'), $lieferant_id, 'offen', 'Express-Bestellung aus Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id])]);
     $bid = insert_id();
     $i = 0;
@@ -12671,7 +12671,7 @@ function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?i
         $pp = produkt_lieferant_preise_pkg((int)$a['produkt_id'], (float)$packs);
         if (!isset($pp[$lieferant_id])) return null;
         $vfItem = (int) produkt_lageritem((int)$a['produkt_id']);
-        q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,CURDATE())",
+        q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,'" . heute_ort() . "')",
           [naechste_nummer('BE'), $lieferant_id, 'offen', 'Express Fertigprodukt-Zukauf aus Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id])]);
         $bid = insert_id();
         q("INSERT INTO bestellung_position (bestellung_id,item_id,bezeichnung,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?,0)",
@@ -12698,7 +12698,7 @@ function auftrag_express_bulk_bestellung(int $auftrag_id, int $lieferant_id): ?i
     if ($preis === null) return null;
     if ($einheitPreis !== '') $einheit = $einheitPreis;   // Lieferant gibt die Einheit vor, falls hinterlegt
     $notizArt = $art === 'fertig' ? 'Fertigprodukt-Zukauf' : 'Bulk/Pulver-Zukauf';
-    q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,CURDATE())",
+    q("INSERT INTO bestellung (nummer,lieferant_id,status,notiz,bestelldatum) VALUES (?,?,?,?,'" . heute_ort() . "')",
       [naechste_nummer('BE'), $lieferant_id, 'offen', 'Express ' . $notizArt . ' aus Auftrag ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id])]);
     $bid = insert_id();
     $bez = trim((string)$a['name'] . ($groesse !== '' ? ' · ' . $groesse : '') . $bulkSuffix) ?: 'Fertigprodukt';
@@ -13119,14 +13119,14 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
     // Lieferschein für diese (Teil-)Lieferung; netto anteilig an der versendeten Menge.
     $netto = $gesamt > 0 ? round((float)$a['gesamt_netto'] * $ship / $gesamt, 2) : (float)$a['gesamt_netto'];
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,menge,netto,ust_prozent,ust_betrag,brutto,status,datum)
-       VALUES (?,'lieferschein',?,?,?,?,0,0,?,'offen',CURDATE())",
+       VALUES (?,'lieferschein',?,?,?,?,0,0,?,'offen','" . heute_ort() . "')",
       [naechste_nummer('LS'), $auftrag_id, $a['kunde_id'], $ship, $netto, $netto]);
     $lsId = (int) insert_id();
     $neuVersendet = $bereits + $ship;
     $voll = $neuVersendet >= $gesamt;
     // 'versendet' erst, wenn alles geliefert UND die Produktion fertig ist; läuft sie noch, bleibt der Status unverändert
     // (beim Produktionsabschluss wird er dann auf 'versendet' gesetzt, siehe auftrag_nach_produktion_status()).
-    if ($voll && !$inProd) q("UPDATE auftrag SET versendet_menge=?, status='versendet', status_datum=CURDATE() WHERE id=?", [$neuVersendet, $auftrag_id]);
+    if ($voll && !$inProd) q("UPDATE auftrag SET versendet_menge=?, status='versendet', status_datum='" . heute_ort() . "' WHERE id=?", [$neuVersendet, $auftrag_id]);
     else                   q("UPDATE auftrag SET versendet_menge=? WHERE id=?", [$neuVersendet, $auftrag_id]);
     if ($a['kunde_id']) log_aktivitaet('kunde', (int)$a['kunde_id'], 'team',
         $voll ? ('Auftrag ' . $a['nummer'] . ' versendet' . ($bereits > 0 ? ' (Restlieferung ' . number_format($ship,0,',','.') . ')' : '') . '.')
@@ -13146,7 +13146,7 @@ function auftrag_versenden_menge(int $auftrag_id, ?int $menge = null): array {
 function auftrag_nach_produktion_status(int $auftrag_id): string {
     $a = one("SELECT menge, versendet_menge FROM auftrag WHERE id=?", [$auftrag_id]);
     $st = ($a && (int)$a['menge'] > 0 && (int)($a['versendet_menge'] ?? 0) >= (int)$a['menge']) ? 'versendet' : 'erledigt';
-    q("UPDATE auftrag SET status=?" . ($st === 'versendet' ? ", status_datum=CURDATE()" : "") . " WHERE id=?", [$st, $auftrag_id]);
+    q("UPDATE auftrag SET status=?" . ($st === 'versendet' ? ", status_datum='" . heute_ort() . "'" : "") . " WHERE id=?", [$st, $auftrag_id]);
     // Während der Produktion schon alles geliefert -> jetzt ist die Lieferung komplett: Rechnung festschreiben (St-04).
     if ($st === 'versendet' && function_exists('auftrag_rechnung_bei_lieferung')) auftrag_rechnung_bei_lieferung($auftrag_id, true);
     return $st;
@@ -13261,7 +13261,7 @@ function auftrag_aus_angebot(int $angebot_id): ?int {
     $hinw  = $sicht ? null : 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.';
     $zielK = kunde_zahlungsziel_tage((int)$a['kunde_id']);
     q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,zahlungsziel_tage,faellig,text,kunde_sichtbar)
-       VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),?,DATE_ADD(CURDATE(), INTERVAL ? DAY),?,?)",
+       VALUES (?,?,?,?,?,?,?,?,?,'" . heute_ort() . "',?,DATE_ADD('" . heute_ort() . "', INTERVAL ? DAY),?,?)",
       [naechste_nummer('RE'), 'rechnung', $aid, $a['kunde_id'], $netto, $ustP, $ust, $brutto, 'offen', $zielK, $zielK, $hinw, $sicht]);
     // Detaillierte Positionen (Produkt + Glas + Etikett) materialisieren -> Team sieht sie, PDF funktioniert.
     beleg_positionen_materialisieren((int) insert_id(), $ustP);
@@ -14147,7 +14147,7 @@ function kontingent_aus_angebot(int $angebot_id, string $unterzeichner = '', ?st
     if ($ex) return ['ok' => true, 'kontingent_id' => (int)$ex['id'], 'schon_da' => true];
     $mon = (int)($a['jahres_laufzeit_monate'] ?? 12) ?: 12;
     q("INSERT INTO kontingent (kunde_id,produkt_id,angebot_id,gruppe,gesamt_menge,abgerufen,vk_stueck,gueltig_von,gueltig_bis,status,freigabe_name,freigabe_am,notiz)
-       VALUES (?,?,?,?,?,0,?,CURDATE(),DATE_ADD(CURDATE(), INTERVAL ? MONTH),'wartet_vertrag',?,UTC_TIMESTAMP(),?)",
+       VALUES (?,?,?,?,?,0,?,'" . heute_ort() . "',DATE_ADD('" . heute_ort() . "', INTERVAL ? MONTH),'wartet_vertrag',?,UTC_TIMESTAMP(),?)",
       [(int)$a['kunde_id'], $produktId, $angebot_id, $gruppe, $menge, $vk, $mon, ($unterzeichner ?: null),
        'Aus Angebot ' . (string)$a['nummer'] . ' (Jahresvertrag).']);
     $kid = insert_id();
@@ -14189,7 +14189,7 @@ function kontingent_aus_auftrag(int $auftrag_id, int $monate = 12): array {
     if ($ex) return ['ok' => true, 'kontingent_id' => (int)$ex['id'], 'schon_da' => true];
     $mon = $monate > 0 ? $monate : 12;
     q("INSERT INTO kontingent (kunde_id,produkt_id,angebot_id,gesamt_menge,abgerufen,vk_stueck,gueltig_von,gueltig_bis,status,notiz)
-       VALUES (?,?,?,?,0,?,CURDATE(),DATE_ADD(CURDATE(), INTERVAL ? MONTH),'aktiv',?)",
+       VALUES (?,?,?,?,0,?,'" . heute_ort() . "',DATE_ADD('" . heute_ort() . "', INTERVAL ? MONTH),'aktiv',?)",
       [(int)$a['kunde_id'], (int)$a['produkt_id'], ($a['angebot_id'] ?? null) ?: null, $menge, $vk, $mon, $ref . ' angelegt.']);
     $kid = insert_id();
     // Ursprungsauftrag stornieren – produziert wird ueber die Abrufe.
@@ -14301,7 +14301,7 @@ function kontingent_abruf(int $kontingent_id, int $menge): array {
     // Rechnung nur einen Nettobetrag ohne Positionen -> PDF fuer den Kunden nicht baubar (Bug bei Abruf-Rechnungen).
     $sicht = kunde_hat_rechnungsadresse($kid) ? 1 : 0;
     $hinw  = $sicht ? null : 'Rechnungsadresse fehlt – bitte Kundenadresse ergänzen, dann Rechnung neu berechnen.';
-    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,text,kunde_sichtbar) VALUES (?,?,?,?,?,?,?,?,?,CURDATE(),?,?)",
+    q("INSERT INTO beleg (nummer,typ,auftrag_id,kunde_id,netto,ust_prozent,ust_betrag,brutto,status,datum,text,kunde_sichtbar) VALUES (?,?,?,?,?,?,?,?,?,'" . heute_ort() . "',?,?)",
       [naechste_nummer('RE'), 'rechnung', $aid, $kid, $netto, $ustP, $ust, $brutto, 'offen', $hinw, $sicht]);
     $belId = (int) insert_id();
     // Rechnungspositionen: die Positionen der gewählten JV-Option (Produkt + Glas + Etikett) auf den vereinbarten
@@ -14463,7 +14463,7 @@ function auftrag_rechnung_bei_lieferung(int $auftrag_id, bool $voll = true): voi
         $ziel = kunde_zahlungsziel_tage((int)$b['kunde_id']);
         q("UPDATE beleg SET zahlungsziel_tage=?, faellig=? WHERE id=?", [$ziel, date('Y-m-d', strtotime(((string)($b['datum'] ?: date('Y-m-d'))) . ' +' . $ziel . ' days')), $bid]);
     }
-    if ($voll || empty($b['leistung_datum'])) q("UPDATE beleg SET leistung_datum=CURDATE() WHERE id=?", [$bid]);
+    if ($voll || empty($b['leistung_datum'])) q("UPDATE beleg SET leistung_datum='" . heute_ort() . "' WHERE id=?", [$bid]);
     if ($voll && (int)$b['kunde_sichtbar'] === 0 && kunde_hat_rechnungsadresse((int)$b['kunde_id'])) {
         q("UPDATE beleg SET kunde_sichtbar=1, text=NULL WHERE id=?", [$bid]);
         beleg_status_log_add($bid, (string)$b['status'], 'Rechnung bei Lieferung festgeschrieben und für den Kunden freigegeben.', 'System');
@@ -15165,7 +15165,7 @@ function kunde_guthaben(int $kunde_id): float {
     return round($gut - $ver, 2);
 }
 function guthaben_bewegung_add(int $kunde_id, float $betrag, string $typ, ?int $ref_beleg_id = null, string $notiz = '', ?int $gutschrift_id = null): void {
-    q("INSERT INTO guthaben_bewegung (kunde_id,gutschrift_id,betrag,typ,ref_beleg_id,notiz,datum) VALUES (?,?,?,?,?,?,CURDATE())",
+    q("INSERT INTO guthaben_bewegung (kunde_id,gutschrift_id,betrag,typ,ref_beleg_id,notiz,datum) VALUES (?,?,?,?,?,?,'" . heute_ort() . "')",
       [$kunde_id, $gutschrift_id ?: null, round($betrag, 2), $typ, $ref_beleg_id ?: null, $notiz ?: null]);
 }
 // Guthaben auf eine Rechnung anrechnen: als Zahlung (art=guthaben) verbuchen + Verbrauch protokollieren. Gibt den angerechneten Betrag.

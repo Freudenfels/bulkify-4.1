@@ -306,7 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     // Sofortfix 11.11.2026: von Hand „versendet" bei offenem Labor/offener Menge nur mit Pflicht-Grund (Hinweis statt Sperre).
     if (auftrag_versendet_regel($id, $alt, $neu, (string)($_POST['versendet_grund'] ?? '')) !== '') { header('Location: ?p=auftrag&id=' . $id . '&versendetfrage=status'); exit; }   // zentral (13.11.2026)
     if ($neu !== $alt) {
-        q("UPDATE auftrag SET status=?, status_datum=CURDATE() WHERE id=?", [$neu, $id]);
+        q("UPDATE auftrag SET status=?, status_datum='" . heute_ort() . "' WHERE id=?", [$neu, $id]);
         log_aktivitaet('auftrag', $id, 'team', 'Status geändert: ' . $alt . ' -> ' . $neu, 'status', 'auftrag', $id);
         // Fertig/versendet -> Produktion mit abschließen, damit kein Rohstoffbedarf mehr entsteht (ohne Lagerbuchung).
         if (in_array($neu, ['erledigt','versendet'], true)) {
@@ -361,7 +361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     if (auftrag_versendet_regel($id, (string)($alt['status'] ?? ''), $neuStatus, (string)($_POST['versendet_grund'] ?? '')) !== '') {   // zentral (13.11.2026)
         header('Location: ?p=auftrag&id=' . $id . '&versendetfrage=phase&ph=' . $idx . (isset($_POST['rest']) ? '&rest=' . rawurlencode((string)$_POST['rest']) : '') . '#schritte'); exit;
     }
-    q("UPDATE auftrag SET phase_override=?, status=?, status_datum=CURDATE() WHERE id=?", [$ovVal, $neuStatus, $id]);
+    q("UPDATE auftrag SET phase_override=?, status=?, status_datum='" . heute_ort() . "' WHERE id=?", [$ovVal, $neuStatus, $id]);
     if ((int)($alt['phase_override'] ?? -1) !== (int)($ovVal ?? -1) || (string)($alt['status'] ?? '') !== $neuStatus)
         log_aktivitaet('auftrag', $id, 'team', 'Fortschritt gesetzt: ' . ($phasen[$idx] ?? ('Stufe ' . $idx)) . ' (Status ' . $neuStatus . ')', 'status', 'auftrag', $id);
     // Fertig/versendet -> Produktion mit abschließen (Rohstoffbedarf stoppen, ohne Lagerbuchung).
@@ -533,7 +533,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     $altStatus = (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]);
     $stn = 0;
     if ($altStatus !== 'storniert') {
-        q("UPDATE auftrag SET status='storniert', status_datum=CURDATE() WHERE id=?", [$id]);
+        q("UPDATE auftrag SET status='storniert', status_datum='" . heute_ort() . "' WHERE id=?", [$id]);
         $akteur = (function_exists('current_user') && ($u = current_user())) ? $u['name'] : 'team';
         $stn = auftrag_rechnungen_stornieren($id, 'Auftrag ' . ((string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$id])) . ' storniert', $akteur);
         log_aktivitaet('auftrag', $id, 'team', 'Auftrag storniert.', 'status', 'auftrag', $id);

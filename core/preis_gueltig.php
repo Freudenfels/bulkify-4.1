@@ -267,7 +267,7 @@ function pg_ek_abgelaufen_pruefen(): int {
     try {
         foreach (all("SELECT i.id FROM item i WHERE i.ek_auto=1 AND i.ek_abgelaufen_seit IS NULL
                         AND EXISTS (SELECT 1 FROM lieferant_preis lp WHERE lp.item_id=i.id AND lp.preis>0)
-                        AND NOT EXISTS (SELECT 1 FROM lieferant_preis lp WHERE lp.item_id=i.id AND lp.preis>0 AND (lp.gueltig_bis IS NULL OR lp.gueltig_bis >= CURDATE()))") as $r) {
+                        AND NOT EXISTS (SELECT 1 FROM lieferant_preis lp WHERE lp.item_id=i.id AND lp.preis>0 AND (lp.gueltig_bis IS NULL OR lp.gueltig_bis >= '" . heute_ort() . "'))") as $r) {
             item_ek_aus_lieferantenpreis((int)$r['id']); $n++;
         }
     } catch (Throwable $e) {}

@@ -770,9 +770,9 @@ function crmdemo_seed(): void {
             ('Kurkuma-Extrakt 95%','Pflanzenextrakt','Curcuma longa','95% Curcumin','Pulver','IN',25,NULL)");
         $r1 = (int) scalar("SELECT id FROM crmdemo_rohstoff WHERE name LIKE 'Ashwagandha-Extrakt%' LIMIT 1");
         q("INSERT INTO crmdemo_rohstoff_preis (rohstoff_id,datum,preis_cent,waehrung,lieferant) VALUES
-            (?, DATE_SUB(CURDATE(),INTERVAL 180 DAY), 4200,'EUR','Shandong'),
-            (?, DATE_SUB(CURDATE(),INTERVAL 90 DAY), 3900,'EUR','Shandong'),
-            (?, DATE_SUB(CURDATE(),INTERVAL 20 DAY), 3750,'EUR','Nutra Yunnan')", [$r1,$r1,$r1]);
+            (?, DATE_SUB('" . heute_ort() . "',INTERVAL 180 DAY), 4200,'EUR','Shandong'),
+            (?, DATE_SUB('" . heute_ort() . "',INTERVAL 90 DAY), 3900,'EUR','Shandong'),
+            (?, DATE_SUB('" . heute_ort() . "',INTERVAL 20 DAY), 3750,'EUR','Nutra Yunnan')", [$r1,$r1,$r1]);
     }
 
     // Nummern nachziehen (idempotent): jede Rezeptur RZ-…, jeder Rohstoff RM-….

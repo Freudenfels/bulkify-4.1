@@ -118,11 +118,11 @@ function webe_bestellung_stand(int $bestellung_id, bool $melden = false, string 
     $komplett = $pos > 0 && !$offen && ($irgendwas || (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=? AND rest_storniert_am IS NOT NULL", [$bestellung_id]) > 0);
     $warSchon = (string)$b['status'] === 'geliefert' || !empty($b['angekommen_am']);
     if ($komplett) {
-        q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+        q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, '" . heute_ort() . "') WHERE id=?", [$bestellung_id]);
         q("UPDATE bestellung SET status='geliefert' WHERE id=? AND status IN ('offen','gesendet','bestellt')", [$bestellung_id]);
         if (!empty($b['lieferant_id'])) q("UPDATE bestellung SET station='eingegangen' WHERE id=?", [$bestellung_id]);
     } elseif ($irgendwas) {
-        q("UPDATE bestellung SET teilgeliefert_am=COALESCE(teilgeliefert_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+        q("UPDATE bestellung SET teilgeliefert_am=COALESCE(teilgeliefert_am, '" . heute_ort() . "') WHERE id=?", [$bestellung_id]);
     }
     $wiederOffen = false;
     if (!$komplett && $oeffnen && $warSchon && $offen) {
@@ -195,11 +195,11 @@ function webe_rest_stornieren(int $bestellung_id, string $wer = ''): bool {
     webe_spalten();
     $b = one("SELECT id, nummer, status FROM bestellung WHERE id=?", [$bestellung_id]);
     if (!$b || in_array((string)$b['status'], ['storniert'], true)) return false;
-    q("UPDATE bestellung_position SET rest_storniert_am=CURDATE() WHERE bestellung_id=? AND rest_storniert_am IS NULL AND COALESCE(geliefert_menge,0) < menge", [$bestellung_id]);
+    q("UPDATE bestellung_position SET rest_storniert_am='" . heute_ort() . "' WHERE bestellung_id=? AND rest_storniert_am IS NULL AND COALESCE(geliefert_menge,0) < menge", [$bestellung_id]);
     $gel = (float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [$bestellung_id]);
     if ($gel <= 0) q("UPDATE bestellung SET status='storniert' WHERE id=?", [$bestellung_id]);
     else {
-        q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+        q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, '" . heute_ort() . "') WHERE id=?", [$bestellung_id]);
         q("UPDATE bestellung SET status='geliefert' WHERE id=? AND status IN ('offen','gesendet','bestellt')", [$bestellung_id]);
     }
     $vermerk = "\n[" . gmdate('d.m.Y') . '] Rest storniert' . ($wer !== '' ? ' (' . $wer . ')' : '') . ' – zählt nicht mehr als unterwegs.';
@@ -213,8 +213,8 @@ function webe_rest_stornieren(int $bestellung_id, string $wer = ''): bool {
 function webe_als_geliefert_schliessen(int $bestellung_id, string $wer = ''): bool {
     webe_spalten();
     if (!one("SELECT id FROM bestellung WHERE id=? AND status<>'storniert'", [$bestellung_id])) return false;
-    q("UPDATE bestellung_position SET rest_storniert_am=CURDATE() WHERE bestellung_id=? AND rest_storniert_am IS NULL AND COALESCE(geliefert_menge,0) < menge", [$bestellung_id]);
-    q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, CURDATE()) WHERE id=?", [$bestellung_id]);
+    q("UPDATE bestellung_position SET rest_storniert_am='" . heute_ort() . "' WHERE bestellung_id=? AND rest_storniert_am IS NULL AND COALESCE(geliefert_menge,0) < menge", [$bestellung_id]);
+    q("UPDATE bestellung SET angekommen_am=COALESCE(angekommen_am, '" . heute_ort() . "') WHERE id=?", [$bestellung_id]);
     q("UPDATE bestellung SET status='geliefert' WHERE id=? AND status IN ('offen','gesendet','bestellt')", [$bestellung_id]);
     q("UPDATE bestellung SET notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", ["\n[" . gmdate('d.m.Y') . '] Als geliefert geschlossen ohne eingebuchte Charge' . ($wer !== '' ? ' (' . $wer . ')' : '') . '.', $bestellung_id]);
     webe_bedarf_bump();
@@ -345,7 +345,7 @@ function webe_ohne_einbuchen_positionen(int $tage = 90, int $bp_id = 0): array {
           AND NOT EXISTS (SELECT 1 FROM charge c WHERE c.bestellung_position_id=bp.id)";
     $p = [];
     if ($bp_id > 0) { $w .= " AND bp.id=?"; $p[] = $bp_id; }
-    else { $w .= " AND bp.rest_storniert_am >= DATE_SUB(CURDATE(), INTERVAL " . max(1, $tage) . " DAY)"; }
+    else { $w .= " AND bp.rest_storniert_am >= DATE_SUB('" . heute_ort() . "', INTERVAL " . max(1, $tage) . " DAY)"; }
     try {
         $rows = all("SELECT bp.id AS bp_id, bp.bestellung_id, b.nummer, b.status, b.station, b.bestellart, b.bestelldatum, b.eta_geplant, b.lieferant_id,
                             COALESCE(l.firma, NULLIF(b.online_haendler,''), '') AS lieferant,

@@ -139,7 +139,7 @@ function ek_lieferant_preis_schreiben(array $ek): void {
     $mengeAb = ek_menge_ab((string)$ek['name']);
     $vers = ek_versandart((string)$ek['name']) ?: null;
     q("INSERT INTO lieferant_preis (item_id,lieferant_id,lieferant_name,menge_ab,preis,waehrung,stand,quelle,ek_import_id,versandart)
-       VALUES (?,?,?,?,?, 'EUR', CURDATE(), 'ek_import', ?, ?)",
+       VALUES (?,?,?,?,?, 'EUR', '" . heute_ort() . "', 'ek_import', ?, ?)",
       [(int)$ek['item_id'], $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, $mengeAb, (float)$ek['preis'], (int)$ek['id'], $vers]);
     if (function_exists('item_ek_aus_lieferantenpreis')) item_ek_aus_lieferantenpreis((int)$ek['item_id']);
 }
@@ -151,7 +151,7 @@ function produkt_zukauf_preis_schreiben(array $ek, int $produkt_id): void {
     if (scalar("SELECT id FROM produkt_lieferant_preis WHERE ek_import_id=?", [(int)$ek['id']])) return;   // schon da
     $lid = ek_lieferant_id($ek['lieferant']);
     q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,groesse,waehrung,versandart,stand,quelle,ek_import_id)
-       VALUES (?,?,?,?,?,?,?, 'EUR', ?, CURDATE(), 'ek_import', ?)",
+       VALUES (?,?,?,?,?,?,?, 'EUR', ?, '" . heute_ort() . "', 'ek_import', ?)",
       [$produkt_id, $lid, mb_substr((string)$ek['lieferant'], 0, 120) ?: null, (float)($ek['menge'] ?? 0), (float)$ek['preis'],
        mb_substr((string)($ek['einheit'] ?? 'kapsel'), 0, 16), mb_substr((string)($ek['groesse'] ?? ''), 0, 60) ?: null,
        ek_versandart((string)$ek['name']) ?: null, (int)$ek['id']]);

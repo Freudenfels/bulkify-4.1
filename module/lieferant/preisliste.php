@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'preis_save') {
         $rid   = (int)($_POST['id'] ?? 0);
         $preis = zahl_lesen((string)($_POST['eur_kg'] ?? ''), false, $spr);
-        q("UPDATE lieferant_preisliste SET eur_kg=?, stand=CURDATE() WHERE id=? AND lieferant_id=?",
+        q("UPDATE lieferant_preisliste SET eur_kg=?, stand='" . heute_ort() . "' WHERE id=? AND lieferant_id=?",
           [$preis > 0 ? $preis : null, $rid, $lid]);
         header('Location: ' . $ziel . '&ok=1'); exit;
     }
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name = trim((string)($_POST['rohstoff_name'] ?? ''));
         if ($name !== '') {
             $preis = zahl_lesen((string)($_POST['eur_kg'] ?? ''), false, $spr);
-            q("INSERT INTO lieferant_preisliste (rohstoff_name,lieferant,lieferant_id,eur_kg,einheit,stand,angelegt) VALUES (?,?,?,?,?,CURDATE(),NOW())",
+            q("INSERT INTO lieferant_preisliste (rohstoff_name,lieferant,lieferant_id,eur_kg,einheit,stand,angelegt) VALUES (?,?,?,?,?,'" . heute_ort() . "',NOW())",
               [mb_substr($name, 0, 190), (string) scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]), $lid,
                $preis > 0 ? $preis : null, mb_substr(trim((string)($_POST['einheit'] ?? '')), 0, 20) ?: 'kg']);
         }

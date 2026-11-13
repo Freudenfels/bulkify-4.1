@@ -158,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $anz = (int) scalar("SELECT COUNT(*) FROM angebot_position WHERE angebot_id=?", [(int)$id]);
             if ($st === 'offen' && $anz > 0) {
                 q("UPDATE angebot SET status='gesendet', preise_kunde=1 WHERE id=?", [(int)$id]);
-                q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < CURDATE())", [angebot_gueltig_bis_default((int)$id), (int)$id]);
+                q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < '" . heute_ort() . "')", [angebot_gueltig_bis_default((int)$id), (int)$id]);
                 angebot_produkte_sichern((int)$id);
                 $kd = (int) scalar("SELECT kunde_id FROM angebot WHERE id=?", [(int)$id]);
                 if ($kd) {
@@ -204,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         q("UPDATE angebot SET status='gesendet', preise_kunde=1 WHERE id=?", [(int)$id]);
         // Gültigkeit zählt ab dem Tag, an dem das Angebot beim Kunden landet – ein alter Entwurf
         // wäre sonst schon abgelaufen. Ein selbst gesetztes Datum in der Zukunft bleibt stehen.
-        q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < CURDATE())",
+        q("UPDATE angebot SET gueltig_bis=? WHERE id=? AND (gueltig_bis IS NULL OR gueltig_bis < '" . heute_ort() . "')",
           [angebot_gueltig_bis_default((int)$id), (int)$id]);
         // Jetzt – und erst jetzt – gelten die angebotenen Konfigurationen als eigene Produkte
         // (Rezeptur x Menge + Verpackung), und der Kunde darf deren Preise im Portal sehen.

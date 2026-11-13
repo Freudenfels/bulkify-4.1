@@ -363,7 +363,7 @@ $CHECKS = [
                            (SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND bp.menge>0) AS positionen
                     FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
                     WHERE b.status IN ('gesendet','bestellt') AND b.angekommen_am IS NULL
-                      AND COALESCE(b.bestelldatum, DATE(b.angelegt)) < DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+                      AND COALESCE(b.bestelldatum, DATE(b.angelegt)) < DATE_SUB('" . heute_ort() . "', INTERVAL 14 DAY)
                       AND EXISTS (SELECT 1 FROM bestellung_position bp WHERE bp.bestellung_id=b.id AND " . BA_POS_OFFEN . ")
                     ORDER BY COALESCE(b.bestelldatum, DATE(b.angelegt))",
         // Alles in der Zeile (Nico 11.11.2026): Inhalt, Vorschläge mit „verknüpfen", Knöpfe je Bestellung (AJAX, ohne Neuladen).

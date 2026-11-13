@@ -45,7 +45,7 @@ if ($istPost && !$neu) {
         $inco  = array_key_exists($_POST['zk_incoterm'] ?? '', incoterm_liste()) ? $_POST['zk_incoterm'] : null;
         $vers  = array_key_exists($_POST['zk_versandart'] ?? '', versandart_liste()) ? $_POST['zk_versandart'] : null;
         $zkEinh = ($_POST['zk_einheit'] ?? '') === 'packung' ? 'packung' : (($_POST['zk_einheit'] ?? '') === 'kg' ? 'kg' : 'kapsel');
-        if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand,gueltig_bis) VALUES (?,?,?,?,?,?,?,?, 'EUR', CURDATE(), ?)",
+        if ($preis > 0) q("INSERT INTO produkt_lieferant_preis (produkt_id,lieferant_id,lieferant_name,menge_ab,preis,einheit,incoterm,versandart,waehrung,stand,gueltig_bis) VALUES (?,?,?,?,?,?,?,?, 'EUR', '" . heute_ort() . "', ?)",
             [$pid, $lid, $lname ?: null, $mab, $preis, $zkEinh, $inco, $vers, pg_lesen((string)($_POST['zk_gueltig_bis'] ?? ''))]);
         $zurueck('&zkok=1&tab=beschaffung', 'zukauf'); exit;
     }

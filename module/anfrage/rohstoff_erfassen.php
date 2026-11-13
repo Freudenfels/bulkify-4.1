@@ -20,7 +20,7 @@ $ab    = max(0.0, zahl_lesen((string)($_POST['menge_ab'] ?? ''), true));
 $r = ['re_ok' => $iid];
 if ($preis > 0 && !$lid) $r['re_ohnelief'] = 1;
 if ($lid && $preis > 0) {
-    q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,quelle,gueltig_bis) VALUES (?,?,?,?, 'EUR', CURDATE(), 'manuell', ?)", [$iid, $lid, $ab, $preis, pg_lesen((string)($_POST['gueltig_bis'] ?? ''))]);
+    q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,quelle,gueltig_bis) VALUES (?,?,?,?, 'EUR', '" . heute_ort() . "', 'manuell', ?)", [$iid, $lid, $ab, $preis, pg_lesen((string)($_POST['gueltig_bis'] ?? ''))]);
     item_ek_aus_lieferantenpreis($iid);
     log_aktivitaet('item', $iid, 'team', 'Lieferantenpreis erfasst: ' . number_format($preis, 2, ',', '.') . ' EUR/kg ab ' . number_format($ab, 0, ',', '.') . ' kg ('
         . scalar("SELECT firma FROM lieferanten WHERE id=?", [$lid]) . ')', 'preis', 'item', $iid);

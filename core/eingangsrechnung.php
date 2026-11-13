@@ -124,7 +124,7 @@ function er_entwurf_aus_dokument(int $dok_id, string $quelle = 'portal'): array 
     $erNr = function_exists('naechste_nummer') ? naechste_nummer('ER') : null;
     q("INSERT INTO lieferant_rechnung (nummer, lieferant_id, bestellung_id, lief_nummer, datum, eingang_am, waehrung, fx_kurs, fw_netto, netto, ust_prozent, ust_betrag, brutto,
                                        status, zahlungsziel_tage, faellig, notiz, datei, orig_name, mime, dokument_id, quelle, ki_json, ki_unsicher, bank_re, bank_warnung)
-       VALUES (?,?,?,?,?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, 'entwurf', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       VALUES (?,?,?,?,?, '" . heute_ort() . "', ?, ?, ?, ?, ?, ?, ?, 'entwurf', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [$erNr, $lid ?: null, (int)$b['id'], $nr !== '' ? mb_substr($nr, 0, 80) : null, $dat, $wae, $wae === 'EUR' ? 1 : null, $netto, $wae === 'EUR' ? $netto : 0, $ustP, $wae === 'EUR' ? $ust : 0, $wae === 'EUR' ? $brutto : 0,
        $ziel, $faellig, 'Entwurf aus ' . ($quelle === 'team' ? 'Team-Upload' : 'Lieferantenportal') . ' (Bestellung ' . $b['nummer'] . ')' . (!empty($ki['test']) ? ' – Testumgebung: eingespielte KI-Antwort' : ($ki['ok'] ? '' : ' – KI-Auslesen nicht möglich: ' . ($ki['fehler'] ?? ''))) . ($wae !== 'EUR' ? ' – Betrag in ' . $wae . ': ' . number_format($brutto, 2, ',', '.') . ' brutto, Kurs bitte prüfen' : ''),
        basename((string)$d['datei']), (string)($d['datei_orig'] ?: $d['datei']), strtolower(pathinfo((string)$d['datei'], PATHINFO_EXTENSION)) === 'pdf' ? 'application/pdf' : 'image/' . strtolower(pathinfo((string)$d['datei'], PATHINFO_EXTENSION)),

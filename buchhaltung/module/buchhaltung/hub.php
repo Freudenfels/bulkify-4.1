@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../../core/zeit_ort.php';   // heute_ort() statt CURDATE() (Fable-6 T5.3)
 // Buchhaltung – Finanz-Hub (Route: buchhaltung, Rolle finance)
 // Reiter: Übersicht, Offene Posten (je Kunde), Auswertung (Umsatz), Prüfung (GoBD/Nummernkreis), Export.
 require_once BX_ROOT . '/core/ui.php';
@@ -39,10 +40,10 @@ foreach ($opRows as $r) { if ((float)$r['rest'] < 0) { $op_guthaben -= (float)$r
 $anz_offen = count($opRows);
 $umsatz_jahr = (float) scalar(
     "SELECT COALESCE(SUM(CASE WHEN typ='gutschrift' THEN -netto ELSE netto END),0) FROM beleg
-      WHERE typ IN ('rechnung','gutschrift') AND status<>'storniert' AND datum IS NOT NULL AND YEAR(datum)=YEAR(CURDATE())");
+      WHERE typ IN ('rechnung','gutschrift') AND status<>'storniert' AND datum IS NOT NULL AND YEAR(datum)=YEAR('" . heute_ort() . "')");
 $umsatz_monat = (float) scalar(
     "SELECT COALESCE(SUM(CASE WHEN typ='gutschrift' THEN -netto ELSE netto END),0) FROM beleg
-      WHERE typ IN ('rechnung','gutschrift') AND status<>'storniert' AND datum IS NOT NULL AND YEAR(datum)=YEAR(CURDATE()) AND MONTH(datum)=MONTH(CURDATE())");
+      WHERE typ IN ('rechnung','gutschrift') AND status<>'storniert' AND datum IS NOT NULL AND YEAR(datum)=YEAR('" . heute_ort() . "') AND MONTH(datum)=MONTH('" . heute_ort() . "')");
 $anz_gutschrift = (int) scalar("SELECT COUNT(*) FROM beleg WHERE typ='gutschrift'");
 $verb = kr_op_summe();                 // offene Verbindlichkeiten (wir schulden Lieferanten)
 $verb_ue = kr_op_ueberfaellig_summe();

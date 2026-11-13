@@ -253,8 +253,8 @@ function katalog_uebernehmen(int $zeile_id, ?int $item_id = null, bool $preis_ue
         $ab = $z['menge_ab'] !== null ? (float)$z['menge_ab'] : 0;
         $vorhanden = scalar("SELECT id FROM lieferant_preis WHERE item_id=? AND lieferant_id=? AND menge_ab=?", [$item_id, (int)$z['lieferant_id'], $ab]);
         $zBis = ($z['gueltig_bis'] ?? null) ?: null;
-        if ($vorhanden) q("UPDATE lieferant_preis SET preis=?, waehrung=?, stand=CURDATE(), gueltig_bis=? WHERE id=?", [(float)$z['preis'], $z['waehrung'] ?: 'EUR', $zBis, (int)$vorhanden]);
-        else q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,gueltig_bis) VALUES (?,?,?,?,?,CURDATE(),?)",
+        if ($vorhanden) q("UPDATE lieferant_preis SET preis=?, waehrung=?, stand='" . heute_ort() . "', gueltig_bis=? WHERE id=?", [(float)$z['preis'], $z['waehrung'] ?: 'EUR', $zBis, (int)$vorhanden]);
+        else q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,gueltig_bis) VALUES (?,?,?,?,?,'" . heute_ort() . "',?)",
                [$item_id, (int)$z['lieferant_id'], $ab, (float)$z['preis'], $z['waehrung'] ?: 'EUR', $zBis]);
         if (function_exists('item_ek_aus_lieferantenpreis')) item_ek_aus_lieferantenpreis((int)$item_id);
     }

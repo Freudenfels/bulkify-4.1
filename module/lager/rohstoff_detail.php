@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'preis
     $mengeab = (float)($_POST['lp_menge_ab'] ?? 0);   // 13.11.2026 (Fable-3 T1.3): type="number" sendet immer Punkt – nie den Mengen-Parser („2.125“ wäre 2125)
     $inco = in_array($_POST['lp_incoterm'] ?? '', array_keys(incoterm_liste()), true) ? $_POST['lp_incoterm'] : null;
     $vers = in_array($_POST['lp_versandart'] ?? '', array_keys(versandart_liste()), true) ? $_POST['lp_versandart'] : null;
-    if ($lid && $preis > 0) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?, 'EUR', CURDATE(), ?, ?, ?)", [(int)$id, $lid, $mengeab, $preis, $inco, $vers, pg_lesen((string)($_POST['lp_gueltig_bis'] ?? ''))]);
+    if ($lid && $preis > 0) q("INSERT INTO lieferant_preis (item_id,lieferant_id,menge_ab,preis,waehrung,stand,incoterm,versandart,gueltig_bis) VALUES (?,?,?,?, 'EUR', '" . heute_ort() . "', ?, ?, ?)", [(int)$id, $lid, $mengeab, $preis, $inco, $vers, pg_lesen((string)($_POST['lp_gueltig_bis'] ?? ''))]);
     item_ek_aus_lieferantenpreis((int)$id);   // leerer/automatischer EK folgt dem günstigsten Lieferantenpreis
     header('Location: ?p=rohstoff&id=' . $id . '&preisok=1#'); exit;
 }

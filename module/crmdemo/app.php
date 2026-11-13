@@ -270,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $a = one("SELECT * FROM crmdemo_angebot WHERE id=?", [(int)($_POST['id'] ?? 0)]);
         if ($a && $a['status'] === 'gesendet') {
             $ust = (float) cd_std('std_ust','19'); $netto = (int)$a['netto_cent']; $brutto = (int) round($netto * (1 + $ust / 100));
-            q("INSERT INTO crmdemo_rechnung (nummer,kunde_id,angebot_id,waehrung,netto_cent,ust_prozent,brutto_cent,status,datum,zahlungsbedingungen,versandart,bankverbindung) VALUES (?,?,?,?,?,?,?, 'offen', CURDATE(),?,?,?)",
+            q("INSERT INTO crmdemo_rechnung (nummer,kunde_id,angebot_id,waehrung,netto_cent,ust_prozent,brutto_cent,status,datum,zahlungsbedingungen,versandart,bankverbindung) VALUES (?,?,?,?,?,?,?, 'offen', '" . heute_ort() . "',?,?,?)",
               [cd_nummer('RE'), $a['kunde_id'], $a['id'], $a['waehrung'], $netto, $ust, $brutto,
                $a['zahlungsbedingungen'] ?: cd_std('std_zahlungsbed'), $a['versandart'] ?: cd_std('std_versandart'), cd_std('std_bank')]);
             q("UPDATE crmdemo_angebot SET status='angenommen' WHERE id=?", [(int)$a['id']]);

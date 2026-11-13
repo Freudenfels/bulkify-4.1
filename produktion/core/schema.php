@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../core/zeit_ort.php';   // heute_ort() statt CURDATE() (Fable-6 T5.3)
 // Eigene Tabellen des Produktions-Programms (pr_*). KEINE Dashboard-Tabellen hier (die nur über erp.php).
 // Aktuell: pr_pa_daten = erfasste Werte je Produktionsauftrag (Mischmenge, Kontrollgewichte, Muster …).
 require_once __DIR__ . '/db.php';
@@ -150,7 +151,7 @@ function pr_maschine_reinigung_erfassen(array $d): int {
     if ($gereinigt) {
         pr_stamm_schema();
         $wer = trim((string)($d['unterschrift'] ?? '')) ?: trim((string)($d['von'] ?? ''));
-        q("UPDATE pr_maschine SET letzte_reinigung=CURDATE(), letzte_von=? WHERE id=?", [$wer !== '' ? $wer : null, $mid]);
+        q("UPDATE pr_maschine SET letzte_reinigung='" . heute_ort() . "', letzte_von=? WHERE id=?", [$wer !== '' ? $wer : null, $mid]);
     }
     return $neu;
 }
@@ -255,7 +256,7 @@ function pr_maschine_loeschen(int $id): void { pr_stamm_schema(); q("UPDATE pr_m
 function pr_gereinigt_setzen(string $typ, int $id, string $von): void {
     pr_stamm_schema();
     $t = $typ === 'maschine' ? 'pr_maschine' : 'pr_raum';
-    q("UPDATE $t SET letzte_reinigung=CURDATE(), letzte_von=? WHERE id=?", [$von !== '' ? $von : null, $id]);
+    q("UPDATE $t SET letzte_reinigung='" . heute_ort() . "', letzte_von=? WHERE id=?", [$von !== '' ? $von : null, $id]);
 }
 
 // Generierte Reinigungspläne aus Räumen + Maschinen, die ein Intervall haben. Mit Fälligkeit.
@@ -290,7 +291,7 @@ function pr_reinigung_neu(string $titel, string $bereich, string $intervall, str
 }
 function pr_reinigung_gereinigt(int $id, string $von): void {
     pr_schema();
-    q("UPDATE pr_reinigung SET letzte_reinigung=CURDATE(), letzte_von=? WHERE id=?", [$von !== '' ? $von : null, $id]);
+    q("UPDATE pr_reinigung SET letzte_reinigung='" . heute_ort() . "', letzte_von=? WHERE id=?", [$von !== '' ? $von : null, $id]);
 }
 function pr_reinigung_loeschen(int $id): void { pr_schema(); q("UPDATE pr_reinigung SET aktiv=0 WHERE id=?", [$id]); }
 

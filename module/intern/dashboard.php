@@ -15,7 +15,7 @@ if (function_exists('benachrichtigungen_auto_pruefen')) benachrichtigungen_auto_
 $anfragen_neu   = (int) scalar("SELECT COUNT(*) FROM rezeptur_anfrage WHERE status='neu'");
 // 13.11.2026 (Paket Teil 8): Zähler nur für offene Vorgänge – abgelaufene Angebote zählen nicht, Produktionsaufträge versendeter/
 // stornierter Aufträge auch nicht, „Rohstoffe leer“ nur, wenn ein offener Auftrag den Rohstoff braucht.
-$angebote_offen = (int) scalar("SELECT COUNT(*) FROM angebot WHERE status IN ('offen','gesendet') AND (gueltig_bis IS NULL OR gueltig_bis >= CURDATE())");
+$angebote_offen = (int) scalar("SELECT COUNT(*) FROM angebot WHERE status IN ('offen','gesendet') AND (gueltig_bis IS NULL OR gueltig_bis >= '" . heute_ort() . "')");
 $prod_offen     = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag pa LEFT JOIN auftrag au ON au.id=pa.auftrag_id WHERE pa.status IN ('offen','laufend') AND " . pa_aktiv_sql() . " AND (au.id IS NULL OR au.status NOT IN ('versendet','storniert'))");
 // Versandbereit nur, wenn der Fortschritt wirklich fertig ist (11.11.2026): Labor da, alle Mengen da - sonst nicht mitzählen.
 $versandAlle    = all("SELECT a.*, k.firma, p.name AS produkt FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.status='erledigt' ORDER BY a.angelegt DESC");

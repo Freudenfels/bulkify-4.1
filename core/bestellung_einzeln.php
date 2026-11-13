@@ -58,7 +58,7 @@ function bestellung_einzeln_status(int $bid, array $orig): void {
     }
     // Nur stornierte Positionen ohne jede Lieferung -> die Einzelbestellung ist storniert (Vermerk bleibt in der Position).
     if (!$etwas && !array_filter($ps, fn($p) => empty($p['rest_storniert_am']))) { q("UPDATE bestellung SET status='storniert' WHERE id=?", [$bid]); return; }
-    if ($alleZu) q("UPDATE bestellung SET status='geliefert', angekommen_am=COALESCE(angekommen_am, ?, teilgeliefert_am, CURDATE()) WHERE id=? AND status IN ('gesendet','bestellt','geliefert')", [$orig['angekommen_am'] ?? null, $bid]);
+    if ($alleZu) q("UPDATE bestellung SET status='geliefert', angekommen_am=COALESCE(angekommen_am, ?, teilgeliefert_am, '" . heute_ort() . "') WHERE id=? AND status IN ('gesendet','bestellt','geliefert')", [$orig['angekommen_am'] ?? null, $bid]);
     else q("UPDATE bestellung SET status=IF(status='geliefert','bestellt',status), angekommen_am=NULL, teilgeliefert_am=" . ($etwas ? "COALESCE(teilgeliefert_am, ?)" : "NULL") . " WHERE id=?",
            $etwas ? [$orig['teilgeliefert_am'] ?? $orig['angekommen_am'] ?? gmdate('Y-m-d'), $bid] : [$bid]);
 }

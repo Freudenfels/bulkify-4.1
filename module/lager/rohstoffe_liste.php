@@ -101,8 +101,8 @@ if ($ids && !$istKapsel) {
     foreach (all("SELECT DISTINCT objekt_id AS id FROM dokument WHERE objekt_typ='item' AND typ='coa' AND objekt_id IN ($in)", $ids) as $r) $coaSet[(int)$r['id']] = 1;
     // Lieferant vorhanden + günstigster Lieferanten-EK je Item
     // Block D (11.11.2026): „günstigster EK" nur aus gültigen Preisen; gibt es nur abgelaufene, der letzte mit Kennzeichen (nie still).
-    foreach (all("SELECT lp.item_id AS id, MIN(CASE WHEN lp.gueltig_bis IS NULL OR lp.gueltig_bis >= CURDATE() THEN lp.preis END) AS mp, MIN(lp.preis) AS mp_alle,
-                         MAX(lp.gueltig_bis) AS bis_max, SUM(lp.gueltig_bis IS NULL OR lp.gueltig_bis >= CURDATE()) AS n_gueltig
+    foreach (all("SELECT lp.item_id AS id, MIN(CASE WHEN lp.gueltig_bis IS NULL OR lp.gueltig_bis >= '" . heute_ort() . "' THEN lp.preis END) AS mp, MIN(lp.preis) AS mp_alle,
+                         MAX(lp.gueltig_bis) AS bis_max, SUM(lp.gueltig_bis IS NULL OR lp.gueltig_bis >= '" . heute_ort() . "') AS n_gueltig
                   FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
                   WHERE lp.item_id IN ($in) AND lp.preis>0 AND COALESCE(l.gesperrt,0)=0 GROUP BY lp.item_id", $ids) as $r) {
         $liefSet[(int)$r['id']] = 1;

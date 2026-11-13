@@ -12,7 +12,7 @@ $fehler = '';
 
 // „Prüfung heute erledigt" – setzt letzte Prüfung auf heute.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'pruef_erledigt' && is_numeric($id)) {
-    q("UPDATE item SET letzte_pruefung=CURDATE(), elektrisch=1 WHERE id=?", [(int)$id]);
+    q("UPDATE item SET letzte_pruefung='" . heute_ort() . "', elektrisch=1 WHERE id=?", [(int)$id]);
     log_aktivitaet('item', (int)$id, 'team', 'Geräteprüfung durchgeführt.', 'notiz');
     header('Location: ?p=betriebsmittel&id=' . $id . '&gespeichert=1'); exit;
 }

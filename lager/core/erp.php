@@ -572,8 +572,8 @@ function erp_lager_kennzahlen(): array {
     $o['l2_chargen'] = (int) scalar("SELECT COUNT(*) FROM charge c WHERE c.fremd_kunde_id IS NOT NULL AND $aktiv");
     $o['l2_kunden']  = (int) scalar("SELECT COUNT(DISTINCT c.fremd_kunde_id) FROM charge c WHERE c.fremd_kunde_id IS NOT NULL AND $aktiv");
     $o['quarantaene']= (int) scalar("SELECT COUNT(*) FROM charge c WHERE c.status='quarantaene' AND $aktiv");
-    $o['mhd_bald']   = (int) scalar("SELECT COUNT(*) FROM charge c WHERE $aktiv AND c.mhd IS NOT NULL AND c.mhd>=CURDATE() AND c.mhd<=DATE_ADD(CURDATE(), INTERVAL 90 DAY)");
-    $o['mhd_ablauf'] = (int) scalar("SELECT COUNT(*) FROM charge c WHERE $aktiv AND c.mhd IS NOT NULL AND c.mhd<CURDATE()");
+    $o['mhd_bald']   = (int) scalar("SELECT COUNT(*) FROM charge c WHERE $aktiv AND c.mhd IS NOT NULL AND c.mhd>='" . heute_ort() . "' AND c.mhd<=DATE_ADD('" . heute_ort() . "', INTERVAL 90 DAY)");
+    $o['mhd_ablauf'] = (int) scalar("SELECT COUNT(*) FROM charge c WHERE $aktiv AND c.mhd IS NOT NULL AND c.mhd<'" . heute_ort() . "'");
     return $o;
 }
 
@@ -586,7 +586,7 @@ function erp_mhd_kritisch(int $tage = 90, int $limit = 10): array {
                 FROM charge c JOIN item i ON i.id=c.item_id
                 LEFT JOIN kunden k ON k.id=c.fremd_kunde_id
                 WHERE (c.status IS NULL OR c.status<>'leer') AND c.menge_verfuegbar>0 AND " . erp_pk_wo() . "
-                  AND c.mhd IS NOT NULL AND c.mhd <= DATE_ADD(CURDATE(), INTERVAL $tage DAY)
+                  AND c.mhd IS NOT NULL AND c.mhd <= DATE_ADD('" . heute_ort() . "', INTERVAL $tage DAY)
                 ORDER BY c.mhd ASC LIMIT $limit");
 }
 
@@ -656,7 +656,7 @@ function erp_wareneingang_buchen_fremd(int $item_id, float $menge, string $charg
     // Kundenware steht im Lager 2 (S-16) – Standort mitsetzen, sonst erscheint sie unter Lager 1.
     $hatStandort = (bool) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='charge' AND COLUMN_NAME='standort'");
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,mhd,wareneingang,status,fremd_kunde_id,notiz,angelegt" . ($hatStandort ? ",standort" : "") . ")
-       VALUES (?,?,?,?,?,?,CURDATE(),'frei',?,?,?" . ($hatStandort ? ",'lager2'" : "") . ")",
+       VALUES (?,?,?,?,?,?,'" . heute_ort() . "','frei',?,?,?" . ($hatStandort ? ",'lager2'" : "") . ")",
       [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $mhd ?: null, $kunde_id, $notiz ?: 'Fremdlager-Wareneingang', gmdate('Y-m-d H:i:s')]);
     return (int) insert_id();
 }
@@ -1248,7 +1248,7 @@ function erp_charge_werte_aus_bestellung(int $charge_id): int {
 }
 function erp_bestellung_angekommen(int $bestellung_id): void {
     if ($bestellung_id <= 0 || !tabelle_da('bestellung')) return;
-    q("UPDATE bestellung SET angekommen_am=CURDATE() WHERE id=? AND angekommen_am IS NULL", [$bestellung_id]);
+    q("UPDATE bestellung SET angekommen_am='" . heute_ort() . "' WHERE id=? AND angekommen_am IS NULL", [$bestellung_id]);
     // Bestellung SCHLIESSEN (S-06): sonst bleibt sie 'bestellt' und der Bedarf zählt die Ware zugleich als eingebucht
     // UND als bestellt (Doppelzählung), und der Dashboard-Knopf „liefern" würde sie ein zweites Mal einbuchen.
     q("UPDATE bestellung SET status='geliefert' WHERE id=? AND status IN ('offen','gesendet','bestellt')", [$bestellung_id]);

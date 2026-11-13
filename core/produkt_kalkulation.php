@@ -278,7 +278,7 @@ function produkt_beschaffung(int $pid, int $packungen = 1000): array {
     $roh = [];
     if ($rid) foreach (all("SELECT z.item_id, z.menge_mg, i.name, i.einheit, COALESCE(NULLIF(i.preis_bezug,''),'kg') AS bezug, i.ek_preis FROM rezeptur_zutat z JOIN item i ON i.id=z.item_id WHERE z.rezeptur_id=? ORDER BY z.menge_mg DESC", [$rid]) as $z) {
         // Block D (11.11.2026): abgelaufene Preise markiert und hinten, gesperrte Lieferanten raus (nie still „günstigster").
-        $pr = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, lp.gueltig_bis, (lp.gueltig_bis IS NOT NULL AND lp.gueltig_bis < CURDATE()) AS abgelaufen,
+        $pr = all("SELECT lp.lieferant_id, lp.menge_ab, lp.preis, lp.waehrung, lp.gueltig_bis, (lp.gueltig_bis IS NOT NULL AND lp.gueltig_bis < '" . heute_ort() . "') AS abgelaufen,
                           COALESCE(l.firma, lp.lieferant_name, '') AS firma FROM lieferant_preis lp LEFT JOIN lieferanten l ON l.id=lp.lieferant_id
                    WHERE lp.item_id=? AND lp.preis>0 AND COALESCE(l.gesperrt,0)=0 ORDER BY abgelaufen, lp.preis, lp.menge_ab", [(int)$z['item_id']]);
         $roh[] = $z + ['preise' => $pr, 'bestand' => (float) item_bestand((int)$z['item_id'], true)];

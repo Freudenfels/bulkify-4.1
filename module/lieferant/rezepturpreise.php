@@ -27,13 +27,13 @@ $preisSpeichern = function (int $aid, float $preis) use ($lid): string {
     $alt = ($cur['preis'] !== null && (float)$cur['preis'] > 0) ? (float)$cur['preis'] : null;
     if ($alt === null) {
         // Noch kein festgesetzter Preis -> gilt sofort (Erstangebot).
-        q("UPDATE rezeptur_lief_angebot SET preis=?, stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$preis > 0 ? $preis : null, $aid, $lid]);
+        q("UPDATE rezeptur_lief_angebot SET preis=?, stand='" . heute_ort() . "', preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$preis > 0 ? $preis : null, $aid, $lid]);
         rezeptur_produkt_matrizen_auffrischen((int) scalar("SELECT rezeptur_id FROM rezeptur_lief_angebot WHERE id=?", [$aid]));
         return 'ok';
     }
     if ($preis > 0 && abs($preis - $alt) < 0.00005) {
         // Gleicher Preis -> als aktuell bestätigt behandeln (4-Wochen-Regel), Vorschlag weg.
-        q("UPDATE rezeptur_lief_angebot SET stand=CURDATE(), preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$aid, $lid]);
+        q("UPDATE rezeptur_lief_angebot SET stand='" . heute_ort() . "', preis_vorschlag=NULL, vorschlag_am=NULL WHERE id=? AND lieferant_id=?", [$aid, $lid]);
         return 'ok';
     }
     // Änderung eines festgesetzten Preises -> nur VORSCHLAG; der alte Preis bleibt gültig, bis bulkify freigibt.
@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ((array)($_POST['preis'] ?? []) as $aid => $roh) {
             $roh = trim((string)$roh); $vorher = trim((string)($_POST['vorher'][$aid] ?? ''));
             $gNeu = pg_lesen((string)($_POST['gueltig'][$aid] ?? '')); $gAlt = trim((string)($_POST['gueltig_vorher'][$aid] ?? ''));
-            if ((string)$gNeu !== $gAlt) { q("UPDATE rezeptur_lief_angebot SET gueltig_bis=?, stand=CURDATE() WHERE id=? AND lieferant_id=?", [$gNeu, (int)$aid, $lid]); if ($roh === $vorher) $n++; }
+            if ((string)$gNeu !== $gAlt) { q("UPDATE rezeptur_lief_angebot SET gueltig_bis=?, stand='" . heute_ort() . "' WHERE id=? AND lieferant_id=?", [$gNeu, (int)$aid, $lid]); if ($roh === $vorher) $n++; }
             if ($roh === $vorher) continue;
             $preis = zahl_lesen($roh, false, $spr);
             if ($roh !== '' && $preis <= 0) { $falsch++; continue; }   // nicht lesbar -> nichts überschreiben
@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Nur freigeschaltete Formen + keine Dublette.
         $angefragtR = (bool) scalar("SELECT id FROM lieferant_anfrage WHERE lieferant_id=? AND rezeptur_id=? AND art='fertigprodukt' AND status NOT IN ('zurueckgezogen','geschlossen')", [$lid, $rid]);
         if ($rid > 0 && $angefragtR && !scalar("SELECT id FROM rezeptur_lief_angebot WHERE rezeptur_id=? AND lieferant_id=?", [$rid, $lid])) {
-            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt,gueltig_bis) VALUES (?,?,?,?, 'angeboten', CURDATE(), NOW(), ?)",
+            q("INSERT INTO rezeptur_lief_angebot (rezeptur_id,lieferant_id,preis,einheit,status,stand,angelegt,gueltig_bis) VALUES (?,?,?,?, 'angeboten', '" . heute_ort() . "', NOW(), ?)",
               [$rid, $lid, $preis > 0 ? $preis : null, $formEinheit($form), pg_lesen((string)($_POST['gueltig_bis'] ?? ''))]);
             rezeptur_produkt_matrizen_auffrischen($rid);   // Matrix auffrischen -> Fertigpreis automatisch im Angebot
         }
@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . $ziel . '&ok=1'); exit;
     }
     if ($aktion === 'alle_bestaetigen') {
-        q("UPDATE rezeptur_lief_angebot SET stand=CURDATE() WHERE lieferant_id=?", [$lid]);
+        q("UPDATE rezeptur_lief_angebot SET stand='" . heute_ort() . "' WHERE lieferant_id=?", [$lid]);
         header('Location: ' . $ziel . '&best=1'); exit;
     }
     header('Location: ' . $ziel); exit;
