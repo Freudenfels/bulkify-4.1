@@ -245,4 +245,14 @@ function qr_penalty(array $m, int $size): int {
     return $score;
 }
 
+// QR als SVG für Bildschirmseiten (13.11.2026, Seite „Apps“). $px = Kantenlänge, Ruhezone 4 Module. Leer, wenn der Text zu lang ist.
+function qr_svg(string $text, int $px = 140): string {
+    $m = qr_matrix($text);
+    if (!$m) return '';
+    $n = count($m); $q = 4; $g = $n + 2 * $q; $d = '';
+    foreach ($m as $y => $zeile) foreach ($zeile as $x => $v) if ($v) $d .= 'M' . ($x + $q) . ' ' . ($y + $q) . 'h1v1h-1z';
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' . $g . ' ' . $g . '" width="' . $px . '" height="' . $px . '" shape-rendering="crispEdges" role="img" aria-label="QR-Code">'
+         . '<rect width="' . $g . '" height="' . $g . '" fill="#fff"/><path d="' . $d . '" fill="#000"/></svg>';
+}
+
 } // Ende function_exists-Guard

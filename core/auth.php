@@ -20,6 +20,7 @@ function rollen_liste(): array {
 function route_rollen_map(): array {
     return [
         'dashboard'          => ['*'],
+        'apps'               => ['*'],   // Apps öffnen/installieren (13.11.2026); die Karten zeigen je Rolle nur das Passende
         'app'                => ['*'],   // Anleitung: bulkify aufs Handy legen - fuer jeden
         'werk'               => ['production', 'labor', 'fulfillment'],
         'aufgaben'           => ['production', 'labor', 'fulfillment'],

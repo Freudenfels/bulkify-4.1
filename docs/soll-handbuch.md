@@ -73,7 +73,7 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
 
 **Einfach (Alltag)** ist **eine flache Liste ohne Gruppen** (keine Zwischenüberschriften, kein Auf-/Zuklappen), etwas größer, jeder Punkt mit Linien-Icon, in dieser festen Reihenfolge (Nico 08.11.2026):
 - **Zu erledigen** (die zentrale Aufgabenliste, Abschnitt 6) - ganz oben, mit Zähler *(kommt mit Schritt 4, bis dahin nicht angezeigt)*
-- **Benachrichtigungen** - Glocke mit Zähler der ungelesenen; darunter bzw. bis Schritt 4 ganz oben. In "Einfach" entfällt dafür der kleine Eintrag unten in der Seitenleiste. *(Heute ein gemeinsames Team-Postfach, das nur Admins öffnen dürfen - Freigabe für weitere Rollen offen, Abschnitt 12.)*
+- **Benachrichtigungen** sind kein Menüpunkt mehr, sondern eine **Glocke mit Zähler** der ungelesenen oben im Menü-Kopf neben dem Logo (auf dem Handy rechts in der Kopfleiste) – in beiden Menüs gleich, nirgends doppelt (Nico 13.11.2026).
 1. **Anfragen** - **eine** Tabelle mit allen Anfragearten (Rezeptur-, Produkt-, Rohstoff-, Dienstleistungsanfragen), Spalte "Art", Filter nach Art, Markierung "neu"
 2. **Angebote**
 3. **Aufträge**
@@ -84,7 +84,8 @@ Dieses Handbuch ist das **gemeinsame Gedächtnis** für bulkify V4. Es beschreib
 7. **Produkte**
 8. **Rezepturen**
 9. **Rohstoffe**
-10. **Buchhaltung** - nur für Nutzer mit der Rolle Finanz (finance)
+10. **Apps** - alle bulkify-Programme öffnen und als App installieren (Werk-App, Lager-App, CRM, Dashboard, Produktion, Buchhaltung; QR-Code fürs Tablet; Admin: Lager-Brücke herunterladen) (Nico 13.11.2026)
+11. **Buchhaltung** - nur für Nutzer mit der Rolle Finanz (finance)
 
 Die Reihenfolge ist fest im Programm und hängt nicht am Menü-Editor (der steuert nur "Ausführlich"). Was eine Rolle nicht darf, fehlt einfach.
 

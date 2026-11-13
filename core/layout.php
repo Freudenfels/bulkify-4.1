@@ -46,7 +46,7 @@ function bx_nav_default(): array {
             'rohstoff_split' => 'Rohstoffe aufschlüsseln', 'rohstoff_website' => 'Website-Freigabe', 'freigaben' => 'Freigaben', 'rohstoffe_papiere' => 'Rohstoffe ohne Papiere', 'laboranalysen' => 'Laboranalysen', 'verpackungen' => 'Verpackungen', 'naehrstoffe' => 'Nährstoffe (NRV)'],
         'Einkauf'      => ['einkaufsliste' => 'Bedarf', 'einkauf' => 'Bestellt', 'einkauf_mobil' => 'Schnell (mobil)', 'lieferanten' => 'Lieferanten', 'lief_anfragen' => 'Anfragen & Preise', 'lief_nachrichten' => 'Nachrichten', 'katalog_freigaben' => 'Katalog-Freigaben', 'einkauf_preise' => 'Preise'],
         'Import'       => ['angebot_import' => 'Angebots-Import', 'lager2_import' => 'Lager-2 Bestände'],
-        'System'       => ['benachrichtigungen' => 'Benachrichtigungen', 'einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'datenpruefung' => 'Datenprüfung', 'artikel_zusammenfuehren' => 'Artikel zusammenführen', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
+        'System'       => ['benachrichtigungen' => 'Benachrichtigungen', 'apps' => 'Apps', 'einstellungen' => 'Einstellungen', 'menu_editor' => 'Menü', 'benutzer' => 'Benutzer', 'protokoll' => 'Protokoll', 'datenpruefung' => 'Datenprüfung', 'artikel_zusammenfuehren' => 'Artikel zusammenführen', 'durchlaufzeiten' => 'Durchlaufzeiten', 'angebotsscan' => 'Angebotsscan', 'testdaten' => 'Testdaten (lokal)', 'app' => 'App aufs Handy'],
         'Assistent'    => ['fastaction' => 'Fastaction'],
     ];
 }
@@ -128,8 +128,9 @@ function bx_nav_einfach(): array {
     // Platz für „Zu erledigen" (Schritt 4) ist ganz oben reserviert und wird bis dahin nicht angezeigt.
     $reg = bx_nav_registry();
     // Benachrichtigungen ganz oben (Nico 08.11.2026; später unter „Zu erledigen"), Zähler = ungelesene des Nutzers.
-    $plan = ['benachrichtigungen' => null, 'anfragen' => null, 'rohstoff_unterlagen' => null, 'angebote' => null, 'auftraege' => null, 'einkaufsliste' => 'Einkauf', 'einkauf' => 'Bestellt', 'produktion' => null,
-             'lager' => 'Lager', 'produkte' => null, 'rezeptur' => null, 'rohstoffe' => null, 'd3k2_rechner' => 'D3K2-Rechner'];
+    // 13.11.2026: Benachrichtigungen stehen als Glocke im Menü-Kopf (nicht mehr als Menüpunkt); „Apps“ am Ende.
+    $plan = ['anfragen' => null, 'rohstoff_unterlagen' => null, 'angebote' => null, 'auftraege' => null, 'einkaufsliste' => 'Einkauf', 'einkauf' => 'Bestellt', 'produktion' => null,
+             'lager' => 'Lager', 'produkte' => null, 'rezeptur' => null, 'rohstoffe' => null, 'd3k2_rechner' => 'D3K2-Rechner', 'apps' => null];
     $nav = [];
     foreach ($plan as $key => $label) {
         if (!isset($reg[$key])) continue;
@@ -147,6 +148,7 @@ function bx_nav_einfach(): array {
 function bx_nav_icon(string $key): string {
     static $p = [
         'benachrichtigungen' => '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+        'apps'          => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
         'aufgaben'      => '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
         'rohstoff_unterlagen' => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="15"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
         'anfragen'      => '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
@@ -234,7 +236,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     // Sidebar
     // Logo führt zur Startseite (im Menü „Einfach" gibt es keinen eigenen Punkt „Dashboard").
     $startHref = $istWerk ? '?p=werk' : '?p=dashboard';
-    echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><a href=\"$startHref\" title=\"Zur Startseite\" style=\"display:contents\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"></a><span class=\"bx-ver\">" . h($verLabel) . "</span></div><nav>";
+    $glocke = $istWerk ? '' : bx_glocke();   // 13.11.2026: Benachrichtigungen als Glocke mit Zähler oben im Menü-Kopf
+    echo "<aside class=\"bx-side\"><div class=\"bx-brand\"><a href=\"$startHref\" title=\"Zur Startseite\" style=\"display:contents\"><img src=\"assets/bulkify-logo-white.png\" alt=\"$marke\" class=\"bx-logo\"></a><span class=\"bx-ver\">" . h($verLabel) . "</span>" . $glocke . "</div><nav>";
     // Einklappbare Menü-Gruppen: Kopf = Umschalter, Items im Wrapper; Zustand je Gruppe in localStorage.
     echo "<style>.bx-navgroup{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}"
        . ".bx-navchev{font-size:12px;line-height:1;opacity:.85;transition:transform .15s;margin-left:8px;display:inline-block}"
@@ -309,6 +312,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         // Nur erlaubte Einträge der Gruppe (Eintrag = Label-String oder Array mit route/href/typ)
         $sichtbar = [];
         foreach ($seiten as $key => $val) {
+            if ($key === 'benachrichtigungen') continue;   // 13.11.2026: steht als Glocke im Menü-Kopf, nicht doppelt im Menü
             $route = is_array($val) ? $val['route'] : $key;
             if (is_array($val) && !empty($val['extern'])) { $sichtbar[$key] = $val; continue; }   // Unterprogramm (Rolle schon geprüft)
             if (!$darf || route_erlaubt($route)) { $sichtbar[$key] = $val; continue; }
@@ -376,11 +380,8 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         $rollen = function_exists('rollen_liste') ? rollen_liste() : [];
         $meine = array_map(fn($r) => $rollen[$r] ?? $r, user_rollen());
         $nBenach = function_exists('benachrichtigungen_ungelesen_count') ? benachrichtigungen_ungelesen_count((int)$u['id']) : 0;
-        // Im Menü „Einfach" steht Benachrichtigungen als Menüpunkt oben – unten dann nicht doppelt.
-        $benachUnten = $menuModus !== 'einfach'
-           ? "<a class=\"bx-usernotify\" href=\"?p=benachrichtigungen\" style=\"display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;text-decoration:none;color:inherit\">"
-           . "<span>Benachrichtigungen</span>" . ($nBenach > 0 ? "<span class=\"bx-navbadge\">" . (int)$nBenach . "</span>" : "<span class=\"muted\" style=\"font-size:12px\">keine neuen</span>") . "</a>"
-           : '';
+        // 13.11.2026: Benachrichtigungen nur noch als Glocke im Menü-Kopf (vorher zusätzlich hier und im Menü = doppelt).
+        $benachUnten = '';
         echo "<div class=\"bx-userbox\">" . $benachUnten
            . "<div class=\"bx-username\">" . h($u['name']) . "</div>"
            . "<div class=\"bx-userroles\">" . h(implode(' · ', $meine) ?: 'keine Rolle') . "</div>"
@@ -407,7 +408,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     echo "<button type=\"button\" class=\"bx-sideauf\" title=\"Menü aufklappen\">Menü</button>";
     // Hauptbereich
     echo bx_menue_scrim();
-    echo "<main class=\"bx-main\">" . bx_mobilbar();
+    echo "<main class=\"bx-main\">" . bx_mobilbar($glocke);
     // Pop-up „Es gibt schon eine offene Bestellung" (Sofortfix 11.11.2026), einmalig nach dem Bestellversuch.
     if (!empty($_SESSION['bx_doppelt'])) { require_once __DIR__ . '/bestellung_doppelt.php'; echo bestellung_doppelt_dialog(); }
 }
@@ -432,12 +433,23 @@ function bx_menu_umschalter(string $modus): string {
 // (intern, Lieferantenportal, Kundenportal). Am Rechner blendet das CSS sie aus.
 
 // Kopfleiste mit Burger - gehoert als ERSTES in <main class="bx-main">.
-function bx_mobilbar(): string {
+function bx_mobilbar(string $rechts = ''): string {
     return '<div class="bx-mobilbar">'
          . '<button type="button" class="bx-burger" id="bx-burger" aria-label="Menü" aria-expanded="false">'
          . '<span></span><span></span><span></span></button>'
          . '<img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo">'
+         . $rechts
          . '</div>';
+}
+// Glocke mit Zahl der ungelesenen Benachrichtigungen (13.11.2026) – im Menü-Kopf und in der Handy-Kopfleiste. Nur wer die Seite
+// Benachrichtigungen sehen darf. Klick öffnet ?p=benachrichtigungen.
+function bx_glocke(): string {
+    if (!function_exists('current_user') || !($u = current_user()) || !function_exists('route_erlaubt') || !route_erlaubt('benachrichtigungen')) return '';
+    $n = function_exists('benachrichtigungen_ungelesen_count') ? benachrichtigungen_ungelesen_count((int)$u['id']) : 0;
+    $titel = $n > 0 ? $n . ' ungelesene Benachrichtigungen' : 'Keine neuen Benachrichtigungen';
+    return '<a class="bx-glocke" href="?p=benachrichtigungen" title="' . h($titel) . '" aria-label="' . h($titel) . '">'
+         . '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>'
+         . ($n > 0 ? '<span class="bx-glocke-zahl">' . ($n > 99 ? '99+' : $n) . '</span>' : '') . '</a>';
 }
 
 // Dunkle Flaeche hinter der offenen Schublade - Tippen schliesst sie.

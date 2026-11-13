@@ -6,3 +6,5 @@ Erzeugt aus einem Text (z. B. einer URL) eine **Modul-Matrix** (Array aus 0/1-Ze
 - Gezeichnet wird außerhalb (z. B. `spec_qr()` in `core/pdf_spec.php`): weißer Grund + 2 Module Ruhezone, dann je 1-Modul ein kleines Rechteck.
 
 **Wichtig:** Das ist eine **wortgleiche Kopie** von `lager/core/qr.php`. Das Dashboard-`core` darf die Sub-App `lager/` nicht requiren, darum die Kopie. Ein `function_exists('qr_matrix')`-Guard verhindert Doppeldeklaration, falls beide Dateien je im selben Request geladen würden. **Bei Änderungen beide Dateien pflegen.**
+
+**Glocke und Apps (13.11.2026):** Neu `qr_svg($text, $px)`: QR als SVG für Bildschirmseiten (Seite „Apps“).
