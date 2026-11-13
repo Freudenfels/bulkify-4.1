@@ -716,3 +716,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **Mehr bestellt als gebraucht (13.11.2026, Paket Teil 7):** Beim Wareneingang wird eine Bulk-Charge ganz an den Auftrag gebunden (`charge.auftrag_id`). `bulk_ueberschuss_anderer($bulk_item, $ohne_auftraege)` zählt den Teil als frei, der über den Restbedarf des gebundenen Auftrags hinausgeht (`bulk_rest_bedarf_auftrag()`: offener Produktionsrest × Stück je Packung; ist der Auftrag fertig, versendet oder storniert, ist der ganze Rest frei). Das gilt nur für Stück-Chargen.
 - Genutzt in `bedarf_bulk()` (Bestellliste, für Aufträge außerhalb der Gruppe) und in `auftrag_bulk_lager_frei()` (je Auftrag: Material, Bereitschaft).
 - Beispiel: A braucht 120.000, geliefert werden 150.000 → 30.000 sind frei. Auftrag B mit 60.000 bestellt nur 30.000 nach – auch dann, wenn A schon versendet ist (vorher galten die 30.000 als an A gebunden, und B bestellte voll).
+
+**Einzelbestellungen (13.11.2026, Paket Teil 6.2):** `bestellung_aus_bedarf()` und `auftrag_express_bestellung()` teilen ihren Entwurf sofort je Position auf (`core/bestellung_einzeln.php`).

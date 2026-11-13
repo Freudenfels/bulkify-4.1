@@ -12154,6 +12154,9 @@ function bestellung_aus_bedarf(int $pa_id): array {
               [$bid, (int)$p['item_id'], $p['zu_bestellen'], $ek, $einh, $aid, $i]);
         }
         $erstellt[] = $bid;
+        // 13.11.2026 (Paket Teil 6.2): jede Bestellung genau eine Position – Entwurf gleich je Position aufteilen.
+        if (count($pos) > 1) { require_once __DIR__ . '/bestellung_einzeln.php'; $rA = bestellung_aufteilen_je_position($bid, 'Einzelbestellung je Position (Regel 13.11.2026)');
+            foreach ($rA['neu'] as $nA) $erstellt[] = (int)$nA['id']; }
     }
     return $erstellt;
 }
@@ -12420,6 +12423,8 @@ function auftrag_express_bestellung(int $auftrag_id, int $lieferant_id): ?int {
         q("INSERT INTO bestellung_position (bestellung_id,item_id,menge,ek_preis,einheit,auftrag_id,sort) VALUES (?,?,?,?,?,?,?)",
           [$bid, $p['item_id'], $p['menge'], $p['ek'], $p['einheit'], $auftrag_id, $i++]);
     }
+    // 13.11.2026 (Paket Teil 6.2): jede Bestellung genau eine Position – Express-Entwurf gleich je Position aufteilen.
+    if ($i > 1) { require_once __DIR__ . '/bestellung_einzeln.php'; bestellung_aufteilen_je_position((int)$bid, 'Einzelbestellung je Position (Regel 13.11.2026)'); }
     return $bid;
 }
 

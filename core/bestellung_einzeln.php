@@ -16,7 +16,8 @@ function bestellung_aufteilen_je_position(int $bestellung_id, string $vermerk, s
     $kopf = $b;
     foreach (['id', 'nummer', 'angelegt', 'aktualisiert', 'v3_id'] as $weg) unset($kopf[$weg]);
     $neu = [];
-    db()->beginTransaction();
+    $eigeneTx = !db()->inTransaction();   // in einer äußeren Transaktion keine eigene öffnen
+    if ($eigeneTx) db()->beginTransaction();
     try {
         foreach (array_slice($pos, 1) as $p) {
             $k = $kopf;
@@ -36,9 +37,9 @@ function bestellung_aufteilen_je_position(int $bestellung_id, string $vermerk, s
         }
         bestellung_einzeln_status($bestellung_id, $b);
         log_aktivitaet('bestellung', $bestellung_id, 'system', 'Aufgeteilt in Einzelbestellungen je Position: ' . implode(', ', array_column($neu, 'nummer')) . ' – ' . $vermerk . ($wer !== '' ? ' (' . $wer . ')' : ''), 'status');
-        db()->commit();
+        if ($eigeneTx) db()->commit();
     } catch (Throwable $e) {
-        db()->rollBack();
+        if ($eigeneTx) db()->rollBack(); else throw $e;
         return ['ok' => false, 'msg' => 'Aufteilen fehlgeschlagen: ' . $e->getMessage(), 'neu' => []];
     }
     if (function_exists('bedarf_bump')) { try { bedarf_bump(); } catch (Throwable $e) {} }

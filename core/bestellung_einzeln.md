@@ -15,3 +15,5 @@ Regel Nico: nie eine Bestellung mit mehreren Positionen, Lieferanten oder Arten.
 - `bestellung_sendung_text()`: Kurztext, z. B. „2 × Palette (Euro-Palette), 12 Kartons, 840 kg, 2 Stellplätze“.
 - `bestellung_tracking_setzen()` / `bestellung_tracking_liste()`: mehrere Tracking-Nummern in `lieferung_paket`.
 - `bestellung_fehlt($zeile)`: was für „Offen je Lieferant“ noch fehlt – Bestätigung, CoA (bei Rohstoff/Bulk), Tracking, Lieferung.
+
+**Alte Mehrfach-Wege (13.11.2026):** `bestellung_aus_bedarf()` (Produktionsauftrag „Bedarf bestellen“, je Hauptlieferant) und `auftrag_express_bestellung()` (Express am Auftrag) legen weiter einen Entwurf an. Er wird sofort mit `bestellung_aufteilen_je_position()` in Einzelbestellungen je Position aufgeteilt. In einer äußeren Transaktion öffnet die Funktion keine eigene.
