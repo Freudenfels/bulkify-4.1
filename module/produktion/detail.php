@@ -74,22 +74,29 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     $menge = zahl_lesen((string)($_POST['menge'] ?? '0'), true);
     $charge = trim((string)($_POST['charge_nr'] ?? ''));
     $datumN = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_POST['datum'] ?? '')) ? (string)$_POST['datum'] : pa_tag_heute();
-    if ($charge !== '' && $charge === trim((string)($_POST['charge_vorschlag'] ?? ''))) $charge = '';   // unveränderter Vorschlag = System vergibt
+    if ($charge !== '' && !pa_charge_abweichend($charge, trim((string)($_POST['charge_vorschlag'] ?? '')))) $charge = '';   // unveränderter Vorschlag = System vergibt (tolerant, Fable-5 N4)
     // 13.11.2026 (Fable-3 T1.4): ein Weg für jedes Datum – pa_nachtrag_buchen() findet bzw. legt die Unter-Charge des gewählten Tages an,
     // lässt die laufende Unter-Charge in Ruhe und verwirft bei einem Fehler alles (kein Buchstabe verbraucht).
+    // Fable-5 T1.1/T1.8 (13.11.2026): KI-Karte nur über ihre Kennung aus der Sitzung – Rückfragen serverseitig geklärt, Text und Melder
+    // aus der Sitzung (nicht aus versteckten Feldern). Der Vermerk geht als Option in die Buchung (steht damit im abgelegten Protokoll).
+    $kiKid = trim((string)($_POST['ki_karte'] ?? ''));
+    $kiS = null; $kiTxt = '';
+    if ($kiKid !== '') {
+        $kiS = pki_karte_aus_sitzung($kiKid);
+        $kiF = $kiS ? pki_buchen_pruefen((array)$kiS['meldung']['karte'], $_POST, $id) : 'Die KI-Karte ist abgelaufen – bitte die Meldung neu auswerten.';
+        if ($kiF !== '') { header('Location: ?p=produktionsauftrag&id=' . $id . '&teilfehler=' . urlencode($kiF) . '#kimelden'); exit; }
+        $kiM = (array)$kiS['meldung'];
+        $kiTxt = 'per KI gemeldet von ' . ((string)($kiM['gemeldet_von'] ?? '') ?: $wer) . ', bestätigt von ' . $wer . ': „' . mb_substr((string)$kiM['text'], 0, 400) . '“';
+    }
     $foto = pa_foto_speichern($_FILES['foto'] ?? [], 'nachtrag' . $id);
     $r = pa_nachtrag_buchen($id, $menge, ['bulk_charge_id' => $bulk, 'prod_charge_id' => $eimer, 'datum' => $datumN, 'charge_nr' => $charge, 'grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')],
         ['mitarbeiter' => (string)($_POST['mitarbeiter'] ?? ''), 'rueckstell' => (int) zahl_lesen((string)($_POST['rueckstell'] ?? '0'), true), 'foto' => $foto, 'geliefert' => !empty($_POST['geliefert']),
-         'vor_etikett' => ($_POST['umfang'] ?? '') === 'vor_etikett'], $wer);
+         'vor_etikett' => ($_POST['umfang'] ?? '') === 'vor_etikett', 'ki_vermerk' => $kiTxt], $wer);
     $uc = (int)($r['unter_charge_id'] ?? 0);
-    // 13.11.2026 (Teil 4): per KI gemeldet -> Vermerk mit Originaltext im Chargenprotokoll und Verlauf (wer gemeldet, wer bestätigt).
-    $kiText = trim((string)($_POST['ki_text'] ?? ''));
-    if ($r['ok'] && $kiText !== '') {
-        $kiTxt = 'per KI gemeldet von ' . (trim((string)($_POST['ki_von'] ?? '')) ?: $wer) . ', bestätigt von ' . $wer . ': „' . mb_substr($kiText, 0, 500) . '“';
-        pa_ereignis($id, $uc ?: null, 'ki_meldung', $kiTxt, '', '', '', $wer);
+    if ($r['ok'] && $kiS) {   // Verlauf am Auftrag; Karte erledigt
         $aidK = (int) scalar("SELECT COALESCE(auftrag_id,0) FROM produktionsauftrag WHERE id=?", [$id]);
         if ($aidK > 0) log_aktivitaet('auftrag', $aidK, 'team', 'Produktion ' . (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$id]) . ': ' . $kiTxt, 'status');
-        unset($_SESSION['pki_' . (int)($_POST['ki_ursprung'] ?? 0)]);
+        unset($_SESSION[$kiS['schluessel']]);
     }
     if ($r['ok'] && !empty($_POST['geliefert']) && !empty($r['charge_id'])) {
         // Schon geliefert (wie Easy Production): die nachgetragene Menge gleich per Lieferschein wieder ausbuchen – kein Phantombestand.

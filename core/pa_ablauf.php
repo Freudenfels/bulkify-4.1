@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/zeit_ort.php';   // heute_ort() (13.11.2026)
+require_once __DIR__ . '/charge_norm.php';   // charge_gleich() – Chargen tolerant vergleichen (Fable-5, 13.11.2026)
+require_once __DIR__ . '/pa_produziert.php'; // „produziert“ = Fertigware des PA in Stück (Fable-5 T2.2)
 // Produktion – EIN geführter Ablauf (Nico 11.11.2026, plan-produktion-gefuehrt.md, Teil 3 + 5).
 // GEMEINSAMER Kern für Dashboard (PA-Seite, Nachtragen) UND Werk-App (Sub-App /produktion/): nutzt nur q/one/all/scalar/insert_id
 // und ruft fachliche Funktionen über pa_fn() auf (Dashboard-Name, sonst der erp_-Spiegel der Produktions-App). Darf deshalb NICHT
@@ -213,6 +215,8 @@ function pa_voll_produziert_erledigen(int $pa_id, int $uc_id = 0, string $von = 
     $aid = (int) scalar("SELECT COALESCE(auftrag_id,0) FROM produktionsauftrag WHERE id=?", [$pa_id]);
     if ($aid > 0) pa_fn('log_aktivitaet', 'erp_log_aktivitaet', 'auftrag', $aid, 'team', 'Produktion ' . (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$pa_id]) . ': ' . $txt, 'status');
     if ($akt) pa_unter_charge_schliessen((int)$akt['id'], $von, 'voll produziert');
+    // Fable-5 T1.6: auch die übergebene Unter-Charge (z. B. Nachtrag-Unter-Charge mit Status „nachtrag“) schließen.
+    if ($uc_id > 0 && (!$akt || (int)$akt['id'] !== $uc_id)) { $ucV = pa_unter_charge($uc_id); if ($ucV && in_array((string)$ucV['status'], ['laeuft', 'nachtrag'], true)) pa_unter_charge_schliessen($uc_id, $von, 'voll produziert'); }
     return $n;
 }
 function pa_rest_storniert(int $pa_id): bool {
@@ -295,6 +299,9 @@ function pa_starten(int $pa_id, array $d, string $von): array {
     $abw = $charge !== $v['charge_nr'];
     $grund = $abw ? trim((string)($d['abweichung_grund'] ?? '')) : '';
     if ($abw && $grund === '') return ['ok' => false, 'msg' => 'Andere Charge als vorgegeben (' . $v['charge_nr'] . ') nur mit Grund.'];
+    // Fable-5 T1.5 (13.11.2026): eine Chargennummer gibt es je Auftrag nur einmal (keine zweite Unter-Charge bzw. Lager-Charge gleichen Namens).
+    if ($abw && ($dup = pa_charge_im_pa($pa_id, $charge)) !== '')
+        return ['ok' => false, 'msg' => 'Die Charge ' . $charge . ' gibt es in diesem Auftrag schon (' . $dup . ') – bitte darauf nachtragen bzw. eine andere Nummer wählen.'];
     // 13.11.2026 (Fable-3 T1.4): erst prüfen, dann schließen. Ein Nachtrag schließt die laufende Unter-Charge nie (eigene Unter-Charge
     // mit Status „nachtrag“, pa_nachtrag_buchen() schließt oder verwirft sie).
     if ($akt && !$nachtrag) pa_unter_charge_schliessen((int)$akt['id'], $von, ((int)$akt['bulk_charge_id'] === $bulk && (int)$akt['prod_charge_id'] === $eimer) ? 'neuer Produktionstag' : 'Chargenwechsel');
@@ -338,10 +345,21 @@ function pa_reihenfolge_laufend_zuerst(array $rows, callable $laeuft): array {
     return $rows;
 }
 
-// Weicht die Charge wirklich von der Vorgabe ab? Leer = Vorgabe; Leerzeichen und Groß-/Kleinschreibung zählen nicht (13.11.2026).
+// Weicht die Charge wirklich von der Vorgabe ab? Leer = Vorgabe; Leerzeichen, Punkt, Bindestrich und Groß-/Kleinschreibung zählen nicht
+// (13.11.2026; seit Fable-5 über charge_norm: „2775 B“ = „2775.B“ = „2775b“).
 function pa_charge_abweichend(string $charge, string $vorgabe): bool {
     $charge = trim($charge);
-    return $charge !== '' && strcasecmp($charge, trim($vorgabe)) !== 0;
+    return $charge !== '' && charge_norm($charge) !== charge_norm($vorgabe);
+}
+function pa_charge_gleich(string $a, string $b): bool { return charge_gleich($a, $b); }
+// Gibt es diese Chargennummer im PA schon (Unter-Charge oder Lager-Charge)? '' = nein, sonst kurzer Text.
+function pa_charge_im_pa(int $pa_id, string $charge): string {
+    if (trim($charge) === '') return '';
+    foreach (all("SELECT charge_nr, status FROM pa_unter_charge WHERE pa_id=? AND status<>'nachtrag'", [$pa_id]) as $u)
+        if (charge_gleich((string)$u['charge_nr'], $charge)) return 'Unter-Charge ' . $u['charge_nr'];
+    foreach (all("SELECT charge_nr FROM charge WHERE pa_id=? AND charge_nr IS NOT NULL", [$pa_id]) as $c)
+        if (charge_gleich((string)$c['charge_nr'], $charge)) return 'Lager-Charge ' . $c['charge_nr'];
+    return '';
 }
 // Oberfläche: Feld „Grund“ erst zeigen (und Pflicht machen), wenn die Charge geändert wurde (13.11.2026). Gehört INS Formular
 // hinter das Feld charge_nr; das Grund-Feld steckt in einem Element mit Klasse „pa-grund“ und data-vorgabe = Vorgabe-Charge.
@@ -374,7 +392,11 @@ function pa_nachtrag_buchen(int $pa_id, float $menge, array $d, array $o, string
     $bulk = (int)($d['bulk_charge_id'] ?? 0); $eimer = (int)($d['prod_charge_id'] ?? 0);
     $charge = trim((string)($d['charge_nr'] ?? ''));
     $uc = pa_nachtrag_unter_charge($pa_id, $bulk, $eimer, $tag);
-    if ($uc && $charge !== '' && $charge !== (string)$uc['charge_nr'])
+    // Fable-5 T1.5: genannte Charge = vorhandene Unter-Charge dieses Auftrags (gleicher Bulk/Eimer) -> darauf nachtragen, egal welcher Tag.
+    if (!$uc && $charge !== '')
+        foreach (all("SELECT * FROM pa_unter_charge WHERE pa_id=? AND status IN ('laeuft','fertig') AND COALESCE(bulk_charge_id,0)=? AND COALESCE(prod_charge_id,0)=?", [$pa_id, $bulk, $eimer]) as $u)
+            if (charge_gleich((string)$u['charge_nr'], $charge)) { $uc = $u; $tag = pa_uc_tag($u); break; }
+    if ($uc && pa_charge_abweichend($charge, (string)$uc['charge_nr']))
         return ['ok' => false, 'msg' => 'Gleicher Bulk am selben Tag = gleiche Charge ' . $uc['charge_nr'] . '. Ein neuer Buchstabe kommt nur bei anderem Bulk oder anderem Tag.'];
     $neu = null;
     if (!$uc) {
@@ -386,18 +408,23 @@ function pa_nachtrag_buchen(int $pa_id, float $menge, array $d, array $o, string
         // der Nachtrag bucht darauf und lässt sie laufen (nie schließen, kein neuer Start in der Werk-App).
         if (empty($neu['neu'])) $neu = null;
     }
-    $r = pa_teilmenge_buchen($pa_id, (int)$uc['id'], $menge, ['art' => 'nachtrag', 'datum' => $tag, 'von' => $von, 'nachtrag_komplett' => empty($o['vor_etikett'])] + $o);
+    // Fable-5 T1.7 (P8): bei Etikett-Sperre bucht ein Nachtrag immer nur „bis vor dem Etikettieren“ (kein „komplett“ an der Sperre vorbei).
+    $r = pa_teilmenge_buchen($pa_id, (int)$uc['id'], $menge, ['art' => 'nachtrag', 'datum' => $tag, 'von' => $von] + $o);
     $r['unter_charge_id'] = (int)$uc['id'];
     if ($neu) {
         if (empty($r['ok'])) { pa_nachtrag_verwerfen((int)$uc['id']); $r['unter_charge_id'] = 0; return $r; }
         $laeuft = (int) scalar("SELECT COUNT(*) FROM pa_unter_charge WHERE pa_id=? AND status='laeuft'", [$pa_id]);
-        if ($tag === pa_tag_heute() && $laeuft === 0) q("UPDATE pa_unter_charge SET status='laeuft' WHERE id=?", [(int)$uc['id']]);
-        else pa_unter_charge_schliessen((int)$uc['id'], $von, 'Nachtrag ' . date('d.m.Y', strtotime($tag)));
+        // Fable-5 T1.6 (P7): bis zum Soll nachgetragen -> die Unter-Charge immer schließen (Chargenprotokoll), nie wieder „läuft“.
+        if (empty($r['fertig']) && $tag === pa_tag_heute() && $laeuft === 0) q("UPDATE pa_unter_charge SET status='laeuft' WHERE id=?", [(int)$uc['id']]);
+        else pa_unter_charge_schliessen((int)$uc['id'], $von, !empty($r['fertig']) ? 'voll produziert' : 'Nachtrag ' . date('d.m.Y', strtotime($tag)));
         if (($neu['grund'] ?? '') !== '' && pa_charge_abweichend((string)$neu['charge_nr'], (string)($neu['vorgabe'] ?? '')))   // nur echte Abweichung (13.11.2026)
             pa_aufgabe_buero($pa_id, 'Produktion: Charge abweichend (' . $neu['charge_nr'] . ' statt ' . $neu['vorgabe'] . ')', 'Grund: ' . $neu['grund'] . ' · ' . $von, $von);
         if ((string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$pa_id]) === 'offen') q("UPDATE produktionsauftrag SET status='laufend' WHERE id=?", [$pa_id]);
     } elseif (!empty($r['ok']) && (string)$uc['status'] === 'fertig' && function_exists('pa_protokoll_ablegen')) {
         pa_protokoll_ablegen((int)$uc['id']);   // Chargenprotokoll der schon abgeschlossenen Unter-Charge neu ablegen
+    } elseif (!empty($r['ok']) && !empty($r['fertig'])) {
+        $ucJ = pa_unter_charge((int)$uc['id']);   // T1.6: laufende Unter-Charge war nicht die „aktuelle“ -> trotzdem schließen
+        if ($ucJ && in_array((string)$ucJ['status'], ['laeuft', 'nachtrag'], true)) pa_unter_charge_schliessen((int)$uc['id'], $von, 'voll produziert');
     }
     return $r;
 }
@@ -484,6 +511,8 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
        mb_substr((string)($o['mitarbeiter'] ?? $von), 0, 120) ?: null, !empty($o['geliefert']) ? 1 : 0, mb_substr(trim((string)($o['notiz'] ?? '')), 0, 255) ?: null, gmdate('Y-m-d H:i:s')]);
     $tm = insert_id();
     $GLOBALS['pa_teilmenge_id'] = $tm;
+    // Fable-5 T1.8 (M4): KI-Vermerk sofort an die Unter-Charge – vor dem Schließen/Ablegen des Chargenprotokolls, sonst fehlt er im PDF.
+    if (trim((string)($o['ki_vermerk'] ?? '')) !== '') pa_ereignis($pa_id, $uc_id, 'ki_meldung', mb_substr((string)$o['ki_vermerk'], 0, 600), '', '', '', $von);
     if (!$fehlt) foreach ($stationen as $st) pa_fn('produktion_station_entnahme', 'erp_station_entnahme', $pa_id, $st, $bis, false);
     unset($GLOBALS['pa_bevorzugt'], $GLOBALS['pa_teilmenge_id']);
     if ($fehlt) pa_ereignis($pa_id, $uc_id, 'abweichung', 'Teilmenge ohne vollständige Materialbuchung nachgetragen (fehlt: ' . implode(', ', array_map(fn($f) => (string)$f['name'], $fehlt)) . ').', '', '', '', $von);
