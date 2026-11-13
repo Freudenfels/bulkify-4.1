@@ -499,3 +499,5 @@ Nico: „Grundcharge ist 2775, die Buchstaben stehen nur für verschiedene Tage.
 - Rezeptur-Freigabe: „Spec ansehen“ statt „Spec/CoA ansehen“; der Link erscheint nur bei freigegebener bulkify-Spec.
 - Rohstoff-Infoblatt und Katalog-Pop-up: „bulkify-Spec (PDF)“, keine Chargen-CoAs mehr (die kommen mit der Lieferung).
 - `v=coa_pdf` liefert nur noch freigegebene CoAs (`coa_freigegeben=1`).
+
+**Etikett-Freigabe-Pop-up (Fable-4 T5, 13.11.2026):** Liste, Pop-up und Download nutzen `etikett_datei_fuer_auftrag()` (geerbtes Design wird jetzt ausgeliefert). Das Pop-up kommt nur mit einer Datei, die auf dem Server liegt; fehlt sie, kein Pop-up und eine dringende Aufgabe ans Team. Geerbtes, schon freigegebenes Design ohne Änderung gilt beim Login automatisch als freigegeben.

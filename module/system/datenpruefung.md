@@ -170,3 +170,5 @@ Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführ
 - Bestellung geliefert oder storniert
 
 Erkannt wird das am Öffnen-Link der Zeile bzw. an `_aid` (`dp_nur_offen()`, `dp_vorgang_zu()`). Der Schalter „auch abgeschlossene“ (`&zu=1`) zeigt alle. Oben steht, wie viele Zeilen ausgeblendet sind. „Beheben“ ist davon unberührt.
+
+**Etikett-Freigabe im Portal (Fable-4 T5.5, 13.11.2026):** Prüfung `etikett_freigabe_portal` (auf Klick, nur lesen): je offenem Auftrag Design (eigen/geerbt), Datei da, wie es bis 13.11. aussah und was jetzt passiert.

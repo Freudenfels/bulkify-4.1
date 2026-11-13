@@ -98,6 +98,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), 
     header('Location: ?p=datenpruefung#rohstoff_angefragt_ohne_dok'); exit;
 }
 $CHECKS = [
+    // Fable-4 T5.5 (13.11.2026): Etikett-Freigabe im Kundenportal – welche Aufträge landen heute im Pop-up, warum, und was jetzt
+    // passiert. Nur lesen: nichts wird freigegeben, keine Aufgabe angelegt (das macht erst das Portal beim Login des Kunden).
+    'etikett_freigabe_portal' => [
+        'titel' => 'Etikett: Freigabe-Pop-up im Kundenportal (welche Datei, was passiert)',
+        'info'  => 'Offene Aufträge mit Etikett ohne Kundenfreigabe. „Bis 13.11.“: so sah der Kunde das Pop-up vor der Nachbesserung (bei geerbtem Design oder fehlender Datei ein weißes Feld „Nicht gefunden.“). '
+                 . '„Jetzt“: geerbtes, beim Vorauftrag freigegebenes Design ohne Änderung gilt beim nächsten Login automatisch als freigegeben; fehlt die Datei, kommt kein Pop-up, sondern eine dringende Aufgabe ans Team. Nur Anzeige.',
+        'auf_klick' => true,
+        'sql'   => "SELECT a.id AS _id, CONCAT('?p=auftrag&id=', a.id) AS _link, a.nummer AS auftrag, k.firma AS kunde, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt
+                    FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id
+                    WHERE a.status NOT IN ('versendet','storniert') AND COALESCE(a.etikett_freigegeben,0)=0
+                    ORDER BY k.firma, a.id DESC",
+        'zeilen' => function (array $rows): array {
+            $out = [];
+            foreach ($rows as $r) {
+                $aid = (int)$r['_id'];
+                if (!auftrag_braucht_etikett($aid)) continue;
+                $d = etikett_datei_fuer_auftrag($aid);
+                if (!$d) continue;   // kein Design: „Etikett fehlt“, kein Pop-up (weder vorher noch jetzt)
+                $quelle = !empty($d['alt']) ? 'geerbt aus ' . (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [(int)$d['quell_auftrag_id']]) : 'eigenes Design';
+                $eigenDa = ($e = etikett_datei($aid)) && is_file(BX_UPLOADS . '/' . basename((string)$e['datei']));
+                $vorher = $eigenDa ? 'Pop-up mit Datei' : 'Pop-up leer („Nicht gefunden.“)';
+                $auto = etikett_geerbt_freigabe_text($aid);
+                $jetzt = empty($d['datei_da']) ? 'kein Pop-up, Aufgabe „Etikett-Datei fehlt“ ans Team' : ($auto !== '' ? 'automatisch freigegeben (' . $auto . ')' : 'Pop-up mit Datei (' . ($d['datei_orig'] ?: 'Etikett-Design') . ')');
+                $out[] = $r + ['design' => $quelle, 'datei' => !empty($d['datei_da']) ? 'liegt auf dem Server' : 'FEHLT', 'bis_13_11' => $vorher, 'jetzt' => $jetzt];
+            }
+            return $out;
+        },
+        'korrektur' => '– (nur anzeigen)',
+    ],
     // Block E (Abendpaket 11.11.2026): Etikett-Ersatz raus. (1) VORHER-Liste: offene/laufende PAs, die nach dem Entfernen des
     // generischen Ersatz-Etiketts beim Etikettieren blockiert wären (Kundenetikett hat nicht genug Bestand). Nur Anzeige.
     'etikett_ersatz_blockiert' => [

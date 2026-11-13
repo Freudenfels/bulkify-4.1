@@ -303,9 +303,9 @@ if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 
 if ($k && ($_GET['v'] ?? '') === 'etikett_datei') {
     $aid = (int)($_GET['aid'] ?? 0);
     $ok = $aid && (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]) === (int)$k['id'];
-    $d = $ok ? etikett_datei($aid) : null;
-    $pf = $d ? BX_UPLOADS . '/' . basename((string)$d['datei']) : '';
-    if (!$d || !is_file($pf)) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
+    $d = $ok ? etikett_datei_fuer_auftrag($aid) : null;   // Fable-4 T5.1: eigenes oder geerbtes Design – eine Stelle
+    $pf = $d ? (string)$d['pfad'] : '';
+    if (!$d || empty($d['datei_da'])) { http_response_code(404); echo 'Nicht gefunden.'; exit; }
     // Richtiger MIME-Typ, damit PDF/Bild im Browser INLINE angezeigt werden (Vorschau), statt herunterzuladen.
     $ext = strtolower(pathinfo($pf, PATHINFO_EXTENSION));
     $mime = ['pdf'=>'application/pdf','png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','gif'=>'image/gif','svg'=>'image/svg+xml'][$ext] ?? 'application/octet-stream';
@@ -2050,8 +2050,12 @@ foreach (all("SELECT a.id, a.nummer FROM auftrag a
               WHERE a.kunde_id=? AND a.status NOT IN ('versendet','storniert') AND COALESCE(a.etikett_freigegeben,0)=0
               ORDER BY a.id DESC", [(int)$k['id']]) as $eu) {
     if (!auftrag_braucht_etikett((int)$eu['id'])) continue;
-    $dok = etikett_datei((int)$eu['id']) ?: etikett_quelle((int)$eu['id']);   // es MUSS ein Design da sein (sonst nur „fehlt")
+    // Fable-4 T5.1–T5.4: eine Stelle für „welche Datei“; geerbtes, schon freigegebenes Design gilt ohne Pop-up als freigegeben;
+    // fehlt die Datei auf dem Server, kein Pop-up (Aufgabe ans Team) – das Pop-up kommt nur mit auslieferbarer Datei.
+    if (etikett_geerbt_freigabe_pruefen((int)$eu['id'])) continue;
+    $dok = etikett_datei_fuer_auftrag((int)$eu['id']);   // es MUSS ein Design da sein (sonst nur „fehlt")
     if (!$dok) continue;
+    if (empty($dok['datei_da'])) { etikett_datei_fehlt_melden((int)$eu['id']); continue; }
     $etikettUnbestListe[] = ['id'=>(int)$eu['id'], 'nummer'=>(string)$eu['nummer'], 'datei'=>(string)($dok['datei_orig'] ?: 'Etikett-Design')];
 }
 $navBadges = [
@@ -4800,7 +4804,8 @@ portal_head('Kundenportal · ' . $k['firma']);
     $etFrei = false; $etHtml = '';
     if ($etBraucht) {
       $etDok     = etikett_datei((int)$a['id']);                 // eigenes Design dieses Auftrags
-      $etQuelle  = $etDok ?: etikett_quelle((int)$a['id']);      // sonst: altes Etikett (Vorbestellung)
+      $etQuelle  = etikett_datei_fuer_auftrag((int)$a['id']);    // eigenes, sonst altes Etikett (Vorbestellung) – Fable-4 T5.1
+      if ($etQuelle && empty($etQuelle['datei_da'])) { etikett_datei_fehlt_melden((int)$a['id']); $etQuelle = null; }   // T5.3: nichts Leeres zeigen
       $etFrei    = etikett_freigegeben((int)$a['id']);
       $etVorlage = etikett_druckvorlage_datei((int)($a['produkt_id'] ?? 0));
       ob_start(); ?>

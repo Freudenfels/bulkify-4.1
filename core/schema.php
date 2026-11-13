@@ -11249,6 +11249,54 @@ function etikett_quelle(int $auftrag_id): ?array {
     $alt['alt'] = true; $alt['quell_auftrag_id'] = (int)$alt['objekt_id'];
     return $alt;
 }
+// Welche Etikett-Datei gilt für Auftrag X? (Fable-4 T5.1, 13.11.2026) EINE Stelle für Portal-Liste, Freigabe-Pop-up, Download und
+// Auftragsseite: eigenes Design, sonst das geerbte des früheren Auftrags (etikett_quelle). Zusätzlich 'pfad' und 'datei_da' – nur
+// eine Datei, die wirklich auf dem Server liegt, kann ausgeliefert werden. null = kein Design.
+function etikett_datei_fuer_auftrag(int $auftrag_id): ?array {
+    $d = etikett_quelle($auftrag_id);
+    if (!$d) return null;
+    $pf = BX_UPLOADS . '/' . basename((string)($d['datei'] ?? ''));
+    $d['pfad'] = $pf;
+    $d['datei_da'] = trim((string)($d['datei'] ?? '')) !== '' && is_file($pf);
+    return $d;
+}
+// Geerbtes, schon freigegebenes Design übernehmen (Fable-4 T5.2): Stammt das Design aus einem früheren Auftrag, war es dort
+// freigegeben (Freigabe nach dem Hochladen dieser Design-Version) und wurden Produkt und Rezeptur seitdem nicht geändert
+// (aenderung_log), gilt es für diesen Auftrag automatisch als freigegeben – Vermerk „übernommen aus AB-…, freigegeben am …“,
+// kein Pop-up, keine Mail. true = jetzt übernommen.
+// Nur prüfen, nichts schreiben: '' = keine Übernahme möglich, sonst der Vermerk („übernommen aus AB-…, freigegeben am …“).
+function etikett_geerbt_freigabe_text(int $auftrag_id): string {
+    if ($auftrag_id <= 0 || etikett_freigegeben($auftrag_id) || !auftrag_braucht_etikett($auftrag_id)) return '';
+    $d = etikett_datei_fuer_auftrag($auftrag_id);
+    if (!$d || empty($d['alt']) || empty($d['datei_da'])) return '';
+    $q = one("SELECT a.id, a.nummer, a.etikett_freigegeben, a.etikett_freigabe_am, a.produkt_id, p.rezeptur_id
+              FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [(int)$d['quell_auftrag_id']]);
+    if (!$q || (int)$q['etikett_freigegeben'] !== 1 || empty($q['etikett_freigabe_am'])) return '';
+    if (!empty($d['angelegt']) && (string)$d['angelegt'] > (string)$q['etikett_freigabe_am']) return '';   // neuere Design-Version, nicht freigegeben
+    if ((int)$q['produkt_id'] !== (int) scalar("SELECT COALESCE(produkt_id,0) FROM auftrag WHERE id=?", [$auftrag_id])) return '';
+    try {
+        $geaendert = (int) scalar("SELECT COUNT(*) FROM aenderung_log WHERE erstellt > ? AND ((objekt_typ='produkt' AND objekt_id=?) OR (objekt_typ='rezeptur' AND objekt_id=?))",
+                                  [(string)$q['etikett_freigabe_am'], (int)$q['produkt_id'], (int)($q['rezeptur_id'] ?? 0)]);
+    } catch (\Throwable $e) { $geaendert = 1; }   // im Zweifel nicht automatisch
+    if ($geaendert > 0) return '';
+    return 'übernommen aus ' . $q['nummer'] . ', freigegeben am ' . fmt_zeit((string)$q['etikett_freigabe_am'], 'd.m.Y');
+}
+function etikett_geerbt_freigabe_pruefen(int $auftrag_id): bool {
+    $txt = etikett_geerbt_freigabe_text($auftrag_id);
+    if ($txt === '') return false;
+    $r = etikett_freigabe_setzen($auftrag_id, $txt, 'system');
+    if (!empty($r['ok'])) log_aktivitaet('auftrag', $auftrag_id, 'team', 'Etikett automatisch freigegeben: ' . $txt . ' (gleiches Design, Produkt unverändert).', 'status');
+    return !empty($r['ok']);
+}
+// Etikett-Datei fehlt wirklich (Fable-4 T5.3): Eintrag da, Datei nicht auf dem Server. Kein Pop-up beim Kunden, sondern einmal je
+// Auftrag eine dringende Aufgabe ans Team; der Auftrag zeigt einen roten Hinweis (etikett_datei_fuer_auftrag()['datei_da']).
+function etikett_datei_fehlt_melden(int $auftrag_id): void {
+    if ($auftrag_id <= 0 || !function_exists('aufgabe_neu')) return;
+    if ((int) scalar("SELECT COUNT(*) FROM aufgabe WHERE ref_typ='etikett_datei_fehlt' AND ref_id=? AND status='offen'", [$auftrag_id]) > 0) return;
+    $nr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$auftrag_id]);
+    aufgabe_neu('Etikett-Datei fehlt bei ' . $nr, 'Zu diesem Auftrag ist ein Etikett-Design eingetragen, die Datei liegt aber nicht auf dem Server. Der Kunde sieht kein Freigabe-Pop-up. Bitte die Datei neu hochladen oder beim Kunden anfordern.',
+                1, null, null, null, 'etikett_datei_fehlt', $auftrag_id, '?p=auftrag&id=' . $auftrag_id);
+}
 // Freigabe setzen (durch den Kunden bzw. vom Team manuell bestätigt). Übernimmt bei einer
 // Nachbestellung ohne eigenes Design das alte Etikett auf diesen Auftrag (als dessen freigegebenes
 // Design). Rückgabe ['ok'=>bool, 'fehler'=>?].
@@ -11263,7 +11311,8 @@ function etikett_freigabe_setzen(int $auftrag_id, string $name, string $akteur =
         $src = BX_UPLOADS . '/' . basename((string)$alt['datei']);
         $ext = strtolower(pathinfo((string)$alt['datei'], PATHINFO_EXTENSION));
         $fn  = 'auftrag_' . $auftrag_id . '_etikett_' . bin2hex(random_bytes(6)) . ($ext ? '.' . $ext : '');
-        if (is_file($src)) @copy($src, BX_UPLOADS . '/' . $fn);
+        // Fable-4 T5.3: ohne Datei kein Dokument-Eintrag (sonst Eintrag ohne Datei -> leeres Pop-up beim Kunden).
+        if (!is_file($src) || !@copy($src, BX_UPLOADS . '/' . $fn)) { if (function_exists('etikett_datei_fehlt_melden')) etikett_datei_fehlt_melden((int)$alt['objekt_id']); return ['ok' => false, 'fehler' => 'Die Etikett-Datei des früheren Auftrags fehlt auf dem Server – bitte das Design neu hochladen.']; }
         q("INSERT INTO dokument (objekt_typ,objekt_id,typ,titel,datei,datei_orig) VALUES ('auftrag',?,'etikett',?,?,?)",
           [$auftrag_id, 'Etikett-Design (aus Vorbestellung übernommen)', $fn, (string)($alt['datei_orig'] ?: 'Etikett-Design')]);
     }

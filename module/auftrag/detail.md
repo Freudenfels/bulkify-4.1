@@ -390,3 +390,5 @@ Express-Bestellung (fehlende Rohstoffe) und Express-Zukauf (Bulk und Fertigware/
 **Etikett-Erinnerung (13.11.2026, Paket Teil 4.4):** Im Pop-up Etikett steht „Etikett-Erinnerung: n × gesendet, zuletzt …“ und der Knopf „Erinnerung pausieren“ (`aktion=etikett_erinnerung_pause`).
 
 **Füllmenge je Packung (Fable-4 T2.1, 13.11.2026):** Kachel liest mit `zahl_lesen(…, true)` (Mengen-Lesart, „1.000“ = 1000) und belegt ohne Tausenderpunkt vor („1000“). Vorher machte Speichern ohne Änderung aus 1.000 g eine 1.
+
+**Etikett-Datei fehlt (Fable-4 T5.3, 13.11.2026):** roter Hinweis oben, wenn ein Design eingetragen ist, die Datei aber nicht auf dem Server liegt (nur Anzeige).

@@ -1092,6 +1092,13 @@ if (has_role('admin') || has_role('sales')):
 <div class="bx-panel" data-panel="details">
   <?php if (isset($_GET['kok']) || isset($_GET['vpok']) || isset($_GET['knok']) || isset($_GET['ltok']) || isset($_GET['etikettok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Gespeichert.</div><?php endif; ?>
   <?php $kachelnRender(); // Kennzahl-Kacheln; änderbare Werte per Stift (Fenster unten) ?>
+  <?php // Fable-4 T5.3: Design eingetragen, Datei fehlt auf dem Server -> roter Hinweis (der Kunde sieht kein Freigabe-Pop-up).
+  if (auftrag_braucht_etikett($id) && ($etFehltD = etikett_datei_fuer_auftrag($id)) && empty($etFehltD['datei_da'])): // nur anzeigen – die Aufgabe ans Team legt das Portal an (Ansehen schreibt nichts) ?>
+  <div class="bx-panel" style="margin:0 0 16px;border-color:#c0392b;background:rgba(192,57,43,.08);padding:12px 16px">
+    <div style="font-weight:600;color:#c0392b">Etikett-Datei fehlt</div>
+    <div style="font-size:13px">Eingetragen ist „<?= h((string)($etFehltD['datei_orig'] ?: 'Etikett-Design')) ?>“<?= !empty($etFehltD['alt']) ? ' (aus ' . h((string) scalar("SELECT nummer FROM auftrag WHERE id=?", [(int)$etFehltD['quell_auftrag_id']])) . ')' : '' ?>, die Datei liegt aber nicht auf dem Server. Der Kunde sieht deshalb kein Freigabe-Pop-up. Bitte das Design neu hochladen (Stift am Etikett) oder beim Kunden anfordern.</div>
+  </div>
+  <?php endif; ?>
   <?php // Etikett als Bild direkt sichtbar (Nico 11.11.2026, AB-3297): bisher nur im Stift-Fenster. PDF -> Seite 1 als Bild (pdf.js).
   if (auftrag_braucht_etikett($id) && ($etBild = etikett_datei($id) ?: etikett_quelle($id))):
       $etBildExt = strtolower(pathinfo((string)($etBild['datei_orig'] ?: $etBild['datei']), PATHINFO_EXTENSION));
