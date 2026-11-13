@@ -159,7 +159,7 @@ function lieferant_dateien_panel(int $lieferant_id, string $wer = 'team', string
 
 // Datei direkt an eine BESTELLUNG hängen (CoA, Rechnung, Sonstiges) – vom Lieferanten. So ist das Dokument
 // mit genau dieser Bestellung verknüpft (dokument.objekt_typ='bestellung'). Rückgabe: '' ok, sonst Fehlertext.
-function bestell_dok_upload(int $bestellung_id, int $lieferant_id, string $typ, string $sprache = 'de'): string {
+function bestell_dok_upload(int $bestellung_id, int $lieferant_id, string $typ, string $sprache = 'de', int $ersatz_fuer = 0): string {
     $t = fn(string $de, string $en, string $zh = '') => $sprache === 'de' ? $de : (($sprache === 'zh' && $zh !== '') ? $zh : $en);
     if ($bestellung_id <= 0 || $lieferant_id <= 0) return 'Bestellung/Lieferant fehlt.';
     // Gehört die Bestellung dem Lieferanten?
@@ -179,14 +179,19 @@ function bestell_dok_upload(int $bestellung_id, int $lieferant_id, string $typ, 
         return $t('Die Datei konnte nicht gespeichert werden.', 'The file could not be saved.', '文件无法保存。');
     $typ = in_array($typ, ['coa', 'rechnung', 'lieferschein', 'spec', 'analyse', 'sonstiges'], true) ? $typ : 'sonstiges';
     // Nur EINE Rechnung je Bestellung – hat das Team sie schon (z. B. per Mail erhalten) hochgeladen, keine zweite.
-    if ($typ === 'rechnung' && (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung'", [$bestellung_id]) > 0) {
+    if ($ersatz_fuer > 0 && !scalar("SELECT id FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung'", [$ersatz_fuer, $bestellung_id])) $ersatz_fuer = 0;
+    if ($typ === 'rechnung' && $ersatz_fuer <= 0 && (int) scalar("SELECT COUNT(*) FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung'", [$bestellung_id]) > 0) {
         @unlink(BX_UPLOADS . '/' . $fn);
         return $t('Zu dieser Bestellung liegt bereits eine Rechnung vor.', 'An invoice for this order is already on file.', '此订单已有发票。');
     }
     q("INSERT INTO dokument (objekt_typ,objekt_id,typ,lieferant_id,titel,datei,datei_orig,kunde_sichtbar,hochgeladen_von) VALUES ('bestellung',?,?,?,?,?,?,0,'lieferant')",
       [$bestellung_id, $typ, $lieferant_id, mb_substr(trim((string)($_POST['dok_titel'] ?? '')), 0, 190) ?: null, $fn, mb_substr($orig, 0, 255)]);
     $dokId = (int) insert_id();
-    log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Datei zur Bestellung ' . $bestellung_id . ' hochgeladen (' . $typ . ').', 'dokument', 'dokument', $dokId);
+    if ($ersatz_fuer > 0) {   // Fable-6 T4.2: Ersatz – die alte Rechnung bleibt, die neue verweist darauf
+        if (function_exists('er_schema')) er_schema();
+        try { q("UPDATE dokument SET ersatz_fuer=?, titel=COALESCE(titel, ?) WHERE id=?", [$ersatz_fuer, 'Ersatz-Rechnung', $dokId]); } catch (\Throwable $e) {}
+    }
+    log_aktivitaet('lieferant', $lieferant_id, 'lieferant', 'Datei zur Bestellung ' . $bestellung_id . ' hochgeladen (' . $typ . ($ersatz_fuer > 0 ? ', Ersatz' : '') . ').', 'dokument', 'dokument', $dokId);
     // 13.11.2026: Rechnung -> Entwurf einer Eingangsrechnung in der Buchhaltung (KI liest nach der Antwort aus, core/eingangsrechnung.php)
     if ($typ === 'rechnung' && function_exists('er_entwurf_aus_dokument')) {
         if (function_exists('nach_antwort')) nach_antwort(fn() => er_entwurf_aus_dokument($dokId, 'portal')); else er_entwurf_aus_dokument($dokId, 'portal');

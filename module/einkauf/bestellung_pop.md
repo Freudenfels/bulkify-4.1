@@ -14,3 +14,5 @@ Gewicht gesamt wird mit `gewicht_lesen()` gelesen (vorher Preis-Lesart: Vorbeleg
 
 ## Gleiche Gliederung wie die Bestellseite (13.11.2026)
 Kopf (`bs_kopf_html`: Status, Badges, Betrag, Hauptknopf als Link, „Ganze Bestellung“), Unterlagen-Zeile (Link auf `#unterlagen`), Position (`bs_position_html`), Reiter Dokumente · Versand · Notiz. `&nur=versand` zeigt nur Versand und Sendung – das ist das Pop-up hinter „Versand / Sendung erfassen“ im Reiter Versand der Bestellseite. Speichern wie bisher (pop_versand, pop_sendung, pop_dok, pop_notiz), danach zurück ins Pop-up.
+
+**Fable-6 T4.1 (13.11.2026):** Eine Rechnung, die im Pop-up hochgeladen wird, wird wie jede Lieferanten-Rechnung ein Entwurf der Eingangsrechnung (`er_entwurf_aus_dokument`).

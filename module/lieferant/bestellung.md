@@ -69,3 +69,8 @@ In der Liste ist der Artikel anklickbar, wenn die erste Position eine Rezeptur h
 4. Versand (#versand): Versandanbieter, Versandart, „Wie viele Pakete?“ – je Paket eine Zeile mit Sendungsnummer (Zeilen entstehen beim Tippen der Anzahl), optional Sendungsnummer der ganzen Sendung. Aktion lief_versand_neu speichert alles; ohne Sammelnummer gilt die erste Paketnummer als bestellung.tracking. Ab „versandbereit“ zusätzlich „Speichern und versendet melden“ (bestellung_station_setzen, prüft weiter CoA je Charge). Gelbe Hinweise oben, wenn CoA oder Unterlagen fehlen. Paket entfernen über paket_del im selben Formular (kein Formular im Formular).
 5. Zahlstatus, 6. Rückfragen ganz unten.
 Die alten Aktionen lief_versand und pakete_add bleiben für ältere Formulare erhalten.
+
+**Fable-6 T4 (13.11.2026):**
+- Der Lieferant kann eine Rechnung nur löschen, solange sie in der Buchhaltung Entwurf ist; der Entwurf wird dann storniert und das PDF bleibt auf dem Server.
+- Danach gibt es statt „Entfernen“ den Knopf „Ersatz hochladen“ (`aktion=bestell_dok_ersatz`). Er legt keinen zweiten Entwurf an.
+- „bezahlt am“ sieht der Lieferant nur noch aus der Buchhaltung (Eingangsrechnung), nicht mehr aus `bestellung.bezahlt_am`.

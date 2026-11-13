@@ -41,7 +41,7 @@ function bs_haupt(array $b, array $d): array {
     if (in_array($st, ['bestellt', 'gesendet'], true) && empty($b['angekommen_am']) && $d['bp_offen']) return ['art' => 'einbuchen', 'label' => 'Ware ist da - einbuchen'];
     if ($st === 'storniert' || empty($b['lieferant_id'])) return ['art' => '', 'label' => ''];
     if (!$d['rechnungen']) return ['art' => 'rechnung', 'label' => 'Rechnung erfassen'];
-    if (!$d['bezahlt']) return ['art' => 'bezahlt', 'label' => 'Als bezahlt markieren'];
+    if (!$d['bezahlt']) return ['art' => 'bezahlt', 'label' => 'In der Buchhaltung bezahlen'];   // Fable-6 T4.1: bezahlt nur in der Buchhaltung
     return ['art' => '', 'label' => ''];
 }
 
@@ -51,7 +51,7 @@ function bs_haupt_link(array $b, array $d, string $klasse = 'btn btn-primary bs-
     $url = match ($hp['art']) {
         'einbuchen' => $d['einbuchen_url'],
         'rechnung'  => '?p=bestellung&id=' . (int)$b['id'] . '#rechnung',
-        'bezahlt'   => '?p=bestellung&id=' . (int)$b['id'] . '#bezahlt',
+        'bezahlt'   => (function_exists('er_link_bestellung') ? er_link_bestellung((int)$b['id']) : '') ?: '?p=bestellung&id=' . (int)$b['id'] . '#zahlung',
         'bestellen' => '?p=bestellung&id=' . (int)$b['id'],
         default     => '',
     };

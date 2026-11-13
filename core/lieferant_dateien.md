@@ -28,3 +28,5 @@ Intern `module/lieferant/detail.php` (Reiter „Dokumente"), Portal `module/lief
 Ablageort rezeptur: Spezifikation des Gesamtprodukts je Lieferant (lieferant_unterlage_speichern, Liste, Download-Recht).
 
 13.11.2026: Rechnung zur Bestellung (Portal-Upload und Team) legt automatisch einen Entwurf einer Eingangsrechnung in der Buchhaltung an (`er_entwurf_aus_dokument`, nach der Antwort).
+
+**Fable-6 T4.2 (13.11.2026):** `bestell_dok_upload(…, $ersatz_fuer)` nimmt eine Ersatz-Rechnung an, obwohl es schon eine Rechnung gibt. Die neue Datei verweist mit `dokument.ersatz_fuer` auf die alte; die alte bleibt.

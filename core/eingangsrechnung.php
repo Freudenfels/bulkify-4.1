@@ -10,6 +10,7 @@
 
 function er_schema(): bool {
     static $ok = null; if ($ok !== null) return $ok;
+    try { ensure_column('dokument', 'ersatz_fuer', "INT NULL"); } catch (\Throwable $e) {}   // Fable-6 T4.2: Ersatz-Upload einer Rechnung
     if (!table_exists('lieferant_rechnung')) return $ok = false;   // Buchhaltung noch nie gestartet -> kein Entwurf
     try {
         ensure_column('lieferant_rechnung', 'dokument_id', 'INT NULL');
@@ -78,6 +79,12 @@ function er_entwurf_aus_dokument(int $dok_id, string $quelle = 'portal'): array 
     if ((int) scalar("SELECT COUNT(*) FROM lieferant_rechnung WHERE dokument_id=?", [$dok_id]) > 0) return ['ok' => false, 'msg' => 'Entwurf zu diesem Dokument gibt es schon.'];
     $b = one("SELECT id, nummer, lieferant_id FROM bestellung WHERE id=?", [(int)$d['objekt_id']]);
     if (!$b) return ['ok' => false, 'msg' => 'Bestellung fehlt.'];
+    // Fable-6 T4.3 (13.11.2026): Ersatz-Upload -> KEIN zweiter Entwurf, sondern an die vorhandene Eingangsrechnung hängen.
+    if (!empty($d['ersatz_fuer'])) {
+        $alt = one("SELECT * FROM lieferant_rechnung WHERE dokument_id=? AND status<>'storniert' ORDER BY id DESC LIMIT 1", [(int)$d['ersatz_fuer']]);
+        if (!$alt) $alt = one("SELECT * FROM lieferant_rechnung WHERE bestellung_id=? AND status<>'storniert' ORDER BY id DESC LIMIT 1", [(int)$b['id']]);
+        if ($alt) return er_ersatz_anhaengen($alt, $d, $b);
+    }
     $lid = (int)($b['lieferant_id'] ?? $d['lieferant_id'] ?? 0);
     $lf = $lid ? (one("SELECT * FROM lieferanten WHERE id=?", [$lid]) ?: []) : [];
     $ki = er_ki_lesen(BX_UPLOADS . '/' . basename((string)$d['datei']));
@@ -95,7 +102,14 @@ function er_entwurf_aus_dokument(int $dok_id, string $quelle = 'portal'): array 
     if ($brutto <= 0) $brutto = round($netto + $ust, 2);
     // Doppelt? gleiche Rechnungsnummer beim gleichen Lieferanten (nicht storniert) -> nicht anlegen
     if ($nr !== '' && $lid > 0) {
-        $dup = one("SELECT id, nummer, status FROM lieferant_rechnung WHERE lieferant_id=? AND lief_nummer=? AND status<>'storniert' LIMIT 1", [$lid, $nr]);
+        // Fable-6 P35: Nummer normalisiert vergleichen („inv 2026-0815“ = „INV-2026-0815“)
+        $dup = null;
+        foreach (all("SELECT id, nummer, status, lief_nummer FROM lieferant_rechnung WHERE lieferant_id=? AND status<>'storniert' AND lief_nummer IS NOT NULL", [$lid]) as $x)
+            if (er_nr_norm((string)$x['lief_nummer']) === er_nr_norm($nr)) { $dup = $x; break; }
+        if ($dup && (string)$dup['status'] === 'entwurf') {   // noch Entwurf: die neue Datei ersetzt die alte (kein zweiter Entwurf)
+            $altE = one("SELECT * FROM lieferant_rechnung WHERE id=?", [(int)$dup['id']]);
+            if ($altE) return er_ersatz_anhaengen($altE, $d, $b);
+        }
         if ($dup) {
             log_aktivitaet('bestellung', (int)$b['id'], 'system', 'Lieferantenrechnung ' . $nr . ' liegt schon als ' . $dup['nummer'] . ' in der Buchhaltung – kein zweiter Entwurf.', 'dokument', 'dokument', $dok_id);
             try { q("UPDATE dokument SET befund=? WHERE id=?", ['doppelt: ' . $dup['nummer'], $dok_id]); } catch (\Throwable $e) {}
@@ -129,6 +143,30 @@ function er_entwurf_aus_dokument(int $dok_id, string $quelle = 'portal'): array 
         } catch (\Throwable $e) {}
     }
     return ['ok' => true, 'id' => $id, 'msg' => 'Entwurf ' . $erNr . ' angelegt.'];
+}
+
+function er_nr_norm(string $nr): string { return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $nr)); }
+// Ersatz-Datei an eine vorhandene Eingangsrechnung hängen: neue Datei gilt, die alte bleibt gespeichert (Vermerk in der Notiz).
+function er_ersatz_anhaengen(array $er, array $d, array $b): array {
+    $altDatei = (string)($er['orig_name'] ?? $er['datei'] ?? '');
+    $vermerk = 'Ersatz-Upload am ' . (function_exists('fmt_zeit') ? fmt_zeit(gmdate('Y-m-d H:i:s'), 'd.m.Y H:i') : gmdate('d.m.Y H:i')) . ' (' . ((string)($d['hochgeladen_von'] ?? '') === 'team' ? 'Team' : 'Lieferant') . '); vorherige Datei bleibt gespeichert: ' . $altDatei;
+    q("UPDATE lieferant_rechnung SET dokument_id=?, datei=?, orig_name=?, mime=?, notiz=TRIM(CONCAT(COALESCE(notiz,''), ' | ', ?)) WHERE id=?",
+      [(int)$d['id'], basename((string)$d['datei']), (string)($d['datei_orig'] ?: $d['datei']),
+       strtolower(pathinfo((string)$d['datei'], PATHINFO_EXTENSION)) === 'pdf' ? 'application/pdf' : 'image/' . strtolower(pathinfo((string)$d['datei'], PATHINFO_EXTENSION)),
+       $vermerk, (int)$er['id']]);
+    log_aktivitaet('bestellung', (int)$b['id'], 'system', 'Ersatz-Rechnung an ' . ($er['nummer'] ?: 'Eingangsrechnung') . ' gehängt (kein zweiter Entwurf). ' . $vermerk, 'dokument', 'dokument', (int)$d['id']);
+    if (function_exists('aufgabe_neu') && (string)$er['status'] !== 'entwurf') {
+        try { aufgabe_neu('Ersatz-Rechnung prüfen: ' . ($er['nummer'] ?: '') . ' (' . $b['nummer'] . ')', 'Zur schon erfassten Eingangsrechnung ' . ($er['nummer'] ?: '') . ' kam eine Ersatz-Datei. ' . $vermerk . '. Bitte Betrag und Daten vergleichen.',
+                              2, null, null, null, 'eingangsrechnung', (int)$er['id'], '/buchhaltung/?p=lief_rechnung&id=' . (int)$er['id']); } catch (\Throwable $e) {}
+    }
+    return ['ok' => true, 'id' => (int)$er['id'], 'ersatz' => true, 'msg' => 'Ersatz an ' . ($er['nummer'] ?: 'Eingangsrechnung') . ' gehängt.'];
+}
+// Link „in der Buchhaltung bezahlen“ (Fable-6 T4.1): Entwurf -> prüfen, sonst die Eingangsrechnung. '' = es gibt keine.
+function er_link_bestellung(int $bestellung_id): string {
+    if (!table_exists('lieferant_rechnung')) return '';
+    $r = one("SELECT id, status FROM lieferant_rechnung WHERE bestellung_id=? AND status<>'storniert' ORDER BY (status='bezahlt'), id DESC LIMIT 1", [$bestellung_id]);
+    if (!$r) return '';
+    return (string)$r['status'] === 'entwurf' ? '/buchhaltung/?p=lief_rechnung_pruefen&id=' . (int)$r['id'] : '/buchhaltung/?p=lief_rechnung&id=' . (int)$r['id'];
 }
 
 // Text je Status für das Lieferantenportal (DE/EN/中文).

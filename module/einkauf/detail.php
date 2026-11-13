@@ -223,9 +223,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode($f))); exit;
     }
     // E8: Lieferantenrechnung als bezahlt markieren (Datum + Zahlungsweg + optional Überweisungsbeleg).
-    if ($aktion === 'bezahlt' && !$neu) {
-        $res = bestellung_bezahlt_markieren((int)$id, (string)($_POST['bezahlt_am'] ?? ''), (string)($_POST['zahlungsweg'] ?? ''), 'zahlbeleg');
-        header('Location: ?p=bestellung&id=' . $id . ($res['ok'] ? '&ok=1' : '&fehler=' . urlencode($res['msg']))); exit;
+    if ($aktion === 'bezahlt' && !$neu) {   // Fable-6 T4.1: „Als bezahlt markieren“ an der Bestellung entfällt – bezahlt wird nur in der Buchhaltung
+        header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode('Bezahlt wird nur noch in der Buchhaltung (Eingangsrechnung). Link „In der Buchhaltung bezahlen“.')); exit;
+    }
+    if ($aktion === 'er_anlegen' && !$neu) {   // Rechnung ohne Eingangsrechnung (Altfall): Entwurf in der Buchhaltung anlegen
+        require_once BX_ROOT . '/core/eingangsrechnung.php';
+        $dE = (int) scalar("SELECT id FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC LIMIT 1", [(int)$id]);
+        $rE = $dE ? er_entwurf_aus_dokument($dE, 'team') : ['ok' => false, 'msg' => 'Keine Rechnung an der Bestellung.'];
+        header('Location: ?p=bestellung&id=' . $id . (!empty($rE['ok']) ? '&okmsg=' . rawurlencode((string)$rE['msg']) : '&fehler=' . urlencode((string)$rE['msg']))); exit;
     }
     // B4: Bestellung stornieren.
     // Nico 12.11.2026: Grund Pflicht. Portal-Lieferanten werden immer informiert (Nachricht + Mail); „ohne Nachricht“ gibt es nur
@@ -478,7 +483,9 @@ if (!$neu) {
         'bestellen' => '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-primary bs-haupt" type="submit">Bestellen</button></form>',
         'einbuchen' => '<a class="btn btn-primary bs-haupt" href="' . h($bd['einbuchen_url']) . '">Ware ist da - einbuchen</a>',
         'rechnung'  => '<button type="button" class="btn btn-primary bs-haupt" onclick="bxPopup.open(\'dlgRechnung\')">Rechnung erfassen</button>',
-        'bezahlt'   => '<button type="button" class="btn btn-primary bs-haupt" onclick="bxPopup.open(\'dlgBezahlt\')">Als bezahlt markieren</button>',
+        'bezahlt'   => ($erL = (function_exists('er_link_bestellung') ? er_link_bestellung((int)$id) : '')) !== ''
+                       ? '<a class="btn btn-primary bs-haupt" href="' . h($erL) . '">In der Buchhaltung bezahlen</a>'
+                       : '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="er_anlegen"><button class="btn btn-primary bs-haupt" type="submit">Eingangsrechnung anlegen</button></form>',
         default     => '',
     };
 
@@ -487,7 +494,7 @@ if (!$neu) {
     $menu[] = '<button type="button" class="bs-mi" onclick="bxPopup.open(\'dlgBearbeiten\')">Bearbeiten</button>';
     $menu[] = '<a class="bs-mi" target="_blank" href="?p=bestellung_pdf&id=' . (int)$id . '">PDF für den Lieferanten</a>';
     if ($hp['art'] !== 'rechnung' && !empty($b['lieferant_id']) && !$rechnDocs && $st !== 'storniert') $menu[] = '<button type="button" class="bs-mi" onclick="bxPopup.open(\'dlgRechnung\')">Rechnung erfassen</button>';
-    if ($hp['art'] !== 'bezahlt' && !empty($b['lieferant_id']) && !$istBezahlt && $st !== 'storniert') $menu[] = '<button type="button" class="bs-mi" onclick="bxPopup.open(\'dlgBezahlt\')">Als bezahlt markieren</button>';
+    // Fable-6 T4.1: „Als bezahlt markieren“ entfällt (bezahlt nur in der Buchhaltung).
     if ($st === 'offen') $menu[] = '<form method="post"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="bs-mi" type="submit" title="Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form>';
     if ($st !== 'offen' && $posGesamt === 0) $menu[] = '<form method="post" onsubmit="return confirm(\'Diese leere Bestellung löschen?\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="bs-mi bs-rot" type="submit">Leere Bestellung löschen</button></form>';
     if ($st === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) {
@@ -605,7 +612,7 @@ if (!$neu) {
         foreach (all("SELECT id FROM dokument WHERE objekt_typ='bestellung' AND objekt_id=? AND typ='zahlungsbeleg' ORDER BY id DESC", [(int)$id]) as $zd)
             echo '<a class="btn btn-ghost btn-sm" target="_blank" href="?p=dokument&id=' . (int)$zd['id'] . '">Zahlungsbeleg</a>';
         if (!$rechnDocs && $st !== 'storniert') echo '<button type="button" class="btn btn-primary btn-sm" onclick="bxPopup.open(\'dlgRechnung\')">Rechnung erfassen</button>';
-        elseif ($rechnDocs && !$istBezahlt && $st !== 'storniert') echo '<button type="button" class="btn btn-primary btn-sm" onclick="bxPopup.open(\'dlgBezahlt\')">Als bezahlt markieren</button>';
+        elseif ($rechnDocs && !$istBezahlt && $st !== 'storniert') echo (($erL2 = (function_exists('er_link_bestellung') ? er_link_bestellung((int)$id) : '')) !== '' ? '<a class="btn btn-primary btn-sm" href="' . h($erL2) . '">In der Buchhaltung bezahlen</a>' : '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="er_anlegen"><button class="btn btn-primary btn-sm" type="submit">Eingangsrechnung anlegen</button></form>');
         echo '</span></div>';
     }
     $tabZahlung = ob_get_clean();

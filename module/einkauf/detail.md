@@ -158,3 +158,5 @@ Doppeltes entfernt: Einbuchen nur Hauptknopf und je vorgemerkter Charge „einbu
 - **Stornieren** geht nicht mehr, sobald Ware eingegangen ist (auch in `bestellung_stornieren()`). Dann gibt es nur „Rest stornieren“.
 - **Rest stornieren** geht nur bei echter Teillieferung (schon geliefert, Rest offen), nur mit Grund (Pop-up `dlgRestStorno`) und nur für Einkauf und Admin.
 - **bezahlt** geht nur einmal und nie mit einem Datum in der Zukunft (auch in `bestellung_bezahlt_markieren()`).
+
+**Fable-6 T4.1 (13.11.2026):** „Als bezahlt markieren“ an der Bestellung entfällt; die Aktion `bezahlt` wird abgelehnt. Hauptknopf und Reiter Zahlung zeigen „In der Buchhaltung bezahlen“ (Link auf die Eingangsrechnung). Gibt es noch keine Eingangsrechnung, steht dort „Eingangsrechnung anlegen“ (`er_anlegen`).

@@ -84,8 +84,18 @@ if ($b && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $fehler = bestellung_chargen_post($b, 'lieferant', lp_sprache()) ?? '';
     } elseif ($aktion === 'bestell_dok_del') {
         $dd = (int)($_POST['dok_id'] ?? 0);
-        if ($dd) { $row = one("SELECT datei FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND lieferant_id=?", [$dd, $id, $lid]);
-                   if ($row) { @unlink(BX_UPLOADS . '/' . basename((string)$row['datei'])); q("DELETE FROM dokument WHERE id=?", [$dd]); } }
+        if ($dd) { $row = one("SELECT datei, typ FROM dokument WHERE id=? AND objekt_typ='bestellung' AND objekt_id=? AND lieferant_id=?", [$dd, $id, $lid]);
+            // Fable-6 T4.2: Rechnung nur löschen, solange sie Entwurf ist; danach nur Ersatz-Upload (die alte Datei bleibt).
+            $erRow = ($row && (string)$row['typ'] === 'rechnung' && table_exists('lieferant_rechnung')) ? one("SELECT id, status FROM lieferant_rechnung WHERE dokument_id=? AND status<>'storniert' ORDER BY id DESC LIMIT 1", [$dd]) : null;
+            if ($erRow && (string)$erRow['status'] !== 'entwurf') {
+                $fehler = ['de' => 'Die Rechnung ist schon erfasst und kann nicht mehr gelöscht werden. Bitte „Ersatz hochladen“ nutzen.', 'en' => 'The invoice has already been recorded and can no longer be deleted. Please use “Upload replacement”.', 'zh' => '发票已登记，无法删除。请使用“上传替换文件”。'][lp_sprache()] ?? 'Not possible.';
+            } elseif ($row) {
+                if ($erRow) q("UPDATE lieferant_rechnung SET status='storniert', notiz=TRIM(CONCAT(COALESCE(notiz,''), ' | vom Lieferanten zurückgezogen (Entwurf)')) WHERE id=? AND status='entwurf'", [(int)$erRow['id']]);
+                if ((string)$row['typ'] !== 'rechnung') @unlink(BX_UPLOADS . '/' . basename((string)$row['datei']));   // Rechnungs-PDF bleibt auf dem Server
+                q("DELETE FROM dokument WHERE id=?", [$dd]);
+            } }
+    } elseif ($aktion === 'bestell_dok_ersatz') {   // Fable-6 T4.2/T4.3: Ersatz-Rechnung – hängt sich an die vorhandene Eingangsrechnung
+        $fehler = bestell_dok_upload($id, $lid, 'rechnung', lp_sprache(), (int)($_POST['dok_id'] ?? 0));
     }
     header('Location: ?p=lieferant_bestellung&id=' . $id . ($fehler === '' ? '&ok=1' : '&fehler=' . urlencode($fehler))); exit;
 }
@@ -230,7 +240,10 @@ if (!$b):
         <tr><td><?= h($BDTYP[$d['typ']] ?? $d['typ']) ?></td>
             <td><a href="?p=lieferant_dokument&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener"><?= h($d['titel'] ?: ($d['datei_orig'] ?: lp_t('dok_dokument'))) ?></a></td>
             <td class="muted"><?= h(date('d.m.Y', strtotime((string)$d['angelegt']))) ?><?php if (isset($erMap[(int)$d['id']])): ?><div style="font-size:12px;color:var(--text)"><?= h(er_status_text($erMap[(int)$d['id']], lp_sprache())) ?></div><?php endif; ?></td>
-            <td style="text-align:right"><?php if (($d['typ'] ?? '') !== 'zahlungsbeleg'): ?><form method="post" style="margin:0" onsubmit="return confirm(<?= h(json_encode(lp_t('dok_del_q'), JSON_UNESCAPED_UNICODE)) ?>);"><input type="hidden" name="aktion" value="bestell_dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('entfernen')) ?></button></form><?php endif; ?></td></tr>
+            <td style="text-align:right"><?php $erD = $erMap[(int)$d['id']] ?? null; $reFest = ($d['typ'] ?? '') === 'rechnung' && $erD && $erD['status'] !== 'entwurf';
+              if ($reFest): // Fable-6 T4.2: erfasste Rechnung nicht löschen – nur Ersatz hochladen ?>
+              <form method="post" enctype="multipart/form-data" style="margin:0;display:flex;gap:6px;justify-content:flex-end;align-items:center;flex-wrap:wrap"><input type="hidden" name="aktion" value="bestell_dok_ersatz"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><input type="file" name="dok" accept=".pdf,.jpg,.jpeg,.png" required style="max-width:200px"><button class="btn btn-ghost btn-sm" type="submit"><?= h(['de' => 'Ersatz hochladen', 'en' => 'Upload replacement', 'zh' => '上传替换文件'][lp_sprache()] ?? 'Upload replacement') ?></button></form>
+              <?php elseif (($d['typ'] ?? '') !== 'zahlungsbeleg'): ?><form method="post" style="margin:0" onsubmit="return confirm(<?= h(json_encode(lp_t('dok_del_q'), JSON_UNESCAPED_UNICODE)) ?>);"><input type="hidden" name="aktion" value="bestell_dok_del"><input type="hidden" name="dok_id" value="<?= (int)$d['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('entfernen')) ?></button></form><?php endif; ?></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -318,13 +331,13 @@ if (!$b):
     <?php endif; ?>
   </div>
   <?php // E8: Zahlungsstatus (vom Team gesetzt) – der Lieferant sieht „bezahlt" samt Beleg.
-    if (!empty($b['bezahlt_am'])): ?>
-    <div class="bx-panel badge-ok" style="padding:10px 14px;margin-bottom:12px"><?= h(lp_t('dok_bezahlt_am')) ?> <?= h(date('d.m.Y', strtotime((string)$b['bezahlt_am']))) ?><?= (string)($b['zahlungsweg'] ?? '') !== '' ? ' · ' . h((string)$b['zahlungsweg']) : '' ?>.</div>
+    // Fable-6 T4.1 (13.11.2026): „bezahlt am“ zeigt der Lieferant NUR aus der Buchhaltung (Eingangsrechnung), nie aus bestellung.bezahlt_am.
+    if (false): ?>
   <?php endif; ?>
   <?php // 13.11.2026: Zahlstatus der Rechnung(en) aus der Buchhaltung (lieferant_rechnung) – „bezahlt am“, teilbezahlt mit Rest
     $erSt = function_exists('er_status_bestellung') ? er_status_bestellung((int)$id) : []; $erMap = [];
     foreach ($erSt as $er) { if ($er['dokument_id']) $erMap[$er['dokument_id']] = $er; }
-    if ($erSt && empty($b['bezahlt_am'])): ?>
+    if ($erSt): ?>
     <div class="bx-panel<?= $erSt[0]['status'] === 'bezahlt' ? ' badge-ok' : '' ?>" style="padding:10px 14px;margin-bottom:12px<?= $erSt[0]['status'] === 'bezahlt' ? '' : ';border-left:3px solid var(--gruen)' ?>">
       <?php foreach ($erSt as $er): ?><div><?= h(lp_t('bd_rechnung')) ?><?= $er['lief_nummer'] !== '' ? ' ' . h($er['lief_nummer']) : '' ?>: <strong style="font-weight:600"><?= h(er_status_text($er, lp_sprache())) ?></strong></div><?php endforeach; ?>
     </div>

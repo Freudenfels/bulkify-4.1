@@ -8,3 +8,9 @@ Lädt ein Lieferant im Portal eine Rechnung zur Bestellung hoch (`bestell_dok_up
 - Für das Lieferantenportal: `er_status_bestellung($bestellung_id)` + `er_status_text($r, $sprache)` („bezahlt am …“, teilbezahlt mit Rest, „eingegangen, wird geprüft“).
 - Keine Zahlung, keine Mail an den Lieferanten. Testkopie ohne KI-Schlüssel: eingespielte Antwort `data/er_ki_test.json`.
 - Tabelle gehört der Buchhaltung (`kreditor_init`); hier nur der Entwurf und additive Spalten (`dokument_id`, `quelle`, `ki_json`, `ki_unsicher`, `bank_re`, `bank_warnung`, `geprueft_am`, `geprueft_von`).
+
+**Fable-6 P10/T4 (13.11.2026) – Rechnung ein Weg:**
+- Jede Lieferanten-Rechnung wird zur Eingangsrechnung (Entwurf): Portal, Team-Upload an der Bestellung und jetzt auch das Bestell-Pop-up. Für Altfälle gibt es an der Bestellung „Eingangsrechnung anlegen“ (`aktion=er_anlegen`).
+- „bezahlt“ gibt es nur in der Buchhaltung. `er_link_bestellung()` liefert den Link „In der Buchhaltung bezahlen“: bei einem Entwurf auf „prüfen“, sonst auf die Eingangsrechnung.
+- **Ersatz-Upload** (`dokument.ersatz_fuer`) legt keinen zweiten Entwurf an. `er_ersatz_anhaengen()` hängt die neue Datei an die vorhandene Eingangsrechnung; die alte Datei bleibt gespeichert (Vermerk in der Notiz). Ist die Rechnung schon erfasst, bekommt die Buchhaltung die Aufgabe „Ersatz-Rechnung prüfen“.
+- **Doppel-Erkennung:** Die Rechnungsnummer wird normalisiert verglichen (`er_nr_norm`: „inv 2026-0815“ = „INV-2026-0815“). Bei einem noch offenen Entwurf ersetzt die neue Datei die alte.

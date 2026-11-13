@@ -12,3 +12,5 @@ Genutzt von der Bestellseite (`module/einkauf/detail.php`), dem Bestell-Pop-up a
 - `bs_reiter_html($tabs, $standard)`: Reiter-Leiste (am Handy waagerecht scrollbar) mit Zähler bzw. Punkt; Umschalten und Anker macht `bx-ui.js` (`data-bs-tab`/`data-bs-panel`), auch im nachgeladenen Pop-up.
 
 CSS: Block „Bestellseite aufgeräumt“ in `public/assets/app.css` (`.bs-*`).
+
+**Fable-6 T4.1 (13.11.2026):** Der Hauptknopf heißt bei offener Rechnung „In der Buchhaltung bezahlen“ und führt in die Buchhaltung (`er_link_bestellung`).

@@ -44,6 +44,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Bezug zur (einzigen) Position, damit CoA/Spec genau dieser Bestellung und diesem Artikel gehören
         $bp = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? ORDER BY sort, id LIMIT 1", [$id]);
         if ($did && $bp) q("UPDATE dokument SET bestellung_position_id=COALESCE(bestellung_position_id, ?) WHERE id=?", [$bp, $did]);
+        // Fable-6 T4.1 (13.11.2026): eine Rechnung aus dem Pop-up wird – wie jede Lieferanten-Rechnung – eine Eingangsrechnung (Entwurf).
+        if ($did && (string) scalar("SELECT typ FROM dokument WHERE id=?", [$did]) === 'rechnung') {
+            require_once BX_ROOT . '/core/eingangsrechnung.php';
+            if (function_exists('nach_antwort')) nach_antwort(fn() => er_entwurf_aus_dokument((int)$did, 'team')); else er_entwurf_aus_dokument((int)$did, 'team');
+        }
     }
     header('Location: ?p=bestellung_pop&id=' . $id . ($nurVersand ? '&nur=versand' : '')); exit;
 }
