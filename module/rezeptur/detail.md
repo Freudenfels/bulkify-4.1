@@ -119,3 +119,5 @@ Neben „Fertigprodukt anfragen“ steht bei Stück-Formen der Knopf **„Premix
 **Rezeptur inaktiv (Block C, 11.11.2026):** Knöpfe „Inaktiv setzen“ / „Wieder aktivieren“ (nur Admin) im Status-Block. Eine inaktive Rezeptur ist nirgends mehr auswählbar (Produkt, Angebot, Auftrag, Kataloge), steht in der Rezepturliste nur mit Schalter und ist per Link erreichbar. Der Bulk- und Premix-Artikel wird mit gesperrt. Das Formular ändert den Status „inaktiv“ nicht, das geht nur über die Knöpfe.
 
 **Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.
+
+**PIB prüfen (13.11.2026, Paket Teil 3):** Oben steht der Kasten „PIB prüfen“ (`#pibpruefen`) mit jedem wartenden Auftrag dieser Rezeptur: PIB-Vorschau im Pop-up, Link „Nährwerte und Angaben“, Knopf „PIB geprüft“ (`aktion=pib_geprueft` → `pib_freigeben()`), Hinweis „PIB unvollständig: …“. Nach dem Speichern der Zutaten prüft `pib_rezeptur_geaendert()`, ob freigegebene Aufträge neu geprüft werden müssen.

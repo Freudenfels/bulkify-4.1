@@ -50,3 +50,5 @@ Eine Kundenwahl „pro Tag“ (`$proTagOverride`) wird bei Pulver ignoriert (imm
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 Hochgeladenes PIB: PDF-Metadaten werden vor der Auslieferung geleert.
+
+**13.11.2026 (Paket Teil 3.5):** Kein „Erstellt am <heute>“ mehr oben. Unten stehen zwei Zeilen aus `$GLOBALS['pib_stand']` (gesetzt von `pib_ausliefern(..., $auftrag_id, $kunde_id)` bzw. `pib_mail_kunde()`): „Freigegeben am …“, „Stand: … (Auftragsbestätigung)“ bei Altaufträgen oder „Entwurf – nicht freigegeben“, dazu „Heruntergeladen am …“.

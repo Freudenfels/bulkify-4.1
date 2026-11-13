@@ -44,3 +44,7 @@ bulkify-CoA: Lieferant nur als Nummer (neutralisiert), Methode ohne Lieferantenn
 
 
 **Lieferantennummer (Regel Nico 13.11.2026, ersetzt T4.2 aus Fable-2):** Der CoA (`build_coa_pdf()`) zeigt die Zeile „Lieferant“ wieder – nur mit der Lieferantennummer (L-xxxx), nie Firma oder Adresse.
+
+**13.11.2026 (Paket Teil 3.7):** `spec_release($p, $y, $stand, $abgerufen)` schreibt „Stand: … · Abgerufen am …“ statt „Erstellt … <heute>“.
+- Spec: Stand = Gültig ab bzw. Freigabe der Spec, sonst letzte Änderung; „Gültig ab“ nie mehr das heutige Datum.
+- bulkify-CoA: Stand = CoA-Freigabe der Charge, sonst Eingang der Charge.

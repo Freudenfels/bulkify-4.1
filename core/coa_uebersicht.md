@@ -66,3 +66,5 @@ In „Eingesetzte Rohstoffe und Quellchargen“ steht nur die Charge, keine Lief
 
 
 **Lieferantennummer (Regel Nico 13.11.2026, ersetzt T4.2 aus Fable-2):** Quellchargen stehen wieder mit Lieferantennummer in Klammern („LOT123 (L-2841)“), nie mit Firmenname.
+
+**13.11.2026:** Unten steht „Stand: <Tag der QM-Freigabe>“. Das Dokument wird einmal erzeugt und als Datei abgelegt, darum gibt es kein „Abgerufen am“.

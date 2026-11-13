@@ -323,6 +323,15 @@ Bevor Ware das Haus verlässt **oder** in Lager 2 für das Fulfillment verkaufba
 
 ---
 
+### 4.x PIB prüfen, bevor der Kunde es bekommt (Nico 13.11.2026)
+- Jeder neue Auftrag bekommt die Aufgabe „PIB prüfen – AB-xxxx, Produkt“ (dringend). Ihr Ziel ist die Rezeptur mit dem Kasten „PIB prüfen“: Vorschau, „Nährwerte und Angaben“ und der Knopf „PIB geprüft“.
+- Bis zur Freigabe ist der PIB-Download im Portal gesperrt (Schloss, „PIB wird geprüft“, auch serverseitig).
+- Nach der Freigabe bekommt der Kunde eine Mail mit dem PIB; fehlt das Etikett, steht die Bitte gleich darin. Ist das PIB unvollständig, gibt es keine Freigabe und keine Mail, sondern den Hinweis „PIB unvollständig: …“.
+- Datum auf dem PIB: „Freigegeben am“ und „Heruntergeladen am“; Altaufträge „Stand“ = Auftragsbestätigung.
+- Andere Kundendokumente (Spec, CoA) zeigen „Stand“ und „Abgerufen am“, nie das heutige Datum als Erstelldatum.
+- Ändert sich die Rezeptur (Zutaten, Mengen, Angaben), muss das PIB neu geprüft werden. Neue CoA- oder Spec-Werte innerhalb der Spec lösen das nicht aus.
+- Gilt für neue Aufträge. Altaufträge haben keine Prüfpflicht.
+
 ## 5. Die Auftragsseite (je Sache eine Stelle)
 
 Stand nach dem Umbau "Auftragsseite entschlacken" (live 08.11.2026):

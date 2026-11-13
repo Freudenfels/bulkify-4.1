@@ -492,3 +492,5 @@ Nico: „Grundcharge ist 2775, die Buchstaben stehen nur für verschiedene Tage.
 **Grundcharge (13.11.2026, Fable-3 T3.2):** Knopf „Laboranalyse …“ mit Grundcharge; Titel der Laboranalysen und Suchtreffer laufen durch `kunde_text_neutral()` (Lieferantennamen ersetzt, eigene Chargen gekürzt).
 
 **Produktionsdaten beim Kunden (13.11.2026, Fable-3 T3.3):** Status-Kachel „in Produktion“ ohne „seit <Datum>“. „Neu für Sie“: Produktionsbericht und Informationsdokument ohne Datum, solange der Auftrag nicht versandbereit ist (`auftrag_kunde_datum_frei()`). Energetisierung „Start …“ unverändert (Nico entscheidet).
+
+**PIB-Sperre (13.11.2026, Paket Teil 3.3):** `v=pib` liefert ohne Freigabe 403 („wird gerade geprüft“). Die drei PIB-Knöpfe (Bestellung, Etiketten-Liste, Dokumente) zeigen bis dahin `pib_gesperrt_html()` (Schloss, „PIB wird geprüft“). Altaufträge sind nicht betroffen.

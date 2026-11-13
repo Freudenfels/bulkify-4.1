@@ -416,6 +416,8 @@ if ($k && ($_GET['v'] ?? '') === 'pib') {
     $aid = (int)($_GET['aid'] ?? 0);
     $auPib = $aid ? one("SELECT produkt_id, stueck FROM auftrag WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
     $pid = (int)($auPib['produkt_id'] ?? 0);
+    // 13.11.2026 (Paket Teil 3.3): ohne Freigabe durch das Team kein Download – auch nicht über den direkten Link.
+    if ($auPib && function_exists('pib_kunde_darf') && !pib_kunde_darf($aid)) { http_response_code(403); header('Content-Type: text/plain; charset=utf-8'); echo 'Das Produktinformationsblatt wird gerade geprüft und steht danach hier bereit.'; exit; }
     // Vom Kunden vor dem Download gewaehlte Tagesdosis (Kapseln/Portionen pro Tag) – daraus rechnet das PIB
     // die Werte je Tagesdosis. 0/leer = ohne Tagesdosis (nur je Einheit). Obergrenze gegen Unsinn.
     $td = max(0, min(50, (int)($_GET['td'] ?? 0)));
@@ -425,7 +427,7 @@ if ($k && ($_GET['v'] ?? '') === 'pib') {
         'PIB heruntergeladen' . ($td > 0 ? ' · Tagesdosis: ' . $td . ' pro Tag' : ' · ohne Tagesdosis')
         . ' · ' . (string)($k['firma'] ?? ('Kunde ' . (int)$k['id'])), 'pib', 'auftrag', $aid);
     // Stückzahl je Packung aus dem Auftrag als Fallback (falls am Produkt nicht gepflegt).
-    if (!$pid || !pib_ausliefern($pid, 'Produktinfo-' . $aid, (int)($auPib['stueck'] ?? 0) ?: null, $td ?: null)) { http_response_code(404); echo 'Produktinformationsblatt nicht verfügbar.'; }
+    if (!$pid || !pib_ausliefern($pid, 'Produktinfo-' . $aid, (int)($auPib['stueck'] ?? 0) ?: null, $td ?: null, $aid, (int)$k['id'])) { http_response_code(404); echo 'Produktinformationsblatt nicht verfügbar.'; }
     exit;
 }
 // Etikett-Druckvorlage (fertige Vorlage mit Maßen/Stanzkontur) zum eigenen Auftrag herunterladen.
@@ -4967,6 +4969,9 @@ portal_head('Kundenportal · ' . $k['firma']);
       <?php if ($angVorhanden): ?><a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('angebot_pdf') ?>&aid=<?= (int)$a['angebot_id'] ?>">Angebot (AN)</a><?php endif; ?>
       <a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('ab_pdf') ?>&aid=<?= (int)$a['id'] ?>">Auftragsbestätigung (AB)</a>
       <?php if ($re): ?><a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('rechnung_pdf') ?>&aid=<?= (int)$a['id'] ?>">Rechnung (RE)</a><?php endif; ?>
+      <?php if (function_exists('pib_kunde_darf') && !pib_kunde_darf((int)$a['id'])): // 13.11.2026: PIB erst nach Prüfung durch das Team ?>
+      <div style="flex:1 1 220px;display:flex;justify-content:center;align-items:center;padding:6px"><?= pib_gesperrt_html() ?></div>
+      <?php else: ?>
       <form method="get" target="_blank" class="btn btn-ghost" style="flex:1 1 220px;display:flex;gap:8px;align-items:center;justify-content:center;padding:10px 14px;font-size:15px;cursor:default" title="Wie viele pro Tag? Daraus rechnet das PIB die Werte je Tagesdosis.">
         <input type="hidden" name="p" value="portal"><input type="hidden" name="token" value="<?= h($token) ?>">
         <input type="hidden" name="v" value="pib"><input type="hidden" name="aid" value="<?= (int)$a['id'] ?>">
@@ -4975,6 +4980,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         <input type="number" name="td" min="0" max="50" value="1" style="width:52px;text-align:center;padding:4px" title="Kapseln/Portionen pro Tag (0 = ohne Tagesdosis)"><?php endif; ?>
         <button class="btn btn-primary btn-sm" type="submit" data-busy="PIB…" style="white-space:nowrap">Produktinfo (PIB)</button>
       </form>
+      <?php endif; ?>
       <?php if (umkarton_druckvorlage_datei((int)($a['produkt_id'] ?? 0))): ?>
       <a class="btn btn-ghost" target="_blank" style="flex:1 1 200px;justify-content:center;padding:14px 16px;font-size:15px" href="<?= $portalLink('umkarton_vorlage') ?>&aid=<?= (int)$a['id'] ?>" title="Druckvorlage für den Umkarton (je 1 Glas)">Umkarton-Druckvorlage</a>
       <?php endif; ?>
@@ -5236,7 +5242,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <td><?= $masse !== '' ? h($masse) : '<span class="muted">–</span>' ?></td>
           <td><?= bx_badge($sb[0], $sb[1]) ?></td>
           <td class="bx-num" style="white-space:nowrap">
-            <a class="btn btn-ghost btn-sm" href="<?= $portalLink('pib') ?>&aid=<?= (int)$f['id'] ?>" download="PIB-<?= h($f['nummer']) ?>.pdf" title="Produktinformationsblatt herunterladen">PIB</a>
+            <?php if (function_exists('pib_kunde_darf') && !pib_kunde_darf((int)$f['id'])): ?><?= pib_gesperrt_html('PIB') ?><?php else: ?><a class="btn btn-ghost btn-sm" href="<?= $portalLink('pib') ?>&aid=<?= (int)$f['id'] ?>" download="PIB-<?= h($f['nummer']) ?>.pdf" title="Produktinformationsblatt herunterladen">PIB</a><?php endif; ?>
             <a class="btn btn-primary btn-sm" href="<?= $portalLink('bestellung') ?>&aid=<?= (int)$f['id'] ?>">Etikett hochladen</a>
           </td>
         </tr>
@@ -5374,7 +5380,7 @@ portal_head('Kundenportal · ' . $k['firma']);
           <?= $xRe ? $dkBtn($portalLink('rechnung_pdf') . '&aid=' . $xid, 'Rechnung') : '' ?>
           <?= !empty($x['angebot_id']) ? $dkBtn($portalLink('angebot_pdf') . '&aid=' . (int)$x['angebot_id'], 'Angebot') : '' ?>
           <?php foreach ($xLs as $l) echo $dkBtn($portalLink('lieferschein_pdf') . '&lid=' . (int)$l['id'], 'Lieferschein ' . $l['nummer']); ?>
-          <?= !$xIstDl && !empty($x['produkt_id']) ? $dkBtn($portalLink('pib') . '&aid=' . $xid, 'Produktinfo (PIB)') : '' ?>
+          <?= !$xIstDl && !empty($x['produkt_id']) ? ((function_exists('pib_kunde_darf') && !pib_kunde_darf($xid)) ? pib_gesperrt_html() : $dkBtn($portalLink('pib') . '&aid=' . $xid, 'Produktinfo (PIB)')) : '' ?>
           <?= !$xIstDl && !empty($x['produkt_id']) ? $dkBtn($portalLink('ppwr_pdf') . '&aid=' . $xid, 'Verpackungs-Konformität') : '' ?>
           <?= $xEt ? $dkBtn($portalLink('etikett_datei') . '&aid=' . $xid, auftrag_design_label($xid) . '-Design') : '' ?>
           <?= $xVorl ? $dkBtn($portalLink('druckvorlage') . '&aid=' . $xid, 'Etikett-Druckvorlage') : '' ?>

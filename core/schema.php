@@ -9,6 +9,7 @@ require_once __DIR__ . '/zeit_ort.php';   // heute_ort(): Tag in Europe/Berlin (
 require_once __DIR__ . '/kunde_charge.php';   // kunde_charge_anzeige(): Grundcharge beim Kunden (13.11.2026)
 require_once __DIR__ . '/charge_norm.php';
 require_once __DIR__ . '/rohstoff_alternative.php';   // Alternative zu einer Rohstoff-Anfrage (Dashboard + Kundenportal)
+require_once __DIR__ . '/pib_pruefung.php';   // PIB prüfen vor dem Kunden (Paket 13.11.2026 Teil 3)
 require_once __DIR__ . '/pa_ablauf.php';   // Produktion ein Weg (11.11.2026): Unter-Chargen, Teilmengen, Kartons – gemeinsam mit der Werk-App
 require_once __DIR__ . '/wareneingang_bestellung.php';   // Wareneingang gegen Bestellung (Einkauf gerade ziehen, Teil 1-3) – eine Stelle für Dashboard + Lager-App   // toleranter Chargen-Vergleich (Handbuch 4.5/4.12) – eine Stelle für alle Programme
 
@@ -12918,6 +12919,8 @@ function auftrag_name_snapshot(int $auftrag_id): void {
     if ($auftrag_id <= 0) return;
     q("UPDATE auftrag a JOIN produkt p ON p.id=a.produkt_id SET a.produkt_bezeichnung=p.name
        WHERE a.id=? AND a.produkt_id IS NOT NULL AND (a.produkt_bezeichnung IS NULL OR a.produkt_bezeichnung='')", [$auftrag_id]);
+    // 13.11.2026 (Paket Teil 3): jeder neue Auftrag (alle Anlage-Wege laufen hier durch) -> PIB prüfen, bevor der Kunde es bekommt.
+    if (function_exists('pib_pruefung_anlegen')) { try { pib_pruefung_anlegen($auftrag_id); } catch (Throwable $e) {} }
 }
 
 // Annahme-Hook für ALLE Annahmewege (auftrag_aus_angebot / _positionen / _zelle): legt bei der ANNAHME das

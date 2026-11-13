@@ -13,6 +13,12 @@ $fehler = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $f = fn($k) => trim($_POST[$k] ?? '');
     $aktion = $_POST['aktion'] ?? '';
+    // 13.11.2026 (Paket Teil 3.2): „PIB geprüft“ direkt im Kasten an der Rezeptur – gibt frei, erledigt die Aufgabe, mailt den Kunden.
+    if (!$neu && $aktion === 'pib_geprueft') {
+        $cuP = current_user();
+        $rP = pib_freigeben((int)($_POST['auftrag_id'] ?? 0), (string)($cuP['name'] ?? ''), isset($cuP['id']) ? (int)$cuP['id'] : null);
+        header('Location: ?p=rezeptur_detail&id=' . $id . '&pibmsg=' . rawurlencode(($rP['ok'] ? '1|' : '0|') . $rP['msg']) . '#pibpruefen'); exit;
+    }
     // Lebenszyklus setzen
     // Block C (11.11.2026): Rezeptur inaktiv setzen / wieder aktivieren (nur Admin) – Bulk-/Premix-Artikel mit gesperrt.
     if (!$neu && in_array($aktion, ['inaktiv_setzen', 'reaktivieren'], true) && has_role('admin')) {
@@ -159,6 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               [(int)$id, $iid, $bez, $mg, $i]);
         }
         rezeptur_bulkitem((int)$id);   // jede Rezeptur hat ein koppelbares Lager-Bulk-Item
+        if (!$neu && function_exists('pib_rezeptur_geaendert')) pib_rezeptur_geaendert((int)$id);   // 13.11.2026: geänderte Rezeptur = PIB neu prüfen
         // Überarbeitungsmodus abschließen: ursprünglichen (gesperrten) Status wiederherstellen und die
         // Nährwerte aus den jetzt korrigierten Zutaten frisch festschreiben; Entsperrung beenden.
         if (!$neu && isset($_SESSION['rez_unlock'][(int)$id]) && has_role('admin')) {
@@ -255,6 +262,33 @@ bx_head($neu ? 'Neue Rezeptur' : $v('name'),
         $neu ? 'Formulierung anlegen' : trim($v('nummer') . ' · ' . ($DFORM[$df] ?? $df)),
         $pibBtn . bx_btn('Zurück zur Liste', '?p=rezeptur', 'ghost'));
 if (!$neu && !empty($r['angelegt'])) echo '<div class="muted" style="font-size:12px;margin:-6px 0 10px">Angelegt am ' . h(fmt_zeit($r['angelegt'], 'd.m.Y H:i')) . (!empty($r['aktualisiert']) && $r['aktualisiert'] !== $r['angelegt'] ? ' · zuletzt geändert ' . h(fmt_zeit($r['aktualisiert'], 'd.m.Y H:i')) : '') . ' Uhr</div>';
+// 13.11.2026 (Paket Teil 3.2): Kasten „PIB prüfen“ – je wartendem Auftrag Vorschau, Nährwerte, Knopf „PIB geprüft“.
+if (!$neu && function_exists('pib_wartend_fuer_rezeptur')) {
+    if (isset($_GET['pibmsg'])) { [$okP, $txtP] = array_pad(explode('|', (string)$_GET['pibmsg'], 2), 2, '');
+        echo '<div class="bx-panel" style="padding:10px 14px;margin-bottom:10px;border-left:4px solid ' . ($okP === '1' ? 'var(--gruen)' : 'var(--err)') . '">' . h($txtP) . '</div>'; }
+    $pibWart = pib_wartend_fuer_rezeptur((int)$id);
+    if ($pibWart) {
+        echo '<div class="bx-panel" id="pibpruefen" style="border:2px solid #c0392b;margin-bottom:14px"><h2 style="margin-top:0">PIB prüfen</h2>'
+           . '<p class="muted" style="margin-top:-4px">Der Kunde bekommt das Produktinformationsblatt erst nach dieser Prüfung (Download bis dahin gesperrt). Bitte Zusammensetzung, Nährwerte und Angaben kontrollieren.</p>';
+        foreach ($pibWart as $w) {
+            $fehltP = pib_unvollstaendig((int)$w['produkt_id']);
+            $dlg = 'pibDlg' . (int)$w['id'];
+            echo '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)">'
+               . '<div style="flex:1;min-width:240px"><a href="?p=auftrag&id=' . (int)$w['id'] . '"><b style="font-weight:600">' . h((string)$w['nummer']) . '</b></a> · ' . h((string)$w['produkt']) . ($w['firma'] ? ' · ' . kunde_link((int)$w['kunde_id'], (string)$w['firma']) : '')
+               . ($fehltP ? '<div style="color:var(--err);font-size:13px;margin-top:4px">PIB unvollständig: ' . h(implode(', ', $fehltP)) . '</div>' : '') . '</div>'
+               . '<button type="button" class="btn btn-ghost btn-sm" onclick="bxPopup.open(\'' . $dlg . '\')">PIB-Vorschau</button>'
+               . '<a class="btn btn-ghost btn-sm" href="#naehrwerte">Nährwerte und Angaben</a>'
+               . '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="pib_geprueft"><input type="hidden" name="auftrag_id" value="' . (int)$w['id'] . '">'
+               . '<button class="btn btn-primary btn-sm" type="submit"' . ($fehltP ? ' disabled title="Erst die fehlenden Angaben ergänzen"' : '') . '>PIB geprüft</button></form>'
+               . '</div>'
+               . '<dialog id="' . $dlg . '" class="bx-dialog" style="max-width:960px"><h2>PIB-Vorschau ' . h((string)$w['nummer']) . '</h2>'
+               . '<iframe src="?p=produkt_pib&id=' . (int)$w['produkt_id'] . '&aid=' . (int)$w['id'] . '" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:8px" loading="lazy"></iframe>'
+               . '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="pib_geprueft"><input type="hidden" name="auftrag_id" value="' . (int)$w['id'] . '">'
+               . '<div class="bx-pop-fuss"><a class="btn btn-ghost" href="#naehrwerte" onclick="bxPopup.close(\'' . $dlg . '\', true)">Nährwerte und Angaben</a><button class="btn btn-primary" type="submit"' . ($fehltP ? ' disabled' : '') . '>PIB geprüft</button></div></form></dialog>';
+        }
+        echo '</div>';
+    }
+}
 if (!$neu && !$pibProdukte) echo '<div class="muted" style="font-size:12px;margin:-2px 0 10px">PIB direkt aus der Rezeptur (Komposition, Nährwertdeklaration, Kapselgröße). Verpackung, Verzehrempfehlung und Nettofüllmenge kommen hinzu, sobald ein Produkt/Auftrag dazu entsteht.</div>';
 // Form-Warnung: Öl-/Flüssig-Rohstoffe in einem trockenen Produkt (z. B. „Hagebutte Öl" in einem Pulver).
 if (!$neu && ($oelMiss = rezeptur_oel_in_trocken((int)$id))) {

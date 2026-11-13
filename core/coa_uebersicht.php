@@ -212,6 +212,9 @@ function build_coa_uebersicht_pdf(int $charge_id): ?string {
                        'QR-Code scannen – bestätigt Produkt, Charge und Mindesthaltbarkeit dieser Charge.');
     $y += 12;
     $klein(COA_UEBERSICHT_HINWEIS);
+    // 13.11.2026 (Paket Teil 3.7): „Stand“ = Tag der QM-Freigabe, an dem das Dokument einmal erzeugt und abgelegt wird
+    // (danach wird die Datei ausgeliefert, nicht neu erzeugt – ein „Abgerufen am“ ist bei einer fertigen Datei nicht möglich).
+    $klein('Stand: ' . (function_exists('heute_ort') ? date('d.m.Y', strtotime(heute_ort())) : date('d.m.Y')) . ' (QM-Freigabe der Charge)');
     // Kein Unterschrifts-/Stempelblock: spec_fuss schreibt Haftungsausschluss + „maschinell erstellt, ohne Unterschrift gültig".
     spec_fuss($p, $y + 14);
     return $p->output();

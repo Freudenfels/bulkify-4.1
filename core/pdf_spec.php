@@ -182,7 +182,8 @@ function spec_echt_panel(MiniPDF $p, float $y, int $charge_id): float {
 }
 
 // QS-Freigabeblock: links „erstellt", rechts Freigabe mit Signatur + Stempel („Tabea Albers").
-function spec_release(MiniPDF $p, float $y, string $datum): float {
+// $datum = Stand (Freigabe bzw. letzte inhaltliche Änderung), $abgerufen = heute (13.11.2026, Paket Teil 3.7: kein Tagesdatum als Erstelldatum).
+function spec_release(MiniPDF $p, float $y, string $datum, string $abgerufen = ''): float {
     $L = 40; $R = 555; $colR = 320;
     if ($y > 660) { $p->addPage(); $y = 48; }
     $y += 30;
@@ -194,7 +195,7 @@ function spec_release(MiniPDF $p, float $y, string $datum): float {
     $ly = $sy + 58;                 // Signaturlinie
     $p->line($L, $ly, $colR - 30, $ly, 0.5, SPEC_GRAU);
     $p->line($colR, $ly, $R, $ly, 0.5, SPEC_GRAU);
-    $p->text($L, $ly + 11, 'Erstellt: bulkify (maschinell) · ' . $datum, 8.5, false, SPEC_GRAU);
+    $p->text($L, $ly + 11, $abgerufen !== '' ? 'Stand: ' . $datum . ' · Abgerufen am ' . $abgerufen : 'Erstellt: bulkify (maschinell) · ' . $datum, 8.5, false, SPEC_GRAU);
     $p->text($colR, $ly + 11, 'Tabea Albers · Qualitätssicherung · ' . $datum, 8.5, false, SPEC_GRAU);
     return $ly + 22;
 }
@@ -267,7 +268,9 @@ function build_spec_pdf(int $item_id, bool $nur_freigegeben = false): ?string {
     if (!empty($it['zusaetze']))   $ident[] = ['Zusätze / Trägerstoffe', (string)$it['zusaetze']];
     if (!empty($it['artikelnummer'])) $ident[] = ['Artikel-Nr.', (string)$it['artikelnummer']];
     $ident[] = ['Spezifikations-Nr.', trim((string)($it['spec_nr'] ?? '') . '  ' . (string)($it['spec_version'] ?? '')) ?: '–'];
-    $ident[] = ['Gültig ab', $fmtD($it['spec_gueltig_ab'] ?? '') ?: date('d.m.Y')];
+    // Stand = Freigabe der Spec (bzw. Gültig-ab); nie das heutige Datum (13.11.2026)
+    $specStand = $fmtD($it['spec_gueltig_ab'] ?? '') ?: ($fmtD(substr((string)($it['spec_freigabe_am'] ?? ''), 0, 10)) ?: ($fmtD(substr((string)($it['aktualisiert'] ?? $it['angelegt'] ?? ''), 0, 10)) ?: '–'));
+    $ident[] = ['Gültig ab', $specStand];
     $y = spec_grid($p, $y, $ident);
 
     // Gehalt (Assay) – aus dem gewählten Payload (freigegebener Snapshot oder Live).
@@ -312,7 +315,7 @@ function build_spec_pdf(int $item_id, bool $nur_freigegeben = false): ?string {
         if ($y > 780) { $p->addPage(); $y = 48; }
         $p->text($L, $y, $wl, 9, false, SPEC_GRAU); $y += 12;
     }
-    $y = spec_release($p, $y, date('d.m.Y'));
+    $y = spec_release($p, $y, $fmtD(substr((string)($it['spec_freigabe_am'] ?? ''), 0, 10)) ?: $specStand, function_exists('heute_ort') ? date('d.m.Y', strtotime(heute_ort())) : date('d.m.Y'));
     spec_fuss($p, $y + 18);
     return $p->output();
 }
@@ -373,7 +376,9 @@ function build_coa_pdf(int $charge_id): ?string {
         ? 'Die aufgeführten Analysenwerte entsprechen der Spezifikation.'
         : 'Dies ist eine Spezifikation (Zielwerte/Grenzwerte). Chargenspezifische Analysenergebnisse (z. B. Schwermetalle, Mikrobiologie) liegen separat als Analysenzertifikat vor.';
     foreach ($p->wrap($freigabe, $R - $L, 9, false) as $wl) { if ($y > 780) { $p->addPage(); $y = 48; } $p->text($L, $y, $wl, 9, false, SPEC_INK); $y += 12; }
-    $y = spec_release($p, $y, date('d.m.Y'));
+    // Stand = CoA-Freigabe der Charge, sonst Eingang der Charge (13.11.2026); dazu „Abgerufen am“ heute.
+    $coaStand = (string)($c['coa_freigegeben_am'] ?? '') !== '' ? (string)$c['coa_freigegeben_am'] : (string)($c['angelegt'] ?? '');
+    $y = spec_release($p, $y, $coaStand !== '' ? date('d.m.Y', strtotime($coaStand)) : '–', function_exists('heute_ort') ? date('d.m.Y', strtotime(heute_ort())) : date('d.m.Y'));
     spec_fuss($p, $y + 18);
     return $p->output();
 }

@@ -166,7 +166,7 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
     if ($formLbl !== '') $ident[] = ['Darreichungsform', $formLbl];
     if ($kg)             $ident[] = ['Kapselgröße', (string)$kg['name'] . ((float)($kg['volumen_ml'] ?? 0) > 0 ? ' · ' . $mg($kg['volumen_ml']) . ' ml' : '')];
     if ($einh > 0)       $ident[] = [$fuellEinh !== '' ? 'Füllmenge je Packung' : 'Einheiten pro Packung', $inhaltTxt()];
-    $ident[] = ['Erstellt am', (function_exists('fmt_zeit') ? fmt_zeit(gmdate('Y-m-d H:i:s'), 'd.m.Y, H:i') : date('d.m.Y, H:i')) . ' Uhr'];
+    // 13.11.2026 (Paket Teil 3.5): kein „Erstellt am <heute>“ mehr – das Datum steht unten (Freigegeben am / Stand + Heruntergeladen am).
     $y = spec_grid($p, $y, $ident);
 
     // Verpackung & Etikett (+ Leergewichte für die Brutto-Rechnung, + Etikettmaße für die Gestaltung)
@@ -425,12 +425,27 @@ function pib_pdf_render(array $prod, int $produkt_id, ?int $einheitenOverride = 
             'QR-Code scannen – bestätigt dieses bulkify-Produkt und seine Chargen-Nachweise.');
     }
 
+    // Datum unten (Teil 3.5): „Freigegeben am“ (Datum der Prüfung) bzw. bei Altaufträgen „Stand“ (Auftragsbestätigung),
+    // ohne Auftrag/ohne Freigabe „Entwurf – nicht freigegeben“; dazu immer „Heruntergeladen am“ (heute, Ortszeit).
+    $st = $GLOBALS['pib_stand'] ?? ['art' => 'entwurf', 'datum' => ''];
+    $dOrt = fn($utc) => $utc ? (function_exists('fmt_zeit') ? fmt_zeit((string)$utc, 'd.m.Y') : date('d.m.Y', strtotime((string)$utc))) : '';
+    $zeile1 = match ($st['art'] ?? '') {
+        'frei'  => 'Freigegeben am ' . $dOrt($st['datum']),
+        'alt'   => 'Stand: ' . $dOrt($st['datum']) . ' (Auftragsbestätigung)',
+        default => 'Entwurf – nicht freigegeben',
+    };
+    if ($y > 760) { $p->addPage(); $y = 54; }
+    $y += 14;
+    $p->text($L, $y, $zeile1, 9, true, [60, 60, 58]); $y += 13;
+    $p->text($L, $y, 'Heruntergeladen am ' . (function_exists('heute_ort') ? date('d.m.Y', strtotime(heute_ort())) : date('d.m.Y')), 9, false, [60, 60, 58]);
     spec_fuss($p, $y + 16);
     return $p->output();
 }
 
 // PIB ausliefern: hochgeladenes PIB (Vorrang) sonst Auto-PIB. Setzt Header + gibt Body aus. false = nichts da.
-function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformationsblatt', ?int $einheitenOverride = null, ?int $proTagOverride = null): bool {
+function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformationsblatt', ?int $einheitenOverride = null, ?int $proTagOverride = null, int $auftrag_id = 0, int $kunde_id = 0): bool {
+    // 13.11.2026: Datum unten nach dem Prüfstand des Auftrags (pib_stand_fuer_auftrag); ohne Auftrag = Entwurf.
+    $GLOBALS['pib_stand'] = ($auftrag_id > 0 && function_exists('pib_stand_fuer_auftrag')) ? pib_stand_fuer_auftrag($auftrag_id) : ['art' => 'entwurf', 'datum' => ''];
     $safe = preg_replace('/[^A-Za-z0-9._-]+/', '_', $dateiname) ?: 'Produktinformationsblatt';
     // Hat der Kunde eine Tagesdosis gewaehlt, IMMER frisch generieren (die hochgeladene Datei kennt sie nicht).
     $d = ($proTagOverride !== null && $proTagOverride > 0) ? null : pib_datei($produkt_id);
@@ -450,7 +465,7 @@ function pib_ausliefern(int $produkt_id, string $dateiname = 'Produktinformation
             return true;
         }
     }
-    $pdf = pib_pdf_bauen($produkt_id, $einheitenOverride, $proTagOverride);
+    $pdf = pib_pdf_bauen($produkt_id, $einheitenOverride, $proTagOverride, $kunde_id ?: null);
     if ($pdf === null) return false;
     header('Content-Type: application/pdf');
     header('Content-Disposition: inline; filename="' . $safe . '.pdf"');
