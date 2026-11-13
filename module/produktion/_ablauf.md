@@ -24,3 +24,6 @@ Die Verarbeitung (`uc_schliessen`, `uc_oeffnen`) steht in `detail.php`.
 **Charge-Abweichung nur bei echter Abweichung (13.11.2026):** `pa_charge_abweichend($charge, $vorgabe)` (core/pa_ablauf.php) ist die eine Regel: leer oder gleich der Vorgabe (Groß-/Kleinschreibung egal) = keine Abweichung. Nur dann gibt es das Ereignis „abweichung“ und die Aufgabe ans Büro (Start, Chargenwechsel, Nachtrag, KI-Karte); ein Grund ohne Abweichung wird ignoriert. Das Feld „Grund“ erscheint erst, wenn jemand die Charge ändert (`pa_grund_js()`, Element mit Klasse `pa-grund` und `data-vorgabe`).
 
 **Bulk-Auswahl im Nachtrag (Fable-4 T1.1, 13.11.2026):** Die Bulk-Charge der laufenden Unter-Charge steht immer in der Auswahl (auch mit Bestand 0, Zusatz „laufende Unter-Charge …“), dazu die Eimer des PA (`prod_charge`, Wert `e<id>`). detail.php zerlegt den Wert in `bulk_charge_id` / `prod_charge_id`.
+
+## Spalte „Produziert am“ (Nico 13.11.2026)
+Die Tabelle „Unter-Chargen und Teilmengen“ zeigt je Unter-Charge, wann produziert wurde: die Produktionstage ihrer Teilmengen (`pa_teilmenge.datum`, sonst Anlage), mehrere Tage durch Komma getrennt; ohne Teilmenge der Produktionstag (`pa_unter_charge.tag`) bzw. das Anlagedatum.

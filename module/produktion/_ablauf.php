@@ -41,13 +41,19 @@ $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl
   </div>
   <?php if (!$ucs): ?><p class="muted">Noch keine Unter-Charge. Start in der Werk-App (Bulk scannen, Fotos Linie und Stempel) oder unten „Teilmenge nachtragen“.</p>
   <?php else: ?>
-  <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Charge</th><th>Bulk / Eimer</th><th>MHD</th><th class="bx-num">Menge</th><th>Teilmengen</th><th class="bx-num">Kartons</th><th>Status</th><th>Protokoll</th></tr></thead><tbody>
+  <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Charge</th><th>Produziert am</th><th>Bulk / Eimer</th><th>MHD</th><th class="bx-num">Menge</th><th>Teilmengen</th><th class="bx-num">Kartons</th><th>Status</th><th>Protokoll</th></tr></thead><tbody>
   <?php foreach ($ucs as $u):
       $tmU = all("SELECT * FROM pa_teilmenge WHERE unter_charge_id=? ORDER BY id", [(int)$u['id']]);
       $kU = (int) scalar("SELECT COUNT(*) FROM pa_karton WHERE unter_charge_id=?", [(int)$u['id']]);
+      // Produziert am (Nico 13.11.2026): Tage der Teilmengen (Produktionsdatum), sonst Produktionstag bzw. Anlage der Unter-Charge
+      $tageU = array_values(array_unique(array_filter(array_map(fn($t) => substr((string)($t['datum'] ?: $t['angelegt']), 0, 10), $tmU))));
+      if (!$tageU) $tageU = [substr((string)($u['tag'] ?: $u['angelegt']), 0, 10)];
+      sort($tageU);
+      $prodAm = implode(', ', array_map(fn($d) => date('d.m.Y', strtotime($d)), $tageU));
       $bulkTxt = $u['bulk_charge_id'] ? (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#',id)) FROM charge WHERE id=?", [(int)$u['bulk_charge_id']]) : ($u['prod_charge_id'] ? 'Eimer ' . (string) scalar("SELECT CONCAT(nummer, COALESCE(sub_kennung,'')) FROM prod_charge WHERE id=?", [(int)$u['prod_charge_id']]) : '–'); ?>
     <tr style="vertical-align:top">
       <td><b style="font-weight:600"><?= h((string)$u['charge_nr']) ?></b><?= $u['fertig_charge_id'] ? ' <a href="?p=chargen&id=' . (int)$u['fertig_charge_id'] . '" class="muted" style="font-size:12px">Lager</a>' : '' ?><?= $u['abweichung_grund'] ? '<div class="muted" style="font-size:12px">abweichend: ' . h((string)$u['abweichung_grund']) . '</div>' : '' ?></td>
+      <td style="white-space:normal"><?= h($prodAm) ?></td>
       <td><?= h($bulkTxt) ?></td>
       <td><?= $u['mhd'] ? h(date('d.m.Y', strtotime((string)$u['mhd']))) : '–' ?></td>
       <td class="bx-num"><?= $nfA(pa_uc_menge((int)$u['id'])) ?></td>
