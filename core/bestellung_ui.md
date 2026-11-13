@@ -32,3 +32,5 @@ Stationen als einheitliche Leiste `ol.bx-schritte`: erledigt (grüner Haken), ak
 
 ## Stationen nur bei Portal-Lieferanten (Bestellseite 13.11.2026)
 Im Team (`$wer = 'team'`) zeigt `bestellung_ablauf_panel()` die Stationen-Leiste und „Nächster Schritt“ nur, wenn `bestellung_ist_portal($b)`; bei „direkt bestellt“ nur Termin und Versanddaten. Überschrift im Team „Termin und Versand“. Im Lieferantenportal unverändert.
+
+Nachtrag 13.11.2026: In der Lieferanten-Sicht (wer = lieferant) zeigt bestellung_ablauf_panel() kein Versandformular mehr, nur „Produktion geplant“. Versanddaten, Pakete und „versendet“ stehen im Bereich Versand der Lieferanten-Bestellseite (module/lieferant/bestellung.php). Die Team-Sicht ist unverändert.

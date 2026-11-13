@@ -61,3 +61,11 @@ Oberhalb von „Dokumente & Rechnung“ steht je Rechnung der Stand aus `liefera
 
 ## Rezeptur-Schnellansicht (13.11.2026)
 In der Liste ist der Artikel anklickbar, wenn die erste Position eine Rezeptur hat (Bulk-Item, Auftrag oder Produkt). Pop-up `lp_rezeptur_popup()` mit Zusammensetzung; Rohstoffe darin mit Wirkstoffgehalten.
+
+## Reihenfolge der Bestellseite (13.11.2026)
+1. Ablauf: Bestätigen mit Termin, Stationen, „Produktion geplant“ (Aktion lief_produktion). Ist der nächste Schritt „versendet“, führt der Knopf nach unten zu Versand.
+2. Positionen: Rezeptur als Text-Link (Schnellansicht-Pop-up lp_rezeptur_popup, kein Knopf).
+3. Dokumente: fehlende Unterlagen, Chargen & Dokumente (CoA je Charge), Labels / Aufkleber, Dokumente & Rechnung – vor dem Versand.
+4. Versand (#versand): Versandanbieter, Versandart, „Wie viele Pakete?“ – je Paket eine Zeile mit Sendungsnummer (Zeilen entstehen beim Tippen der Anzahl), optional Sendungsnummer der ganzen Sendung. Aktion lief_versand_neu speichert alles; ohne Sammelnummer gilt die erste Paketnummer als bestellung.tracking. Ab „versandbereit“ zusätzlich „Speichern und versendet melden“ (bestellung_station_setzen, prüft weiter CoA je Charge). Gelbe Hinweise oben, wenn CoA oder Unterlagen fehlen. Paket entfernen über paket_del im selben Formular (kein Formular im Formular).
+5. Zahlstatus, 6. Rückfragen ganz unten.
+Die alten Aktionen lief_versand und pakete_add bleiben für ältere Formulare erhalten.

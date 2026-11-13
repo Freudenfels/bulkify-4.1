@@ -68,13 +68,23 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
         }
         $o .= '</ol>';
         $naechster = $keys[$ist + 1] ?? null;
-        if (!$fertig && $naechster !== null && $naechster !== 'eingegangen')
+        if (!$fertig && $naechster === 'versendet' && $wer !== 'team')   // Lieferantenportal 13.11.2026: „versendet“ meldet der Bereich Versand
+            $o .= '<a class="btn btn-primary btn-sm" href="#versand" style="margin-top:4px">' . $h($t('Nächster Schritt', 'Next step', '下一步')) . ': ' . $h($stationen['versendet']) . ' – ' . $h($t('Versand unten eintragen', 'enter shipping below', '在下方填写发货信息')) . '</a>';
+        elseif (!$fertig && $naechster !== null && $naechster !== 'eingegangen')
             $o .= '<form method="post" style="margin:4px 0 0"><input type="hidden" name="aktion" value="lief_station"><input type="hidden" name="station" value="' . $h($naechster) . '">'
                 . '<button class="btn btn-primary btn-sm" type="submit">' . $h($t('Nächster Schritt', 'Next step', '下一步')) . ': ' . $h($stationen[$naechster]) . '</button></form>';
         }
 
+        // 3) Lieferantenportal (13.11.2026): hier nur „Produktion geplant“; Versanddaten, Pakete und „versendet“ stehen im Bereich
+        //    Versand der Bestellseite (nach Positionen und Dokumenten), damit nichts doppelt abgefragt wird.
+        if (!$fertig && $wer !== 'team') {
+            $o .= '<form method="post" class="bx-row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:16px"><input type="hidden" name="aktion" value="lief_produktion">'
+                . '<div class="bx-field" style="margin:0"><label>' . $t('Produktion geplant', 'Production planned', '计划生产日期') . '</label>'
+                . '<input type="date" name="produktion_geplant" value="' . $h($b['produktion_geplant'] ?? '') . '"></div>'
+                . '<button class="btn btn-ghost btn-sm" type="submit">' . $t('Speichern', 'Save', '保存') . '</button></form>';
+        }
         // 3) Versanddaten – Pflicht, bevor „versendet" gesetzt werden kann.
-        if (!$fertig) {
+        elseif (!$fertig) {
             // Eine gemeinsame Versandart-Liste für Anfrage/Angebot UND Bestellung – mehrsprachig.
             // Ein in einem Angebot gewählter Alt-Wert bleibt als Option erhalten und wird lesbar beschriftet.
             $va = array_keys(versandart_liste());
