@@ -84,7 +84,7 @@ function rechnung_frei_erstellen(array $positionen, array $opt = []): ?int {
     $pos = [];
     foreach ($positionen as $p) {
         if (trim((string)($p['bezeichnung'] ?? '')) === '') continue;
-        $menge = zahl_lesen((string)($p['menge'] ?? 1), true); if ($menge <= 0) $menge = 1;
+        $menge = ki_zahl($p['menge'] ?? 1);   // Fable-4 T2.3: KI-Zahl bleibt Zahl (2.125 kg), Text wie bisher if ($menge <= 0) $menge = 1;
         $pos[] = [
             'artikelnr'   => trim((string)($p['artikelnr'] ?? '')),
             'bezeichnung' => (string)$p['bezeichnung'],
@@ -206,7 +206,7 @@ function rechnung_import_positionen_ki(string $pfad): array {
     foreach ($list as $p) {
         if (!is_array($p)) continue;
         $bez = trim((string)($p['bezeichnung'] ?? '')); if ($bez === '') continue;
-        $menge = zahl_lesen((string)($p['menge'] ?? 1), true); if ($menge <= 0) $menge = 1;
+        $menge = ki_zahl($p['menge'] ?? 1);   // Fable-4 T2.3: KI-Zahl bleibt Zahl (2.125 kg), Text wie bisher if ($menge <= 0) $menge = 1;
         $pos[] = ['bezeichnung' => mb_substr($bez, 0, 255), 'menge' => $menge,
                   'einheit' => mb_substr(trim((string)($p['einheit'] ?? '')), 0, 20),
                   'einzelpreis' => $num($p['einzelpreis'] ?? $p['preis'] ?? 0),

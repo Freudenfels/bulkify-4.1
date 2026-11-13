@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'ki_ex
                     'artikelnr' => trim((string)($p['artikelnr'] ?? $p['artikelnummer'] ?? '')),
                     'bez'       => $bez,
                     'besch'     => trim((string)($p['beschreibung'] ?? '')),
-                    'menge'     => zahl_lesen((string)($p['menge'] ?? 1), true) ?: 1,
+                    'menge'     => ki_zahl($p['menge'] ?? 1) ?: 1,   // Fable-4 T2.3
                     'einheit'   => trim((string)($p['einheit'] ?? 'Stk.')) ?: 'Stk.',
                     'preis'     => zahl_lesen((string)($p['einzelpreis'] ?? $p['preis'] ?? 0)),
                     'ust'       => zahl_lesen((string)($p['ust'] ?? $ustStdV)),

@@ -42,3 +42,12 @@ if (!function_exists('betrag_lesen')) {
 if (!function_exists('betrag_lesen_null')) {
     function betrag_lesen_null($roh): ?float { $r = trim((string)$roh); return ($r === '' || !preg_match('/\d/', $r)) ? null : betrag_lesen($r); }
 }
+
+// KI-Zahl lesen (Fable-4 T2.3, 13.11.2026): Die KI liefert JSON – Mengen sind dort echte Zahlen mit Punkt (2.125 = 2,125 kg).
+// Ist der Wert schon eine Zahl (int/float), wird er unverändert übernommen; nur Text („2.125 kg“, „1.000“) geht durch zahl_lesen().
+if (!function_exists('ki_zahl')) {
+    function ki_zahl($wert, bool $mengenfeld = true): float {
+        if (is_int($wert) || is_float($wert)) return (float) $wert;
+        return zahl_lesen((string) $wert, $mengenfeld);
+    }
+}

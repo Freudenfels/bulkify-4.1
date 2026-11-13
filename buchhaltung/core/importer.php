@@ -145,7 +145,7 @@ function imp_ki_auslesen(string $pfad): array {
     foreach ((array)($d['positionen'] ?? []) as $p) {
         $typ = strtolower(trim((string)($p['typ'] ?? 'produkt'))); if (!in_array($typ, ['produkt', 'verpackung', 'etikett'], true)) $typ = 'produkt';
         $pos[] = ['typ' => $typ, 'gruppe' => (int)($p['gruppe'] ?? 1) ?: 1, 'bezeichnung' => trim((string)($p['bezeichnung'] ?? '')),
-                  'menge' => zahl_lesen((string)($p['menge'] ?? 0), true), 'einheit' => trim((string)($p['einheit'] ?? '')), 'preis' => zahl_lesen((string)($p['preis'] ?? 0))];
+                  'menge' => ki_zahl($p['menge'] ?? 0), 'einheit' => trim((string)($p['einheit'] ?? '')), 'preis' => zahl_lesen((string)($p['preis'] ?? 0))];
     }
     return ['ok' => true, 'roh' => json_encode($d, JSON_UNESCAPED_UNICODE), 'daten' => [
         'art' => $art, 'kunde_name' => trim((string)($d['kunde_name'] ?? '')), 'nummer' => trim((string)($d['nummer'] ?? '')),

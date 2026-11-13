@@ -9,3 +9,5 @@ Eine Regel zum Lesen getippter Zahlen für Dashboard, CRM und Buchhaltung (Nachb
 - **`betrag_lesen_null($roh)`**: wie oben, leer = null (CRM „Wert in €“).
 
 Gewichte liest `gewicht_lesen()` (core/gewicht.php).
+
+**KI-Zahlen (Fable-4 T2.3, 13.11.2026):** `ki_zahl($wert, $mengenfeld = true)` – ist der Wert aus dem KI-JSON schon eine Zahl (int/float), wird er unverändert übernommen (2.125 = 2,125 kg); nur Text geht durch `zahl_lesen()`. Genutzt für Positionsmengen im Rechnungs-Import, Belegimport, „Rechnung frei“, Gutschrift aus KI und Staffelmengen im Lieferantenkatalog.
