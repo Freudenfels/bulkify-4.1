@@ -19,3 +19,5 @@ Anleitung, Abschnitt Dateien: „Fehlt eine CoA oder Spezifikation, steht sie un
 
 ## Neu geschrieben (13.11.2026)
 DE/EN/中文, 16 Abschnitte mit Icon in der Reihenfolge des Menüs: Anmelden, Übersicht, Fehlende Unterlagen (Bestell-Sperre), Anfragen (Variante, Staffel, „Preis gültig bis“, CoA/Spec nötig, „Angebot abgeben/anpassen“), Bestellung bestätigen (Termin + Name; danach Termin nur über Rückfrage), Fortschritt, Chargen und Dokumente (CoA je Charge vor „versendet“), Aufkleber (Supplier no.), Versanddaten, Rechnung und Zahlung („bezahlt am“), Rohstoff- und Fertigprodukt-Preise, Katalog, Dateien, Rückfragen, Meine Daten mit Bankverbindung (keine „Zahlungsbedingungen“), Handy. 中文: CoA, 保质期, 资质证书 einheitlich.
+
+**Fable-6 T5.1 (13.11.2026):** Die Anleitung in DE/EN/中文 nennt die Quarantäne-Regel: Fehlen Unterlagen, bestellen wir trotzdem, die gelieferte Ware bleibt aber in Quarantäne, bis die Unterlage da ist. Der Satz „können wir nicht bestellen“ ist entfernt.

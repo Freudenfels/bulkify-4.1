@@ -208,11 +208,12 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
 - **Rohstoff-Dubletten (Regel Nico 10.11.2026):** gleiche Qualität/Spezifikation von verschiedenen Lieferanten = **ein** Artikel mit mehreren Lieferantenpreisen. Andere Spezifikation (13 % vs. 20 % Mg, Bio vs. konventionell, anderer Extraktgehalt) = eigener Artikel. **Bulk-Kapseln, Premixe und Fertigware mit anderer Kapselgröße (z. B. 0 vs. 00), anderem Füllgewicht oder Kapselmaterial sind immer eigene Artikel** - Zusammenführen ist dort gesperrt. Seite "Artikel zusammenführen" (Gruppen je Warenart mit Vergleich, Nico wählt den Hauptartikel; Chargen, Bestellpositionen, Rezepturzeilen, Lieferantenpreise, Dokumente ziehen um; der alte Artikel wird gesperrt, sein Name bleibt Synonym). Beim Anlegen warnt "Meintest du …?". Artikelsuche überall mit Synonymen und sichtbarer Kapselgröße.
 - Dustin sieht in der Lager-App die Liste **"Erwartete Lieferungen"** (offene Bestellungen, "unterwegs"). Er tippt die Lieferung an; Artikel, Menge, Auftrag, Rezeptur, Kapselgröße sind übernommen. Freie Anlage ist möglich (bevorzugt aus vorhandenen Artikeln; "Neuer Artikel" nur über eigenen Knopf mit Pflichtangaben, jede Neuanlage meldet sich als Aufgabe zum Prüfen/Zusammenführen).
 - **Charge blind eintippen:** Dustin tippt die Charge **vom Gebinde ab, ohne Vorschlag**. Das System gleicht mit der Charge aus der Bestellung/dem CoA ab:
-  1. **Gleich** (tolerant: Punkte, Leerzeichen, Bindestriche, Groß-/Kleinschreibung egal - "2799.A" = "2799A" = "2799 a") → Ware ist sofort frei.
+  1. **Gleich** (tolerant: Punkte, Leerzeichen, Bindestriche, Groß-/Kleinschreibung egal - "2799.A" = "2799A" = "2799 a") → Ware ist sofort frei – **außer** es fehlen CoA/Spec des Lieferanten (dann Quarantäne, 4.3 Unterlagen-Regel).
   2. **Ähnlich** (z. B. Zahlendreher 69/96, ein Zeichen anders) → Rückfrage: "Bitte noch einmal aufs Gebinde schauen - auf dem CoA steht …". Dustin korrigiert.
   3. **Passt gar nicht** → Ware geht in **Quarantäne**, Nico und Tabea bekommen sofort eine Benachrichtigung + Aufgabe.
   - Liegt noch keine Charge aus CoA/Bestellung vor: Eingabe wird übernommen, Abgleich passiert, sobald das CoA kommt; bis dahin Aufgabe "CoA fehlt".
 - **Ware ist standardmäßig frei.** Quarantäne nur bei bewusst gewähltem "Problem" (Beschädigung, Abweichung) oder bei Chargen-Mismatch (oben).
+- **Quarantäne trotz „frei“ (Code-Stand 13.11.2026, Fable-6):** Fehlen CoA/Spec des Lieferanten, geht die Charge beim Eingang **immer** in Quarantäne (`charge.unterlagen_fehlt`). Das gilt auch beim späteren Verknüpfen mit einer Bestellung. Ohne Bestellung ist der **Lieferant Pflicht** bei Rohstoff, Bulk und Fertigware; fehlt er doch, bleibt die Charge in Quarantäne. Freigeben darf nur QM, und nur wenn nichts mehr fehlt (auch „gesperrt → frei“). Aus Quarantäne und „gesperrt“ wird nie entnommen. Eine Inventur ändert den Status nie (Quarantäne bleibt Quarantäne, auch nach 0 und Wiederfinden).
 - **Gewicht je Karton** bei wiegbarer Ware (Rohstoffe, Bulk, Pulver): Zeile je Karton, gleichmäßig vorbelegt, jede änderbar, Summe/Differenz laufend, **bei Differenz gesperrt**. Echtes Gewicht am Gebinde hinter dem Barcode; Scan zeigt den echten Inhalt; Entnahme und Rückgabe (neu wiegen, "ordentlich verschlossen") je Gebinde. (Gebaut - Rückmeldung "Gewicht pro Gebinde".)
 - **Bulkware** wird nur auf den Bulk-Artikel der Rezeptur gebucht (keine losen "Bulk #0"-Artikel mehr); die **Kapselgröße** kommt automatisch aus Auftrag/Rezeptur.
 - **Zuordnung zum Auftrag:** Beim Wareneingang gegen eine verknüpfte Bestellung hängt die Ware automatisch am Auftrag, und der Auftrag springt auf "Material da".
@@ -296,8 +297,8 @@ Nach der Wahl geht es direkt weiter: "Für Eigenproduktion fehlen 225 kg L-Carno
 - Druck über die Lager-Druck-Brücke auf den Produktionsdrucker (100 × 150 mm).
 
 ### 4.11 Fertigware
-- Eigene Fertigware ist nach der Produktion **sofort frei** (keine QM-Sperre beim Einbuchen) und liegt in Lager 1.
-- **Automatisch erzeugt:** das zusammenfassende **CoA** je Charge beim Einbuchen (Übersicht aus den Rohstoff-Analysen, ehrlich gekennzeichnet "nicht am Fertigprodukt gemessen", Mikrobiologie nur als Rohstoffwert, claims-neutral; ein echtes Fertigprodukt-Labor-CoA hat Vorrang) und der **Produktionsbericht** beim Produktionsabschluss.
+- **QM-Gate (gilt wieder ab 13.11.2026, Fable-6 P12, Anweisung Nico):** Eigene Fertigware aus der Produktion liegt nach dem Einbuchen in Lager 1 **in Quarantäne**, bis QM (Tabea) sie freigibt. Freigeben geht in der Lager-App unter „Freigaben“ oder im Dashboard. Versendet und entnommen wird nur freigegebene Ware; auch ein Teilversand nimmt nur freigegebene Chargen. Chargen von vor dem 13.11.2026 bleiben, wie sie sind. *(Vorher, 04.11.–13.11.2026: „sofort frei, keine QM-Sperre“.)*
+- **Automatisch erzeugt:** das zusammenfassende **CoA** je Charge bei der QM-Freigabe (Übersicht aus den Rohstoff-Analysen, ehrlich gekennzeichnet "nicht am Fertigprodukt gemessen", Mikrobiologie nur als Rohstoffwert, claims-neutral; ein echtes Fertigprodukt-Labor-CoA hat Vorrang) und der **Produktionsbericht** beim Produktionsabschluss.
 - Im Kundenportal sieht der Kunde an der Bestellung Charge(n), MHD, CoA, Produktionsbericht.
 
 ### 4.12 Labor (externe Analyse)
@@ -513,7 +514,7 @@ Diese MDs/Rückmeldungen bleiben als Detail-Quelle gültig, soweit sie dem Handb
 
 - Kein PIB vor der Bestellung auf Produkt-/Rezepturseite (Schutz vor Weitergabe der Unterlagen an andere Hersteller).
 - Keine separate Produktionsfreigabe für ganze Aufträge (gesteuert über Material je Schritt + Reihenfolge).
-- Keine QM-Sperre beim Einbuchen eigener Fertigware.
+- ~~Keine QM-Sperre beim Einbuchen eigener Fertigware.~~ Seit 13.11.2026 gilt wieder das QM-Gate (4.11).
 - Keine Druckerei im System (die Etikettendruckerei hat keinen Zugang; Druckdaten laufen außerhalb).
 - Keine automatische Erinnerungsmail an Kunden (Lieferadresse) - Erinnern per Knopf durch das Team.
 - Keine Versandsperre wegen offener Rechnung (nur Hinweis).
@@ -628,3 +629,4 @@ Besonders melden: Stellen, an denen es **mehrere Wege** für dieselbe Sache gibt
 | 13.11.2026 | Nachbesserung Fable-Prüfung 2: gesperrt/inaktiv auch in globaler Suche (Schalter „auch inaktive“), Auswahlfeldern neuer Vorgänge, Vorbelegung Hauptlieferant (Hinweis „gesperrt“), „günstigster Lieferant“, Produkt-Treffer beim Anlegen und KI-/Namens-Zuordnung (1.9 stimmt jetzt) | Nico / Claude Code |
 | 13.11.2026 | Sofortfix „heute bestellt“: Unterlagen-Regel wird Quarantäne-Sperre statt Bestell-Sperre (4.3/4.4) – Bestellen und Einbuchen gehen immer, gelber Hinweis + Aufgabe „Unterlagen nachfordern“, Charge ohne CoA/Spec bleibt in Quarantäne (Freigabe erst mit Unterlage, Admin-Ausnahme mit Grund, QM-Aufgabe nach Nachreichen), „kein Dokument nötig“ am Artikel, „Schon bestellt am …“ an alten Sperr-Entwürfen |
 | 13.11.2026 | Fable-6 Teil 0: täglicher Lauf über GitHub Actions (07:00 UTC), Erinnerungs-Regeln (je Lieferant und Tag, offener Rest, max. 3, gesperrte raus), Mail-Bremse 20/Minute mit Warteschlange, Mail-Log unter Einstellungen → E-Mail | Nico / Claude Code |
+| 13.11.2026 | Fable-6 Teil 1–4: Etikettmaß fest durch die Verpackung (Datei ändert es nie, Admin mit Grund); Wareneingang ohne Bestellung: Lieferant Pflicht, sonst Quarantäne; Statusprüfung je Aktion an der Bestellung; Inventur und Lager-App halten Quarantäne; Einmal-Kennung gegen Doppelklick; eine Materialbuchung Dashboard/Werk-App; Mengenkorrektur Unter-Charge komplett/vor Etikett; KI-Meldung „ohne Bulk“, fremde Charge; QM-Gate Fertigware (4.11); Rechnung ein Weg (bezahlt nur in der Buchhaltung, Ersatz-Upload) | Nico / Claude Code |

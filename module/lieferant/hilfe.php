@@ -27,7 +27,7 @@ $T = [
     ['rohstoff_unterlagen', 'Fehlende Unterlagen', 'Zu jedem Rohstoff brauchen wir eine CoA oder eine Spezifikation, bei Fertigprodukten zusätzlich die Spezifikation des Gesamtprodukts.', [
       'Unter „Fehlende Unterlagen“ steht alles, was noch fehlt – gruppiert nach Artikel. Die Zahl im Menü zeigt, wie viele es sind.',
       '„Hochladen“ tippen, Datei wählen, bei Bedarf Ablaufdatum und Bemerkung eintragen. Erledigte Punkte verschwinden.',
-      'Solange Unterlagen fehlen, können wir nicht bestellen bzw. bleibt gelieferte Ware bei uns gesperrt.',
+      'Fehlen Unterlagen, bestellen wir trotzdem – die gelieferte Ware bleibt aber bei uns in Quarantäne (gesperrt), bis die Unterlage da ist.',
     ]],
     ['anfragen', 'Anfragen beantworten', 'Wir fragen einen Preis an – Sie tragen ihn ein.', [
       'Anfrage öffnen. Oben steht, was wir brauchen: Artikel, Menge und die Einheit für den Preis (z. B. je kg).',
@@ -35,7 +35,7 @@ $T = [
       'Ihre genaue Variante eintragen, z. B. „Magnesiumbisglycinat, 13 % Magnesium“.',
       'Andere Mengen, anderer Preis? „+ Staffel“ tippen und weitere Zeilen anlegen.',
       '„Preis gültig bis“ eintragen. Bei Rohstoffen mit schwankendem Preis ist das Datum Pflicht; leer heißt unbegrenzt.',
-      'CoA oder Spezifikation direkt an der Anfrage hochladen. Ohne Unterlagen können Sie den Preis abgeben, wir können aber nicht bestellen.',
+      'CoA oder Spezifikation direkt an der Anfrage hochladen. Ohne Unterlagen können Sie den Preis abgeben; bestellte Ware bleibt dann bei uns in Quarantäne, bis die Unterlage da ist.',
       'Mit „Angebot abgeben“ senden. Bis wir annehmen, ändern Sie über „Angebot anpassen“.',
     ]],
     ['auftraege', 'Bestellung bestätigen', 'Aus Ihrem Preis wird eine Bestellung. Die Zahl am Menü zeigt, wie viele noch zu bestätigen sind.', [
@@ -105,7 +105,7 @@ $T = [
     ['rohstoff_unterlagen', 'Missing documents', 'For every raw material we need a CoA or a specification; for finished products also the specification of the whole product.', [
       '“Missing documents” lists everything that is still missing – grouped by item. The number in the menu shows how many.',
       'Tap “Upload”, choose the file, add an expiry date and a note if needed. Completed items disappear.',
-      'As long as documents are missing, we cannot order, and delivered goods stay blocked with us.',
+      'If documents are missing, we still order – but delivered goods stay in quarantine (blocked) with us until the document is here.',
     ]],
     ['anfragen', 'Answer requests', 'We ask for a price – you enter it.', [
       'Open the request. At the top you see what we need: item, quantity and the unit for the price (e.g. per kg).',
@@ -113,7 +113,7 @@ $T = [
       'Enter your exact variant, e.g. “magnesium bisglycinate, 13 % magnesium”.',
       'Other quantities, other prices? Tap “+ Tier” and add more lines.',
       'Enter “Price valid until”. For raw materials with fluctuating prices the date is mandatory; empty means unlimited.',
-      'Upload a CoA or specification directly at the request. Without documents you can submit the price, but we cannot order.',
+      'Upload a CoA or specification directly at the request. Without documents you can submit the price; ordered goods then stay in quarantine with us until the document is here.',
       'Send with “Submit quote”. Until we accept it you can change it with “Adjust quote”.',
     ]],
     ['auftraege', 'Confirm an order', 'Your price becomes an order. The number in the menu shows how many are still to confirm.', [
@@ -183,7 +183,7 @@ $T = [
     ['rohstoff_unterlagen', '缺失文件', '每种原料都需要分析证书（CoA）或规格书；成品还需要整个产品的规格书。', [
       '“缺失文件”列出所有尚缺的文件，按物料分组。菜单上的数字表示数量。',
       '点击“上传”，选择文件，如需要可填写到期日期和备注。完成的项目会自动消失。',
-      '只要文件缺失，我们就无法下单，已交付的货物也会被我们冻结。',
+      '即使文件缺失，我们仍会下单——但已交付的货物会在我方隔离（冻结），直到收到文件为止。',
     ]],
     ['anfragen', '回复询价', '我们询价，您填写价格。', [
       '打开询价。上方写明我们需要的物料、数量以及计价单位（例如每公斤）。',
@@ -191,7 +191,7 @@ $T = [
       '填写您的具体规格，例如“甘氨酸镁，镁含量 13 %”。',
       '不同数量不同价格？点击“+ 阶梯价”添加更多行。',
       '填写“价格有效期至”。价格波动的原料必须填写日期；留空表示不限期。',
-      '直接在询价中上传分析证书（CoA）或规格书。没有文件也可以报价，但我们无法下单。',
+      '直接在询价中上传分析证书（CoA）或规格书。没有文件也可以报价；已订购的货物将在我方隔离，直到收到文件为止。',
       '点击“提交报价”发送。在我们采纳之前，可通过“修改报价”进行更改。',
     ]],
     ['auftraege', '确认订单', '报价被采纳后会生成订单。菜单上的数字表示待确认的订单数量。', [
