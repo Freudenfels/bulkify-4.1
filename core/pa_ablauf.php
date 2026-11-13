@@ -220,9 +220,14 @@ function pa_rest_storniert(int $pa_id): bool {
     catch (\Throwable $e) { return false; }
 }
 // Alter Einlager-Weg (Rest als eigene Charge ohne Unter-Charge): nicht, solange eine Unter-Charge läuft. '' = darf, sonst Grund.
-function pa_einlagern_alt_sperre(int $pa_id): string {
+// Fable-4 T1.2 (13.11.2026): Ist nichts mehr offen (Rest 0 bzw. Rest storniert), schließt das Einlagern die laufende Unter-Charge selbst
+// (Vermerk im Chargenprotokoll) und bucht weiter – vorher hing die Einlager-Aufgabe ohne Knopf. Bei Rest > 0 bleibt die Sperre.
+function pa_einlagern_alt_sperre(int $pa_id, string $von = ''): string {
     $uc = pa_aktuelle_unter_charge($pa_id);
-    return $uc ? 'Es läuft noch die Unter-Charge ' . $uc['charge_nr'] . ' – erst in der Werk-App abschließen, dann einlagern.' : '';
+    if (!$uc) return '';
+    $rest = pa_rest_storniert($pa_id) ? 0.0 : (float) pa_noch_offen($pa_id)['menge'];
+    if ($rest <= 0.0001) { pa_unter_charge_schliessen((int)$uc['id'], $von ?: 'Lager', 'beim Einlagern, nichts mehr offen'); return ''; }
+    return 'Es läuft noch die Unter-Charge ' . $uc['charge_nr'] . ' (offen ' . pa_mz($rest) . ' Stk) – erst in der Werk-App oder auf der Seite des Produktionsauftrags „abschließen“, dann einlagern.';
 }
 function pa_unter_charge(int $id): ?array { pa_schema(); return $id > 0 ? one("SELECT * FROM pa_unter_charge WHERE id=?", [$id]) : null; }
 function pa_aktuelle_unter_charge(int $pa_id): ?array {

@@ -54,7 +54,7 @@ $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl
       <td style="white-space:normal;font-size:13px"><?php foreach ($tmU as $t): ?><div><?= h(date('d.m.', strtotime((string)($t['datum'] ?: $t['angelegt'])))) ?> · <?= $nfA($t['menge']) ?> Stk<?= $t['umfang'] === 'vor_etikett' ? ' (vor Etikett)' : '' ?><?= $t['art'] === 'nachtrag' ? ' · nachgetragen' : '' ?><?= $t['mitarbeiter'] ? ' · ' . h((string)$t['mitarbeiter']) : '' ?><?= $t['geliefert'] ? ' · schon geliefert' : '' ?></div><?php endforeach; ?></td>
       <td class="bx-num"><?= $kU ?></td>
       <td><?= $u['status'] === 'laeuft' ? bx_badge('läuft', 'info') : bx_badge('fertig', 'ok') ?>
-        <?php if ($pa['status'] !== 'erledigt'): ?>
+        <?php if ($pa['status'] !== 'erledigt' || $u['status'] === 'laeuft'): // Fable-4 T1.2: laufende Unter-Charge immer abschließbar, auch bei erledigtem PA ?>
         <form method="post" style="margin:6px 0 0" <?= $u['status'] === 'laeuft' ? 'onsubmit="return confirm(\'Unter-Charge ' . h((string)$u['charge_nr']) . ' abschließen? Weitere Teilmengen mit demselben Bulk laufen dann unter einem neuen Buchstaben.\');"' : '' ?>>
           <input type="hidden" name="aktion" value="<?= $u['status'] === 'laeuft' ? 'uc_schliessen' : 'uc_oeffnen' ?>"><input type="hidden" name="uc_id" value="<?= (int)$u['id'] ?>">
           <button class="btn btn-ghost btn-sm" type="submit"><?= $u['status'] === 'laeuft' ? 'abschließen' : 'wieder öffnen' ?></button>

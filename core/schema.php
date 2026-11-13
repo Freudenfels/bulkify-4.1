@@ -3897,7 +3897,7 @@ function einlager_buchen(int $pa_id, string $wer = '', string $grund = ''): arra
     // bei Fulfillment-Kunden. Die Weiterleitung (an Kunden senden ODER an Lager 2 übergeben) entscheidet das
     // Lager erst beim Versand (auftrag_versenden / auftrag_ins_fremdlager). So ist der Ablauf für alle gleich.
     require_once __DIR__ . '/pa_ablauf.php';
-    if (($sp = pa_einlagern_alt_sperre($pa_id)) !== '') return ['ok' => false, 'msg' => $sp];   // Fable-3 T4.2
+    if (($sp = pa_einlagern_alt_sperre($pa_id, $wer)) !== '') return ['ok' => false, 'msg' => $sp];   // Fable-3 T4.2, Fable-4 T1.2: Rest 0 schließt selbst
     $cid  = produktion_fertigware_einbuchen($pa_id, $wer, $grund);
     $ziel = einlager_ziel_fuer_pa($pa_id);
     foreach (all("SELECT id FROM aufgabe WHERE ref_typ='einlagern' AND ref_id=? AND status='offen'", [$pa_id]) as $a)
