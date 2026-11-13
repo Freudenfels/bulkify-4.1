@@ -11,40 +11,26 @@ require_once __DIR__ . '/ui.php';        // status_text()
 
 // Offene Posten je Kunde (Brutto minus Zahlungen; überfälliger Anteil separat).
 function bh_op_je_kunde(): array {
-    return all(
-        "SELECT k.id AS kunde_id, k.firma,
-                COUNT(*) AS anz,
-                SUM(b.brutto - COALESCE(z.bez,0)) AS offen,
-                SUM(CASE WHEN b.faellig IS NOT NULL AND b.faellig < CURDATE()
-                         THEN b.brutto - COALESCE(z.bez,0) ELSE 0 END) AS ueberfaellig
-           FROM beleg b
-           LEFT JOIN kunden k ON k.id=b.kunde_id
-           LEFT JOIN (SELECT beleg_id, SUM(betrag) bez FROM zahlung GROUP BY beleg_id) z ON z.beleg_id=b.id
-          WHERE b.typ='rechnung' AND b.status IN ('offen','teilbezahlt')
-          GROUP BY k.id, k.firma
-          ORDER BY offen DESC");
+    // 13.11.2026: aus derselben Liste wie alle offenen Posten (core/offene_posten.php), kein eigenes SQL.
+    $g = [];
+    foreach (bh_op_rechnungen() as $r) {
+        $k = (int)$r['kunde_id'];
+        if (!isset($g[$k])) $g[$k] = ['kunde_id' => $r['kunde_id'], 'firma' => $r['kunde_firma'], 'anz' => 0, 'offen' => 0.0, 'ueberfaellig' => 0.0];
+        $g[$k]['anz']++;
+        $g[$k]['offen'] += (float)$r['rest'];
+        if ((int)$r['tage_ueberfaellig'] > 0) $g[$k]['ueberfaellig'] += (float)$r['rest'];
+    }
+    $g = array_values($g);
+    usort($g, fn($x, $y) => $y['offen'] <=> $x['offen']);
+    return $g;
 }
 
 // Offene Posten je Rechnung (Debitoren, Zeilenebene). $filter: '' = alle offenen, 'ueberfaellig' = nur fällige.
 // Liefert Rest (brutto − bezahlt), Tage überfällig und die aktuelle Mahnstufe. Nur Rechnungen (kein Storno).
 function bh_op_rechnungen(string $filter = '', int $kunde_id = 0): array {
-    $where = "b.typ='rechnung' AND b.status IN ('offen','teilbezahlt')";
-    $args = [];
-    if ($kunde_id) { $where .= " AND b.kunde_id=?"; $args[] = $kunde_id; }
-    if ($filter === 'ueberfaellig') $where .= " AND b.faellig IS NOT NULL AND b.faellig < CURDATE()";
-    return all(
-        "SELECT b.id, b.nummer, b.datum, b.faellig, b.brutto, b.status, b.kunde_id,
-                COALESCE(b.mahnstufe,0) AS mahnstufe, b.letzte_mahnung, b.kategorie,
-                k.firma AS kunde_firma,
-                COALESCE(z.bez,0) AS bezahlt,
-                (b.brutto - COALESCE(z.bez,0)) AS rest,
-                CASE WHEN b.faellig IS NOT NULL AND b.faellig < CURDATE()
-                     THEN DATEDIFF(CURDATE(), b.faellig) ELSE 0 END AS tage_ueberfaellig
-           FROM beleg b
-           LEFT JOIN kunden k ON k.id=b.kunde_id
-           LEFT JOIN (SELECT beleg_id, SUM(betrag) bez FROM zahlung GROUP BY beleg_id) z ON z.beleg_id=b.id
-          WHERE $where
-          ORDER BY (b.faellig IS NULL), b.faellig ASC, b.id ASC", $args);
+    // 13.11.2026: eine Rechnung mit dem Dashboard – core/offene_posten.php (offen + teilbezahlt, Brutto minus Zahlungen).
+    require_once __DIR__ . '/../../core/offene_posten.php';
+    return op_rechnungen($filter, $kunde_id);
 }
 
 // Jahre, für die es Belege gibt (neueste zuerst) – für die Jahr-Auswahl.
@@ -201,15 +187,8 @@ function bh_csv_betrag(float $x): string { return number_format($x, 2, ',', '');
 
 // Offene-Posten-Liste als CSV (UTF-8 mit BOM, Excel-freundlich).
 function bh_export_op_csv(): string {
-    $rows = all(
-        "SELECT b.nummer, b.datum, b.faellig, k.firma, b.brutto,
-                COALESCE(z.bez,0) AS bezahlt, (b.brutto - COALESCE(z.bez,0)) AS offen,
-                CASE WHEN b.faellig IS NOT NULL AND b.faellig < CURDATE() THEN DATEDIFF(CURDATE(), b.faellig) ELSE 0 END AS tage_ueberfaellig
-           FROM beleg b
-           LEFT JOIN kunden k ON k.id=b.kunde_id
-           LEFT JOIN (SELECT beleg_id, SUM(betrag) bez FROM zahlung GROUP BY beleg_id) z ON z.beleg_id=b.id
-          WHERE b.typ='rechnung' AND b.status IN ('offen','teilbezahlt')
-          ORDER BY b.faellig ASC, b.nummer ASC");
+    // 13.11.2026: gleiche Zeilen wie Offene Posten Debitoren (core/offene_posten.php).
+    $rows = array_map(fn($r) => $r + ['firma' => $r['kunde_firma'], 'offen' => $r['rest']], bh_op_rechnungen());
     $csv  = "\xEF\xBB\xBF"; // BOM
     $csv .= bh_csv_zeile(['Rechnungsnr', 'Datum', 'Faellig', 'Kunde', 'Brutto', 'Bezahlt', 'Offen', 'Tage ueberfaellig']);
     foreach ($rows as $r) {

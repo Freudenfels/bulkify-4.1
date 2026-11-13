@@ -135,7 +135,9 @@ if (!$neu) {
     $k_produkte = all("SELECT p.*, r.name AS rezeptur_name FROM produkt p LEFT JOIN rezeptur r ON r.id=p.rezeptur_id WHERE p.kunde_id=? ORDER BY p.name", [$kid]);
     $k_rezepturen = all("SELECT * FROM rezeptur WHERE kunde_id=? ORDER BY name", [$kid]);
     $umsatz = (float) scalar("SELECT COALESCE(SUM(netto),0) FROM beleg WHERE kunde_id=? AND typ='rechnung'", [$kid]);
-    $offen  = (float) scalar("SELECT COALESCE(SUM(brutto),0) FROM beleg WHERE kunde_id=? AND typ='rechnung' AND status='offen'", [$kid]);
+    // Offene Posten (13.11.2026): offen + teilbezahlt, Brutto minus Zahlungen – gleiche Rechnung wie Dashboard und Buchhaltung.
+    require_once BX_ROOT . '/core/offene_posten.php';
+    $offen  = op_summe($kid);
 }
 
 // ---- Reiter "Preise": Produkt + Menge -> kundenspezifischer Schnellpreis ----

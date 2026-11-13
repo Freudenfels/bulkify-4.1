@@ -3,6 +3,7 @@
 Reine Lese-/Aufbereitungslogik für den Buchhaltungs-Hub. Keine schreibenden Aktionen.
 
 ## Kennzahlen / Listen
+- `bh_op_rechnungen()` ruft seit 13.11.2026 `op_rechnungen()` aus `core/offene_posten.php` (eine Rechnung mit dem Dashboard). `bh_op_je_kunde()` und `bh_export_op_csv()` bauen auf genau diesen Zeilen auf, kein eigenes SQL mehr.
 - `bh_op_je_kunde()` – offene Posten je Kunde (offen + überfälliger Anteil).
 - `bh_jahre()` – Jahre mit Belegen (neueste zuerst).
 - `bh_umsatz_monate(int $jahr)` – Umsatz Netto/USt/Brutto je Monat (Rechnung − Gutschrift, ohne Storno).

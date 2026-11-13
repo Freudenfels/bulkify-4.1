@@ -3,6 +3,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/preis_gueltig.php';
+require_once BX_ROOT . '/core/offene_posten.php';   // op_rechnungen(): offene Posten wie in der Buchhaltung (13.11.2026)
 if (function_exists('pg_bald_pruefen')) { try { pg_bald_pruefen(); } catch (Throwable $e) {} }   // einmal am Tag: bald ablaufende Preise in offenen Angeboten melden
 
 // Damit auf einer frischen DB Zahlen da sind
@@ -18,7 +19,9 @@ $prod_offen     = (int) scalar("SELECT COUNT(*) FROM produktionsauftrag pa WHERE
 $versandAlle    = all("SELECT a.*, k.firma, p.name AS produkt FROM auftrag a LEFT JOIN kunden k ON k.id=a.kunde_id LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.status='erledigt' ORDER BY a.angelegt DESC");
 $versandAlle    = array_values(array_filter($versandAlle, fn($a) => ($a['kategorie'] ?? '') === 'dienstleistung' || auftrag_fortschritt_fertig($a)));
 $versandbereit  = count($versandAlle);
-$offene_posten  = (float) scalar("SELECT COALESCE(SUM(brutto),0) FROM beleg WHERE typ='rechnung' AND status='offen'");
+// Offene Posten (13.11.2026): offen + teilbezahlt, je Rechnung Brutto minus Zahlungen – eine Rechnung mit der Buchhaltung (core/offene_posten.php).
+$opRows         = op_rechnungen();
+$offene_posten  = round(array_sum(array_map(fn($r) => (float)$r['rest'], $opRows)), 2);
 $rohstoff_leer  = (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0
                                 AND (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='frei') <= 0");
 
@@ -26,7 +29,10 @@ $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 
 $neue_anfragen = all("SELECT a.*, k.firma FROM rezeptur_anfrage a LEFT JOIN kunden k ON k.id=a.kunde_id WHERE a.status='neu' ORDER BY a.angelegt DESC LIMIT 6");
 $versand_liste = array_slice($versandAlle, 0, 6);
-$offene_rechn  = all("SELECT b.*, k.firma FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id WHERE b.typ='rechnung' AND b.status='offen' ORDER BY b.datum DESC LIMIT 6");
+// Liste: die 6 neuesten offenen Rechnungen mit offenem Rest (nicht Brutto).
+$offene_rechn  = $opRows;
+usort($offene_rechn, fn($x, $y) => [(string)$y['datum'], (int)$y['id']] <=> [(string)$x['datum'], (int)$x['id']]);
+$offene_rechn  = array_slice($offene_rechn, 0, 6);
 
 render_header('dashboard', 'Dashboard');
 bx_head('Dashboard', 'Überblick über den laufenden Betrieb');
@@ -41,7 +47,7 @@ kachel('Neue Anfragen', $anfragen_neu ?: '<span class="muted">0</span>', '?p=anf
 kachel('Offene Angebote', $angebote_offen ?: '<span class="muted">0</span>', '?p=angebote');
 kachel('In Produktion', $prod_offen ?: '<span class="muted">0</span>', '?p=produktion');
 kachel('Versandbereit', $versandbereit ?: '<span class="muted">0</span>', '?p=versand', $versandbereit ? 'color:var(--gruen)' : '');
-kachel('Offene Posten', $offene_posten > 0 ? number_format($offene_posten,2,',','.').' €' : '<span class="muted">0 €</span>', '/buchhaltung/?p=rechnungen', $offene_posten > 0 ? 'color:var(--warn)' : '');
+kachel('Offene Posten', $offene_posten > 0 ? number_format($offene_posten,2,',','.').' €' : '<span class="muted">0 €</span>', '/buchhaltung/?p=op_debitoren', $offene_posten > 0 ? 'color:var(--warn)' : '');
 kachel('Rohstoffe leer', $rohstoff_leer ?: '<span class="muted">0</span>', '?p=lager', $rohstoff_leer ? 'color:var(--err)' : '');
 echo '</div>';
 ?>
@@ -74,7 +80,7 @@ echo '</div>';
       <?php if (!$offene_rechn): ?><tr><td class="muted">Keine offenen Rechnungen.</td></tr><?php endif; ?>
       <?php foreach ($offene_rechn as $b): ?>
         <tr style="cursor:pointer" onclick="location.href='/buchhaltung/?p=rechnung&id=<?= (int)$b['id'] ?>'">
-          <td><strong><?= h($b['nummer']) ?></strong></td><td><?= kunde_link($b['kunde_id'] ?? null, $b['firma']) ?></td><td class="bx-num"><?= $eur($b['brutto']) ?></td>
+          <td><strong><?= h($b['nummer']) ?></strong></td><td><?= kunde_link($b['kunde_id'] ?? null, $b['kunde_firma']) ?></td><td class="bx-num"><?= $eur($b['rest']) ?><?= $b['status'] === 'teilbezahlt' ? '<div class="muted" style="font-size:11px">teilbezahlt</div>' : '' ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody></table></div>

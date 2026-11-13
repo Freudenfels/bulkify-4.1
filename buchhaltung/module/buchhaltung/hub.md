@@ -8,6 +8,7 @@ nur Rolle `finance`. Gegliedert in Reiter (`?p=buchhaltung&tab=…`).
   Verbindlichkeiten (offen + überfällig), Saldo (Forderungen − Verbindlichkeiten), Umsatz Jahr.
   Panels „Überfällige Rechnungen" und „Zuletzt bezahlt", Schnellaktionen.
 - **Offene Posten** (`op`) – Forderungen (Debitoren): OP je Kunde (Summe offen + überfälliger Anteil), CSV-Export.
+  Die Kacheln „Forderungen (offen)“/„davon überfällig“ und die Liste „Überfällig“ kommen seit 13.11.2026 aus `bh_op_rechnungen()` (= `core/offene_posten.php`).
 - **Verbindlichkeiten** (`verbindlichkeiten`) – Kreditoren: offene Beträge je Lieferant + offene
   Eingangsrechnungen; „+ Eingangsrechnung erfassen" und CSV. Daten aus `core/kreditor.php`.
 - **Auswertung** (`auswertung`) – Umsatz je Monat (Netto/USt/Brutto, Mini-Balken) mit Jahr-Auswahl,

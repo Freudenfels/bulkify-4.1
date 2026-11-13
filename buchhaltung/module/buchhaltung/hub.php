@@ -31,15 +31,11 @@ function fkachel(string $k, $v, string $href, string $farbe = ''): void {
 // ===========================================================================
 if ($tab === 'uebersicht'):
 // ===========================================================================
-$op = (float) scalar(
-    "SELECT COALESCE(SUM(b.brutto - COALESCE(z.bez,0)),0) FROM beleg b
-       LEFT JOIN (SELECT beleg_id, SUM(betrag) bez FROM zahlung GROUP BY beleg_id) z ON z.beleg_id=b.id
-      WHERE b.typ='rechnung' AND b.status IN ('offen','teilbezahlt')");
-$op_ueberfaellig = (float) scalar(
-    "SELECT COALESCE(SUM(b.brutto - COALESCE(z.bez,0)),0) FROM beleg b
-       LEFT JOIN (SELECT beleg_id, SUM(betrag) bez FROM zahlung GROUP BY beleg_id) z ON z.beleg_id=b.id
-      WHERE b.typ='rechnung' AND b.status IN ('offen','teilbezahlt') AND b.faellig IS NOT NULL AND b.faellig < CURDATE()");
-$anz_offen = (int) scalar("SELECT COUNT(*) FROM beleg WHERE typ='rechnung' AND status IN ('offen','teilbezahlt')");
+// 13.11.2026: offene Posten aus einer Rechnung (core/offene_posten.php, gleich wie Dashboard und OP Debitoren).
+$opRows = bh_op_rechnungen();
+$op = 0.0; $op_ueberfaellig = 0.0;
+foreach ($opRows as $r) { $op += (float)$r['rest']; if ((int)$r['tage_ueberfaellig'] > 0) $op_ueberfaellig += (float)$r['rest']; }
+$anz_offen = count($opRows);
 $umsatz_jahr = (float) scalar(
     "SELECT COALESCE(SUM(CASE WHEN typ='gutschrift' THEN -netto ELSE netto END),0) FROM beleg
       WHERE typ IN ('rechnung','gutschrift') AND status<>'storniert' AND datum IS NOT NULL AND YEAR(datum)=YEAR(CURDATE())");
@@ -51,12 +47,8 @@ $verb = kr_op_summe();                 // offene Verbindlichkeiten (wir schulden
 $verb_ue = kr_op_ueberfaellig_summe();
 $saldo = $op - $verb;                  // Forderungen minus Verbindlichkeiten
 
-$ueberfaellig = all(
-    "SELECT b.*, k.firma, (b.brutto - COALESCE(z.bez,0)) AS rest, DATEDIFF(CURDATE(), b.faellig) AS tage
-       FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id
-       LEFT JOIN (SELECT beleg_id, SUM(betrag) bez FROM zahlung GROUP BY beleg_id) z ON z.beleg_id=b.id
-      WHERE b.typ='rechnung' AND b.status IN ('offen','teilbezahlt') AND b.faellig IS NOT NULL AND b.faellig < CURDATE()
-      ORDER BY b.faellig ASC LIMIT 8");
+$ueberfaellig = array_slice(array_map(fn($r) => $r + ['firma' => $r['kunde_firma'], 'tage' => $r['tage_ueberfaellig']],
+                 array_values(array_filter($opRows, fn($r) => (int)$r['tage_ueberfaellig'] > 0))), 0, 8);
 $zuletzt_bezahlt = all(
     "SELECT b.*, k.firma FROM beleg b LEFT JOIN kunden k ON k.id=b.kunde_id
       WHERE b.typ='rechnung' AND b.status='bezahlt' ORDER BY b.datum DESC, b.id DESC LIMIT 8");
