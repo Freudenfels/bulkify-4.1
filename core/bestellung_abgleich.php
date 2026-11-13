@@ -79,18 +79,27 @@ function bestellung_abgleich_panel(array $b): string {
     if (in_array((string)$b['status'], ['storniert', 'offen'], true)) return '';
     $pos = all("SELECT bp.*, i.name AS artikel, (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_chargen
                 FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id WHERE bp.bestellung_id=? AND bp.menge>0 ORDER BY bp.sort, bp.id", [(int)$b['id']]);
-    $offen = array_filter($pos, fn($p) => empty($p['rest_storniert_am']) && ((int)$p['n_chargen'] === 0 || (float)$p['geliefert_menge'] < (float)$p['menge'] * 0.98));
+    // Sofortfix 13.11.2026: auch Positionen, die „ohne Ware geschlossen“ wurden (Rest storniert ohne Positions-Storno, keine Charge) –
+    // dort kann die Ware nachträglich eingebucht bzw. eine ohne Bestellung gebuchte Charge verknüpft werden.
+    $ohneWare = fn($p) => !empty($p['rest_storniert_am']) && trim((string)($p['pos_storno_grund'] ?? '')) === '' && (int)$p['n_chargen'] === 0;
+    $offen = array_filter($pos, fn($p) => (empty($p['rest_storniert_am']) && ((int)$p['n_chargen'] === 0 || (float)$p['geliefert_menge'] < (float)$p['menge'] * 0.98)) || $ohneWare($p));
     if (!$offen) return '';
     $eingegangen = (string)$b['status'] === 'geliefert' || !empty($b['angekommen_am']);
     $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
-    $h = '<div class="bx-panel" id="abgleich"><h2 style="margin-top:0">Wareneingang zuordnen</h2>'
+    $h = '<div class="bx-panel" id="abgleich"><h2 style="margin-top:0">Wareneingang</h2>'
        . '<p class="muted" style="margin:0 0 12px">' . ($eingegangen ? 'Die Bestellung steht auf eingegangen, aber nicht jede Position hängt an einer eingebuchten Charge.' : 'Noch nicht (vollständig) eingegangen.')
-       . ' Vorschläge aus vorhandenen Chargen (gleicher Lieferant, gleicher oder ähnlicher Artikel, passende Menge, Eingang nach dem Bestelldatum). Nichts passiert automatisch.</p>';
+       . ' Ware ist da: „Ware ist da - einbuchen“. Liegt sie schon im Lager (ohne Bestellung gebucht), unten verknüpfen.</p>';
     foreach ($offen as $p) {
         $v = bestellung_abgleich_vorschlaege((int)$p['id']);
+        $vor = function_exists('webe_vormerkung') ? webe_vormerkung((int)$p['id']) : null;
         $h .= '<div style="margin:0 0 14px"><div><strong style="font-weight:600">' . h((string)($p['artikel'] ?: $p['bezeichnung'])) . '</strong> <span class="muted">· bestellt ' . $mz($p['menge']) . ' ' . h((string)$p['einheit'])
-            . ' · geliefert ' . $mz($p['geliefert_menge']) . ($p['n_chargen'] ? ' (' . (int)$p['n_chargen'] . ' Charge(n))' : '') . '</span></div>';
-        if (!$v) { $h .= '<div class="muted" style="font-size:13px;margin-top:4px">Keine passende Charge gefunden.' . (!$eingegangen ? ' <a href="?p=wareneingang&bp=' . (int)$p['id'] . '">Wareneingang buchen</a>' : '') . '</div></div>'; continue; }
+            . ' · geliefert ' . $mz($p['geliefert_menge']) . ($p['n_chargen'] ? ' (' . (int)$p['n_chargen'] . ' Charge(n))' : '') . '</span>'
+            . ($ohneWare($p) ? ' <span style="color:#8f231b;font-weight:600">ohne Ware geschlossen – nicht im Lager</span>' : '') . '</div>'
+            // Hauptknopf: Ware ist da -> Wareneingang dieser Position (Charge/MHD/Menge aus „Chargen & Dokumente“ vorbelegt)
+            . '<div class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0 4px"><a class="btn btn-primary" href="?p=wareneingang&bp=' . (int)$p['id'] . ($vor ? '&bch=' . (int)$vor['id'] : '') . '">Ware ist da - einbuchen</a>'
+            . ($vor ? '<span class="muted" style="font-size:13px">vorbelegt: Charge ' . h((string)$vor['charge_nr']) . ($vor['mhd'] ? ' · MHD ' . h(date('d.m.Y', strtotime((string)$vor['mhd']))) : '') . ($vor['menge'] !== null ? ' · ' . $mz($vor['menge']) . ' ' . h((string)$p['einheit']) : '') . '</span>' : '') . '</div>';
+        if (!$v) { $h .= '</div>'; continue; }
+        $h .= '<div class="muted" style="font-size:13px;margin-top:6px">Schon im Lager (ohne Bestellung gebucht)? Passende Chargen:</div>';
         $h .= '<div class="bx-tablewrap" style="margin-top:6px"><table class="bx-table"><thead><tr><th>Charge</th><th>Artikel</th><th class="bx-num">Menge</th><th>Eingang</th><th>Lieferant</th><th>Warum</th><th></th></tr></thead><tbody>';
         foreach ($v as $c)
             $h .= '<tr><td><a href="?p=chargen&id=' . (int)$c['id'] . '">' . h((string)($c['charge_nr'] ?: '#' . $c['id'])) . '</a></td><td>' . h((string)$c['artikel']) . '</td>'
@@ -103,11 +112,39 @@ function bestellung_abgleich_panel(array $b): string {
                 . '</td></tr>';
         $h .= '</tbody></table></div></div>';
     }
-    $h .= '<div class="bx-row" style="gap:8px;flex-wrap:wrap">'
-        . '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung als geliefert schließen? Offene Positionen zählen nicht mehr als unterwegs. Es wird keine Charge angelegt.\');"><input type="hidden" name="aktion" value="abgl_geliefert"><button class="btn btn-ghost btn-sm" type="submit" title="Ware ist gekommen, aber nicht einzeln eingebucht">als geliefert schließen</button></form>';
+    // Sofortfix 13.11.2026: „als geliefert schließen“ (ohne Charge) war die Falle – sah aus wie „Lieferung bestätigen“. Jetzt nur Admin,
+    // eingeklappt unter „Altlasten“, mit Rückfrage „Ist die Ware im Lager?“ (bestellung_altlast_dialog).
+    $h .= '<div class="bx-row" style="gap:8px;flex-wrap:wrap;align-items:center">';
     if (!$eingegangen) $h .= '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung stornieren?\');"><input type="hidden" name="aktion" value="storno"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b">stornieren</button></form>';
+    if (function_exists('has_role') && has_role('admin'))
+        $h .= '<details style="margin-left:auto"><summary class="muted" style="cursor:pointer;font-size:13px">Altlasten (nur Admin)</summary>'
+            . '<div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'dlgAltlast' . (int)$b['id'] . '\').showModal()">ohne Einbuchen schließen (Altlast)</button></div></details>'
+            . bestellung_altlast_dialog((int)$b['id']);
     $h .= '</div></div>';
     return $h;
+}
+// Pop-up „Ist die Ware im Lager?“ (Sofortfix 13.11.2026) – EINE Stelle für Bestellseite und Datenprüfung.
+// Ja: je offener Position der Wareneingang (vorbelegt aus „Chargen & Dokumente“). Nein (kam nie / nicht mehr nötig): schließen ohne
+// Charge, Rest storniert, Grund Pflicht (aktion abgl_geliefert auf der Bestellseite). $zurueck: Rücksprung nach dem Schließen.
+function bestellung_altlast_dialog(int $bestellung_id, string $zurueck = ''): string {
+    $pos = all("SELECT bp.id, bp.menge, bp.einheit, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '') AS name FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
+                WHERE bp.bestellung_id=? AND bp.menge>0 AND COALESCE(bp.pos_storno_grund,'')='' AND NOT EXISTS (SELECT 1 FROM charge c WHERE c.bestellung_position_id=bp.id) ORDER BY bp.sort, bp.id", [$bestellung_id]);
+    $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+    $ja = '';
+    foreach ($pos as $p) {
+        $vor = function_exists('webe_vormerkung') ? webe_vormerkung((int)$p['id']) : null;
+        $ja .= '<a class="btn btn-primary" style="margin:4px 0;display:block;text-align:left" href="?p=wareneingang&bp=' . (int)$p['id'] . ($vor ? '&bch=' . (int)$vor['id'] : '') . '">Ja, Ware ist da - jetzt einbuchen: '
+             . h((string)$p['name']) . ' · ' . $mz($p['menge']) . ' ' . h((string)$p['einheit']) . ($vor ? ' (Charge ' . h((string)$vor['charge_nr']) . ')' : '') . '</a>';
+    }
+    if ($ja === '') $ja = '<p class="muted" style="margin:0">Alle Positionen hängen schon an einer Charge.</p>';
+    return '<dialog id="dlgAltlast' . $bestellung_id . '" class="bx-dialog" style="max-width:640px"><h2 style="margin-top:0">Ist die Ware im Lager?</h2>'
+        . '<p class="muted" style="margin:0 0 10px">„Ohne Einbuchen schließen“ legt keine Charge an – die Ware zählt dann weder als unterwegs noch als Bestand. Ist die Ware da, bitte einbuchen.</p>'
+        . $ja
+        . '<form method="post" action="?p=bestellung&id=' . $bestellung_id . '" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">'
+        . '<input type="hidden" name="aktion" value="abgl_geliefert">' . ($zurueck !== '' ? '<input type="hidden" name="zurueck" value="' . h($zurueck) . '">' : '')
+        . '<div class="bx-field"><label>Nein, kam nie / nicht mehr nötig – Grund *</label><input type="text" name="grund" required maxlength="200" placeholder="z. B. Lieferant hat nicht geliefert, Bestellung nicht mehr nötig"></div>'
+        . '<div class="bx-row" style="gap:8px;justify-content:flex-end"><button type="button" class="btn btn-ghost" onclick="this.closest(\'dialog\').close()">Abbrechen</button>'
+        . '<button type="submit" class="btn btn-ghost" style="color:#8f231b">Nein – ohne Einbuchen schließen</button></div></form></dialog>';
 }
 
 // ---- Datenprüfung: alles in der Zeile (Nico 11.11.2026) ------------------------------------------------------------
@@ -187,7 +224,9 @@ function bestellung_abgleich_knoepfe(array $r): string {
     $b = one("SELECT status, angekommen_am FROM bestellung WHERE id=?", [$bid]);
     $eingegangen = $b && ((string)$b['status'] === 'geliefert' || !empty($b['angekommen_am']));
     return '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">'
-        . '<button type="button" class="btn btn-ghost btn-sm" data-dpabgl="geliefert" data-bestellung="' . $bid . '" data-frage="Als geliefert schließen? Offene Positionen zählen nicht mehr als unterwegs, es wird keine Charge angelegt.">als geliefert schließen</button>'
+        // Sofortfix 13.11.2026: kein direktes „als geliefert schließen“ mehr – Pop-up „Ist die Ware im Lager?“ (nur Admin).
+        . (function_exists('has_role') && has_role('admin') ? '<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'dlgAltlast' . $bid . '\').showModal()">ohne Einbuchen schließen (Altlast)</button>' . bestellung_altlast_dialog($bid, '?p=datenpruefung') : '')
+        . '<a class="btn btn-primary btn-sm" href="?p=bestellung&id=' . $bid . '#abgleich">Ware ist da - einbuchen</a>'
         . '<button type="button" class="btn btn-ghost btn-sm" data-dpabgl="rest" data-bestellung="' . $bid . '" data-frage="Rest stornieren? Die noch offene Menge zählt nicht mehr als unterwegs.">Rest storniert</button>'
         . (!$eingegangen ? '<button type="button" class="btn btn-ghost btn-sm" style="color:#8f231b" data-dpabgl="storno" data-bestellung="' . $bid . '" data-frage="Bestellung wirklich stornieren?">stornieren</button>' : '')
         . '</div>';
@@ -203,6 +242,7 @@ function bestellung_abgleich_aktion(string $aktion, int $bestellung_id, int $bp_
            && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND bestellung_position_id IS NULL", [$charge_id]) === 1;
         if (!$ok) return ['ok' => false, 'msg' => 'Charge oder Position nicht (mehr) passend - nichts geändert.'];
         webe_charge_verknuepfen($charge_id, $bp_id, false);
+        webe_nachtraeglich_eingebucht_vermerken($bp_id, $charge_id, $wer);   // Sofortfix 13.11.2026: Position war ohne Ware geschlossen
         aenderung_protokollieren('charge', $charge_id, ['bestellung_position_id' => null], ['bestellung_position_id' => $bp_id], 'datenpruefung');
         $cnr = (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#', id)) FROM charge WHERE id=?", [$charge_id]);
         log_aktivitaet('bestellung', $bestellung_id, 'team', 'Charge ' . $cnr . ' mit der Bestellung verknüpft (Datenprüfung).', 'status');
@@ -235,6 +275,8 @@ function bestellung_abgleich_aktion(string $aktion, int $bestellung_id, int $bp_
         return ['ok' => $r['ok'], 'msg' => $nr . ': ' . $r['msg'], 'offen' => bestellung_abgleich_offen_anzahl($bestellung_id)];
     }
     if ($aktion === 'geliefert') {
+        // Sofortfix 13.11.2026: nur noch über das Pop-up „Ist die Ware im Lager?“ mit Grund (Bestellseite, aktion abgl_geliefert).
+        return ['ok' => false, 'msg' => 'Bitte über „ohne Einbuchen schließen (Altlast)“ mit Grund – oder „Ware ist da - einbuchen“.'];
         webe_als_geliefert_schliessen($bestellung_id, $wer);
         log_aktivitaet('bestellung', $bestellung_id, 'team', 'Als geliefert geschlossen ohne eingebuchte Charge (Datenprüfung).', 'status');
         return ['ok' => true, 'msg' => $nr . ' als geliefert geschlossen.'];

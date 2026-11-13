@@ -398,6 +398,7 @@ $items   = erp_items_eingang();
 $rezepturen = function_exists('erp_rezeptur_liste') ? erp_rezeptur_liste() : [];   // für Fertigware/Bulk: Rezeptur-Picker
 $ki      = lg_ki_bereit();
 $erwartet = erp_erwartete_lieferungen();   // für Kachel "aus Liste wählen"
+$ohneEinbuchen = function_exists('erp_ohne_einbuchen_lieferungen') ? erp_ohne_einbuchen_lieferungen() : [];   // Sofortfix 13.11.2026
 $etProdukte = erp_etikett_produkte();       // für Kachel "Etiketten einbuchen" (je Produkt + Kunde)
 $etKunden   = erp_kunden_liste();            // „Anderes Etikett anlegen“
 $etAlleProd = erp_produkt_auswahl();
@@ -613,7 +614,7 @@ if ($gebucht):
     <div class="bx-panel we-weg" data-w="liste" hidden>
       <h2 style="margin-top:0">Ankommende Sendung wählen</h2>
       <div id="weListeInfo" class="muted"></div>
-      <?php if (!$erwartet): ?>
+      <?php if (!$erwartet && !$ohneEinbuchen): ?>
         <p class="muted" style="margin:var(--sp-2) 0 0">Aktuell keine Lieferungen unterwegs.</p>
       <?php else: ?>
       <div class="bx-row" id="weListeSuchZeile" style="gap:8px;align-items:center;margin-top:var(--sp-2)">
@@ -634,6 +635,15 @@ if ($gebucht):
           <span class="we-li-eta"><?= $eta !== '' ? h(date('d.m.', strtotime($eta))) : '' ?><?= $anz > 1 ? ' · ' . $anz . ' Pos.' : '' ?></span>
         </button>
         <?php endforeach; ?>
+        <?php if ($ohneEinbuchen): // Sofortfix 13.11.2026: Ware kam, Bestellung wurde aber ohne Einbuchen geschlossen ?>
+        <div class="muted" style="margin:12px 0 4px;font-weight:600">Geschlossen ohne Einbuchen <span style="font-weight:400">(wurde ohne Ware geschlossen – hier nachträglich einbuchen)</span></div>
+        <?php foreach ($ohneEinbuchen as $l): $namen = array_values(array_filter(array_map(fn($p) => trim((string)($p['name'] ?? '')), $l['positionen'] ?? []))); ?>
+        <button type="button" class="we-listitem" data-id="<?= (int)$l['id'] ?>" data-such="<?= h(mb_strtolower(trim(($l['lieferant'] ?? '') . ' ' . ($l['nummer'] ?? '') . ' ' . implode(' ', $namen)))) ?>" style="border-color:#c0392b">
+          <span class="we-li-art"><?= h(implode(' · ', array_slice($namen, 0, 4))) ?></span>
+          <span class="we-li-lief"><?= h((string)($l['lieferant'] ?: 'Ohne Lieferant')) ?> · <?= h((string)$l['nummer']) ?></span>
+          <span class="we-li-eta" style="color:#c0392b">ohne Ware geschlossen</span>
+        </button>
+        <?php endforeach; endif; ?>
       </div>
       <?php endif; ?>
     </div>

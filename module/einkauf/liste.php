@@ -30,7 +30,7 @@ foreach (all("SELECT DISTINCT lieferant_id FROM benutzer WHERE lieferant_id IS N
 // Laufend = alles außer geliefert UND storniert (aufgeteilte Ur-Bestellungen sind storniert und sollen hier weg).
 $wo = $archiv ? "WHERE b.status='geliefert'" : "WHERE b.status NOT IN ('geliefert','storniert')";
 // Positionen holen (mit Kopfdaten der Bestellung) und in PHP je Bestellung zusammenfassen.
-$posRows = all("SELECT bp.id AS pos_id, bp.menge, bp.einheit, bp.bestellung_id, bp.item_id, bp.sort, bp.auftrag_id, au.nummer AS auftrag_nr,
+$posRows = all("SELECT bp.id AS pos_id, bp.menge, bp.einheit, bp.bestellung_id, COALESCE(bp.geliefert_menge,0) AS gel, bp.rest_storniert_am, bp.item_id, bp.sort, bp.auftrag_id, au.nummer AS auftrag_nr,
                 COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS produkt,
                 b.nummer, b.status, b.bestelldatum, b.angelegt, COALESCE(b.bestaetigt,0) AS bestaetigt,
                 b.lieferant_id, b.eta_geplant, b.station, b.tracking, b.angekommen_am, b.erinnert_am,
@@ -61,6 +61,9 @@ foreach ($posRows as $r) {
         ];
     }
     if (!empty($r['auftrag_id'])) $best[$bid]['auftraege'][(int)$r['auftrag_id']] = (string)$r['auftrag_nr'];
+    // Sofortfix 13.11.2026: erste noch offene Position -> Knopf „Ware ist da“ führt in den Wareneingang dieser Position.
+    if (empty($best[$bid]['erste_offen']) && empty($r['rest_storniert_am']) && (float)$r['menge'] > 0 && (float)$r['gel'] < (float)$r['menge'] * 0.98)
+        $best[$bid]['erste_offen'] = (int)$r['pos_id'];
     $best[$bid]['pos_anz']++;
     $best[$bid]['produkte'][] = (string)$r['produkt'];
     if (empty($r['item_id']) && strncmp((string)$r['produkt'], 'Bulk', 4) === 0)
@@ -126,6 +129,9 @@ $cols = [
     'bestelldatum'    => ['label'=>'Bestellt am', 'sort'=>true, 'render'=>fn($r)=> !empty($r['bestelldatum']) ? h(date('d.m.Y', strtotime((string)$r['bestelldatum']))) : '<span class="muted">–</span>'],
     'offen'           => ['label'=>'Offen seit', 'render'=>$offenCell],
     'status'          => ['label'=>'Status', 'sort'=>true, 'render'=>$statusBadge],
+    // Sofortfix 13.11.2026: Lieferung bestätigen heißt immer Wareneingang buchen (Charge, MHD, Menge) – nie „als geliefert schließen“.
+    'ware'            => ['label'=>'', 'render'=>$wareKnopf = fn($r) => (in_array((string)$r['status'], ['bestellt', 'gesendet'], true) && empty($r['angekommen_am']) && !empty($r['erste_offen']))
+                            ? '<a class="btn btn-primary btn-sm" href="?p=wareneingang&bp=' . (int)$r['erste_offen'] . '" onclick="event.stopPropagation()">Ware ist da</a>' : ''],
 ];
 
 render_header('einkauf', $archiv ? 'Bestellt – Archiv' : 'Bestellt');
@@ -196,7 +202,7 @@ if ($ansicht === 'lieferant') {
             echo '<tr id="be-row-' . (int)$r['id'] . '" style="cursor:pointer" data-pop-url="?p=bestellung_pop&id=' . (int)$r['id'] . '" data-pop-titel="' . h((string)$r['nummer']) . '" data-pop-refresh="#be-row-' . (int)$r['id'] . '">'
                . '<td><a href="?p=bestellung&id=' . (int)$r['id'] . '" onclick="event.stopPropagation()">' . h((string)$r['nummer']) . '</a></td><td>' . $inhalt($r) . '</td>'
                . '<td>' . (!empty($r['bestelldatum']) ? h(date('d.m.Y', strtotime((string)$r['bestelldatum']))) : '–') . '</td><td>' . $statusBadge($r) . '</td>'
-               . '<td>' . ($fehlt ? implode(' ', array_map(fn($x) => bx_badge($x, $x === 'Lieferung' ? 'info' : 'warn'), $fehlt)) : bx_badge('vollständig', 'ok')) . '</td></tr>';
+               . '<td>' . ($fehlt ? implode(' ', array_map(fn($x) => bx_badge($x, $x === 'Lieferung' ? 'info' : 'warn'), $fehlt)) : bx_badge('vollständig', 'ok')) . ' ' . $wareKnopf($r) . '</td></tr>';
         }
         echo '</tbody></table></div></div>';
     }

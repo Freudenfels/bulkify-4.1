@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Einkauf gerade ziehen (Teil 1/2, 10.11.2026): erst die Bestellung. Artikel, Einheit, Lieferant und Auftrag kommen aus der
     // Bestellposition. Ohne Bestellung nur mit Grund (alte Bestellung -> nachträgliche Bestellung; Muster/Sonstiges mit Notiz).
     $bpId = (int)($_POST['bp_id'] ?? 0);
-    $bpR = $bpId > 0 ? one("SELECT bp.id, bp.bestellung_id, bp.item_id, bp.auftrag_id, b.lieferant_id AS b_lief, i.kategorie, i.rezeptur_id
+    $bpR = $bpId > 0 ? one("SELECT bp.id, bp.bestellung_id, bp.item_id, bp.auftrag_id, bp.rest_storniert_am, b.lieferant_id AS b_lief, i.kategorie, i.rezeptur_id
                             FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN item i ON i.id=bp.item_id
                             WHERE bp.id=? AND b.status<>'storniert'", [$bpId]) : null;
     $weGrund = (string)($_POST['we_grund'] ?? '');
@@ -23,7 +23,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'zukauf_buchen' && $bpR) $aktion = 'buchen';   // mit Bestellung: Artikel kommt aus der Position
     $weNachher = function (int $cid) use ($bpR, $weGrund, $weGrundNotiz): string {
         $wer = (string)(current_user()['name'] ?? '');
-        if ($bpR) { bestellung_lieferung_erfassen((int)$bpR['bestellung_id'], [$cid], [$cid => (int)$bpR['id']]); return ''; }
+        if ($bpR) {
+            bestellung_lieferung_erfassen((int)$bpR['bestellung_id'], [$cid], [$cid => (int)$bpR['id']]);
+            // Sofortfix 13.11.2026: Position war „ohne Ware geschlossen“ -> Vermerk; geliefert = eingebuchte Menge, Bestellung bleibt geliefert.
+            if (!empty($bpR['rest_storniert_am'])) webe_nachtraeglich_eingebucht_vermerken((int)$bpR['id'], $cid, $wer);
+            return '';
+        }
         if ($weGrund === 'alt_bestellung') { $nb = webe_nachtraegliche_bestellung($cid, (int)($_POST['lieferant_id'] ?? 0), $weGrundNotiz, $wer); return $nb ? '&nachbest=' . $nb : ''; }
         webe_ohne_bestellung_vermerken($cid, $weGrund, $weGrundNotiz, $wer);
         return '';
@@ -122,6 +127,15 @@ $items = all("SELECT i.id, i.name, i.kategorie, i.einheit, i.verpackung_rolle, C
               WHERE i.kategorie IN ('rohstoff','verpackung','fertig','verkaufsfertig') AND i.gesperrt=0 ORDER BY i.name");
 $lieferanten = all("SELECT id, firma FROM lieferanten WHERE COALESCE(gesperrt,0)=0 ORDER BY firma");   // Block C: gesperrte nicht auswählbar
 $bpListe = webe_offene_positionen('', 800);   // Teil 1: erwartete Lieferungen je Position (Artikel fest aus der Bestellung)
+// Sofortfix 13.11.2026: dazu Positionen „geschlossen ohne Einbuchen“ (letzte 90 Tage) – Ware kam, wurde aber nie eingebucht.
+$bpListe = array_merge($bpListe, webe_ohne_einbuchen_positionen(90));
+$bpGet = (int)($_GET['bp'] ?? 0);
+if ($bpGet > 0 && !in_array($bpGet, array_map('intval', array_column($bpListe, 'bp_id')), true))
+    $bpListe = array_merge($bpListe, webe_ohne_einbuchen_positionen(0, $bpGet), webe_offene_positionen('', 50, (int) scalar("SELECT bestellung_id FROM bestellung_position WHERE id=?", [$bpGet])));
+$bpDoppelt = []; $bpListe = array_values(array_filter($bpListe, function ($r) use (&$bpDoppelt) { $k = (int)$r['bp_id']; if (isset($bpDoppelt[$k])) return false; $bpDoppelt[$k] = 1; return true; }));
+// Vorbelegung aus „Chargen & Dokumente“ (vorgemerkte, noch nicht eingebuchte Charge): Charge, MHD, Menge.
+foreach ($bpListe as &$bpV) $bpV['vor'] = webe_vormerkung((int)$bpV['bp_id'], (int)$bpV['bp_id'] === $bpGet ? (int)($_GET['bch'] ?? 0) : 0);
+unset($bpV);
 // Erwartete Lieferungen (bestellt, noch nicht angekommen) – optionaler Bestellbezug beim Einbuchen.
 $offeneBestellungen = all("SELECT b.id, b.nummer, COALESCE(l.firma,'') AS lieferant FROM bestellung b LEFT JOIN lieferanten l ON l.id=b.lieferant_id
                            WHERE b.status='bestellt' AND b.angekommen_am IS NULL ORDER BY b.id DESC LIMIT 200");
@@ -414,7 +428,9 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
   // Einkauf gerade ziehen (Teil 1): Bestellposition wählen -> Artikel/Einheit fest, Lieferant + Auftrag vorbelegt.
   var BP = <?= json_encode(array_map(fn($r) => ['id' => (int)$r['bp_id'], 'nr' => (string)$r['nummer'], 'l' => (string)$r['lieferant'], 'lid' => (int)$r['lieferant_id'],
       'i' => (int)$r['item_id'], 'n' => (string)$r['name'], 'k' => (string)($r['kategorie'] ?? ''), 'r' => (float)$r['rest'], 'm' => (float)$r['menge'], 'e' => (string)$r['einheit'],
-      'a' => (int)$r['auftrag_id'], 'an' => (string)($r['auftrag_nr'] ?? ''), 'kap' => (string)$r['kapsel'], 'b' => (int)$r['bestellung_id']], $bpListe), JSON_UNESCAPED_UNICODE) ?>;
+      'a' => (int)$r['auftrag_id'], 'an' => (string)($r['auftrag_nr'] ?? ''), 'kap' => (string)$r['kapsel'], 'b' => (int)$r['bestellung_id'],
+      'zu' => !empty($r['zu']) ? 1 : 0, 'vc' => (string)($r['vor']['charge_nr'] ?? ''), 'vm' => (string)($r['vor']['mhd'] ?? ''),
+      'vq' => isset($r['vor']['menge']) && $r['vor']['menge'] !== null ? zahl_feld((float)$r['vor']['menge']) : ''], $bpListe), JSON_UNESCAPED_UNICODE) ?>;
   var su=document.getElementById('weBpSuche'), hid=document.getElementById('weBpId'), list=document.getElementById('weBpList'), info=document.getElementById('weBpInfo'),
       ohne=document.getElementById('weOhne'), grund=document.getElementById('weGrundBlock'), fest=document.getElementById('weFestInfo'),
       typB=document.getElementById('weTypBlock'), typ=document.getElementById('weTyp'), artB=document.getElementById('weBlockArt'), artS=document.getElementById('weArtSuche'), artId=document.getElementById('weArtId'),
@@ -427,7 +443,7 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
     q=(q||'').trim().toLowerCase(); var qs=q.replace(/[\s-]/g,'');
     var t=BP.filter(function(b){ return !q || txt(b).indexOf(q)>=0 || b.nr.toLowerCase().replace(/-/g,'')===qs; }).slice(0,60);
     list.innerHTML = t.length ? t.map(function(b){ return '<div class="opt" data-id="'+b.id+'"><strong>'+esc(b.nr)+'</strong> · '+esc(b.l||'ohne Lieferant')+' · '+esc(b.n)+
-      '<div class="muted">offen '+nf(b.r)+' '+esc(b.e)+(b.r<b.m?' (von '+nf(b.m)+')':'')+(b.kap?' · '+esc(b.kap):'')+(b.an?' · '+esc(b.an):'')+'</div></div>'; }).join('')
+      '<div class="muted">'+(b.zu?'<span style="color:#8f231b">geschlossen ohne Einbuchen – wurde ohne Ware geschlossen</span> · ':'')+'offen '+nf(b.r)+' '+esc(b.e)+(b.r<b.m?' (von '+nf(b.m)+')':'')+(b.kap?' · '+esc(b.kap):'')+(b.an?' · '+esc(b.an):'')+(b.vc?' · Charge '+esc(b.vc)+' vorgemerkt':'')+'</div></div>'; }).join('')
       : '<div class="bx-combo-empty">Keine offene Bestellung gefunden – „Ohne Bestellung“ nur mit Grund.</div>';
     list.hidden=false;
   }
@@ -442,7 +458,13 @@ if (isset($_GET['zkfehler'])) echo '<div class="bx-panel" style="border-color:#e
     if(einh) einh.textContent=b.e||'–';
     if(lief && b.lid) lief.value=String(b.lid);
     if(auf && b.a){ auf.value=String(b.a); auf.dispatchEvent(new Event('change')); }
-    fest.style.display=''; fest.innerHTML='Gebucht gegen <a href="?p=bestellung&id='+b.b+'" target="_blank">'+esc(b.nr)+'</a> · '+esc(b.n)+' · offen '+nf(b.r)+' '+esc(b.e)+(b.kap?' · '+esc(b.kap):'')+(b.an?' · Auftrag '+esc(b.an):'')+' · Artikel und Einheit aus der Bestellung. <button type="button" class="btn btn-ghost btn-sm" id="weBpLos">andere Bestellung</button>';
+    // Sofortfix 13.11.2026: vorgemerkte Charge (Chargen & Dokumente) vorbelegen – Charge, MHD, Menge (nur leere Felder).
+    var fC=su.form.querySelector('[name="charge_nr"]'), fM=su.form.querySelector('[name="mhd"]'), fQ=su.form.querySelector('[name="menge"]');
+    if(b.vc && fC && !fC.value) fC.value=b.vc; if(b.vm && fM && !fM.value) fM.value=b.vm; if(fQ && !fQ.value) fQ.value=b.vq || '';
+    fest.style.display=''; fest.innerHTML='Gebucht gegen <a href="?p=bestellung&id='+b.b+'" target="_blank">'+esc(b.nr)+'</a> · '+esc(b.n)+' · offen '+nf(b.r)+' '+esc(b.e)+(b.kap?' · '+esc(b.kap):'')+(b.an?' · Auftrag '+esc(b.an):'')+' · Artikel und Einheit aus der Bestellung.'
+      +(b.zu?'<div style="color:#8f231b;margin-top:4px">Diese Position wurde ohne Ware geschlossen. Einbuchen nimmt den Storno für die eingebuchte Menge zurück, die Bestellung bleibt geliefert.</div>':'')
+      +(b.vc?'<div class="muted" style="margin-top:4px">Vorbelegt aus „Chargen & Dokumente“: Charge '+esc(b.vc)+(b.vm?' · MHD '+esc(b.vm):'')+(b.vq?' · '+esc(b.vq)+' '+esc(b.e):'')+'</div>':'')
+      +' <button type="button" class="btn btn-ghost btn-sm" id="weBpLos">andere Bestellung</button>';
     document.getElementById('weBpLos').addEventListener('click', los);
   }
   function los(){

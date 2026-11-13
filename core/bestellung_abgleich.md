@@ -32,3 +32,5 @@
 
 ## Verknüpfte Chargen in der Datenprüfung (13.11.2026)
 Die Zelle zeigt schon verknüpfte Chargen der Bestellung mit „Verknüpfung lösen“, auch nach dem Neuladen. Beim Verknüpfen meldet sie eine Mehrlieferung.
+
+**Falle „als geliefert schließen“ entfernt (Sofortfix 13.11.2026):** Block heißt „Wareneingang“; je offener Position Hauptknopf „Ware ist da - einbuchen“ (`?p=wareneingang&bp=…&bch=…`, vorbelegt aus „Chargen & Dokumente“). „ohne Einbuchen schließen (Altlast)“ nur Admin, eingeklappt unter „Altlasten“, mit Pop-up `bestellung_altlast_dialog()` („Ist die Ware im Lager?“: Ja = Wareneingang je Position, Nein = Grund Pflicht). Positionen „ohne Ware geschlossen“ (Rest storniert ohne Positions-Storno, keine Charge) bleiben sichtbar, mit Vorschlägen zum Verknüpfen; Verknüpfen vermerkt `webe_nachtraeglich_eingebucht_vermerken()`. Die Datenprüfung nutzt dasselbe Pop-up; die alte Aktion „geliefert“ ohne Grund ist gesperrt.

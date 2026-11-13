@@ -19,3 +19,5 @@ Beides sind **dieselben Aktionen wie auf der Detailseite** (`einkauf/detail.php`
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 „bestellt“ erst mit vollständigen Unterlagen.
+
+**Knopf „Ware ist da - einbuchen“ (Sofortfix 13.11.2026):** führt in den Wareneingang (kein Bestätigen ohne Charge).

@@ -140,3 +140,5 @@ Kachel „Lieferanten-Aufkleber scannen“ (AJAX la_scan/la_abschluss), Stand �
 Felder aus der Bestellposition, die nicht änderbar sind (Klasse `we-fest`: Artikel, Warenart, Einheit), hatten ein festes Hellgrau (`#f2f4f0`). Im Dark Mode waren sie dadurch weiß mit heller Schrift. Jetzt nutzen sie die Theme-Farben `var(--line-2)` und `var(--muted)`.
 
 **Vorbelegung der Menge (Fable-4 T1.5, 13.11.2026):** Menge aus Bestellung („Lieferung wählen“) oder Lieferschein-Scan steht deutsch mit Komma und ohne Tausenderpunkt im Feld („12,375“ statt „12.375“, „1500“) – `erp_menge_parse()` las „12.375“ sonst als 12375.
+
+**Geschlossen ohne Einbuchen (Sofortfix 13.11.2026):** „Ankommende Sendung wählen“ zeigt zusätzlich Bestellungen mit Positionen, die ohne Ware geschlossen wurden (`erp_ohne_einbuchen_lieferungen()`); `erp_lieferung_positionen()` liefert diese Positionen (`zu` = 1) und belegt Charge/MHD aus „Chargen & Dokumente“ vor.

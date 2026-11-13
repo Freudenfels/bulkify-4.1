@@ -56,6 +56,14 @@ render_header('einkauf', 'Bestellung ' . $b['nummer']);
   <div class="muted" style="margin-bottom:10px"><a href="?p=bestellung&id=<?= $id ?>"><b style="font-weight:600"><?= h((string)$b['nummer']) ?></b></a> · <?= $b['lieferant_firma'] ? h((string)$b['lieferant_firma']) : 'ohne Lieferant' ?>
     · <?= h(implode(', ', array_map(fn($p) => $p['name'] . ' ' . $nf($p['menge']) . ' ' . $p['einheit'], $pos))) ?></div>
 
+  <?php // Sofortfix 13.11.2026: Lieferung bestätigen = Wareneingang buchen (Charge, MHD, Menge), je offener Position.
+  require_once BX_ROOT . '/core/wareneingang_bestellung.php';
+  if (in_array((string)$b['status'], ['bestellt', 'gesendet'], true) && empty($b['angekommen_am']))
+      foreach (all("SELECT bp.id, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '–') AS name FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
+                    WHERE bp.bestellung_id=? AND bp.menge>0 AND bp.rest_storniert_am IS NULL AND COALESCE(bp.geliefert_menge,0) < bp.menge*0.98 ORDER BY bp.sort, bp.id", [$id]) as $wp):
+          $wv = webe_vormerkung((int)$wp['id']); ?>
+    <a class="btn btn-primary" style="margin:0 8px 8px 0" href="?p=wareneingang&bp=<?= (int)$wp['id'] ?><?= $wv ? '&bch=' . (int)$wv['id'] : '' ?>">Ware ist da - einbuchen<?= count($pos) > 1 ? ': ' . h((string)$wp['name']) : '' ?></a>
+  <?php endforeach; ?>
   <h3 style="margin:8px 0 6px">Dokumente</h3>
   <?php if ($doks): ?><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"><?php foreach ($doks as $d): ?>
     <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="?p=dokument&id=<?= (int)$d['id'] ?>"><?= h((dokument_typen()[$d['typ']] ?? $d['typ']) . ($d['charge_nr'] ? ' · ' . $d['charge_nr'] : '') . ' · ' . ($d['datei_orig'] ?: '#' . $d['id'])) ?></a>

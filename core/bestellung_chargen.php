@@ -454,7 +454,10 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
                 foreach ($coas as $d) $coaHtml .= $docLink($d) . ' ' . $delDoc($d) . ' ';
                 if (!$coas) $coaHtml = '<span class="muted">' . $t('kein CoA', 'no CoA', '无 COA') . '</span>';
                 $ein = array_values(array_filter($einH, fn($c) => charge_gleich((string)$c['charge_nr'], (string)$z['charge_nr'])));
-                $einHtml = $ein ? $t('ja', 'yes', '是') . ', ' . $dat($ein[0]['wareneingang']) : '<span class="muted">–</span>';
+                // Sofortfix 13.11.2026: vorgemerkt, aber nicht eingebucht -> rot „nicht im Lager“ + „Jetzt einbuchen“ (auch bei geschlossener Bestellung).
+                $einHtml = $ein ? $t('ja', 'yes', '是') . ', ' . $dat($ein[0]['wareneingang'])
+                    : ($von === 'team' ? '<span style="color:#8f231b;font-weight:600">nicht im Lager</span> <a class="btn btn-primary btn-sm" href="?p=wareneingang&bp=' . $bp . '&bch=' . (int)$z['id'] . '">Jetzt einbuchen</a>'
+                                       : '<span class="muted">–</span>');
                 $del = ($von === 'team' || (string)$z['von'] === 'lieferant')
                     ? '<form method="post" style="margin:0" onsubmit="return confirm(' . $h(json_encode($t('Charge entfernen?', 'Remove batch?', '删除批次？'), JSON_UNESCAPED_UNICODE)) . ');"><input type="hidden" name="aktion" value="bch_del"><input type="hidden" name="zeile_id" value="' . (int)$z['id'] . '"><button class="btn btn-ghost btn-sm" type="submit">' . $t('entfernen', 'remove', '删除') . '</button></form>' : '';
                 $o .= '<tr><td><strong>' . $h($z['charge_nr']) . '</strong><div class="muted" style="font-size:11px">' . $h($wer((string)$z['von'])) . '</div></td><td>' . $dat($z['mhd']) . '</td>'
@@ -472,7 +475,7 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
             . '<div class="bx-field" style="margin:0;min-width:140px;flex:1"><label>' . $t('Charge des Lieferanten', 'Batch number', '批号') . '</label><input type="text" name="charge_nr" required maxlength="80"></div>'
             . '<div class="bx-field" style="margin:0;max-width:160px"><label>' . $t('MHD', 'Best before', '保质期') . '</label><input type="date" name="mhd"></div>'
             . '<div class="bx-field" style="margin:0;max-width:110px"><label>' . $t('Menge', 'Quantity', '数量') . '</label><input type="text" name="menge" inputmode="decimal" placeholder="' . $h($p['einheit']) . '"></div>'
-            . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Eintragen', 'Save', '保存') . '</button></form>';
+            . '<button class="btn btn-primary btn-sm" type="submit">' . ($von === 'team' ? 'Charge vormerken (noch nicht im Lager)' : $t('Eintragen', 'Save', '保存')) . '</button></form>';
         $o .= '<div class="muted" style="font-weight:600;padding:0 6px">' . $t('oder', 'or', '或') . '</div>';
         $o .= '<form method="post" enctype="multipart/form-data" style="margin:0;flex:1 1 300px;min-width:0">'
             . '<input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '"><input type="hidden" name="dok_typ" value="coa">'

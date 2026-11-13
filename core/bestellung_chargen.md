@@ -43,3 +43,5 @@ Ein Bestell-CoA gilt für eine Charge – es **überschreibt den Rohstoff nicht*
 bestellung_versand_coa_fehlt(): „versendet“ nur mit CoA je Charge (Rohstoff, Fremdfertigung, Premix, Bulk); geprüft in bestellung_station_setzen().
 
 **13.11.2026 (Paket Teil 5.4):** Bei „Geprüft – übernehmen“ mit Abweichung kommt eine schon eingebuchte, freie Charge in Quarantäne, und es entsteht die Aufgabe „CoA außerhalb Spec“: dringend, an QM (Rolle labor), Ziel die Bestellung. Bezug ist die Charge, sonst die Bestellung. Die Benachrichtigung an QM bleibt.
+
+**Charge vormerken / Jetzt einbuchen (Sofortfix 13.11.2026):** Team-Knopf heißt „Charge vormerken (noch nicht im Lager)“. Jede vorgemerkte, nicht eingebuchte Charge zeigt rot „nicht im Lager“ und „Jetzt einbuchen“ (`?p=wareneingang&bp=…&bch=…`), auch bei geschlossener Bestellung.

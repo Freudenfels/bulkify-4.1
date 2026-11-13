@@ -130,3 +130,5 @@ Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artik
 - „Bestellung zurückziehen“ nur ohne Liefermenge, Charge, Lieferanten-Charge und Reservierung (`bestellung_zurueckziehen_grund()`), sonst grauer Knopf mit Grund „bitte stornieren“.
 
 **Spalte offen bei stornierter Position (Fable-4 T3.7, 13.11.2026):** zeigt 0, der stornierte Rest steht klein daneben („(30 kg storniert)“).
+
+**Altlast nur mit Grund (Sofortfix 13.11.2026):** `abgl_geliefert` nur Admin und nur mit Grund (Pop-up „Ist die Ware im Lager?“), optional Rücksprung `zurueck`.

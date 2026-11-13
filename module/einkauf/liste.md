@@ -39,3 +39,5 @@ Kennzeichen „Unterlagen fehlen“ an offenen Bestellungen (Link auf die Liste 
 - **Zeilenklick:** Ein Klick auf die Zeile öffnet das Bestell-Pop-up (`?p=bestellung_pop`). Die Bestellnummer führt weiter zur Bestellseite.
 - **Filter „Lieferant“:** Suchauswahl, Parameter `lief`.
 - **Ansicht „Offen je Lieferant“** (`ansicht=lieferant`): je Lieferant die offenen Bestellungen mit der Spalte „Fehlt noch“ (Bestätigung, CoA, Tracking, Lieferung; berechnet von `bestellung_fehlt()`).
+
+**Ware ist da (Sofortfix 13.11.2026):** Spalte mit Knopf „Ware ist da“ je bestellter, nicht eingegangener Bestellung -> Wareneingang der ersten offenen Position (auch in „Offen je Lieferant“).

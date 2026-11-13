@@ -9,3 +9,5 @@ Route `?p=bestellung_pop&id=…` (Rolle einkauf). In „Bestellt“ öffnet ein 
 
 **Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Eingabefelder mit `zahl_feld()` vorbelegt (Komma, kein Tausenderpunkt).
 Gewicht gesamt wird mit `gewicht_lesen()` gelesen (vorher Preis-Lesart: Vorbelegung „1.250“ kg wurde beim Speichern 1,25 kg).
+
+**Ware ist da (Sofortfix 13.11.2026):** oben je offener Position „Ware ist da - einbuchen“ -> Wareneingang, vorbelegt.

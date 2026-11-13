@@ -70,3 +70,5 @@ Beim Buchen mit „Zur Bestellung“ setzt `bestellung_lieferung_erfassen()` an 
 - Artikelsuche (ohne Bestellung) findet auch Synonyme. Die Kapselgröße bzw. das Füllgewicht steht fett im Treffer (Teil 5).
 
 **Gesperrt/inaktiv (Block C, 11.11.2026):** Gesperrte Lieferanten/Kunden bzw. inaktive Produkte/Rezepturen stehen nicht mehr in den Auswahlfeldern. Ein schon gewählter Eintrag bleibt am Beleg sichtbar.
+
+**Geschlossen ohne Einbuchen (Sofortfix 13.11.2026):** Die Auswahl enthält zusätzlich Positionen, die ohne Ware geschlossen wurden (rot markiert); `?bp=` und `&bch=` belegen Charge, MHD und Menge aus „Chargen & Dokumente“ vor. Gebucht auf so eine Position: Vermerk, Bestellung bleibt geliefert.

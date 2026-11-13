@@ -1355,21 +1355,27 @@ function erp_auftrag_fuer_bulkitem(int $item_id): int {
 // Positionen einer bestimmten erwarteten Lieferung (Bestell-ID) – für "aus Liste wählen".
 function erp_lieferung_positionen(int $id): array {
     if ($id <= 0 || !tabelle_da('bestellung')) return ['ok' => false];
-    $b = one("SELECT b.id, b.nummer, b.lieferant_id, lf.firma AS lieferant
+    // Sofortfix 13.11.2026: auch eingegangene Bestellungen, wenn eine Position „ohne Ware geschlossen“ wurde (Rest storniert ohne Charge).
+    $b = one("SELECT b.id, b.nummer, b.lieferant_id, b.angekommen_am, lf.firma AS lieferant
               FROM bestellung b LEFT JOIN lieferanten lf ON lf.id = b.lieferant_id
-              WHERE b.id = ? AND b.angekommen_am IS NULL", [$id]);
+              WHERE b.id = ? AND b.status <> 'storniert'", [$id]);
     if (!$b) return ['ok' => false];
     $pos = [];
     if (tabelle_da('bestellung_position')) {
         require_once __DIR__ . '/../../core/wareneingang_bestellung.php';
         webe_spalten();
         $sel = "SELECT bp.id AS bp_id, bp.item_id, bp.auftrag_id, " . erp_bp_rest_sql() . " AS menge, bp.einheit, bp.rest_storniert_am,
+                       GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0) AS menge_zu, COALESCE(bp.pos_storno_grund,'') AS storno_grund,
+                       (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS n_ch,
                        COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, i.kategorie, i.form, i.verpackung_rolle
                 FROM bestellung_position bp LEFT JOIN item i ON i.id = bp.item_id
                 WHERE bp.bestellung_id = ? ORDER BY bp.sort, bp.id";
         foreach (all($sel, [$id]) as $p) {
             if (trim((string)($p['name'] ?? '')) === '') continue;
-            if ((float)$p['menge'] <= 0 || !empty($p['rest_storniert_am'])) continue;   // schon geliefert bzw. Rest storniert
+            $zu = !empty($p['rest_storniert_am']) && $p['storno_grund'] === '' && (int)$p['n_ch'] === 0 && (float)$p['menge_zu'] > 0;   // ohne Ware geschlossen
+            if ($zu) $p['menge'] = (float)$p['menge_zu'];
+            elseif (!empty($b['angekommen_am']) || (float)$p['menge'] <= 0 || !empty($p['rest_storniert_am'])) continue;   // schon geliefert bzw. Rest storniert
+            $vor = webe_vormerkung((int)$p['bp_id']);   // vorgemerkte Charge aus „Chargen & Dokumente“
             // Rezeptur der Position ableiten -> beim Einbuchen direkt als "Fertigware/Bulk" vorauswählen.
             // Hat die Position einen eigenen Nicht-Bulk-Artikel (Verpackung, Etikett, Rohstoff ...), bleibt dieser
             // samt Warenart erhalten (S-21) – nur ein Bulk-Artikel bzw. Freitext wird auf die Rezeptur gemappt.
@@ -1379,7 +1385,8 @@ function erp_lieferung_positionen(int $id): array {
                 'name'          => (string)$p['name'],
                 'menge'         => (float)$p['menge'],
                 'einheit'       => erp_einheit_norm((string)($p['einheit'] ?? '')),
-                'charge_nr'     => '', 'mhd' => '',
+                'charge_nr'     => (string)($vor['charge_nr'] ?? ''), 'mhd' => (string)($vor['mhd'] ?? ''),
+                'zu'            => $zu ? 1 : 0,   // „wurde ohne Ware geschlossen“
                 'warenart'      => $rz['rezeptur_id'] ? 'fertig' : ($eigen ? erp_item_warenart($p) : (string)($p['kategorie'] ?? '')),
                 'verpackung_rolle' => $eigen ? (string)($p['verpackung_rolle'] ?? '') : '',
                 'form'          => $eigen ? (string)($p['form'] ?? '') : '',
@@ -1605,6 +1612,18 @@ function erp_warenart_raten(string $name): string {
     return '';
 }
 
+// Bestellungen mit Positionen „geschlossen ohne Einbuchen“ (letzte 90 Tage) für die Auswahl im Wareneingang (Sofortfix 13.11.2026).
+function erp_ohne_einbuchen_lieferungen(): array {
+    if (!tabelle_da('bestellung_position')) return [];
+    require_once __DIR__ . '/../../core/wareneingang_bestellung.php';
+    $out = [];
+    foreach (webe_ohne_einbuchen_positionen(90) as $p) {
+        $bid = (int)$p['bestellung_id'];
+        $out[$bid] ??= ['id' => $bid, 'nummer' => (string)$p['nummer'], 'lieferant' => (string)$p['lieferant'], 'positionen' => []];
+        $out[$bid]['positionen'][] = ['name' => (string)$p['name']];
+    }
+    return array_values($out);
+}
 function erp_erwartete_lieferungen(): array {
     if (!tabelle_da('bestellung')) return [];
     $sendSp = '';   // 13.11.2026 (Teil 6.8): Sendung (Art, Anzahl, Palettenart, Kartons, Gewicht, Stellplätze) aus dem Bestell-Pop-up

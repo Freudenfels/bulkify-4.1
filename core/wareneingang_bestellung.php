@@ -316,3 +316,57 @@ function webe_position_artikel_setzen(int $bp_id, int $item_id): void {
 }
 
 }
+
+// ---- Sofortfix 13.11.2026: Ware ist da, aber nie eingebucht ----------------------------------------------------------------
+// Vorgemerkte, noch nicht eingebuchte Charge einer Position („Chargen & Dokumente“ – bestellung_charge) für die Vorbelegung des
+// Wareneingangs: die gewählte Zeile ($bch_id) bzw. die erste, zu der es noch keine eingebuchte Charge gibt. null = keine.
+function webe_vormerkung(int $bp_id, int $bch_id = 0): ?array {
+    if ($bp_id <= 0) return null;
+    require_once __DIR__ . '/charge_norm.php';
+    try { $zeilen = all("SELECT * FROM bestellung_charge WHERE bestellung_position_id=?" . ($bch_id > 0 ? " AND id=" . (int)$bch_id : "") . " ORDER BY id", [$bp_id]); }
+    catch (\Throwable $e) { return null; }
+    $ein = array_column(all("SELECT charge_nr FROM charge WHERE bestellung_position_id=?", [$bp_id]), 'charge_nr');
+    foreach ($zeilen as $z) {
+        $schon = false;
+        foreach ($ein as $c) if (charge_gleich((string)$c, (string)$z['charge_nr'])) { $schon = true; break; }
+        if (!$schon) return $z;
+    }
+    return null;
+}
+// Positionen „geschlossen ohne Einbuchen“: über „als geliefert schließen“ bzw. Rest storniert zugemacht (rest_storniert_am, kein
+// Positions-Storno mit Grund), keine Charge verknüpft, Bestellung nicht storniert, in den letzten $tage Tagen. Gleiche Spalten wie
+// webe_offene_positionen() plus 'zu' = 1. Dort kann die Ware nachträglich eingebucht werden (Storno für die Menge zurück).
+function webe_ohne_einbuchen_positionen(int $tage = 90, int $bp_id = 0): array {
+    webe_spalten();
+    $w = "bp.menge > 0 AND bp.rest_storniert_am IS NOT NULL AND COALESCE(bp.pos_storno_grund,'') = '' AND b.status <> 'storniert'
+          AND NOT EXISTS (SELECT 1 FROM charge c WHERE c.bestellung_position_id=bp.id)";
+    $p = [];
+    if ($bp_id > 0) { $w .= " AND bp.id=?"; $p[] = $bp_id; }
+    else { $w .= " AND bp.rest_storniert_am >= DATE_SUB(CURDATE(), INTERVAL " . max(1, $tage) . " DAY)"; }
+    try {
+        $rows = all("SELECT bp.id AS bp_id, bp.bestellung_id, b.nummer, b.status, b.station, b.bestellart, b.bestelldatum, b.eta_geplant, b.lieferant_id,
+                            COALESCE(l.firma, NULLIF(b.online_haendler,''), '') AS lieferant,
+                            bp.item_id, COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS name, bp.bezeichnung, i.kategorie, i.form, i.rezeptur_id,
+                            bp.menge, COALESCE(bp.geliefert_menge,0) AS geliefert, GREATEST(bp.menge - COALESCE(bp.geliefert_menge,0), 0) AS rest,
+                            COALESCE(NULLIF(bp.einheit,''), i.einheit, '') AS einheit, bp.auftrag_id, a.nummer AS auftrag_nr, bp.rest_storniert_am
+                     FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
+                     LEFT JOIN lieferanten l ON l.id=b.lieferant_id LEFT JOIN item i ON i.id=bp.item_id LEFT JOIN auftrag a ON a.id=bp.auftrag_id
+                     WHERE $w ORDER BY bp.rest_storniert_am DESC, b.id DESC LIMIT 300", $p);
+    } catch (\Throwable $e) { return []; }
+    foreach ($rows as &$r) { $r['kapsel'] = webe_kapsel_label((int)$r['item_id']); $r['zu'] = 1; }
+    unset($r);
+    return $rows;
+}
+// Charge auf eine „ohne Einbuchen“ geschlossene Position gebucht bzw. verknüpft: die Bestellung bleibt geliefert, die gelieferte
+// Menge ist die eingebuchte (webe_position_neu_rechnen), der Storno gilt nur noch für den Rest. Vermerk im Verlauf.
+function webe_nachtraeglich_eingebucht_vermerken(int $bp_id, int $charge_id, string $wer = ''): void {
+    $bp = one("SELECT bestellung_id, rest_storniert_am, COALESCE(pos_storno_grund,'') AS g FROM bestellung_position WHERE id=?", [$bp_id]);
+    if (!$bp || empty($bp['rest_storniert_am'])) return;
+    $c = one("SELECT COALESCE(charge_nr, CONCAT('#', id)) AS nr, menge, einheit FROM charge WHERE id=?", [$charge_id]);
+    if (!$c) return;
+    $txt = 'Nachträglich eingebucht: Charge ' . $c['nr'] . ' (' . rtrim(rtrim(number_format((float)$c['menge'], 3, ',', '.'), '0'), ',') . ' ' . $c['einheit']
+         . ') – die Position war ohne Ware geschlossen; der Storno gilt nur noch für den Rest' . ($wer !== '' ? ' (' . $wer . ')' : '') . '.';
+    if (function_exists('log_aktivitaet')) { log_aktivitaet('bestellung', (int)$bp['bestellung_id'], 'team', $txt, 'status'); return; }
+    // Lager-App (ohne core/schema.php): direkt in den Verlauf.
+    try { q("INSERT INTO aktivitaet (objekt_typ, objekt_id, akteur, typ, text, erstellt) VALUES ('bestellung', ?, 'team', 'status', ?, ?)", [(int)$bp['bestellung_id'], $txt, gmdate('Y-m-d H:i:s')]); } catch (\Throwable $e) {}
+}

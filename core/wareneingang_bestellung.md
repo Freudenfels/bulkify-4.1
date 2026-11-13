@@ -36,3 +36,5 @@ Aufrufer: `bestellung_lieferung_erfassen()` (core/schema.php), `erp_bestellung_l
 
 ## Lösen setzt Teillieferung zurück (13.11.2026)
 `webe_charge_loesen()`: ist danach an der Bestellung nichts mehr geliefert, wird `teilgeliefert_am` geleert.
+
+**Ohne Ware geschlossen (Sofortfix 13.11.2026):** `webe_vormerkung($bp, $bch)` = vorgemerkte, nicht eingebuchte Charge (Vorbelegung); `webe_ohne_einbuchen_positionen($tage, $bp)` = Positionen mit Rest storniert ohne Positions-Storno und ohne Charge (letzte 90 Tage); `webe_nachtraeglich_eingebucht_vermerken()` = Vermerk im Verlauf beim nachträglichen Einbuchen/Verknüpfen (Bestellung bleibt geliefert, geliefert = eingebuchte Menge).

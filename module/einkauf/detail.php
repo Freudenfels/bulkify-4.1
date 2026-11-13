@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             && (int) scalar("SELECT COUNT(*) FROM charge WHERE id=? AND bestellung_position_id IS NULL", [$cA]) === 1;
         if ($okA) {
             webe_charge_verknuepfen($cA, $bpA, false);
+            webe_nachtraeglich_eingebucht_vermerken($bpA, $cA, (string)(current_user()['name'] ?? ''));   // Sofortfix 13.11.2026
             aenderung_protokollieren('charge', $cA, ['bestellung_position_id' => null], ['bestellung_position_id' => $bpA], 'bestellung_abgleich');
             log_aktivitaet('bestellung', (int)$id, 'team', 'Charge ' . (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#', id)) FROM charge WHERE id=?", [$cA]) . ' mit der Bestellung verknüpft (Altlasten-Abgleich).', 'status');
         }
@@ -52,9 +53,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ?p=bestellung&id=' . $id . ($rK['ok'] ? '&okmsg=' : '&fehler=') . rawurlencode((string)$rK['msg']) . '#' . ($aktion === 'abgl_loesen' ? 'chargenbezug' : 'abgleich')); exit;
     }
     if ($aktion === 'abgl_geliefert' && !$neu) {
+        // Sofortfix 13.11.2026: nur Admin, nur mit Grund (Pop-up „Ist die Ware im Lager?“ -> „Nein, kam nie / nicht mehr nötig“).
+        $grundG = trim((string)($_POST['grund'] ?? ''));
+        $zurG = (string)($_POST['zurueck'] ?? '');
+        if (!preg_match('/^\?p=[a-z_]+(&[A-Za-z0-9_=%#-]*)*$/', $zurG)) $zurG = '?p=bestellung&id=' . $id;
+        if (!has_role('admin')) { header('Location: ' . $zurG . (str_contains($zurG, '?') ? '&' : '?') . 'fehler=' . urlencode('Ohne Einbuchen schließen darf nur ein Admin. Ist die Ware da: „Ware ist da - einbuchen“.')); exit; }
+        if ($grundG === '') { header('Location: ' . $zurG . '&fehler=' . urlencode('Bitte einen Grund angeben (kam nie / nicht mehr nötig).')); exit; }
         webe_als_geliefert_schliessen((int)$id, (string)(current_user()['name'] ?? ''));
-        log_aktivitaet('bestellung', (int)$id, 'team', 'Als geliefert geschlossen ohne eingebuchte Charge (Altlasten-Abgleich).', 'status');
-        header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
+        log_aktivitaet('bestellung', (int)$id, 'team', 'Ohne Einbuchen geschlossen (Altlast, keine Charge, Rest storniert). Grund: ' . mb_substr($grundG, 0, 200), 'status');
+        header('Location: ' . $zurG . '&ok=1'); exit;
     }
     // Teil 3: Rest einer Teillieferung stornieren – die Bestellung schließt, der Rest zählt nicht mehr als unterwegs.
     if ($aktion === 'rest_storno' && !$neu) {

@@ -90,9 +90,9 @@ render_header('einkauf_mobil', 'Einkauf schnell');
         </div>
         <span class="em-badge">bestellt</span>
       </div>
-      <form method="post" onsubmit="return confirm('Ware für <?= h($r['nummer']) ?> als eingegangen buchen? Der Bestand wird erhöht.');">
+      <form method="post"><!-- Sofortfix 13.11.2026: führt in den Wareneingang (Charge, MHD, Menge) – kein Schließen ohne Charge -->
         <input type="hidden" name="aktion" value="liefern"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-        <button class="em-btn em-btn-in" type="submit">Ware eingegangen</button>
+        <button class="em-btn em-btn-in" type="submit">Ware ist da - einbuchen</button>
       </form>
       <a class="em-sub" href="?p=bestellung&id=<?= (int)$r['id'] ?>">Details / Charge &amp; MHD anpassen</a>
     </div>
