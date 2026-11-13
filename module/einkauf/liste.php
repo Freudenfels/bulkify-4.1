@@ -139,6 +139,7 @@ bx_head($archiv ? 'Bestellt – Archiv' : 'Bestellt',
         count($rows) . ($archiv ? ' gelieferte Bestellungen' : ' offene Bestellungen (unterwegs / wartet auf Bestätigung)'),
         bx_btn('Zu „Bestellen"', '?p=einkaufsliste', 'ghost') . ' ' . bx_btn('Neue Bestellung', '?p=bestellung&id=neu', 'ghost'));
 if (isset($_GET['vorsorglich'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Vorsorgliche Bestellung angelegt – sie steht jetzt hier unter „Bestellt".</div>';
+if (!empty($_GET['lu_hinweis'])) { require_once BX_ROOT . '/core/lieferant_unterlagen.php'; echo lu_hinweis_panel((string)$_GET['lu_hinweis']); }   // 13.11.2026
 if (isset($_GET['erinnert']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['erinnert'] . ' Erinnerung(en) an Portal-Lieferanten gesendet.</div>';
 if (isset($_GET['storniert']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Bestellung storniert.</div>';
 if (isset($_GET['stornofehler'])) echo '<div class="bx-panel" style="border-color:var(--warn);border-left:3px solid var(--warn);padding:12px 16px">' . h((string)$_GET['stornofehler']) . '</div>';

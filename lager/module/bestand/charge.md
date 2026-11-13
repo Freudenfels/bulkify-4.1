@@ -75,3 +75,8 @@ Die Eingabe läuft über `erp_menge_parse()` wie alle Mengenfelder der Lager-App
 **Ist-Gewicht bei Rückgabe aus der Produktion (Fable-4 T1.4, 13.11.2026):** gelesen über `erp_menge_einheit_lesen()` in der Einheit der Charge; Feld mit `data-gewicht`; Hinweis, wenn mehr zurückkommt als vor der Ausgabe da war.
 
 **Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Mengen-/Preisfelder werden mit `zahl_feld()` (Komma, kein Tausenderpunkt) vorbelegt, damit Speichern ohne Änderung den Wert nicht verändert.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Unter dem Status steht bei gesperrter Charge „Quarantäne: CoA/Spec des Lieferanten fehlt – Freigabe erst, wenn die Unterlage da ist.“ Freigeben wird abgelehnt (Upload im Dashboard).

@@ -1140,7 +1140,7 @@ if (!$neu):
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Rohstoff</th><th class="bx-num">Ben&ouml;tigt</th><th class="bx-num">EK / Einheit</th><th>Lieferant</th><th class="bx-num">Kosten</th><th>Status</th><th></th></tr></thead>
       <tbody>
-      <?php require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Paket 12.11.2026 Teil 4: Hinweis „Unterlagen fehlen“ (kalkulieren erlaubt, bestellen erst mit Unterlagen)
+      <?php require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Paket 12.11.2026 Teil 4: Hinweis „Unterlagen fehlen“ (kalkulieren und bestellen erlaubt; Ware bleibt bis zur Unterlage in Quarantäne)
       foreach ($rk['zeilen'] as $z): ?>
         <tr>
           <td><a href="?p=rohstoff&id=<?= (int)$z['item_id'] ?>"><?= h($z['name']) ?></a></td>

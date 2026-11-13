@@ -34,6 +34,7 @@ function route_rollen_map(): array {
         'warenart_pruefung'  => [],                // Bulkware/Fertigprodukt prüfen+korrigieren – nur Admin (Stammdaten-Pflege)
         'bedarf'             => ['production', 'labor', 'fulfillment', 'einkauf'],
         'einkaufsliste'      => ['einkauf'],
+        'kein_dokument'      => ['labor'],   // Sofortfix 13.11.2026: Haken „kein Dokument nötig“ – nur QM (labor) und Admin
         'chargen'            => ['production', 'labor', 'fulfillment', 'einkauf'],
         'produktionschargen' => ['production', 'labor', 'fulfillment', 'einkauf'],
         'produktionscharge'  => ['production', 'labor', 'fulfillment', 'einkauf'],

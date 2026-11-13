@@ -21,3 +21,8 @@ Bei „direkt bestellt“ heißt der Termin „Erwartet am“; das Team (`$wer='
 Versandformular: Anzahl Pakete (Vorschlag = nicht stornierte Gebindeaufkleber) und Hinweis bei starker Gewichtsabweichung.
 
 **Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** Das Bestätigen-Formular (Team) zeigt bei einem Entwurf mit fehlenden Unterlagen dem Admin das Feld „Grund (Unterlagen fehlen, nur Admin)“, anderen den Grund mit gesperrtem Knopf.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Das Team bestätigt einen Entwurf ohne Admin-Grund – das Feld „Grund (Unterlagen fehlen, nur Admin)“ ist entfallen.

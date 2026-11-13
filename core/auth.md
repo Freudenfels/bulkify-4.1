@@ -52,3 +52,8 @@ Route `rohstoff_steckbrief`: production, einkauf, labor, sales, finance (admin i
 - `auth_login()` (Team-Login) und `auth_login_by_token()` lassen einen gesperrten Lieferanten ebenfalls nicht hinein.
 - `lieferant_zugang_gesperrt($id)` und `zugang_gesperrt_text()` sind die gemeinsamen Helfer (auch fürs Kundenportal).
 - Eine Lieferanten-Bewerbung (`quelle='bewerbung'`) hat ohnehin nur einen **inaktiven** Login bis zur Freigabe; durch die Sperre ist sie jetzt doppelt zu.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Neue Route `kein_dokument` in `route_rollen_map()`: nur Rolle `labor` (QM) und Admin.

@@ -79,6 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // CoA/Spezifikation hängen über die Bestellposition an der Charge. Fehlt das CoA noch: nur Hinweis (Handbuch 4.4).
             if ($bpR) { require_once BX_ROOT . '/core/bestellung_chargen.php'; $coaFehlt = charge_coa_fehlt((int)$cid); }
             if ($bpR) $zusatz .= '&best=' . (int)$bpR['bestellung_id'];
+            if ((int) scalar("SELECT unterlagen_fehlt FROM charge WHERE id=?", [(int)$cid]) === 1) $zusatz .= '&luq=' . (int)$cid;   // Sofortfix 13.11.2026
         }
         // Tracking-Code(s) der eingegangenen Pakete/Palette an die Charge haengen (je Zeile ein Code, gescannt).
         if ($cid) {
@@ -91,10 +92,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aktion === 'freigeben') {
         if (!darf_qm_freigeben()) { header('Location: ?p=wareneingang&quarantaene=1&nurqm=1'); exit; }   // QM-Gate (St-11)
         $qcid = (int)($_POST['charge_id'] ?? 0);
-        charge_quarantaene_freigeben($qcid);   // inkl. Fertigware: Produktionsbericht + zusammenfassendes CoA für den Kunden (Nico 03.11.)
+        $qOk = charge_quarantaene_freigeben($qcid);   // inkl. Fertigware: Produktionsbericht + zusammenfassendes CoA für den Kunden (Nico 03.11.)
+        $qZurueck = !empty($_POST['quarantaene']) ? '&quarantaene=1' . ((int)($_POST['q_item'] ?? 0) > 0 ? '&item=' . (int)$_POST['q_item'] : '') : '';
+        if (!$qOk && (string)($GLOBALS['bx_freigabe_fehler'] ?? '') !== '') { header('Location: ?p=wareneingang&qsperre=' . rawurlencode((string)$GLOBALS['bx_freigabe_fehler']) . $qZurueck); exit; }   // Sofortfix 13.11.2026
         bedarf_bump();   // freigegebene Ware zählt sofort als verfügbar (Bedarf/Einkauf/Produktion)
         nach_antwort(fn() => material_komplett_pruefen(true));   // Team: „Material komplett" für wartende Aufträge
-        header('Location: ?p=wareneingang&frei=1' . (!empty($_POST['quarantaene']) ? '&quarantaene=1' . ((int)($_POST['q_item'] ?? 0) > 0 ? '&item=' . (int)$_POST['q_item'] : '') : '')); exit;
+        header('Location: ?p=wareneingang&frei=1' . $qZurueck); exit;
+    }
+    // Sofortfix 13.11.2026: Unterlage aus dem Pop-up der Quarantäne-Liste bzw. Admin-Ausnahme mit Grund (lu_freigabe_zelle).
+    if (in_array($aktion, ['lu_upload', 'q_frei_admin'], true)) {
+        if (!darf_qm_freigeben()) { header('Location: ?p=wareneingang&quarantaene=1&nurqm=1'); exit; }
+        require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+        $r = lu_freigabe_post();
+        if ($r['ok'] && $aktion === 'q_frei_admin') { bedarf_bump(); nach_antwort(fn() => material_komplett_pruefen(true)); }
+        header('Location: ?p=wareneingang&quarantaene=1&' . ($r['ok'] ? 'qok=' : 'qsperre=') . rawurlencode($r['msg']));
+        if (!empty($r['did'])) lu_upload_nachlauf((int)$r['did']);
+        exit;
     }
     // Zukauf: fertige Bulkware zu einem Auftrag buchen (Fremdproduktion). Es gibt (noch) keinen Fertigware-
     // Artikel im Katalog – wir leiten ihn aus der Rezeptur des Auftragsprodukts ab (rezeptur_bulkitem, legt
@@ -223,6 +236,10 @@ if (isset($_GET['nachbest']) && ($nbst = (string) scalar("SELECT nummer FROM bes
     echo '<div class="bx-panel" style="padding:12px 16px">Nachträgliche Bestellung <a href="?p=bestellung&id=' . (int)$_GET['nachbest'] . '">' . h($nbst) . '</a> angelegt (direkt bestellt, geliefert) und mit der Charge verknüpft. Bitte Preis und Daten dort prüfen.</div>';
 if (isset($_GET['grundfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Nicht gebucht: Bitte die Bestellung wählen – oder „Ohne Bestellung“ mit Grund (alte Bestellung braucht den Lieferanten, Muster/Sonstiges eine Notiz).</div>';
 if (isset($_GET['frei']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Charge freigegeben.</div>';
+// Sofortfix 13.11.2026: Quarantäne-Sperre wegen fehlender CoA/Spec des Lieferanten
+if (isset($_GET['luq']))     { require_once BX_ROOT . '/core/lieferant_unterlagen.php'; $luqF = lu_charge_fehlt((int)$_GET['luq']); echo '<div class="bx-panel" style="border-left:3px solid #C9A227;background:rgba(201,162,39,.08);padding:12px 16px">Quarantäne: CoA/Spec des Lieferanten fehlt' . ($luqF ? ' (' . h(lu_liste_text($luqF)) . ')' : '') . '. Die Ware ist eingebucht, aber gesperrt und nicht für die Produktion verfügbar, bis die Unterlage da ist und die QM freigibt.</div>'; }
+if (isset($_GET['qsperre'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['qsperre']) . '</div>';
+if (isset($_GET['qok']))     echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['qok']) . '</div>';
 if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Menge oder Artikel fehlt.</div>';
 if (isset($_GET['bulkfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">Nicht gebucht: Bulkware nur auf den Bulk-Artikel einer Rezeptur. Bitte den Auftrag angeben oder über „Zukauf zu Auftrag“ buchen.</div>';
 if (isset($_GET['zkok']))   echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Zukauf-Fertigware gebucht und dem Auftrag zugeordnet. Nach dem Freigeben (unten) erkennt der Produktionsauftrag den Zukauf automatisch.</div>';
@@ -546,10 +563,11 @@ endif; ?>
         <td><?= $c['mhd'] ? h(date('d.m.Y', strtotime($c['mhd']))) : '<span class="muted">–</span>' ?></td>
         <td><?= $c['lieferant_firma'] ? h($c['lieferant_firma']) : (!empty($c['pa_nummer']) ? 'Produktion ' . h((string)$c['pa_nummer']) : '<span class="muted">–</span>') ?></td>
         <td><?php if (!$tc): ?><span class="muted">–</span><?php else: ?><span style="font-variant-numeric:tabular-nums"><?= h($tc[0]) ?></span><?php if (count($tc) > 1): ?> <span class="muted" style="font-size:11px" title="<?= h(implode(', ', $tc)) ?>">+<?= count($tc)-1 ?> Pakete</span><?php endif; ?><?php endif; ?></td>
-        <td><?= $statusBadge($c['status']) ?></td>
+        <td><?= $statusBadge($c['status']) ?><?php if ($c['status']==='quarantaene') { require_once BX_ROOT . '/core/lieferant_unterlagen.php'; $qG = lu_charge_grund((int)$c['id']); if ($qG !== '') echo '<div style="font-size:11px;color:#8f231b;white-space:normal">' . h($qG) . '</div>'; } ?></td>
         <td style="text-align:right">
           <?php if ($c['status']==='quarantaene' && !darf_qm_freigeben()): ?>
             <span class="muted" style="font-size:12px">Freigabe durch QM</span>
+          <?php elseif ($c['status']==='quarantaene' && ($qZ = lu_freigabe_zelle((int)$c['id'], '?p=wareneingang&quarantaene=1')) !== ''): echo $qZ; ?>
           <?php elseif ($c['status']==='quarantaene'): ?>
             <form method="post" style="display:inline"><input type="hidden" name="aktion" value="freigeben"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>"><?php if ($nurQuar): ?><input type="hidden" name="quarantaene" value="1"><input type="hidden" name="q_item" value="<?= (int)$quarItem ?>"><?php endif; ?><button class="btn btn-primary btn-sm" type="submit">freigeben</button></form>
           <?php endif; ?>

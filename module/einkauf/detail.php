@@ -114,15 +114,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lu_upload_nachlauf((int)$r['did']);
         exit;
     }
+    // Sofortfix 13.11.2026 Teil 4: alter Sperr-Entwurf (unterlagen_wartet=1) war schon beim Lieferanten bestellt – Abschluss wie
+    // „heute bestellt“ (Direkt bestellt, ohne Mail) mit dem Datum aus dem Feld; das Kennzeichen fällt weg.
+    if ($aktion === 'schon_bestellt' && !$neu) {
+        $dS = (string)($_POST['datum'] ?? '');
+        $fS = bestellung_direkt_abschliessen((int)$id, preg_match('/^\d{4}-\d{2}-\d{2}$/', $dS) ? $dS : null, null, 'Schon bestellt (alter Entwurf aus der Unterlagen-Sperre)', (string)(current_user()['name'] ?? ''));
+        if ($fS === '') q("UPDATE bestellung SET unterlagen_wartet=0 WHERE id=?", [(int)$id]);
+        header('Location: ?p=bestellung&id=' . $id . ($fS === '' ? '&ok=1' : '&fehler=' . urlencode($fS))); exit;
+    }
     if ($aktion === 'bestellt' && !$neu) {
-        // Paket 12.11.2026 Teil 4: Bestellen erst mit vollständigen Unterlagen des Lieferanten; Ausnahme nur Admin mit Grund.
-        // Zentral (13.11.2026): bestellung_als_bestellt_markieren() prüft die Unterlagen (Admin-Ausnahme mit Grund) und mailt.
-        // Fable-3 T2.3: Ausnahme nach Telefonbestellung = „direkt bestellt (ohne Nachricht)“ – keine Mail, gilt als bestätigt.
-        if ((string)($_POST['lu_weg'] ?? '') === 'direkt') {
-            $fD = bestellung_direkt_abschliessen((int)$id, null, null, '', (string)(current_user()['name'] ?? ''), trim((string)($_POST['lu_grund'] ?? '')));
-            header('Location: ?p=bestellung&id=' . $id . ($fD === '' ? '&ok=1' : '&fehler=' . urlencode($fD) . '#unterlagen')); exit;
-        }
-        $rB = bestellung_als_bestellt_markieren((int)$id, trim((string)($_POST['lu_grund'] ?? '')), (string)(current_user()['name'] ?? ''));
+        // 13.11.2026 (Regel Nico): fehlende Unterlagen sperren nicht mehr – bestellung_als_bestellt_markieren() legt nur die Aufgabe
+        // „Unterlagen nachfordern“ an und mailt; die Ware bleibt nach dem Eingang in Quarantäne, bis die Unterlage da ist.
+        $rB = bestellung_als_bestellt_markieren((int)$id, '', (string)(current_user()['name'] ?? ''));
         if (!$rB['ok']) { header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode($rB['msg']) . '#unterlagen'); exit; }
         $f = (string)$rB['msg'];
         header('Location: ?p=bestellung&id=' . $id . ($f === '' ? '&ok=1' : '&fehler=' . urlencode('Bestellung gespeichert, aber E-Mail nicht verschickt: ' . $f))); exit;
@@ -447,13 +450,12 @@ if (!$neu) {
     if ($zgSperre !== '') echo '<button class="btn btn-ghost btn-sm" type="button" disabled title="' . h($zgSperre) . '">Bestellung zurückziehen</button> ';
     elseif ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung zurückziehen und löschen? Der Bedarf erscheint wieder unter „Zu bestellen“.\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung ist noch nicht angekommen – zurückziehen und löschen (Bedarf kommt zurück)">Bestellung zurückziehen</button></form> ';
     if ($b['status'] === 'offen') {
-        require_once BX_ROOT . '/core/lieferant_unterlagen.php';
-        $luSperre = lu_bestellen_sperre((int)$id);
-        if ($luSperre === '') echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form>';
-        else {   // Paket 12.11.2026 Teil 4: grau mit Grund + Link zur Liste; Admin kann mit Pflicht-Grund trotzdem bestellen
-            echo '<button class="btn btn-ghost btn-sm" type="button" disabled title="' . h($luSperre) . '">als bestellt markieren</button> <a href="#unterlagen" style="font-size:12px">Unterlagen fehlen</a> ';
-            if (has_role('admin')) echo '<form method="post" style="display:inline" onsubmit="return this.lu_grund.value.trim().length > 0;"><input type="hidden" name="aktion" value="bestellt"><input type="text" name="lu_grund" required placeholder="Grund für die Ausnahme" style="width:200px"> <select name="lu_weg" title="Nach einer Telefonbestellung: direkt bestellt, ohne Nachricht an den Lieferanten"><option value="senden">an Lieferanten senden</option><option value="direkt">direkt bestellt (ohne Nachricht)</option></select> <button class="btn btn-ghost btn-sm" type="submit" title="Nur Admin: trotz fehlender Unterlagen bestellen (wird im Verlauf vermerkt)">trotzdem bestellen</button></form> ';
-        }
+        // 13.11.2026: immer bestellbar – fehlende Unterlagen sind nur ein Hinweis (Kasten „Unterlagen des Lieferanten fehlen“).
+        echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="bestellt"><button class="btn btn-ghost btn-sm" type="submit">als bestellt markieren</button></form> ';
+        if ((int)($b['unterlagen_wartet'] ?? 0) === 1)   // alter Sperr-Entwurf: war schon beim Lieferanten bestellt?
+            echo '<form method="post" id="schonbestellt" style="display:inline-flex;gap:6px;align-items:center"><input type="hidden" name="aktion" value="schon_bestellt">'
+               . '<input type="date" name="datum" value="' . h(heute_ort()) . '" style="width:150px" title="Bestelldatum beim Lieferanten">'
+               . '<button class="btn btn-primary btn-sm" type="submit" title="Wie „heute bestellt“: Direkt bestellt, ohne Mail an den Lieferanten">Schon bestellt am …</button></form> ';
     }
     if ($b['status'] === 'gesendet' && (int)($b['bestaetigt'] ?? 0) !== 1)
         echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung als telefonisch bestätigt markieren? Status bestellt, keine Mail.\');"><input type="hidden" name="aktion" value="telefonisch_bestaetigt"><button class="btn btn-primary btn-sm" type="submit" title="Lieferant hat am Telefon bestätigt – ohne weitere Mail">Telefonisch bestätigt</button></form>';
@@ -566,12 +568,15 @@ if (!$neu) {
     echo bestellung_abgleich_panel($b);
     // Chargen & Dokumente je Position: Charge, MHD, CoA, Spezifikation – Team und Lieferant (Portal) pflegen dieselbe Liste.
     require_once BX_ROOT . '/core/bestellung_chargen.php';
-    // Paket 12.11.2026 Teil 4: welche Unterlagen des Lieferanten fehlen noch (Bestellen gesperrt, bis alles da ist).
+    // Welche Unterlagen des Lieferanten fehlen noch. Seit 13.11.2026 keine Bestell-Sperre mehr: die Ware bleibt nach dem Eingang in
+    // Quarantäne, bis die Unterlage da ist (lu_charge_nach_eingang); bis dahin Aufgabe „Unterlagen nachfordern“ an den Einkauf.
     require_once BX_ROOT . '/core/lieferant_unterlagen.php';
-    $luF = in_array((string)$b['status'], ['offen', 'gesendet', 'bestellt'], true) ? lu_bestellung_fehlt((int)$id) : [];
+    lu_abgleich();
+    $luF = (string)$b['status'] !== 'storniert' ? lu_bestellung_fehlt((int)$id) : [];   // auch geliefert: Charge wartet in Quarantäne auf die Unterlage
     if ($luF) {
-        echo '<div class="bx-panel" id="unterlagen" style="border-left:3px solid var(--warn)"><h2 style="margin-top:0">Unterlagen des Lieferanten fehlen</h2>'
-           . '<p class="muted" style="margin-top:0">' . (lu_ausnahme((int)$id) !== '' ? 'Admin-Ausnahme: ' . h(lu_ausnahme((int)$id)) : 'Bestellen geht erst, wenn alles da ist. Der Lieferant sieht dieselbe Liste im Portal unter „Fehlende Unterlagen“.') . '</p>'
+        echo '<div class="bx-panel" id="unterlagen" style="border-left:3px solid #C9A227"><h2 style="margin-top:0">Unterlagen des Lieferanten fehlen</h2>'
+           . '<p style="margin-top:0;padding:8px 12px;background:rgba(201,162,39,.10)">' . h(lu_hinweis_text($luF)) . '</p>'
+           . '<p class="muted" style="margin-top:0">Bestellen geht trotzdem. Der Lieferant sieht dieselbe Liste im Portal unter „Fehlende Unterlagen“; die Aufgabe „Unterlagen nachfordern“ erledigt sich, sobald alles da ist.</p>'
            . lu_panel((int)$b['lieferant_id'], '?p=bestellung&id=' . (int)$id, 'de', ['liste' => $luF], true) . '</div>';
     }
     echo bestellung_chargen_panel($b, 'team', 'de');

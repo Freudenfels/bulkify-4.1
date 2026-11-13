@@ -43,6 +43,7 @@ $T = [
     ['Dateien', 'Ihre Unterlagen an einem Ort – Spezifikationen, Analysenzertifikate, Zertifikate, Preislisten.', [
       'Hochladen, benennen, fertig. Wir sehen dieselben Dateien.',
       'Zu einem Rohstoff gehörende Spezifikationen laden Sie am besten direkt an der Anfrage hoch.',
+      'Fehlt eine CoA oder Spezifikation, steht sie unter „Fehlende Unterlagen“. Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.',
     ]],
     ['Rückfragen', 'Kurze Fragen ohne E-Mail-Verkehr.', [
       'Schreiben Sie uns hier – mit Bezug zur Bestellung oder Anfrage, dann ist sofort klar, worum es geht.',
@@ -91,6 +92,7 @@ $T = [
     ['Files', 'Your documents in one place – specifications, certificates of analysis, certificates, price lists.', [
       'Upload, name it, done. We see the same files.',
       'Specifications belonging to one raw material are best uploaded directly in the request.',
+      'If a CoA or specification is missing, it is listed under “Missing documents”. Please upload missing documents, otherwise the goods remain blocked at our site.',
     ]],
     ['Questions and answers', 'Short questions without e-mail ping-pong.', [
       'Write to us here – linked to an order or request, so it is clear what it is about.',
@@ -139,6 +141,7 @@ $T = [
     ['文件', '您的资料集中存放：规格书、分析证书、认证、价格表。', [
       '上传并命名即可，我们看到的是同一批文件。',
       '与某个原料相关的规格书，最好直接在对应的询价单中上传。',
+      '如缺少 CoA 或规格书，会列在“缺少的文件”中。请上传缺少的文件，否则货物将在我方被冻结。',
     ]],
     ['留言与答复', '简短问题，无需往返邮件。', [
       '请在此处留言，并关联订单或询价单，事由一目了然。',

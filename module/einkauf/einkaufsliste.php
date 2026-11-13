@@ -4,7 +4,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/bestellung_doppelt.php';
-require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // Paket 12.11.2026 Teil 4: Bestellen erst mit Unterlagen
+require_once BX_ROOT . '/core/lieferant_unterlagen.php';   // 13.11.2026: fehlende Unterlagen = nur Hinweis + Aufgabe, Ware bleibt nach Eingang in Quarantäne
 
 // Warnung bei Doppelbestellung (Sofortfix 11.11.2026): vor „Vorsorglich" und „Bestellen" (alle drei Modi) die offenen
 // Bestellungen der gewählten Artikel bzw. Bulk-Produkte prüfen. Treffer ohne Bestätigung -> Pop-up, nichts wird angelegt.
@@ -64,11 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
     if ($iid > 0 && $menge > 0 && scalar("SELECT id FROM item WHERE id=?", [$iid])) {
         $bid = bestellung_erstellen([['item_id'=>$iid, 'menge'=>$menge, 'auftrag_id'=>0]], [], $sup, date('Y-m-d'));
         if ($bid) bestellung_doppelt_vermerken([$bid], $bxDoppelt);
-        if ($bid && !$online && ($luS = lu_bestellen_sperre($bid)) !== '') {   // Unterlagen fehlen: nur Entwurf, nicht senden
-            // Wirklich als Entwurf (offen, ohne Bestelldatum) – bestellung_erstellen() mit Datum legt sonst „bestellt" an.
-            bestellung_als_entwurf($bid, 'Vorsorglich');
-            header('Location: ?p=bestellung&id=' . $bid . '&fehler=' . urlencode('Als Entwurf angelegt, nicht gesendet. ' . $luS) . '#unterlagen'); exit;
-        }
+        // 13.11.2026 (Regel Nico): fehlende Unterlagen sperren das Bestellen nicht mehr – nur Hinweis + Aufgabe „Unterlagen nachfordern“.
         if ($bid) {
             if ($direkt) {
                 bestellung_direkt_abschliessen($bid, (string)($_POST['di_datum'] ?? ''), (string)($_POST['di_eta'] ?? ''), trim('Vorsorglich · ' . trim((string)($_POST['di_notiz'] ?? '')), ' ·'));
@@ -80,9 +76,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vorso
                   [$onHaendler, $onZahlart ?: null, $onPreis > 0 ? $onPreis : null, $onWaehr, $notiz, $bid]);
             } else {
                 q("UPDATE bestellung SET bestellart='lieferant', status='gesendet', notiz=CONCAT_WS(' · ', NULLIF(TRIM(notiz),''), 'Vorsorglich') WHERE id=?", [$bid]);   // Stand zeigt die Statuskette, nicht die Notiz
+                lu_nachfordern_aufgabe($bid);
                 if (mail_bereit()) mail_lieferant_bestellung($bid);
             }
-            header('Location: ?p=einkauf&vorsorglich=1'); exit;
+            header('Location: ?p=einkauf&vorsorglich=1' . (!$online && lu_bestellung_fehlt($bid) ? '&lu_hinweis=' . $bid : '')); exit;
         }
     }
     header('Location: ?p=einkaufsliste&vorsorgfehler=1'); exit;
@@ -180,13 +177,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
           [$onHaendler, $onZahlart ?: null, $onPreis > 0 ? $onPreis : null, $onWaehr, $notiz, $bid]);
     };
     // Lieferanten-Weg: an den Account gesendet (wartet auf Bestätigung) + Mail. Direkt-Weg: bestellt + bestätigt, KEINE Mail.
-    $luEntwurf = [];
-    $finalLief = function(int $bid) use ($direkt, $datum, &$luEntwurf) {
-        // Paket 12.11.2026 Teil 4: fehlen Unterlagen des Lieferanten, bleibt die Bestellung Entwurf (nicht gesendet).
-        // Fable-3 T2.1: auch wirklich Entwurf (offen, ohne Bestelldatum) – bestellung_erstellen() mit Datum legt sonst „bestellt“ an.
-        if (lu_bestellen_sperre($bid) !== '') { bestellung_als_entwurf($bid); $luEntwurf[] = $bid; return; }
+    // 13.11.2026 (Regel Nico): fehlende Unterlagen sperren nicht mehr – jeder Weg setzt seinen normalen Status; fehlt etwas, gibt es
+    // den gelben Hinweis (lu_hinweis) und die Aufgabe „Unterlagen nachfordern“ (lu_nachfordern_aufgabe, einmal je Bestellung).
+    $luHinweis = [];
+    $finalLief = function(int $bid) use ($direkt, $datum, &$luHinweis) {
+        if (lu_bestellung_fehlt($bid)) $luHinweis[] = $bid;
         if ($direkt) { bestellung_direkt_abschliessen($bid, (string)$datum, (string)($_POST['di_eta'] ?? ''), trim((string)($_POST['di_notiz'] ?? ''))); return; }
         q("UPDATE bestellung SET bestellart='lieferant', status='gesendet' WHERE id=?", [$bid]);   // Notiz bleibt; „wartet auf Bestätigung" zeigt die Statuskette
+        lu_nachfordern_aufgabe($bid);
         if (mail_bereit()) mail_lieferant_bestellung($bid);
     };
     $n = 0;
@@ -218,13 +216,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         $preisEin = betrag_lesen(preg_replace('/[^0-9.,]/', '', (string)($_POST['el_preis'] ?? '')));
         if ($direkt && $preisEin > 0 && count($alleBids) === 1) q("UPDATE bestellung_position SET ek_preis=? WHERE bestellung_id=?", [$preisEin, $alleBids[0]]);
     }
-    $n = max(0, $n - count($luEntwurf));   // Fable-4 T3.1: Sperr-Entwürfe sind nicht gesendet/bestellt – sie zählen in der Meldung nicht mit
-    header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal . ($skipGruende ? '&skipgr=' . urlencode(implode(' ', array_keys($skipGruende))) : '') : '') . ($luEntwurf ? '&lu_entwurf=' . implode(',', $luEntwurf) : '')); exit;
+    header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal . ($skipGruende ? '&skipgr=' . urlencode(implode(' ', array_keys($skipGruende))) : '') : '') . ($luHinweis ? '&lu_hinweis=' . implode(',', $luHinweis) : '')); exit;
 }
 
 require_once BX_ROOT . '/core/lieferant_unterlagen.php';
-lu_entwuerfe_pruefen();   // Fable-4 T3.1: Unterlagen nachgereicht -> Entwurf zählt wieder normal
-$sperrEntwuerfe = lu_sperr_entwuerfe();
+lu_entwuerfe_pruefen();   // alte Sperr-Entwürfe (bis 13.11.2026): Unterlagen nachgereicht bzw. bestellt -> Kennzeichen weg
+lu_abgleich();            // 13.11.2026: Aufgaben „Unterlagen nachfordern“ erledigen, Chargen mit nachgereichter Unterlage -> QM-Aufgabe
+$sperrEntwuerfe = lu_sperr_entwuerfe();   // nur noch alte – neue entstehen nicht mehr
 $aggAlle = bedarf_aggregiert(false);
 $aggBedarf = array_values(array_filter($aggAlle, fn($a) => $a['zu_bestellen'] > 1e-6));
 // Gesperrt = Etikett bzw. bedruckter Beutel ohne Kunden-Freigabe: nicht bestellbar -> nicht unter „Zu bestellen",
@@ -321,21 +319,15 @@ $liefSelect = function(string $key, int $sel, array $preise = [], bool $nurMit =
 
 // 13.11.2026 (Paket Teil 6.2): je Zeile eine eigene Bestellung – „heute bestellt“ (Pop-up: Lieferant, Menge, Preis bestätigen,
 // Direkt-Weg ohne Mail) oder „über Portal senden“ (Lieferanten-Account). Keine Mehrfachauswahl, kein Sammelweg mehr.
-$elKnoepfe = fn(string $key) => '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">'
-    . '<button type="button" class="btn btn-primary btn-sm el-heute" data-key="' . h($key) . '">heute bestellt</button>'
+// 13.11.2026: $lu = Hinweis „Beim Lieferanten fehlen noch …“ (gelb im Pop-up), '' = nichts fehlt.
+$elKnoepfe = fn(string $key, string $lu = '') => '<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start">'
+    . '<button type="button" class="btn btn-primary btn-sm el-heute" data-key="' . h($key) . '" data-lu="' . h($lu) . '">heute bestellt</button>'
     . '<button type="button" class="btn btn-ghost btn-sm el-portal" data-key="' . h($key) . '">über Portal senden</button></div>';
 render_header('einkaufsliste', 'Bestellen');
-bx_head('Bestellen', 'Getrennt nach Art. Jede Zeile wird einzeln bestellt (eigene Bestellnummer): „heute bestellt“ = schon beim Lieferanten bestellt (Telefon/Mail/online), im Pop-up Lieferant, Menge und Preis bestätigen – keine Mail; „über Portal senden“ = geht in den Account des Lieferanten (nur mit Account und Preis) und wartet auf Bestätigung.',
+bx_head('Bestellen', 'Getrennt nach Art. Jede Zeile wird einzeln bestellt (eigene Bestellnummer): „heute bestellt“ = schon beim Lieferanten bestellt (Telefon/Mail/online), im Pop-up Lieferant, Menge und Preis bestätigen – keine Mail; „über Portal senden“ = geht in den Account des Lieferanten (nur mit Account und Preis) und wartet auf Bestätigung. Fehlen Unterlagen des Lieferanten (CoA/Spezifikation), kommt nur ein gelber Hinweis: Bestellen geht immer, die Ware bleibt nach dem Eingang in Quarantäne, bis die Unterlage da ist.',
         bx_btn('Zu „Bestellt"', '?p=einkauf', 'ghost'));
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] ? (int)$_GET['bestellt'] . (isset($_GET['online']) ? ' Position(en) als „online bestellt" erfasst (Händler gespeichert, Preis falls angegeben)' : (isset($_GET['direkt']) ? ' Bestellung(en) als „direkt bestellt" erfasst (ohne Mail, gilt als bestätigt)' : ' Bestellung(en) an den/die Lieferanten gesendet (je Position eine eigene Bestellung)')) . ' – unter „Bestellt" sichtbar; in den Aufträgen vermerkt.' : 'Nichts ausgewählt.') . (isset($_GET['skip']) ? ' <strong>' . (int)$_GET['skip'] . ' Zeile(n) übersprungen</strong> – ' . (isset($_GET['direkt']) ? 'kein Lieferant gewählt.' : (trim((string)($_GET['skipgr'] ?? '')) !== '' ? h(trim((string)$_GET['skipgr'])) : 'Lieferant ohne aktiven Account/Preis.') . ' Diese bitte über „Direkt bestellt" oder „Online bestellt" erfassen.') : '') . '</div>';
-if (!empty($_GET['lu_entwurf'])) {   // Paket 12.11.2026 Teil 4: nicht gesendet, weil Unterlagen des Lieferanten fehlen
-    $luL = [];
-    foreach (array_filter(array_map('intval', explode(',', (string)$_GET['lu_entwurf']))) as $luB) {
-        $luNr = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$luB]);
-        if ($luNr !== '') $luL[] = '<a href="?p=bestellung&id=' . $luB . '#unterlagen">' . h($luNr) . '</a>';
-    }
-    if ($luL) echo '<div class="bx-panel" style="border-left:3px solid var(--warn);padding:12px 16px">Nicht gesendet, nur als Entwurf angelegt – Unterlagen des Lieferanten fehlen: ' . implode(', ', $luL) . '. Die Liste der fehlenden Unterlagen steht an der Bestellung; der Lieferant sieht sie im Portal.</div>';
-}
+if (!empty($_GET['lu_hinweis'])) echo lu_hinweis_panel((string)$_GET['lu_hinweis']);   // 13.11.2026: bestellt, Unterlagen fehlen noch (gelb)
 if (isset($_GET['onlinefehler'])) echo '<div class="bx-panel" style="border-color:var(--err);border-left:3px solid var(--err);padding:12px 16px;color:var(--err)"><strong>Nicht bestellt – nichts gespeichert.</strong> Für „Online bestellt" fehlt Händler/Quelle. Bitte die Positionen erneut anhaken und den Händler angeben.</div>';
 if (isset($_GET['vorsorgportal'])) {   // echter Grund (Account ODER Preis) aus lieferant_portal_grund()
     $vpGrund = trim((string)$_GET['vorsorgportal']); if ($vpGrund === '' || $vpGrund === '1') $vpGrund = 'Dieser Lieferant hat keinen Portal-Zugang oder keinen Preis für den Artikel.';
@@ -412,8 +404,8 @@ if ($ohneFestlegung): ?>
   <?php endif; ?>
   <?php if ($sperrEntwuerfe): // Fable-4 T3.1: Entwürfe, die wegen fehlender Unterlagen nicht gesendet werden durften – noch nicht bestellt ?>
   <div class="bx-panel" style="margin:12px 0 4px;border-color:#C9A227;background:rgba(201,162,39,.08);padding:12px 16px">
-    <div style="font-weight:600;margin-bottom:6px">Entwurf - Unterlagen fehlen (<?= count(array_unique(array_column($sperrEntwuerfe, 'id'))) ?>)</div>
-    <div class="muted" style="font-size:13px;margin-bottom:8px">Diese Bestellungen sind nur Entwürfe: Die Unterlagen des Lieferanten fehlen, deshalb wurde nichts gesendet. Sie zählen nicht als unterwegs. Unterlagen an der Bestellung hochladen, dann bestellen.</div>
+    <div style="font-weight:600;margin-bottom:6px">Alte Entwürfe - Unterlagen fehlen (<?= count(array_unique(array_column($sperrEntwuerfe, 'id'))) ?>)</div>
+    <div class="muted" style="font-size:13px;margin-bottom:8px">Entwürfe aus der früheren Bestell-Sperre (bis 13.11.2026), noch nicht bestellt und nicht unterwegs. Neue entstehen nicht mehr: Bestellen geht immer, die Ware bleibt nach dem Eingang in Quarantäne, bis die Unterlage da ist. Schon beim Lieferanten bestellt? An der Bestellung „Schon bestellt am …“.</div>
     <div class="bx-tablewrap"><table class="bx-table">
       <thead><tr><th>Bestellung</th><th>Artikel</th><th class="bx-num">Menge</th><th>Lieferant</th><th>Auftrag</th><th>Es fehlt</th><th></th></tr></thead>
       <tbody>
@@ -424,7 +416,7 @@ if ($ohneFestlegung): ?>
           <td><?= h((string)$se['lieferant']) ?></td>
           <td><?= $se['auftrag_id'] ? '<a href="?p=auftrag&id=' . (int)$se['auftrag_id'] . '">' . h((string)$se['auftrag_nr']) . '</a>' : '–' ?></td>
           <td class="muted" style="font-size:12px;white-space:normal"><?= h(lu_liste_text(lu_bestellung_fehlt((int)$se['id']))) ?></td>
-          <td style="text-align:right"><a class="btn btn-primary btn-sm" href="?p=bestellung&id=<?= (int)$se['id'] ?>#unterlagen">Entwurf öffnen</a></td></tr>
+          <td style="text-align:right"><a class="btn btn-primary btn-sm" href="?p=bestellung&id=<?= (int)$se['id'] ?>#schonbestellt">Entwurf öffnen</a></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
@@ -449,7 +441,7 @@ if ($ohneFestlegung): ?>
           $ei = $istEtikett ? etikett_info((int)$a['auftrag_id']) : null;
       ?>
         <tr<?= $gesperrt ? ' style="opacity:.75"' : '' ?>>
-          <td><?php if ($gesperrt): ?><span title="<?= !empty($a['druck']) ? 'Beutel-Design noch nicht vom Kunden freigegeben' : 'Etikett noch nicht vom Kunden freigegeben' ?>">gesperrt</span><?php else: ?><?= $elKnoepfe($key) ?><?php endif; ?></td>
+          <td><?php if ($gesperrt): ?><span title="<?= !empty($a['druck']) ? 'Beutel-Design noch nicht vom Kunden freigegeben' : 'Etikett noch nicht vom Kunden freigegeben' ?>">gesperrt</span><?php else: ?><?= $elKnoepfe($key, lu_hinweis_text(lu_fehlt(0, (int)$a['item_id'], 0, true))) ?><?php endif; ?></td>
           <td><?= h($a['name']) ?>
             <?php if ($istEtikett): ?>
               <?php if ($gesperrt): ?> <?= bx_badge('wartet auf Kunden-Freigabe','warn') ?>
@@ -512,7 +504,7 @@ if ($ohneFestlegung): ?>
       <?php endforeach; ?>
       <?php foreach ($nachTab as $nb): $key = 'nach:' . (int)$nb['item_id']; ?>
         <tr>
-          <td><?= $elKnoepfe($key) ?></td>
+          <td><?= $elKnoepfe($key, lu_hinweis_text(lu_fehlt(0, (int)$nb['item_id'], 0, true))) ?></td>
           <td><a href="?p=rohstoff&id=<?= (int)$nb['item_id'] ?>" target="_blank" style="text-decoration:none"><?= h($nb['name']) ?></a></td>
           <td><?= bx_badge('Nachbestellung','warn') ?></td>
           <td class="bx-num"><?= $mengeInput($key, (float)$nb['zu_bestellen'], (string)$nb['einheit']) ?><div class="muted" style="font-size:11px">Meldebestand <?= $mfmt($nb['mindest']) ?> · Lager <?= $mfmt($nb['stock']) ?><?= $nb['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($nb['bestellt']) : '' ?></div></td>
@@ -624,6 +616,7 @@ if ($ohneFestlegung): ?>
     <div class="bx-field"><label>Erwartet am (optional)</label><input type="date" id="elEtaIn"></div>
     <div class="bx-field" style="grid-column:1/-1"><label>Notiz (optional)</label><input type="text" id="elNotizIn" placeholder="z. B. telefonisch mit Herrn X"></div>
   </div>
+  <div id="elLu" hidden style="margin-top:10px;padding:10px 12px;border-left:3px solid #C9A227;background:rgba(201,162,39,.10);font-size:13px"></div>
   <div class="bx-fehlhinweis" id="elHw" hidden></div>
   <div class="bx-pop-fuss"><button type="button" class="btn btn-ghost" onclick="bxPopup.close('dlgHeute', true)">Abbrechen</button><button type="button" class="btn btn-primary" id="elOk">Als bestellt erfassen</button></div>
 </dialog>
@@ -650,6 +643,7 @@ if ($ohneFestlegung): ?>
     var opt=dl.options[dl.selectedIndex]; if(opt && opt.dataset.preis) document.getElementById('elPreis').placeholder='Lieferantenpreis '+String(opt.dataset.preis).replace('.',',')+' '+(opt.dataset.cur||'EUR');
     document.getElementById('elArt').textContent=tr?(tr.children[1].innerText.split('\n')[0]):'';
     document.getElementById('elHw').hidden=true;
+    var lu=document.getElementById('elLu'); lu.textContent=btn.dataset.lu||''; lu.hidden=!btn.dataset.lu;   // 13.11.2026: nur Hinweis, keine Sperre
     bxPopup.open('dlgHeute');
   });});
   document.getElementById('elOk').addEventListener('click', function(){

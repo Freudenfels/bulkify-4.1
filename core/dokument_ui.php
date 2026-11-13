@@ -27,6 +27,11 @@ function dokument_upload(string $objekt_typ, int $objekt_id): int {
             if (function_exists('log_aktivitaet'))
                 log_aktivitaet($objekt_typ, $objekt_id, 'team',
                     (dokument_typen()[$typ] ?? $typ) . ' hochgeladen: ' . mb_substr((string)$orig, 0, 120), 'dokument', 'dokument', $did);
+            // Sofortfix 13.11.2026: CoA/Spec am Artikel bzw. an der Rezeptur -> Aufgaben „Unterlagen nachfordern“ erledigen,
+            // Chargen in Quarantäne (Unterlage fehlte) -> Aufgabe an die QM.
+            if (in_array($objekt_typ, ['item', 'rezeptur', 'bestellung'], true)) {
+                try { require_once __DIR__ . '/lieferant_unterlagen.php'; lu_cache_leeren(); lu_abgleich(); } catch (\Throwable $e) {}
+            }
             return $did;
         }
     }

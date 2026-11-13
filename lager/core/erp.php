@@ -1705,6 +1705,7 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
                trim(($alt !== '' ? $alt . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
                (int)$vorab['id']]);
             erp_charge_kapselgroesse_setzen((int)$vorab['id']);
+            erp_unterlagen_quarantaene((int)$vorab['id']);   // Sofortfix 13.11.2026
             erp_bedarf_bump();
             return (int)$vorab['id'];
         }
@@ -1714,8 +1715,18 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
       [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $lief, $mhd ?: null, heute_ort(), $status, $notiz ?: null, jetzt_utc()]);   // Fable-4 T1.7: Ortszeit
     $neu = (int) insert_id();
     erp_charge_kapselgroesse_setzen($neu);   // Soll-Kette 2d: abgeleitet, nicht gemessen
+    erp_unterlagen_quarantaene($neu);        // Sofortfix 13.11.2026: CoA/Spec des Lieferanten fehlt -> immer Quarantäne
     erp_bedarf_bump();
     return $neu;
+}
+// Sofortfix 13.11.2026 (Regel Nico): fehlen für Artikel/Rezeptur Unterlagen des Lieferanten, geht die Charge IMMER in Quarantäne
+// (charge.unterlagen_fehlt=1) – dieselbe Stelle wie im Dashboard (core/lieferant_unterlagen.php, ohne core/schema.php).
+function erp_unterlagen_quarantaene(int $charge_id): bool {
+    try { require_once __DIR__ . '/../../core/lieferant_unterlagen.php'; return lu_charge_nach_eingang($charge_id); } catch (\Throwable $e) { return false; }
+}
+// Grund für die Anzeige („Quarantäne: CoA/Spec des Lieferanten fehlt“) bzw. '' – Lager-App (Charge, Quarantäne-Liste).
+function erp_unterlagen_grund(int $charge_id): string {
+    try { require_once __DIR__ . '/../../core/lieferant_unterlagen.php'; return lu_charge_grund($charge_id); } catch (\Throwable $e) { return ''; }
 }
 
 // --- Gebinde je Charge (Teil 4) -------------------------------------------------------------
@@ -2132,7 +2143,16 @@ function erp_charge_status_setzen(int $charge_id, string $status): array {
     $c = one("SELECT status, menge_verfuegbar FROM charge WHERE id=?", [$charge_id]);
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
     if ((string)$c['status'] === 'leer' || (float)$c['menge_verfuegbar'] <= 0) return ['ok' => false, 'meldung' => 'Leere Charge – Status bleibt.'];
+    // Sofortfix 13.11.2026: Freigabe erst, wenn die CoA/Spec des Lieferanten da ist (Admin-Ausnahme nur im Dashboard unter Freigaben).
+    if ($status === 'frei' && (string)$c['status'] === 'quarantaene') {
+        try {
+            require_once __DIR__ . '/../../core/lieferant_unterlagen.php';
+            if (($luS = lu_freigabe_sperre($charge_id)) !== '')
+                return ['ok' => false, 'meldung' => $luS . ' Unterlage im Dashboard an der Bestellung hochladen (Freigaben).'];
+        } catch (\Throwable $e) {}
+    }
     q("UPDATE charge SET status=? WHERE id=?", [$status, $charge_id]);
+    if ($status === 'frei') { try { q("UPDATE charge SET unterlagen_fehlt=0 WHERE id=?", [$charge_id]); } catch (\Throwable $e) {} }
     erp_bedarf_bump();   // freigegebene/gesperrte Ware ändert den verfügbaren Bestand -> Bedarf/Einkauf neu rechnen
     // QM-Freigabe einer Charge aus der Quarantäne -> Dashboard benachrichtigen (Fertigware: Bericht + CoA für den Kunden).
     if ($status === 'frei' && (string)$c['status'] === 'quarantaene') erp_qm_freigabe_melden($charge_id);

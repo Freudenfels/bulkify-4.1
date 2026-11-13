@@ -89,3 +89,8 @@ Siehe `pg_anfrage_schwankung()`.
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 CoA/Spec je Rohstoff ist keine Pflicht mehr: der Preis wird immer gespeichert und trägt sonst das Kennzeichen „Unterlagen fehlen“. Neu: Zeile „Spezifikation des Gesamtprodukts“ (Fremdfertigung/Premix/Bulk), Liste „Diese Unterlagen fehlen noch“ mit Upload in der Zeile, Kennzeichen in der Anfrage-Liste. Siehe core/lieferant_unterlagen.md.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Bestellen ist nicht mehr an die Unterlagen gebunden; ohne Unterlagen bleibt die Ware nach dem Eingang gesperrt.

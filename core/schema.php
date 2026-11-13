@@ -1978,6 +1978,12 @@ function init_schema(): void {
     ensure_column('item', 'moq_menge', "DECIMAL(12,3) NULL");
     ensure_column('item', 'moq_einheit', "VARCHAR(10) NULL");
     ensure_column('item', 'moq_notiz', "VARCHAR(190) NULL");
+    // Sofortfix 13.11.2026: „kein Dokument nötig“ (Schrauben, Masken, Handschuhe …) – Artikel braucht keine CoA/Spec (lu_item_pflichtig).
+    ensure_column('item', 'kein_dokument', "TINYINT(1) NOT NULL DEFAULT 0");
+    ensure_column('item', 'kein_dokument_grund', "VARCHAR(255) NULL");
+    ensure_column('item', 'kein_dokument_von', "VARCHAR(190) NULL");
+    // Sofortfix 13.11.2026: Charge in Quarantäne, weil CoA/Spec des Lieferanten fehlt (1) bzw. Unterlage nachgereicht, QM gibt frei (2).
+    ensure_column('charge', 'unterlagen_fehlt', "TINYINT(1) NOT NULL DEFAULT 0");
     // Preis-Gültigkeit (Nico 11.11.2026, core/preis_gueltig.php): „gültig bis" an jedem Lieferantenpreis, leer = unbegrenzt.
     foreach (['lieferant_preis', 'lieferant_angebot', 'rezeptur_lief_angebot', 'lieferant_preisliste', 'produkt_lieferant_preis', 'lieferant_katalog'] as $pgT)
         if (table_exists($pgT)) ensure_column($pgT, 'gueltig_bis', "DATE NULL");
@@ -4315,9 +4321,21 @@ function wareneingang_mit_quarantaene(): bool {
 }
 // Eine Charge aus der Quarantäne freigeben – EINE Stelle für Wareneingang und Freigaben. true, wenn sie in Quarantäne war.
 // Bedarf neu rechnen und „Material komplett“ prüfen macht der Aufrufer (einmal, auch bei Sammel-Freigabe).
-function charge_quarantaene_freigeben(int $charge_id): bool {
+// Sofortfix 13.11.2026: fehlt die CoA/Spec des Lieferanten (lu_freigabe_sperre), lehnt sie ab (false, Grund in
+// $GLOBALS['bx_freigabe_fehler']) – Ausnahme nur Admin mit $admin_grund (Vermerk an der Charge und im Protokoll).
+function charge_quarantaene_freigeben(int $charge_id, string $admin_grund = ''): bool {
+    $GLOBALS['bx_freigabe_fehler'] = '';
     if ((string) scalar("SELECT status FROM charge WHERE id=?", [$charge_id]) !== 'quarantaene') return false;
+    require_once __DIR__ . '/lieferant_unterlagen.php';
+    if (($luS = lu_freigabe_sperre($charge_id)) !== '') {
+        $admin_grund = trim($admin_grund);
+        if ($admin_grund === '' || !function_exists('has_role') || !has_role('admin')) { $GLOBALS['bx_freigabe_fehler'] = $luS; return false; }
+        $wer = (string)(function_exists('current_user') ? (current_user()['name'] ?? 'Admin') : 'Admin');
+        q("UPDATE charge SET notiz=CONCAT_WS(' | ', NULLIF(TRIM(notiz),''), ?) WHERE id=?", [mb_substr('Freigabe ohne CoA/Spec (Admin ' . $wer . ', ' . gmdate('d.m.Y') . '): ' . $admin_grund, 0, 250), $charge_id]);
+        log_aktivitaet('charge', $charge_id, 'team', 'Freigabe trotz fehlender CoA/Spec des Lieferanten (Admin-Ausnahme, ' . $wer . '): ' . $admin_grund, 'status');
+    }
     q("UPDATE charge SET status='frei' WHERE id=? AND status='quarantaene'", [$charge_id]);
+    try { q("UPDATE charge SET unterlagen_fehlt=0 WHERE id=?", [$charge_id]); } catch (\Throwable $e) {}
     fertigware_qm_freigabe_nach($charge_id);   // eigene Fertigware: Produktionsbericht + CoA für den Kunden (Nico 03.11.)
     return true;
 }
@@ -4619,6 +4637,8 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
                trim(($altNotiz !== '' ? $altNotiz . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
                $auftrag_id ?: null, $bestellung_position_id ?: null, (int)$vorab['id']]);
             charge_kapselgroesse_setzen((int)$vorab['id']);
+            require_once __DIR__ . '/lieferant_unterlagen.php';
+            lu_charge_nach_eingang((int)$vorab['id']);   // Sofortfix 13.11.2026: CoA/Spec fehlt -> immer Quarantäne
             return (int)$vorab['id'];
         }
     }
@@ -4627,6 +4647,8 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
       [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, heute_ort(), $status, $notiz ?: null, $auftrag_id ?: null, $bestellung_position_id ?: null, gmdate('Y-m-d H:i:s')]);   // Fable-4 T1.7: Wareneingang in Ortszeit
     $neu = (int) insert_id();   // ID VOR bedarf_bump() sichern (meta_set() setzt LAST_INSERT_ID sonst auf 0)
     charge_kapselgroesse_setzen($neu);   // Soll-Kette 2d
+    require_once __DIR__ . '/lieferant_unterlagen.php';
+    lu_charge_nach_eingang($neu);   // Sofortfix 13.11.2026: CoA/Spec des Lieferanten fehlt -> immer Quarantäne (charge.unterlagen_fehlt=1)
     bedarf_bump();   // neuer Bestand -> Bedarf-Cache ungueltig
     return $neu;
 }
@@ -7820,8 +7842,8 @@ function bestellung_stufe(array $b): array {
 // Dritter Bestellweg „Direkt bestellt (Telefon/Mail)" (Nico 08.11.2026): beim Lieferanten (egal ob mit Portal-Account) selbst
 // bestellt – Status sofort „bestellt" und bestätigt, KEINE Mail/Portal-Benachrichtigung. Der Lieferant sieht die Bestellung im
 // Portal trotzdem (Tracking, Rechnung), muss aber nichts bestätigen. $datum = Bestelldatum (leer = heute), $eta = erwarteter Termin.
-// Rückgabe (seit 13.11.2026): '' = abgeschlossen, sonst der Grund, warum nicht (Unterlagen des Lieferanten fehlen – zentrale
-// Sperre lu_bestellen_pruefen(); Admin-Ausnahme mit $ausnahme_grund). Dann bleibt die Bestellung unverändert (Entwurf).
+// Rückgabe: '' = abgeschlossen, sonst der Grund, warum nicht (bestellung_bestellbar). Fehlende Unterlagen des Lieferanten sperren seit
+// 13.11.2026 nicht mehr (lu_bestellen_pruefen legt nur die Aufgabe „Unterlagen nachfordern“ an); $ausnahme_grund wird nicht mehr gebraucht.
 // Fable-3 T2.4 (13.11.2026): bestellt werden kann nur ein Entwurf (offen) oder eine gesendete Bestellung – nie aus geliefert,
 // storniert oder einer schon bestätigten Bestellung. Ausnahme: eine eben aus der Einkaufsliste mit Datum angelegte Bestellung steht
 // schon auf „bestellt“, ist aber unbestätigt (bestellung_erstellen) – die darf „Direkt bestellt“ noch abschließen.
@@ -7851,18 +7873,17 @@ function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = nul
     if (function_exists('bedarf_bump')) bedarf_bump();
     return '';
 }
-// Bestellung als Entwurf führen (Fable-3 T2.1, 13.11.2026): Status „offen“ ohne Bestelldatum – z. B. wenn die Unterlagen-Sperre greift
-// oder „Vorsorglich bestellen“. Meldung „nur Entwurf“ und Status stimmen so überein; der Bedarf gilt nicht als bestellt.
+// Bestellung als Entwurf führen (Fable-3 T2.1, 13.11.2026): Status „offen“ ohne Bestelldatum (z. B. „Vorsorglich bestellen“). Meldung „nur Entwurf“ und Status stimmen so überein; der Bedarf gilt nicht als bestellt.
 function bestellung_als_entwurf(int $bestellung_id, string $notiz = ''): void {
     q("UPDATE bestellung SET bestellart='lieferant', status='offen', bestelldatum=NULL, notiz=CONCAT_WS(' · ', NULLIF(TRIM(notiz),''), NULLIF(?,'')) WHERE id=? AND status IN ('offen','gesendet','bestellt') AND COALESCE(bestaetigt,0)=0",
       [trim($notiz), $bestellung_id]);
-    // Fable-4 T3.1: fehlen Unterlagen des Lieferanten, bekommt der Entwurf das Kennzeichen unterlagen_wartet (zählt nicht als unterwegs).
+    // Altes Kennzeichen unterlagen_wartet wird hier nur noch gelöscht, nie gesetzt (13.11.2026).
     require_once __DIR__ . '/lieferant_unterlagen.php';
     lu_entwurf_markieren($bestellung_id);
     if (function_exists('bedarf_bump')) bedarf_bump();
 }
-// „Als bestellt markieren“ (Bestellseite, Einkauf mobil) – EIN Weg mit der zentralen Unterlagen-Sperre (13.11.2026).
-// Rückgabe ['ok'=>bool, 'msg'=>string]: ok=false = gesperrt (msg = Grund); ok=true und msg nicht leer = Mail-Fehler (Bestellung gilt).
+// „Als bestellt markieren“ (Bestellseite, Einkauf mobil) – EIN Weg. Fehlende Unterlagen sperren nicht (13.11.2026), nur Aufgabe.
+// Rückgabe ['ok'=>bool, 'msg'=>string]: ok=false = nicht bestellbar (msg = Grund); ok=true und msg nicht leer = Mail-Fehler (Bestellung gilt).
 function bestellung_als_bestellt_markieren(int $bestellung_id, string $ausnahme_grund = '', string $wer = ''): array {
     require_once __DIR__ . '/lieferant_unterlagen.php';
     if (($bb = bestellung_bestellbar($bestellung_id)) !== '') return ['ok' => false, 'msg' => $bb];   // Fable-3 T2.4
@@ -8117,7 +8138,7 @@ function bestellung_portal_sichtbar_sql(string $a = ''): string { return ($a !==
 // Fable-3 T2.2: Prüfung zentral hier, nicht in den Seiten –
 //  - storniert/geliefert: nicht bestätigen,
 //  - Lieferant: nur an ihn gesendete Bestellungen (gesendet/bestellt), einen Entwurf (offen) gibt es für ihn nicht,
-//  - Team: einen Entwurf nur mit vollständigen Unterlagen bestätigen, sonst nur Admin mit Grund (lu_bestellen_pruefen).
+//  - Team: einen Entwurf bestätigen (fehlende Unterlagen sperren seit 13.11.2026 nicht mehr, lu_bestellen_pruefen legt nur die Aufgabe an).
 function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, string $sprache = 'de', string $quelle = 'lieferant', string $ausnahme_grund = ''): string {
     $m = fn(string $de, string $en, string $zh) => $sprache === 'de' ? $de : ($sprache === 'zh' ? $zh : $en);
     $b = one("SELECT id, nummer, bestaetigt, lieferant_id, status FROM bestellung WHERE id=?", [$bestellung_id]);
@@ -8127,10 +8148,9 @@ function bestellung_bestaetigen(int $bestellung_id, string $eta, string $wer, st
     if ((int)$b['bestaetigt'] === 1) return '';                     // schon bestaetigt: nichts tun
     if (in_array($st, ['storniert', 'geliefert'], true)) return $m('Diese Bestellung ist ' . ($st === 'storniert' ? 'storniert' : 'schon geliefert') . ' und kann nicht mehr bestätigt werden.', 'This order is ' . ($st === 'storniert' ? 'cancelled' : 'already delivered') . ' and can no longer be confirmed.', '此订单已' . ($st === 'storniert' ? '取消' : '交付') . '，无法再确认。');
     if (trim($eta) === '' || !strtotime($eta)) return $m('Bitte einen geplanten Liefertermin angeben.', 'Please state a planned delivery date.', '请填写计划交货日期。');
-    if ($st === 'offen') {   // Team bestätigt einen Entwurf: gleiche Unterlagen-Sperre wie jeder Bestellweg
+    if ($st === 'offen') {   // Team bestätigt einen Entwurf: wie jeder Bestellweg nur Aufgabe „Unterlagen nachfordern“, keine Sperre
         require_once __DIR__ . '/lieferant_unterlagen.php';
-        $sperre = lu_bestellen_pruefen($bestellung_id, $ausnahme_grund, $wer);
-        if ($sperre !== '') return $sperre . ' Bestätigen nur als Admin mit Grund.';
+        lu_bestellen_pruefen($bestellung_id);
     }
     q("UPDATE bestellung SET bestaetigt=1, bestaetigt_am=UTC_TIMESTAMP(), bestaetigt_von=?, eta_geplant=?, station=?, status=IF(status IN ('offen','gesendet'),'bestellt',status) WHERE id=?",
       [mb_substr(trim($wer), 0, 190), date('Y-m-d', strtotime($eta)), 'angenommen', $bestellung_id]);

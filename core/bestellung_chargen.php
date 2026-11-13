@@ -90,6 +90,8 @@ function bch_datei_speichern(string $feld, array $b, string $typ, int $bp_id, ?s
     log_aktivitaet('bestellung', (int)$b['id'], $von === 'lieferant' ? 'lieferant' : 'team',
         ($typ === 'coa' ? 'CoA' : 'Spezifikation') . ' zur Bestellung hochgeladen' . ($charge_nr ? ' (Charge ' . $charge_nr . ')' : '') . '.', 'dokument', 'dokument', $did);
     if ($typ === 'coa') { $GLOBALS['bch_letztes_coa'] = $did; bch_coa_job_starten($did); }   // CoA sofort auslesen lassen (Hintergrund), danach prüft das Team im Popup
+    // Sofortfix 13.11.2026: CoA/Spec an der Bestellposition zählt als Unterlage des Lieferanten -> Aufgaben/Quarantäne abgleichen.
+    try { require_once __DIR__ . '/lieferant_unterlagen.php'; lu_cache_leeren(); lu_abgleich(); } catch (\Throwable $e) {}
     return [$did, ''];
 }
 

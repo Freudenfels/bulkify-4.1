@@ -62,3 +62,8 @@ Text `hinweis_bulkify` (DE/EN/ZH): Beschriftung für den Hinweis an den Lieferan
 
 ## Paket 12.11.2026 Teil 4 (Unterlagen-Regel)
 Menüpunkt „Fehlende Unterlagen“ mit Zähler; Texte produkt_spec, datei_fehler, unterlagen_menu; Hinweistext ohne Pflicht.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Text `roh_unterlage_hinweis`: „Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.“ statt „Bestellen können wir erst, wenn alle Unterlagen da sind.“

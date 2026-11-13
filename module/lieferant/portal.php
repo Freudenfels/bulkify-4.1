@@ -20,7 +20,7 @@ lp_shell_start('lieferant_portal');
   $luN = count(lu_offen_lieferant((int)$lf['id']));
   if ($luN > 0): ?>
   <div class="bx-panel" style="border-left:3px solid var(--warn);padding:10px 14px;margin:12px 0;max-width:760px">
-    <?= h(['de' => 'Es fehlen noch Unterlagen (' . $luN . '). Ohne sie können wir nicht bestellen.', 'en' => 'Documents are still missing (' . $luN . '). We cannot order without them.', 'zh' => '仍缺少文件（' . $luN . '）。缺少文件我们无法下单。'][lp_sprache()] ?? '') ?>
+    <?= h(['de' => 'Es fehlen noch Unterlagen (' . $luN . '). Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.', 'en' => 'Documents are still missing (' . $luN . '). Please upload missing documents, otherwise the goods remain blocked at our site.', 'zh' => '仍缺少文件（' . $luN . '）。请上传缺少的文件，否则货物将在我方被冻结。'][lp_sprache()] ?? '') ?>
     <a href="?p=lieferant_unterlagen"><?= h(lp_t('unterlagen_menu')) ?></a></div>
 <?php endif; ?>
 

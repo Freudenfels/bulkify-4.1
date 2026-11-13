@@ -174,3 +174,8 @@ Erkannt wird das am Öffnen-Link der Zeile bzw. an `_aid` (`dp_nur_offen()`, `dp
 **Etikett-Freigabe im Portal (Fable-4 T5.5, 13.11.2026):** Prüfung `etikett_freigabe_portal` (auf Klick, nur lesen): je offenem Auftrag Design (eigen/geerbt), Datei da, wie es bis 13.11. aussah und was jetzt passiert.
 
 **Zwei neue Listen (Sofortfix 13.11.2026, Teil 5):** `charge_nicht_eingebucht` – vorgemerkte Charge an geschlossener/eingegangener Bestellung bzw. Position ohne Ware geschlossen, Knopf „Jetzt einbuchen“; `reservierung_ungedeckt` – aktive Reservierungen mit ungedecktem Anteil (Artikel, Auftrag, PR, reserviert, im Lager, unterwegs, ungedeckt, ob der PR „fehlt“ zeigt). Beide auf Klick, nur lesen.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Neue Liste `charge_quarantaene_unterlage` „Chargen in Quarantäne wegen fehlender Unterlage“ (nur offene Vorgänge: Unterlage fehlt bzw. nachgereicht und wartet auf QM; Lieferant nur als Nummer; auf Klick). Die Listen „Rohstoff angefragt ohne Dokument“ und „in Kunden-Anfragen ohne Dokumente“ blenden Artikel mit „kein Dokument nötig“ aus und haben je Zeile den Knopf „kein Dokument nötig“ (Pop-up, Admin/QM).

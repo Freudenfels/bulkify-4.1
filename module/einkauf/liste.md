@@ -41,3 +41,8 @@ Kennzeichen „Unterlagen fehlen“ an offenen Bestellungen (Link auf die Liste 
 - **Ansicht „Offen je Lieferant“** (`ansicht=lieferant`): je Lieferant die offenen Bestellungen mit der Spalte „Fehlt noch“ (Bestätigung, CoA, Tracking, Lieferung; berechnet von `bestellung_fehlt()`).
 
 **Ware ist da (Sofortfix 13.11.2026):** Spalte mit Knopf „Ware ist da“ je bestellter, nicht eingegangener Bestellung -> Wareneingang der ersten offenen Position (auch in „Offen je Lieferant“).
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Badge „Unterlagen fehlen“ bleibt. Nach „Vorsorglich“ mit fehlenden Unterlagen der gelbe Kasten (`?lu_hinweis=`).

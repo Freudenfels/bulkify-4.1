@@ -28,14 +28,16 @@ if (!$zeilen) {
   <?php foreach ($zeilen as $z): ?>
     <tr>
       <td data-label="Artikel"><?= h($z['item_name']) ?></td>
-      <td data-label="Charge"><?= $z['charge_nr'] !== null && $z['charge_nr'] !== '' ? h($z['charge_nr']) : '<span class="muted">–</span>' ?></td>
+      <td data-label="Charge"><?= $z['charge_nr'] !== null && $z['charge_nr'] !== '' ? h($z['charge_nr']) : '<span class="muted">–</span>' ?><?php $zG = erp_unterlagen_grund((int)$z['id']); if ($zG !== ''): ?><div style="font-size:12px;color:var(--err)"><?= h($zG) ?></div><?php endif; ?></td>
       <td data-label="Lieferant"><?= (string)$z['lieferant'] !== '' ? h($z['lieferant']) : '<span class="muted">–</span>' ?></td>
       <td data-label="Eingang"><?= $z['wareneingang'] ? h(date('d.m.Y', strtotime((string)$z['wareneingang']))) : '<span class="muted">–</span>' ?></td>
       <td data-label="MHD"><?= $z['mhd'] ? h(date('d.m.Y', strtotime((string)$z['mhd']))) : '<span class="muted">–</span>' ?></td>
       <td data-label="Menge"><?= h(menge_txt((float)$z['menge_verfuegbar'])) ?> <?= h((string)$z['einheit']) ?></td>
       <td data-label="" style="text-align:right">
         <a class="btn btn-ghost btn-sm" href="?p=charge&id=<?= (int)$z['id'] ?>">Charge</a>
-        <?php if (lg_darf_qm_freigeben()): ?>
+        <?php if ($zG !== ''): // Sofortfix 13.11.2026: Freigabe erst mit Unterlage (Upload im Dashboard) ?>
+        <span class="muted" style="font-size:12px">Freigabe erst, wenn die CoA/Spec da ist</span>
+        <?php elseif (lg_darf_qm_freigeben()): ?>
         <form method="post" style="display:inline" onsubmit="return confirm('Diese Charge freigeben? Sie zählt danach als verfügbar.');">
           <input type="hidden" name="aktion" value="freigeben"><input type="hidden" name="charge_id" value="<?= (int)$z['id'] ?>"><input type="hidden" name="item" value="<?= (int)$itemF ?>">
           <button class="btn btn-primary btn-sm" type="submit">Freigeben</button>

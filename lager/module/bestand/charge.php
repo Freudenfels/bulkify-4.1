@@ -260,6 +260,7 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
     <button type="button" class="lg-ebtn" title="Bearbeiten">✎</button>
     <div class="k">Status</div>
     <div class="v lg-eview" style="font-size:var(--fs-lg)"><?= status_badge($c['status']) ?></div>
+    <?php $cQG = erp_unterlagen_grund((int)$c['id']); if ($cQG !== ''): // Sofortfix 13.11.2026 ?><div style="font-size:13px;color:var(--err);margin-top:4px"><?= h($cQG) ?> – Freigabe erst, wenn die Unterlage da ist.</div><?php endif; ?>
     <form method="post" class="lg-eform" hidden>
       <input type="hidden" name="aktion" value="status">
       <select name="status">

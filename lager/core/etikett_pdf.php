@@ -41,6 +41,7 @@ function lg_etikett_pdf(array $ids, string $format = 'klein', int $override = 0)
     foreach ($ids as $cid) {
         $c = erp_charge_voll($cid);
         if (!$c) continue;
+        $c['q_grund'] = function_exists('erp_unterlagen_grund') ? erp_unterlagen_grund($cid) : '';   // Sofortfix 13.11.2026
         $n = $override ?: lg_pakete($cid);
         // Blinker/Ort fuers Etikett (Kiste = Mischpalette, sonst Leisten-Code).
         $c['blinker_code'] = '';
@@ -162,7 +163,9 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
     }
 
     $lx = $mm(4); $tw = $qx - $lx - $mm(3);
-    $pdf->text($lx, $mm(7), 'bulkify · Wareneingang', 7, false, $muted);
+    // Sofortfix 13.11.2026: Quarantäne wegen fehlender CoA/Spec – im Kopf statt „Wareneingang“ (Lieferant nur als L-Nummer, Regel 7).
+    if (trim((string)($c['q_grund'] ?? '')) !== '') $pdf->text($lx, $mm(7), $pdf->fit((string)$c['q_grund'], $tw, 7.5, true), 7.5, true, $dark);
+    else $pdf->text($lx, $mm(7), 'bulkify · Wareneingang', 7, false, $muted);
 
     $yy = $mm(13.5);
     $name = (string)($c['item_name'] ?? '');
@@ -201,7 +204,8 @@ function lg_karton_etikett(MiniPDF $pdf, callable $mm, array $c, string $url, in
 function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $url, int $karton, int $gesamt): void {
     $W = $pdf->w; $dark = [20, 20, 20]; $muted = [120, 120, 120]; $line = [205, 205, 205];
     $pdf->rectStroke($mm(2), $mm(2), $W - $mm(4), $pdf->h - $mm(4), 0.6, $line);
-    $pdf->text($mm(6), $mm(9), 'bulkify · Wareneingang', 9, false, $muted);
+    if (trim((string)($c['q_grund'] ?? '')) !== '') $pdf->text($mm(6), $mm(9), $pdf->fit((string)$c['q_grund'], $W - $mm(12), 9.5, true), 9.5, true, $dark);   // Sofortfix 13.11.2026
+    else $pdf->text($mm(6), $mm(9), 'bulkify · Wareneingang', 9, false, $muted);
 
     // Etikettenrolle (7-stellige Inventarnummer): QR kleiner links, daneben Inventar-Block (Nummer groß + scanbarer
     // Barcode) und „Karton X / N". Ohne Inventarnummer bleibt das Layout wie bisher.

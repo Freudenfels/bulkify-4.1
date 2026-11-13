@@ -160,3 +160,8 @@ erp_la_scan() / erp_la_abschluss() / erp_charge_gebinde_anhaengen() / erp_la_auf
 **Ist-Gewicht nach Einheit (Fable-4 T1.4, 13.11.2026):** `erp_menge_einheit_lesen($s, $einheit)` – kg/g/l = `gewicht_lesen()` („24.850“ kg = 24,85 wie in der Werk-App), sonst `erp_menge_parse()`. `erp_gebinde_rueckgabe()` meldet `warnung` = true, wenn das Ist über der ursprünglichen Gebindemenge liegt (gebucht wird trotzdem, Meldung gelb).
 
 **Wareneingang in Ortszeit (Fable-4 T1.7, 13.11.2026):** `erp_wareneingang_buchen()` setzt `charge.wareneingang = heute_ort()` (Europe/Berlin) statt `CURDATE()` (UTC-Sitzung = zwischen 0 und 1/2 Uhr der Vortag).
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+`erp_wareneingang_buchen()` ruft `erp_unterlagen_quarantaene()` auf (dieselbe Stelle wie das Dashboard, `core/lieferant_unterlagen.php` ohne `core/schema.php`): fehlt die CoA/Spec des Lieferanten, ist die Charge immer in Quarantäne. `erp_charge_status_setzen($cid, 'frei')` lehnt dann ab („Freigabe erst, wenn die CoA/Spec da ist“). `erp_unterlagen_grund()` liefert den Grund für die Anzeige.

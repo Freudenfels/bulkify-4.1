@@ -51,7 +51,7 @@ if ($a && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aktion === 'angebot') {
         // CoA/Spezifikation je EINGESETZTEM Rohstoff (CoA oder Spec, eins genügt) – seit 12.11.2026 (Entscheidung Nico)
         // KEINE Pflicht mehr beim Preis: der Preis wird immer gespeichert und trägt sonst das Kennzeichen „Unterlagen fehlen“
-        // (core/lieferant_unterlagen.php). Bestellen geht erst mit vollständigen Unterlagen.
+        // (core/lieferant_unterlagen.php). Bestellen geht immer; ohne Unterlagen bleibt die Ware nach dem Eingang in Quarantäne (13.11.2026).
         $pflicht = lief_anfrage_pflicht_rohstoffe($a);
         if ($pgSchw['pflicht'] && !pg_lesen((string)($_POST['gueltig_bis'] ?? ''))) {
             $fehler = ['de' => 'Bitte angeben, wie lange Ihr Preis gilt (Preis gültig bis).', 'en' => 'Please state how long your price is valid (price valid until).', 'zh' => '请注明您的价格有效期（价格有效期至）。'][lp_sprache()] ?? 'Please state how long your price is valid.';

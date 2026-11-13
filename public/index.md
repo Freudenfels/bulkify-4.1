@@ -44,3 +44,8 @@ angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Re
 **Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** `api_einlager` gibt die Sperre („Es läuft noch die Unter-Charge …“) als Meldung an die Lager-App zurück.
 
 **Werk-App nur Machbares (13.11.2026, Teil 1):** Neuer Loopback `api_pa_machbar` (Token): rechnet `produktion_machbar_schritte()` für alle offenen PAs (speichert pa_machbar) und gibt den Stand als JSON an die Werk-App.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Neue Route `kein_dokument` → `module/einkauf/kein_dokument.php` (POST: „kein Dokument nötig“ am Artikel).

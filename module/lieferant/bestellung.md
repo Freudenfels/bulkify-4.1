@@ -48,3 +48,8 @@ Bereich „Labels / Aufkleber“ (core/lief_aufkleber_ui.php): Herstelldatum, Au
 Stückpreis über `preis_anzeige()` (unter 0,01 je 1.000), Summen aus dem genauen Preis.
 
 **Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** Entwürfe (Status „offen“) erscheinen weder in der Liste noch per Link (`bestellung_portal_sichtbar_sql()`); bestätigen lassen sich nur gesendete Bestellungen.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Fehlen zu dieser Bestellung Unterlagen, steht oben ein Kasten „Unterlagen fehlen – Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.“ mit Link auf „Fehlende Unterlagen“ (DE/EN/ZH). „Bestellen erst mit Unterlagen“ gibt es nicht mehr.

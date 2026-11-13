@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), 
         $n = 0;
         foreach (all("SELECT DISTINCT lieferant_id FROM lieferant_anfrage WHERE item_id=? AND lieferant_id IS NOT NULL AND COALESCE(status,'')<>'zurueckgezogen'", [$iid]) as $l) {
             nachricht_senden((int)$l['lieferant_id'], 'team', (string)(current_user()['name'] ?? 'Team'),
-                'Bitte laden Sie zu „' . $name . '“ eine CoA oder Spezifikation hoch (Portal → Fehlende Unterlagen). Ohne Unterlagen können wir nicht bestellen. / Please upload a CoA or specification for “' . $name . '” (portal → Missing documents). We cannot order without documents.',
+                'Bitte laden Sie zu „' . $name . '“ eine CoA oder Spezifikation hoch (Portal → Fehlende Unterlagen). Ohne Unterlagen bleibt die Ware bei uns gesperrt. / Please upload a CoA or specification for “' . $name . '” (portal → Missing documents). Without documents the goods remain blocked at our site.',
                 'item', $iid);
             $n++;
         }
@@ -136,6 +136,38 @@ $CHECKS = [
         'korrektur' => '– (nur anzeigen; „Jetzt einbuchen“ bucht über den Wareneingang)',
     ],
     // Sofortfix 13.11.2026 (Teil 5): Reservierungen, die weder durch Lager noch durch offene Bestellungen gedeckt sind.
+    // Sofortfix 13.11.2026 (Teil 2.6): Chargen, die wegen fehlender CoA/Spec des Lieferanten in Quarantäne stehen – nur offene Vorgänge
+    // (Unterlage fehlt noch bzw. nachgereicht und wartet auf die QM-Freigabe). Nur Anzeige; Freigabe/Upload unter Freigaben.
+    'charge_quarantaene_unterlage' => [
+        'titel' => 'Lager: Chargen in Quarantäne wegen fehlender Unterlage (CoA/Spec des Lieferanten)',
+        'info'  => 'Seit 13.11.2026 gehen Chargen beim Wareneingang in Quarantäne, wenn für Artikel bzw. Rezeptur die CoA oder Spezifikation des Lieferanten fehlt. Sie sind nicht verfügbar und werden nicht reserviert. „Stand“: Unterlage fehlt noch (Aufgabe Einkauf) bzw. nachgereicht – QM gibt frei. Lieferant nur als Nummer.',
+        'auf_klick' => true,
+        'sql'   => "SELECT c.id AS _id, c.charge_nr, c.item_id AS _iid, i.name AS artikel, c.menge_verfuegbar, c.einheit, c.wareneingang, COALESCE(c.unterlagen_fehlt,0) AS _uf,
+                           COALESCE(l.lieferantennummer, CONCAT('L-', c.lieferant_id)) AS lieferant, b.id AS _bid, b.nummer AS bestellung
+                    FROM charge c JOIN item i ON i.id=c.item_id LEFT JOIN lieferanten l ON l.id=c.lieferant_id
+                    LEFT JOIN bestellung_position bp ON bp.id=c.bestellung_position_id LEFT JOIN bestellung b ON b.id=bp.bestellung_id
+                    WHERE c.status='quarantaene' AND c.menge_verfuegbar>0 AND c.fremd_kunde_id IS NULL AND c.lieferant_id IS NOT NULL AND c.pa_id IS NULL
+                    ORDER BY c.wareneingang DESC, c.id DESC",
+        'zeilen' => function (array $rows): array {
+            require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+            lu_abgleich();
+            $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+            $out = [];
+            foreach ($rows as $r) {
+                $f = lu_charge_fehlt((int)$r['_id']);
+                $uf = (int) scalar("SELECT COALESCE(unterlagen_fehlt,0) FROM charge WHERE id=?", [(int)$r['_id']]);
+                if (!$f && $uf !== 2) continue;
+                $out[] = ['_id' => (int)$r['_id'], '_link' => '?p=freigaben', '_link_artikel' => '?p=rohstoff&id=' . (int)$r['_iid'] . '&tab=lager',
+                          '_link_bestellung' => $r['_bid'] ? '?p=bestellung&id=' . (int)$r['_bid'] . '#unterlagen' : null,
+                          'charge' => (string)($r['charge_nr'] ?: '#' . (int)$r['_id']), 'artikel' => (string)$r['artikel'],
+                          'menge' => $mz($r['menge_verfuegbar']) . ' ' . $r['einheit'], 'lieferant' => (string)$r['lieferant'], 'bestellung' => (string)($r['bestellung'] ?? '–'),
+                          'eingang' => $r['wareneingang'] ? date('d.m.Y', strtotime((string)$r['wareneingang'])) : '–',
+                          'es_fehlt' => $f ? lu_liste_text($f) : '–', 'stand' => $f ? 'Unterlage fehlt (Aufgabe Einkauf)' : 'nachgereicht – QM gibt frei'];
+            }
+            return $out;
+        },
+        'korrektur' => '– (nur anzeigen; Unterlage an der Bestellung bzw. unter Freigaben hochladen, dann gibt die QM frei)',
+    ],
     'reservierung_ungedeckt' => [
         'titel' => 'Lager: Reservierung ungedeckt (mehr reserviert als da bzw. unterwegs)',
         'info'  => 'Aktive Reservierungen mit ungedecktem Anteil: reserviert, aber weder im Lager noch bestellt (Beispiel Sanddorn 6 kg, PR-2761). Spalte „PR fehlt“ = der Produktionsauftrag zeigt bei diesem Artikel „fehlt“. Nur Anzeige.',
@@ -450,7 +482,7 @@ $CHECKS = [
                     JOIN lieferant_anfrage la ON la.item_id=i.id
                     LEFT JOIN lieferanten l ON l.id=la.lieferant_id
                     LEFT JOIN lieferant_angebot ag ON ag.anfrage_id=la.id
-                    WHERE i.kategorie='rohstoff' AND COALESCE(i.form,'') NOT IN ('kapselhuelle','premix')
+                    WHERE i.kategorie='rohstoff' AND COALESCE(i.form,'') NOT IN ('kapselhuelle','premix') AND COALESCE(i.kein_dokument,0)=0
                       AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id AND d.typ IN ('spec','coa','beides','analyse'))
                     GROUP BY i.id, i.artikelnummer, i.name
                     ORDER BY ((SELECT COUNT(*) FROM rezeptur_zutat z2 WHERE z2.item_id=i.id) > 0) DESC, (COUNT(DISTINCT ag.id) > 0) DESC, MAX(la.angelegt) DESC, i.name",
@@ -463,7 +495,8 @@ $CHECKS = [
             . '<button class="btn btn-ghost btn-sm" type="submit">Hochladen</button></form>'
             . '<form method="post" style="margin:0" onsubmit="return confirm(&#39;Bei allen angefragten Lieferanten über das Portal anfordern?&#39;);">'
             . '<input type="hidden" name="aktion" value="dp_lu_anfordern"><input type="hidden" name="item_id" value="' . (int)$r['_id'] . '">'
-            . '<button class="btn btn-ghost btn-sm" type="submit">Beim Lieferanten anfordern</button></form>'],
+            . '<button class="btn btn-ghost btn-sm" type="submit">Beim Lieferanten anfordern</button></form>'
+            . (function () use ($r) { require_once BX_ROOT . '/core/lieferant_unterlagen.php'; return '<div style="margin-top:6px">' . lu_kein_dokument_knopf((int)$r['_id'], (string)$r['name'], '?p=datenpruefung#rohstoff_angefragt_ohne_dok') . '</div>'; })()],
     ],
     'rohstoff_kundenanfrage_ohne_dok' => [
         'titel' => 'Rohstoff: in Kunden-Anfragen bzw. offenen Rezepturen, aber ohne Lieferanten-Dokumente',
@@ -474,16 +507,17 @@ $CHECKS = [
                            (SELECT COUNT(DISTINCT w.anfrage_id) FROM rezeptur_anfrage_wunsch w JOIN rezeptur_anfrage ra ON ra.id=w.anfrage_id
                              WHERE w.item_id=i.id AND ra.status NOT IN ('abgelehnt')) AS rezeptur_anfragen,
                            (SELECT COUNT(*) FROM portal_anfrage pa WHERE pa.rohstoff_id=i.id) AS rohstoff_anfragen,
-                           (SELECT COUNT(*) FROM lieferant_anfrage la WHERE la.item_id=i.id) AS preisanfrage
+                           (SELECT COUNT(*) FROM lieferant_anfrage la WHERE la.item_id=i.id) AS preisanfrage, '' AS aktionen
                     FROM item i
-                    WHERE i.kategorie='rohstoff' AND COALESCE(i.form,'') NOT IN ('kapselhuelle','premix')
+                    WHERE i.kategorie='rohstoff' AND COALESCE(i.form,'') NOT IN ('kapselhuelle','premix') AND COALESCE(i.kein_dokument,0)=0
                       AND NOT EXISTS (SELECT 1 FROM dokument d WHERE d.objekt_typ='item' AND d.objekt_id=i.id AND d.typ IN ('spec','coa','beides','analyse'))
                       AND ( EXISTS (SELECT 1 FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id WHERE z.item_id=i.id AND r.status IN ('entwurf','vorschlag'))
                          OR EXISTS (SELECT 1 FROM rezeptur_anfrage_wunsch w JOIN rezeptur_anfrage ra ON ra.id=w.anfrage_id WHERE w.item_id=i.id AND ra.status NOT IN ('abgelehnt'))
                          OR EXISTS (SELECT 1 FROM portal_anfrage pa WHERE pa.rohstoff_id=i.id) )
                     ORDER BY ((SELECT COUNT(DISTINCT z.rezeptur_id) FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id WHERE z.item_id=i.id AND r.status IN ('entwurf','vorschlag'))
                               + (SELECT COUNT(*) FROM rezeptur_anfrage_wunsch w WHERE w.item_id=i.id)) DESC, i.name",
-        'ohne_fix' => 'Nur Anzeige: am Rohstoff „Preis anfragen“ (mit CoA/Spezifikation) oder vorhandene Unterlagen hochladen (Öffnen).',
+        'ohne_fix' => 'Nur Anzeige: am Rohstoff „Preis anfragen“ (mit CoA/Spezifikation) oder vorhandene Unterlagen hochladen (Öffnen). Braucht der Artikel keine Unterlagen: „kein Dokument nötig“ (Admin/QM).',
+        'html' => ['aktionen' => function ($r) { require_once BX_ROOT . '/core/lieferant_unterlagen.php'; return lu_kein_dokument_knopf((int)$r['_id'], (string)$r['name'], '?p=datenpruefung#rohstoff_kundenanfrage_ohne_dok'); }],
     ],
     'rohstoff_ohne_wirkstoff' => [
         'titel' => 'Rohstoff: klingt nach Mineral/Vitamin, aber ohne Wirkstoffdaten (in Rezepturen verwendet)',

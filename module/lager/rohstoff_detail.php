@@ -1852,7 +1852,23 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
   </div>
 </section>
 <?php endif; ?>
-<section data-panel="dok" hidden><?php dokument_panel('item', (int)$id, $lieferanten); ?>
+<section data-panel="dok" hidden>
+  <?php if (!$neu && in_array((string)($it['kategorie'] ?? ''), ['rohstoff', 'fertig'], true)):   // Sofortfix 13.11.2026: „kein Dokument nötig“
+    require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+    $kdAn = (int)($it['kein_dokument'] ?? 0) === 1; $kdDarf = lu_darf_kein_dokument(); ?>
+  <div class="bx-panel" id="keindok" style="padding:12px 16px">
+    <form method="post" action="?p=kein_dokument" class="bx-row" style="gap:10px;align-items:center;flex-wrap:wrap;margin:0">
+      <input type="hidden" name="item_id" value="<?= (int)$id ?>"><input type="hidden" name="zurueck" value="?p=rohstoff&id=<?= (int)$id ?>&tab=dok">
+      <input type="hidden" name="an" value="<?= $kdAn ? '0' : '1' ?>">
+      <label style="display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" <?= $kdAn ? 'checked' : '' ?> <?= $kdDarf ? 'onchange="this.form.submit()"' : 'disabled' ?>> kein Dokument nötig (z. B. Schrauben, Masken, Handschuhe)</label>
+      <?php if (!$kdAn && $kdDarf): ?><input type="text" name="grund" maxlength="250" placeholder="Grund (optional)" style="max-width:280px"><?php endif; ?>
+    </form>
+    <div class="muted" style="font-size:12px;margin-top:4px"><?= $kdAn
+        ? 'Gesetzt von ' . h((string)($it['kein_dokument_von'] ?? '–')) . (trim((string)($it['kein_dokument_grund'] ?? '')) !== '' ? ' – ' . h((string)$it['kein_dokument_grund']) : '') . '. Keine CoA/Spezifikation nötig: kein Badge, keine Aufgabe, kein Punkt im Lieferantenportal, Wareneingang ohne Quarantäne-Sperre.'
+        : 'Ohne Haken braucht dieser Artikel eine CoA oder Spezifikation des Lieferanten; fehlt sie, bleibt die Ware nach dem Eingang in Quarantäne. Setzen dürfen nur Admin und QM (wird protokolliert).' ?></div>
+  </div>
+  <?php endif; ?>
+  <?php dokument_panel('item', (int)$id, $lieferanten); ?>
   <?php // Unsere bulkify-Dokumente: Spezifikation (immer, allgemein) + CoA je Charge mit Analysewerten.
         // Liegt bewusst AUCH hier im Dokumente-Reiter. Das Original des Lieferanten geht nie an den Kunden.
     $coaCharges = $neu ? [] : all("SELECT c.id, c.charge_nr, c.mhd, c.coa_freigegeben

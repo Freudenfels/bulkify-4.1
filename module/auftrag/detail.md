@@ -394,3 +394,8 @@ Express-Bestellung (fehlende Rohstoffe) und Express-Zukauf (Bulk und Fertigware/
 **Etikett-Datei fehlt (Fable-4 T5.3, 13.11.2026):** roter Hinweis oben, wenn ein Design eingetragen ist, die Datei aber nicht auf dem Server liegt (nur Anzeige).
 
 **Reserviert für PR (Sofortfix 13.11.2026):** Reiter Material, Spalte „zugeordnet“: „reserviert X für PR-…“ mit Deckung und Link; nicht eingebuchte Charge mit „jetzt einbuchen“.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Beschaffungsweg „Direkt bestellt“: keine Unterlagen-Sperre mehr; fehlende Unterlagen = Aufgabe „Unterlagen nachfordern“.

@@ -132,3 +132,8 @@ Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artik
 **Spalte offen bei stornierter Position (Fable-4 T3.7, 13.11.2026):** zeigt 0, der stornierte Rest steht klein daneben („(30 kg storniert)“).
 
 **Altlast nur mit Grund (Sofortfix 13.11.2026):** `abgl_geliefert` nur Admin und nur mit Grund (Pop-up „Ist die Ware im Lager?“), optional Rücksprung `zurueck`.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Bestellseite: „als bestellt markieren“ immer möglich (kein grauer Knopf, kein „trotzdem bestellen“ mehr). Kasten „Unterlagen des Lieferanten fehlen“ mit gelbem Hinweis, Upload und Knopf „kein Dokument nötig“ (Admin/QM); auch an gelieferten Bestellungen (Charge wartet in Quarantäne). Alte Sperr-Entwürfe (`unterlagen_wartet` = 1): Knopf „Schon bestellt am …“ (Datum, Standard heute) = Abschluss wie „heute bestellt“ ohne Mail, Kennzeichen fällt weg (aktion `schon_bestellt`).

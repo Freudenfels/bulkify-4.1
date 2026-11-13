@@ -249,3 +249,8 @@ Unter der Stammdaten-Tabelle des KI-Vorschlags steht jetzt „Wirkstoffgehalt la
 **Spec-Vergleich (13.11.2026, Paket Teil 5.3):** Nach dem Upload einer Spec oder CoA öffnet sich das Pop-up „Vergleich mit der bulkify-Spec“ (`&vergleich=`). Aktionen: `spec_vgl_uebernehmen` und `spec_vgl_behalten`. Oben stehen die Knöpfe „Mit bulkify-Spec vergleichen“ je Dokument mit ausgelesenen Werten.
 
 **Reservierung ehrlich (Sofortfix 13.11.2026):** Kopf und Reiter Lager zeigen „reserviert X – im Lager, unterwegs, ungedeckt“; Reservierungsliste mit Spalten PR (Link, „einziger offener“ bei alten Reservierungen) und Deckung; Rückfrage im Pop-up beim Reservieren über Bestand; Hinweis „BE-…: Charge eingetragen, nicht eingebucht – jetzt einbuchen“.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Reiter Dokumente: Haken „kein Dokument nötig (z. B. Schrauben, Masken, Handschuhe)“ (nur Admin/QM, postet an `?p=kein_dokument`, protokolliert) für Rohstoffe und Fertigware.

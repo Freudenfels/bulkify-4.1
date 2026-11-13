@@ -205,3 +205,8 @@ Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App,
 **Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Mengen-/Preisfelder werden mit `zahl_feld()` (Komma, kein Tausenderpunkt) vorbelegt, damit Speichern ohne Änderung den Wert nicht verändert.
 
 **Reserviert (Sofortfix 13.11.2026):** Spalte zeigt im Lager / unterwegs / ungedeckt; bei „fehlt“ der Grund („reserviert, aber nicht im Lager“ / „reserviert, aber ungedeckt - Wareneingang fehlt?“) und Links „BE-…: Charge eingetragen, nicht eingebucht – jetzt einbuchen“.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+„Bedarf bestellen“ mit „Direkt bestellt“: keine Unterlagen-Sperre mehr (nur Aufgabe „Unterlagen nachfordern“).

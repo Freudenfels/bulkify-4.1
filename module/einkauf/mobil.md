@@ -21,3 +21,8 @@ Beides sind **dieselben Aktionen wie auf der Detailseite** (`einkauf/detail.php`
 „bestellt“ erst mit vollständigen Unterlagen.
 
 **Knopf „Ware ist da - einbuchen“ (Sofortfix 13.11.2026):** führt in den Wareneingang (kein Bestätigen ohne Charge).
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+„als bestellt markieren“ ist nicht mehr wegen Unterlagen gesperrt (nur Aufgabe).

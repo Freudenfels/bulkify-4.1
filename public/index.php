@@ -261,6 +261,7 @@ $routes = [
     'portal_anfrage'     => 'intern/portal_anfrage_detail.php',
     'einkauf'            => 'einkauf/liste.php',
     'einkauf_mobil'      => 'einkauf/mobil.php',
+    'kein_dokument'      => 'einkauf/kein_dokument.php',   // Sofortfix 13.11.2026: „kein Dokument nötig“ am Artikel setzen (Pop-up, POST)
     'bestellung'         => 'einkauf/detail.php',
     'bestellung_pop'     => 'einkauf/bestellung_pop.php',   // Pop-up an der Bestellung: Dokumente, Versand, Sendung, Notiz (13.11.2026)
     'bestellung_pdf'     => 'einkauf/pdf.php',

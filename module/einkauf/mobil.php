@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id     = (int)($_POST['id'] ?? 0);
     $st     = $id ? (string) scalar("SELECT status FROM bestellung WHERE id=?", [$id]) : '';
     if ($id && $aktion === 'bestellt' && $st === 'offen') {
-        $rB = bestellung_als_bestellt_markieren($id);   // zentral: Unterlagen-Sperre + Mail (13.11.2026)
+        $rB = bestellung_als_bestellt_markieren($id);   // zentral: Aufgabe „Unterlagen nachfordern“ (keine Sperre mehr) + Mail (13.11.2026)
         if (!$rB['ok']) { header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode($rB['msg']) . '#unterlagen'); exit; }
         header('Location: ?p=einkauf_mobil&ok=bestellt#b' . $id); exit;
     }

@@ -210,6 +210,16 @@ if (!$b):
   <?php // Dokumente & Rechnung: der Lieferant lädt CoA, Rechnung o. Ä. direkt zu DIESER Bestellung hoch.
   require_once BX_ROOT . '/core/lieferant_dateien.php';
   $bdoks = bestell_dokumente($id, true);   // je Position abgelegte CoA/Spezifikationen stehen im Block „Chargen & Dokumente"
+  // 13.11.2026: fehlende Unterlagen zu dieser Bestellung – Hinweis mit Link auf „Fehlende Unterlagen“ (kein Bestell-Stopp, Ware bleibt gesperrt).
+  require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+  $luFB = lu_bestellung_fehlt((int)$id);
+  if ($luFB) {
+      $spB = lp_sprache();
+      echo '<div class="bx-panel" style="border-left:3px solid #C9A227"><div style="font-weight:600;margin-bottom:4px">' . h($spB === 'de' ? 'Unterlagen fehlen' : ($spB === 'zh' ? '缺少文件' : 'Documents missing')) . '</div>'
+         . '<p style="margin:0 0 8px">' . h($spB === 'de' ? 'Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.' : ($spB === 'zh' ? '请上传缺少的文件，否则货物将在我方被冻结。' : 'Please upload missing documents, otherwise the goods remain blocked at our site.')) . '</p>'
+         . '<div class="muted" style="font-size:13px;margin-bottom:8px">' . h(lu_liste_text($luFB, $spB)) . '</div>'
+         . '<a class="btn btn-primary btn-sm" href="?p=lieferant_unterlagen">' . h($spB === 'de' ? 'Fehlende Unterlagen hochladen' : ($spB === 'zh' ? '上传缺少的文件' : 'Upload missing documents')) . '</a></div>';
+  }
   require_once BX_ROOT . '/core/bestellung_chargen.php';
   echo bestellung_chargen_panel($b, 'lieferant', lp_sprache());
   echo la_panel($b, '?p=lieferant_bestellung&id=' . (int)$id, 'lieferant', lp_sprache());   // Paket 12.11.2026 Teil 5: Labels / Aufkleber

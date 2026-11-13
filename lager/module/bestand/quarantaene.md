@@ -12,3 +12,8 @@ Quarantäne-Ware freigeben (Status auf „frei") darf nur QM (Rolle `labor`) ode
 
 ## Quarantäne-Übersicht (Nacht 1b)
 Die Übersicht (`?p=wareneingang&quarantaene=1`, Knopf „Nur Quarantäne (Anzahl)") zeigt alle Chargen in Quarantäne mit Bestand: Charge, Artikel, Menge, **Eingang**, MHD, **Lieferant / Herkunft** (bei Fertigware „Produktion PR-…"), Status und „freigeben" (nur QM/Admin), älteste zuerst. Kein Direkt-frei-Haken beim Wareneingang. Lager-App `?p=quarantaene` zeigt die Herkunft ebenso.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Je Charge der Grund „Quarantäne: CoA/Spec des Lieferanten fehlt“; statt „freigeben“ steht dann „Freigabe erst, wenn die CoA/Spec da ist“.

@@ -26,3 +26,8 @@ Eine Etikettenrolle ist ein Gebinde mit 8-stelliger Inventarnummer (`charge_gebi
 `lg_produktion_karton_pdf($pa)` (Soll-Kette 6, 04.11.2026): Kartonetiketten der Produktion, 100 × 150 mm, je Karton eine Seite – „Karton i von n“, Produkt, Stückzahl im Karton (letzter Karton = Rest), Charge, MHD, Auftrag, Kunde, Code-128-Barcode „<Charge>-K05“.
 
 Gebinde-Etikett (04.11.2026): Feld heißt bei kg/g/l „Gewicht/Karton“ (sonst „Menge/Karton“) und zeigt das aktuelle Gewicht genau dieses Gebindes.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Lageretikett (klein und groß): Steht die Charge in Quarantäne, weil die CoA/Spec des Lieferanten fehlt, steht oben statt „bulkify · Wareneingang“ der Grund „Quarantäne: CoA/Spec des Lieferanten fehlt“. Der Lieferant bleibt nur als L-Nummer.

@@ -39,3 +39,8 @@ Im Upload-Formular von `dokument_panel()` wird die Lieferanten-Auswahl ab mehr a
 dokumente_fuer_kunde() schließt Hersteller-/Lieferanten-Unterlagen aus; Freigabe-Schalter lehnt sie ab (Badge „intern · nie an Kunde“).
 
 **13.11.2026:** Neue Dokumentarten „Rechnung“ und „Lieferschein“ (Bestell-Pop-up).
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+`dokument_upload()` ruft nach einem Upload an Artikel, Rezeptur oder Bestellung `lu_abgleich()` auf (Aufgaben „Unterlagen nachfordern“ erledigen, QM-Aufgabe für gesperrte Chargen).

@@ -197,14 +197,14 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     $neu = bestellung_aus_bedarf($id);
     bestellung_doppelt_vermerken($neu, $bxDoppelt);
     // „Direkt bestellt (Telefon/Mail)": Entwürfe mit Lieferant sofort bestellt + bestätigt, keine Mail (ohne Lieferant bleibt Entwurf).
-    // 13.11.2026: zentrale Unterlagen-Sperre – fehlen Unterlagen, bleibt die Bestellung Entwurf (Hinweis mit Nummern).
+    // Fehlende Unterlagen sperren nicht mehr (13.11.2026); bleibt eine Bestellung Entwurf, dann aus anderem Grund (bestellung_bestellbar).
     $dGesperrt = [];
     if (($_POST['modus'] ?? '') === 'direkt')
         foreach ($neu as $nb) if ((int) scalar("SELECT COALESCE(lieferant_id,0) FROM bestellung WHERE id=?", [$nb]) > 0
                                  && bestellung_direkt_abschliessen((int)$nb, null, null, 'aus dem Produktionsauftrag') !== '')
             $dGesperrt[] = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [(int)$nb]);
     header('Location: ?p=produktionsauftrag&id=' . $id . '&bestellt=' . count($neu)
-         . ($dGesperrt ? '&fehler=' . urlencode('Als Entwurf angelegt, nicht bestellt (Unterlagen des Lieferanten fehlen): ' . implode(', ', $dGesperrt) . '. Bestellen an der Bestellung, Ausnahme nur Admin mit Grund.') : '')); exit;
+         . ($dGesperrt ? '&fehler=' . urlencode('Als Entwurf angelegt, nicht als bestellt abgeschlossen: ' . implode(', ', $dGesperrt) . '. Bitte an der Bestellung abschließen.') : '')); exit;
 }
 // Fehlende Rohstoffe direkt auf die Einkaufsliste setzen (Bedarf melden, ohne den Umweg über die Bedarf-Seite).
 // Nur was WIRKLICH fehlt landet dort – Bestand und bereits Bestelltes rechnet die Einkaufsliste automatisch raus.
@@ -387,7 +387,7 @@ if (isset($_GET['wegfkfehler'])) echo '<div class="bx-panel" style="border-color
 if (isset($_GET['wegfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Eigen/Fremd bzw. der Weg kann nicht mehr geändert werden – es wurde bereits ein Schritt erledigt oder für den Auftrag bestellt.' . (($pa['produktionsart'] ?? '') === 'fremd' ? ' Für „doch selbst produzieren" den Knopf <strong>Rückabwicklung</strong> nutzen (storniert die Bulk-Bestellung mit).' : '') . '</div>';
 if (isset($_GET['rueck']))    echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['rueck']) . '</div>';
 if (isset($_GET['rueckfehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['rueckfehler']) . '</div>';
-if (!empty($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';   // 13.11.2026: z. B. Unterlagen-Sperre bei „Direkt bestellt“
+if (!empty($_GET['fehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['fehler']) . '</div>';   // 13.11.2026: z. B. Bestellung nicht abschließbar bei „Direkt bestellt“
 if (isset($_GET['bestellt'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['bestellt'] > 0 ? (int)$_GET['bestellt'] . ' Bestellung(en) als Entwurf angelegt – im Einkauf prüfen und absenden.' : 'Kein offener Fehlbedarf – nichts zu bestellen.') . '</div>';
 if (isset($_GET['etikett'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Etikett-Design aktualisiert.</div>';
 if (isset($_GET['reserviert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . ((int)$_GET['reserviert'] > 0 ? 'Bestand für ' . (int)$_GET['reserviert'] . ' Komponente(n) reserviert.' : 'Nichts zu reservieren (kein freier Bestand verfügbar).') . '</div>';

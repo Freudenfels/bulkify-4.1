@@ -11,3 +11,8 @@ Oben zwei Zähler. Einzeln freigegeben wird auf der Detailseite (Dokument + Diff
 
 ## Ware in Quarantäne (04.11.2026)
 Oberster Block: alle Chargen in Quarantäne (Lager 1, mit Bestand) mit Artikel, Warenart, Charge, Menge, MHD, Eingang, Herkunft (Lieferant oder Produktion PR-…) und Auftrag. Knopf **freigeben** je Zeile und **Alle freigeben** (Rückfrage), nur QM/Admin (`darf_qm_freigeben`). Logik wie im Wareneingang (`charge_quarantaene_freigeben`). Bei eigener Fertigware gibt die Freigabe auch den Produktionsbericht für den Kunden frei.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Ware in Quarantäne: je Charge der Grund „Quarantäne: CoA/Spec des Lieferanten fehlt“ bzw. „Unterlage nachgereicht – bitte prüfen und freigeben“. Gesperrte Chargen haben statt „freigeben“ den Knopf „Unterlage hochladen“ (Pop-up) und für Admin „trotzdem freigeben“ mit Pflicht-Grund (aktion `q_frei_admin`). „Alle freigeben“ überspringt gesperrte Chargen und meldet sie.

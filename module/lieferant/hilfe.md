@@ -11,3 +11,8 @@ Je Abschnitt: Ueberschrift, ein Satz Einleitung, danach die Schritte als Liste. 
 
 ## Pflegen
 Aendert sich etwas am Portal, gehoert es hier in **allen drei** Sprachen nachgezogen. Fehlt eine Sprache, faellt die Seite auf Deutsch zurueck – das faellt niemandem auf und ist deshalb gefaehrlich.
+
+## Sofortfix 13.11.2026: Unterlagen-Sperre wird Quarantäne-Sperre
+Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
+
+Anleitung, Abschnitt Dateien: „Fehlt eine CoA oder Spezifikation, steht sie unter ‚Fehlende Unterlagen‘. Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.“ (DE/EN/ZH).
