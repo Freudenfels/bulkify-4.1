@@ -80,6 +80,7 @@ if ($aktion === 'wa_karton') {
     weiter($zur);
 }
 if ($aktion === 'wa_teilmenge') {
+    if (empty($_POST['rueckstell_ok'])) { $flash($T['wa_fl_retain'], false); weiter($zur); }   // 13.11.2026: Pflicht-Kachel „Rückstellmuster entnommen“
     $foto = pa_foto_speichern($_FILES['foto_ware'] ?? [], 'ware' . $paId);
     if ($foto === '') { $flash($T['wa_fl_photo_goods'], false); weiter($zur); }
     $kart = array_column(pa_kartons_offen((int)$uc['id']), 'id');
@@ -96,6 +97,7 @@ if ($aktion === 'wa_sack' && function_exists('pa_sackgewicht')) {
     $flash($r['msg'], $r['ok']); weiter($zur);
 }
 if ($aktion === 'wa_abschluss') {
+    if (empty($_POST['abschluss_ok'])) { $flash($T['wa_fl_close_check'], false); weiter($zur); }   // 13.11.2026: Pflicht-Kachel statt confirm()
     $r = pa_abschliessen($paId, (string)($_POST['rest'] ?? 'kommt'), $von);
     $flash($r['msg'], $r['ok']); weiter(!empty($r['abgeschlossen']) ? '?p=werk' : $zur);
 }

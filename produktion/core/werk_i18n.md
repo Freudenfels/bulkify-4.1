@@ -14,3 +14,5 @@ Texte `return_box`, `return_closed`, `return_closed_req` (Rückgabe je Karton, 0
 
 ## Nachbesserung Fable-5 (13.11.2026)
 Neue Texte DE/EN/UK: `wa_rest_material` (Läuft weiter – Material für den Rest fehlt), `wa_stand_von` (Stand von %s …).
+
+13.11.2026: Neue Texte für die Pflicht-Kacheln (`wa_line_choose`, `wp_photo`, `wp_photo_again`, `wp_open`, `wa_retain_taken`, `wa_close_check`, `wa_fl_retain`, `wa_fl_close_check`); Nummern stehen nicht mehr im Text (die Kachel zeigt sie); `wa_restart` = „Neuer Tag – gleicher Bulk, neue Charge %s“ (DE/EN/UK); „Bulk scannen“ ohne Nummer.

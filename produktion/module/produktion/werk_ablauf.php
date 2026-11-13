@@ -19,13 +19,13 @@ $kap = erp_wa_kapsel_info($id);
 ?>
 <style>
   .wa-gross{font-size:34px;font-weight:800;letter-spacing:.5px;color:var(--lime);line-height:1.2}
-  .wa-panel input[type=text],.wa-panel select{font-size:22px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);color:var(--text);min-height:56px}
-  .wa-panel input[type=file]{font-size:16px;color:var(--text)}
+  .wa-panel input[type=text],.wa-panel select{font-size:22px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);color:var(--text);min-height:56px;max-width:100%;box-sizing:border-box}
   .wa-zeile{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:10px 0}
   .wa-pflicht{border:1px dashed var(--lime);border-radius:14px;padding:12px 14px;margin:8px 0}
   .wa-liste div{padding:8px 0;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;font-size:17px}
   .wa-sperre{background:rgba(228,88,78,.16);border:1px solid var(--err);border-radius:14px;padding:12px 16px;margin-bottom:12px;font-weight:700}
 </style>
+<?= werk_pflicht_assets($T) /* Pflichtschritte als Kacheln (13.11.2026, produktion/core/ui.php) */ ?>
 <?php if ($machbar['etikett_gesperrt']): ?>
   <div class="wa-sperre"><?= h(sprintf($T['wa_label_blocked'], werk_msg((string)($machbar['grund'] ?: $T['wa_label_blocked_default']), $lang))) ?></div>
 <?php endif; ?>
@@ -43,7 +43,7 @@ $kap = erp_wa_kapsel_info($id);
     $linieVor = (string) scalar("SELECT linie FROM produktionsauftrag WHERE id=?", [$id]);
 ?>
   <div class="panel wa-panel">
-    <div class="step-sub"><?= h($wiederanlauf && !$wechsel ? $T['wa_restart'] : ($uc ? $T['wa_change'] : $T['wa_start'])) ?></div>
+    <div class="step-sub"><?= h($wiederanlauf && !$wechsel ? sprintf($T['wa_restart'], (string)($v['charge_nr'] ?? '')) : ($uc ? $T['wa_change'] : $T['wa_start'])) ?></div>
     <?php if (!$s): ?>
       <div class="step-h"><?= h($T['wa_scan_bulk']) ?></div>
       <div class="muted" style="font-size:17px"><?= h($T['wa_scan_bulk_hint']) ?></div>
@@ -56,9 +56,10 @@ $kap = erp_wa_kapsel_info($id);
       <div style="font-size:19px;margin:6px 0 14px"><?= h($T['wa_stamp_set']) ?></div>
       <form method="post" enctype="multipart/form-data">
         <input type="hidden" name="aktion" value="wa_start"><input type="hidden" name="pa_id" value="<?= (int)$id ?>"><input type="hidden" name="bulk_code" value="<?= h($bulkCode) ?>">
-        <div class="wa-zeile"><span><?= h($T['wa_line']) ?></span><select name="linie"><?php foreach ($linien as $l): ?><option<?= $l === $linieVor ? ' selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?></select></div>
-        <div class="wa-pflicht"><label style="display:flex;gap:12px;align-items:center;cursor:pointer"><input type="checkbox" name="linie_leer" value="1" required style="width:28px;height:28px"> <?= h($T['wa_line_empty']) ?></label></div>
-        <div class="wa-pflicht"><?= h(sprintf($T['wa_stamp_check'], (string)$v['charge_nr'], $fdate($v['mhd']))) ?> – <b><?= h($T['wa_photo_stamp']) ?></b> <input type="file" name="foto_stempel" accept="image/*" capture="environment" required></div>
+        <?php $linieSel = '<select name="linie" data-norscombo>'; foreach ($linien as $l) $linieSel .= '<option' . ($l === $linieVor ? ' selected' : '') . '>' . h($l) . '</option>'; $linieSel .= '</select>'; ?>
+        <?= werk_pflicht(1, 'feld', 'linie', $T['wa_line_choose'], $T, ['feld' => $linieSel]) ?>
+        <?= werk_pflicht(2, 'bestaetigen', 'linie_leer', $T['wa_line_empty'], $T) ?>
+        <?= werk_pflicht(3, 'foto', 'foto_stempel', sprintf($T['wa_stamp_check'], (string)$v['charge_nr'], $fdate($v['mhd'])) . ' – ' . $T['wa_photo_stamp'], $T) ?>
         <?php if (!empty($v['neu'])): ?>
         <details style="margin:10px 0"><summary class="muted" style="cursor:pointer"><?= h($T['wa_deviate']) ?></summary>
           <div class="wa-zeile"><input type="text" name="charge_nr" placeholder="<?= h((string)$v['charge_nr']) ?>"></div>
@@ -69,7 +70,7 @@ $kap = erp_wa_kapsel_info($id);
           <label class="wa-zeile"><input type="checkbox" name="aelter_ok" value="1"> <?= h($T['wa_admin_younger']) ?></label>
           <div class="wa-zeile"><input type="text" name="aelter_grund" placeholder="<?= h($T['wa_reason']) ?>" style="flex:1"></div>
         <?php endif; ?>
-        <button class="btn btn-lime btn-lg" type="submit"><?= h($wiederanlauf && !$wechsel ? $T['wa_continue'] : $T['wa_start']) ?></button>
+        <button class="btn btn-lime btn-lg" type="submit" data-wp-haupt><?= h($wiederanlauf && !$wechsel ? $T['wa_continue'] : $T['wa_start']) ?></button>
       </form>
       <div style="margin-top:10px"><a class="back" href="?p=werk&id=<?= (int)$id ?><?= $wechsel ? '&wechsel=1' : '' ?>"><?= h($T['wa_other_bulk']) ?></a><?php if ($wechsel): ?> <a class="back" href="?p=werk&id=<?= (int)$id ?>"><?= h($T['wa_cancel']) ?></a><?php endif; ?></div>
     <?php endif; ?>
@@ -128,11 +129,11 @@ $kap = erp_wa_kapsel_info($id);
     <div class="step-sub"><?= h($T['wa_partial_done']) ?></div>
     <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="aktion" value="wa_teilmenge"><input type="hidden" name="pa_id" value="<?= (int)$id ?>">
-      <div class="wa-zeile"><input type="text" inputmode="numeric" name="menge" value="<?= $vorK > 0 ? (int)$vorK : '' ?>" placeholder="<?= h($T['wa_qty']) ?>" style="width:200px"><span><?= h($T['wa_pcs_jars']) ?><?= $vorK > 0 ? h(sprintf($T['wa_from_cartons'], count($offenK))) : '' ?></span></div>
-      <div class="wa-zeile"><input type="text" inputmode="numeric" name="rueckstell" value="5" style="width:120px"><span><?= h($T['wa_retain']) ?></span></div>
       <div class="wa-zeile"><?= h($T['wa_batch']) ?> <b><?= h((string)$uc['charge_nr']) ?></b> · <?= h($T['wa_bbd']) ?> <b><?= h($fdate($uc['mhd'])) ?></b> <?= h($T['wa_given']) ?></div>
-      <div class="wa-pflicht"><?= h($T['wa_photo_goods']) ?> <input type="file" name="foto_ware" accept="image/*" capture="environment" required></div>
-      <button class="btn btn-lime btn-lg" type="submit"><?= h($T['wa_book_partial']) ?></button>
+      <?= werk_pflicht(1, 'feld', 'menge', $T['wa_qty'], $T, ['feld' => '<input type="text" inputmode="numeric" name="menge" value="' . ($vorK > 0 ? (int)$vorK : '') . '" style="width:180px"><span>' . h($T['wa_pcs_jars']) . ($vorK > 0 ? h(sprintf($T['wa_from_cartons'], count($offenK))) : '') . '</span>']) ?>
+      <?= werk_pflicht(2, 'bestaetigen', 'rueckstell_ok', $T['wa_retain_taken'], $T, ['zusatz' => '<input type="text" inputmode="numeric" name="rueckstell" value="5" style="width:110px"> ' . h($T['wa_pcs'])]) ?>
+      <?= werk_pflicht(3, 'foto', 'foto_ware', $T['wa_photo_goods'], $T) ?>
+      <button class="btn btn-lime btn-lg" type="submit" data-wp-haupt><?= h($T['wa_book_partial']) ?></button>
     </form>
     <?php if ($tms): ?><div class="wa-liste" style="margin-top:10px"><?php foreach ($tms as $t): ?><div><span><?= h(fmt_zeit((string)$t['angelegt'])) ?> · <?= h((string)$t['mitarbeiter']) ?></span><span><?= $mz($t['menge']) ?> <?= h($T['wa_pcs']) ?><?= $t['umfang'] === 'vor_etikett' ? h($T['wa_before_label']) : '' ?></span></div><?php endforeach; ?></div><?php endif; ?>
   </div>
@@ -141,13 +142,14 @@ $kap = erp_wa_kapsel_info($id);
     <div class="wa-zeile">
       <a class="btn btn-ghost" href="?p=werk&id=<?= (int)$id ?>&wechsel=1"><?= h($T['wa_bulk_empty']) ?></a>
     </div>
-    <form method="post" class="wa-zeile" onsubmit="return confirm(<?= h(json_encode($T['wa_confirm_close'], JSON_UNESCAPED_UNICODE)) ?>)">
+    <form method="post">
       <input type="hidden" name="aktion" value="wa_abschluss"><input type="hidden" name="pa_id" value="<?= (int)$id ?>">
       <?php if ($rest > 0): ?>
-        <span><?= h(sprintf($T['wa_still_open'], $mz($rest))) ?></span>
-        <select name="rest" data-norscombo><option value="kommt"><?= h($T['wa_rest_comes']) ?></option><option value="storniert"><?= h($T['wa_rest_cancel']) ?></option></select>
+        <div class="wa-zeile"><span><?= h(sprintf($T['wa_still_open'], $mz($rest))) ?></span>
+        <select name="rest" data-norscombo><option value="kommt"><?= h($T['wa_rest_comes']) ?></option><option value="storniert"><?= h($T['wa_rest_cancel']) ?></option></select></div>
       <?php else: ?><input type="hidden" name="rest" value="voll"><?php endif; ?>
-      <button class="btn btn-primary" type="submit"><?= h($T['wa_close']) ?></button>
+      <?= werk_pflicht(1, 'bestaetigen', 'abschluss_ok', $T['wa_close_check'], $T) ?>
+      <button class="btn btn-primary btn-lg" type="submit" data-wp-haupt><?= h($T['wa_close']) ?></button>
     </form>
   </div>
 <?php endif; ?>

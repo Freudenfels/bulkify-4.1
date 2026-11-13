@@ -100,3 +100,5 @@ Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App,
 
 ## Nachbesserung Fable-5 (13.11.2026, Design)
 Kopf einzeilig: Logo, Sprache, Name, Abmelden als Symbol (44 px Tippfläche); am Handy kleinere Sprachknöpfe und gekürzter Name.
+
+13.11.2026: Rückgabe-Bestätigung „alle Kartons/Säcke gewogen und verschlossen“ ist eine Pflicht-Kachel (`werk_pflicht`), „Speichern“ erst danach aktiv.

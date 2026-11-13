@@ -503,9 +503,9 @@ header('Content-Type: text/html; charset=utf-8');
           </tbody>
         </table>
         <?php if ($mitGeb): ?>
-        <label style="display:flex;gap:12px;align-items:center;margin-top:16px;font-size:17px"><input type="checkbox" name="verschlossen" value="1" style="width:26px;height:26px"> <?= h($T['return_closed']) ?></label>
+        <?= werk_pflicht_assets($T) . werk_pflicht(1, 'bestaetigen', 'verschlossen', $T['return_closed'], $T) /* 13.11.2026: Pflicht-Kachel */ ?>
         <?php endif; ?>
-        <div style="margin-top:20px"><button class="btn btn-lime btn-lg" type="submit"><?= h($T['return_save']) ?></button></div>
+        <div style="margin-top:20px"><button class="btn btn-lime btn-lg" type="submit"<?= $mitGeb ? ' data-wp-haupt' : '' ?>><?= h($T['return_save']) ?></button></div>
       </form>
     </div>
   <?php elseif ($cur && (string)$cur['station'] === 'Mischen'): // ===== MISCHEN: Eimer für Eimer =====

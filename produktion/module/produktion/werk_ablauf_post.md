@@ -23,3 +23,5 @@ Die Ausnahme „jüngere Charge trotzdem“ prüft der Server: nur Admin, nur mi
 **Ausnahme „jüngere Charge trotzdem“ (13.11.2026, Fable-3 T1.5):** Die Admin-Prüfung nimmt den PIN-Nutzer der Werk-App (`$istAdminW` aus werk.php, Sitzung `werk_uid`), nicht die Anmeldung der Produktions-App. Admin per PIN + Grund = Start geht, Ereignis „Admin-Ausnahme“ im Chargenprotokoll; Nicht-Admin oder ohne Grund = abgelehnt.
 
 **Voll produziert / Linie leer (13.11.2026, Werk-App Teil 3):** `wa_start` sendet `linie_leer` (Haken) und das Stempelfoto an `pa_starten()`.
+
+13.11.2026: `wa_teilmenge` verlangt zusätzlich `rueckstell_ok` (Kachel „Rückstellmuster entnommen“), `wa_abschluss` verlangt `abschluss_ok` (Kachel statt confirm()); Meldungen `wa_fl_retain`, `wa_fl_close_check`.
