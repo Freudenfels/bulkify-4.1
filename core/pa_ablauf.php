@@ -587,6 +587,71 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     return ['ok' => true, 'msg' => pa_mz($menge) . ' Stk gebucht – Charge ' . $uc['charge_nr'] . ' (MHD ' . date('d.m.Y', strtotime((string)$uc['mhd'])) . ').', 'teilmenge_id' => $tm, 'charge_id' => $cid, 'fertig' => $fertig, 'umfang' => 'komplett'];
 }
 
+// ---- Menge einer laufenden Unter-Charge korrigieren (Nico 13.11.2026) ------------------------------------------------------
+// Mehr: der Unterschied wird als Teilmenge nachgebucht (gleiche Buchung wie Nachtrag: Material raus, Fertigware rein, Tag der
+// Unter-Charge). Weniger: die Teilmengen der Unter-Charge werden von hinten verringert, die Fertigware-Charge um den Unterschied
+// kleiner und das Material dieser Teilmengen anteilig zurückgebucht (produktion_verbrauch mit Minus, Charge wieder verfügbar).
+// Nur bei Status „läuft“, Grund Pflicht, Ereignis im Chargenprotokoll. Weniger geht nur, solange die Fertigware noch im Lager ist.
+function pa_uc_menge_korrigieren(int $pa_id, int $uc_id, float $neu, string $grund, string $von): array {
+    pa_schema();
+    $uc = pa_unter_charge($uc_id);
+    if (!$uc || (int)$uc['pa_id'] !== $pa_id) return ['ok' => false, 'msg' => 'Unter-Charge nicht gefunden.'];
+    if ((string)$uc['status'] !== 'laeuft') return ['ok' => false, 'msg' => 'Die Menge lässt sich nur bei einer laufenden Unter-Charge ändern (erst „wieder öffnen“).'];
+    $grund = trim($grund);
+    if ($grund === '') return ['ok' => false, 'msg' => 'Bitte einen Grund angeben.'];
+    $neu = round($neu);
+    if ($neu < 0) return ['ok' => false, 'msg' => 'Die Menge kann nicht negativ sein.'];
+    $alt = pa_uc_menge($uc_id);
+    $d = $neu - $alt;
+    if (abs($d) < 0.5) return ['ok' => true, 'msg' => 'Menge unverändert (' . pa_mz($alt) . ' Stk).'];
+    $nr = (string)$uc['charge_nr'];
+    if ($d > 0) {
+        $r = pa_teilmenge_buchen($pa_id, $uc_id, $d, ['art' => 'nachtrag', 'datum' => pa_uc_tag($uc), 'von' => $von, 'mitarbeiter' => $von, 'notiz' => 'Korrektur: ' . $grund]);
+        if (empty($r['ok'])) return $r;
+    } else {
+        $m = -$d;
+        $cid = (int)($uc['fertig_charge_id'] ?? 0);
+        $fc = $cid ? one("SELECT id, menge, menge_verfuegbar FROM charge WHERE id=?", [$cid]) : null;
+        if (!$fc) return ['ok' => false, 'msg' => 'Zur Unter-Charge ' . $nr . ' gibt es keine Fertigware-Charge im Lager – bitte Büro.'];
+        if ((float)$fc['menge_verfuegbar'] + 0.0001 < $m)
+            return ['ok' => false, 'msg' => 'Von Charge ' . $nr . ' sind nur noch ' . pa_mz($fc['menge_verfuegbar']) . ' Stk im Lager (Rest schon reserviert, verbraucht oder versendet). Kleiner als ' . pa_mz($alt - (float)$fc['menge_verfuegbar']) . ' Stk geht nicht.'];
+        $rest = $m;
+        foreach (all("SELECT * FROM pa_teilmenge WHERE unter_charge_id=? AND umfang='komplett' AND menge>0 ORDER BY COALESCE(datum, angelegt) DESC, id DESC", [$uc_id]) as $t) {
+            if ($rest < 0.5) break;
+            $M = (float)$t['menge']; $x = min($rest, $M); $anteil = $M > 0 ? $x / $M : 0.0;
+            // Material dieser Teilmenge anteilig zurück (netto je Charge, frühere Korrekturen eingerechnet)
+            foreach (all("SELECT item_id, charge_id, einheit, SUM(menge) AS netto FROM produktion_verbrauch WHERE pa_id=? AND teilmenge_id=? GROUP BY item_id, charge_id, einheit HAVING SUM(menge) > 0", [$pa_id, (int)$t['id']]) as $v) {
+                $zur = round((float)$v['netto'] * $anteil, 3);
+                if ($zur <= 0.0005) continue;
+                q("INSERT INTO produktion_verbrauch (pa_id,item_id,charge_id,menge,einheit,angelegt,teilmenge_id) VALUES (?,?,?,?,?,?,?)",
+                  [$pa_id, (int)$v['item_id'], $v['charge_id'] !== null ? (int)$v['charge_id'] : null, -$zur, $v['einheit'], gmdate('Y-m-d H:i:s'), (int)$t['id']]);
+                if ($v['charge_id'] !== null) {
+                    q("UPDATE charge SET menge_verfuegbar=menge_verfuegbar+?, status=IF(status='leer','frei',status) WHERE id=?", [$zur, (int)$v['charge_id']]);
+                    try {   // Gebinde (Karton/Sack/Rolle) mitführen: zuletzt für diesen Auftrag angebrochenes Gebinde der Charge
+                        $g = one("SELECT id FROM charge_gebinde WHERE charge_id=? AND pa_id=? ORDER BY id DESC LIMIT 1", [(int)$v['charge_id'], $pa_id]);
+                        if ($g) q("UPDATE charge_gebinde SET menge_verfuegbar=menge_verfuegbar+?, status='angebrochen' WHERE id=?", [$zur, (int)$g['id']]);
+                    } catch (\Throwable $e) {}
+                }
+            }
+            if ($x >= $M - 0.0001) {   // Teilmenge ganz weg: genau diese Zeile entfernen (Kartons lösen)
+                q("UPDATE pa_karton SET teilmenge_id=NULL WHERE teilmenge_id=?", [(int)$t['id']]);
+                q("DELETE FROM pa_teilmenge WHERE id=? AND unter_charge_id=?", [(int)$t['id'], $uc_id]);
+            } else {
+                q("UPDATE pa_teilmenge SET menge=?, notiz=? WHERE id=?", [$M - $x, mb_substr(trim((string)($t['notiz'] ?? '') . ' Korrektur −' . pa_mz($x) . ': ' . $grund), 0, 255), (int)$t['id']]);
+            }
+            $rest -= $x;
+        }
+        $neuVerf = (float)$fc['menge_verfuegbar'] - $m;
+        q("UPDATE charge SET menge=GREATEST(0, menge-?), menge_verfuegbar=?, status=IF(?<=0.0001,'leer',status) WHERE id=?", [$m, max(0.0, $neuVerf), $neuVerf, $cid]);
+        pa_fn('reservierung_abgleichen', 'erp_reservierung_abgleichen', $pa_id);
+    }
+    $txt = 'Menge der Unter-Charge ' . $nr . ' von ' . pa_mz($alt) . ' auf ' . pa_mz($neu) . ' Stk korrigiert' . ($d < 0 ? ' (Fertigware und anteiliges Material zurückgebucht)' : ' (Unterschied nachgebucht)') . '. Grund: ' . $grund;
+    pa_ereignis($pa_id, $uc_id, 'korrektur', $txt, (string)$d, '', '', $von);
+    $pa = one("SELECT kunde_id, auftrag_id, nummer FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    if (!empty($pa['kunde_id'])) pa_fn('log_aktivitaet', 'erp_log_aktivitaet', 'kunde', (int)$pa['kunde_id'], 'team', $txt . ' (Produktion ' . $pa['nummer'] . ').', 'auftrag', 'auftrag', (int)($pa['auftrag_id'] ?? 0));
+    return ['ok' => true, 'msg' => 'Menge ' . $nr . ': ' . pa_mz($alt) . ' → ' . pa_mz($neu) . ' Stk.'];
+}
+
 // ---- Kartons (Ergänzung 6) -----------------------------------------------------------------------------------------------
 // Je vollem Karton ein Datensatz mit fortlaufender Nummer je PA und genau einer Unter-Charge. Die Summe der Kartons ist die Menge.
 function pa_karton_anlegen(int $pa_id, int $uc_id, float $menge, string $von): array {

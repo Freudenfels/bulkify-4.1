@@ -43,6 +43,12 @@ $id = (int)($_GET['id'] ?? 0);
 // Unter-Charge im Dashboard abschließen / wieder öffnen (Nico 12.11.2026: „Status läuft – keine Ahnung, wie ich den ändere“).
 // Abschließen = wie Chargenwechsel/Ende in der Werk-App (pa_unter_charge_schliessen: Gegenprobe, Protokoll, Ereignis).
 // Wieder öffnen nur, wenn keine andere Unter-Charge dieses PA läuft (es läuft immer höchstens eine).
+// Menge einer laufenden Unter-Charge korrigieren (Nico 13.11.2026) – Buchung in pa_uc_menge_korrigieren() (core/pa_ablauf.php).
+if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'uc_menge') {
+    require_once BX_ROOT . '/core/pa_ablauf.php';
+    $r = pa_uc_menge_korrigieren($id, (int)($_POST['uc_id'] ?? 0), (float) zahl_lesen((string)($_POST['menge'] ?? ''), true), (string)($_POST['grund'] ?? ''), (string)(current_user()['name'] ?? 'Team'));
+    header('Location: ?p=produktionsauftrag&id=' . $id . (empty($r['ok']) ? '&teilfehler=' : '&nachok=') . urlencode((string)($r['msg'] ?? '')) . '#unterchargen'); exit;
+}
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['uc_schliessen', 'uc_oeffnen'], true)) {
     $wer = (string)(current_user()['name'] ?? 'Team');
     $ucId = (int)($_POST['uc_id'] ?? 0);

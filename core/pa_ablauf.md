@@ -87,3 +87,9 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 - `pa_schritte_vor_qm($pa_id)` – nur offene Schritte vor der ersten QM-Station; genutzt von „voll produziert“ und `pa_abschliessen()` („Einlagern (Bulk)“ nach der QM bleibt offen).
 - `pa_noch_offen()` beachtet „Rest storniert“ (Menge 0) und Mengen „bis vor dem Etikettieren“, liefert die Einheit (`pa_einheit`: Bulk-PA = Einheit des Bulk-Artikels); `pa_noch_offen_text()` lässt bei Rest 0 „· 0 Stk“ weg.
 - „produziert“ überall über `pa_produziert()`.
+
+## Menge einer laufenden Unter-Charge korrigieren (Nico 13.11.2026)
+`pa_uc_menge_korrigieren($pa_id, $uc_id, $neu, $grund, $von)`: nur bei Status „läuft“, Grund Pflicht.
+- **Mehr:** der Unterschied wird wie ein Nachtrag gebucht (`pa_teilmenge_buchen`, Tag der Unter-Charge, Notiz „Korrektur: …“) – Material raus, Fertigware-Charge wächst.
+- **Weniger:** die Teilmengen der Unter-Charge werden von hinten verringert (ganz leere Teilmenge wird genau diese Zeile entfernt, Kartons gelöst); das Material dieser Teilmengen geht anteilig zurück (`produktion_verbrauch` mit Minus-Zeile je Charge, Charge wieder verfügbar, zuletzt für den Auftrag angebrochenes Gebinde mitgeführt); die Fertigware-Charge wird um den Unterschied kleiner. Geht nur, solange die Fertigware noch im Lager ist (sonst Meldung mit der kleinstmöglichen Menge). Danach `reservierung_abgleichen`.
+- Ereignis `korrektur` im Chargenprotokoll und Verlauf am Kunden.

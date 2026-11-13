@@ -56,7 +56,15 @@ $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl
       <td style="white-space:normal"><?= h($prodAm) ?></td>
       <td><?= h($bulkTxt) ?></td>
       <td><?= $u['mhd'] ? h(date('d.m.Y', strtotime((string)$u['mhd']))) : '–' ?></td>
-      <td class="bx-num"><?= $nfA(pa_uc_menge((int)$u['id'])) ?></td>
+      <td class="bx-num" style="white-space:nowrap"><?= $nfA(pa_uc_menge((int)$u['id'])) ?><?php if ($u['status'] === 'laeuft'): ?>
+        <button type="button" class="bx-stift" style="margin-left:6px;vertical-align:middle" title="Menge korrigieren" onclick="bxPopup.open('dlgUcMenge<?= (int)$u['id'] ?>')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+        <dialog id="dlgUcMenge<?= (int)$u['id'] ?>" class="bx-dialog" style="text-align:left;white-space:normal"><h2>Menge <?= h((string)$u['charge_nr']) ?> korrigieren</h2>
+          <form method="post"><input type="hidden" name="aktion" value="uc_menge"><input type="hidden" name="uc_id" value="<?= (int)$u['id'] ?>">
+            <div class="bx-grid"><div class="bx-field"><label>Menge (Stk)</label><input type="text" inputmode="numeric" name="menge" required data-pflicht value="<?= h($nfA(pa_uc_menge((int)$u['id']))) ?>"></div>
+              <div class="bx-field"><label>Grund</label><input type="text" name="grund" required data-pflicht maxlength="200" placeholder="z. B. falsch gezählt"></div></div>
+            <p class="muted" style="font-size:13px;margin:8px 0 0">Mehr: der Unterschied wird nachgebucht (Material raus, Fertigware rein). Weniger: Fertigware und anteiliges Material gehen zurück ins Lager.</p>
+            <div class="bx-pop-fuss"><button class="btn btn-primary" type="submit">Menge speichern</button></div></form></dialog>
+      <?php endif; ?></td>
       <td style="white-space:normal;font-size:13px"><?php foreach ($tmU as $t): ?><div><?= h(date('d.m.', strtotime((string)($t['datum'] ?: $t['angelegt'])))) ?> · <?= $nfA($t['menge']) ?> Stk<?= $t['umfang'] === 'vor_etikett' ? ' (vor Etikett)' : '' ?><?= $t['art'] === 'nachtrag' ? ' · nachgetragen' : '' ?><?= $t['mitarbeiter'] ? ' · ' . h((string)$t['mitarbeiter']) : '' ?><?= $t['geliefert'] ? ' · schon geliefert' : '' ?></div><?php endforeach; ?></td>
       <td class="bx-num"><?= $kU ?></td>
       <td><?= $u['status'] === 'laeuft' ? bx_badge('läuft', 'info') : bx_badge('fertig', 'ok') ?>

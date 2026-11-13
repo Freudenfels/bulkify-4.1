@@ -216,3 +216,6 @@ Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuc
 
 ## Nachbesserung Fable-5 (13.11.2026, Design)
 Symbole ✓/✗/▶/○/↗ als SVG (`bx_sym`); God-Mode-Kasten eingeklappt (`details`) und ganz unten auf der Seite; Laufzettel-Knopf gleich hoch wie die anderen.
+
+## aktion=uc_menge (13.11.2026)
+Menge einer laufenden Unter-Charge korrigieren – Buchung in `pa_uc_menge_korrigieren()` (core/pa_ablauf.php), Rückmeldung oben über `nachok`/`teilfehler`, Anker `#unterchargen`.

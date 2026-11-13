@@ -27,3 +27,6 @@ Die Verarbeitung (`uc_schliessen`, `uc_oeffnen`) steht in `detail.php`.
 
 ## Spalte „Produziert am“ (Nico 13.11.2026)
 Die Tabelle „Unter-Chargen und Teilmengen“ zeigt je Unter-Charge, wann produziert wurde: die Produktionstage ihrer Teilmengen (`pa_teilmenge.datum`, sonst Anlage), mehrere Tage durch Komma getrennt; ohne Teilmenge der Produktionstag (`pa_unter_charge.tag`) bzw. das Anlagedatum.
+
+## Menge korrigieren (Nico 13.11.2026)
+Bei einer laufenden Unter-Charge steht neben der Menge ein Stift. Pop-up: neue Menge + Grund (Pflicht) → `aktion=uc_menge` in `detail.php` → `pa_uc_menge_korrigieren()`. Abgeschlossene Unter-Chargen erst „wieder öffnen“.
