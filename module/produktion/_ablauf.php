@@ -34,7 +34,7 @@ $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl
   <div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Charge</th><th>Produziert am</th><th>Bulk / Eimer</th><th>MHD</th><th class="bx-num">Menge</th><th>Teilmengen</th><th class="bx-num">Kartons</th><th>Status</th><th>Protokoll</th></tr></thead><tbody>
   <?php foreach ($ucs as $u):
       $tmU = all("SELECT * FROM pa_teilmenge WHERE unter_charge_id=? ORDER BY id", [(int)$u['id']]);
-      $kU = (int) scalar("SELECT COUNT(*) FROM pa_karton WHERE unter_charge_id=?", [(int)$u['id']]);
+      $kU = (int) scalar("SELECT COUNT(*) FROM pa_karton WHERE unter_charge_id=? AND storniert_am IS NULL", [(int)$u['id']]);
       // Produziert am (Nico 13.11.2026): Tage der Teilmengen (Produktionsdatum), sonst Produktionstag bzw. Anlage der Unter-Charge
       $tageU = array_values(array_unique(array_filter(array_map(fn($t) => substr((string)($t['datum'] ?: $t['angelegt']), 0, 10), $tmU))));
       if (!$tageU) $tageU = [substr((string)($u['tag'] ?: $u['angelegt']), 0, 10)];
@@ -50,9 +50,11 @@ $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl
         <button type="button" class="bx-stift" style="margin-left:6px;vertical-align:middle" title="Menge korrigieren" onclick="bxPopup.open('dlgUcMenge<?= (int)$u['id'] ?>')"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
         <dialog id="dlgUcMenge<?= (int)$u['id'] ?>" class="bx-dialog" style="text-align:left;white-space:normal"><h2>Menge <?= h((string)$u['charge_nr']) ?> korrigieren</h2>
           <form method="post"><input type="hidden" name="aktion" value="uc_menge"><input type="hidden" name="uc_id" value="<?= (int)$u['id'] ?>">
-            <div class="bx-grid"><div class="bx-field"><label>Menge (Stk)</label><input type="text" inputmode="numeric" name="menge" required data-pflicht value="<?= h($nfA(pa_uc_menge((int)$u['id']))) ?>"></div>
+            <?php $ucVor = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM pa_teilmenge WHERE unter_charge_id=? AND umfang='vor_etikett'", [(int)$u['id']]); ?>
+            <div class="bx-grid"><div class="bx-field"><label>Komplett (Stk, mit Etikett)</label><input type="text" inputmode="numeric" name="menge" required data-pflicht data-pflicht-text="Menge fehlt" value="<?= h($nfA(pa_uc_menge((int)$u['id']))) ?>"></div>
+              <?php if ($ucVor > 0 || (string)(produktion_etikett_sperre((int)$pa['id']) ?? '') !== ''): ?><div class="bx-field"><label>Bis vor Etikett (Stk)</label><input type="text" inputmode="numeric" name="menge_vor" required data-pflicht data-pflicht-text="Menge fehlt" value="<?= h($nfA($ucVor)) ?>"></div><?php endif; ?>
               <div class="bx-field"><label>Grund</label><input type="text" name="grund" required data-pflicht maxlength="200" placeholder="z. B. falsch gezählt"></div></div>
-            <p class="muted" style="font-size:13px;margin:8px 0 0">Mehr: der Unterschied wird nachgebucht (Material raus, Fertigware rein). Weniger: Fertigware und anteiliges Material gehen zurück ins Lager.</p>
+            <p class="muted" style="font-size:13px;margin:8px 0 0">Mehr: der Unterschied wird nachgebucht (gleiche Materialbuchung wie ein Nachtrag). Weniger: Fertigware zurück, Material laut den tatsächlichen Entnahmen zurück ins Lager, Kartons und Rückstellmuster werden angepasst. Nur Produktionsleitung und Admin.</p>
             <div class="bx-pop-fuss"><button class="btn btn-primary" type="submit">Menge speichern</button></div></form></dialog>
       <?php endif; ?></td>
       <td style="white-space:normal;font-size:13px"><?php foreach ($tmU as $t): ?><div><?= h(date('d.m.', strtotime((string)($t['datum'] ?: $t['angelegt'])))) ?> · <?= $nfA($t['menge']) ?> Stk<?= $t['umfang'] === 'vor_etikett' ? ' (vor Etikett)' : '' ?><?= $t['art'] === 'nachtrag' ? ' · nachgetragen' : '' ?><?= $t['mitarbeiter'] ? ' · ' . h((string)$t['mitarbeiter']) : '' ?><?= $t['geliefert'] ? ' · schon geliefert' : '' ?></div><?php endforeach; ?></td>

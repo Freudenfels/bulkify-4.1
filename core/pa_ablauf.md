@@ -98,3 +98,17 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 - Nachgestellt am 13.11.: Der Nachtrag an PR-2722 (ohne Auftrag) buchte weder Etikett noch Bulk; die Werk-App holte danach alles nach (110 Etiketten für 10 Stk). Jetzt buchen beide Wege dieselben Artikel und Mengen.
 - Die gewählte Bulk-Charge der Unter-Charge geht als `$GLOBALS['pa_nur_bulk']` an die Station „Fertigware bereitstellen“. Gebucht wird **nur diese Charge** und nur die Menge dieser Teilmenge (`$GLOBALS['pa_tm_menge']`), damit die Rückverfolgung stimmt.
 - Hinweis: Lücken aus früheren Dashboard-Nachträgen (z. B. nicht gebuchte Etiketten) holt die nächste Teilmenge einmalig nach, wie die Restbuchung es vorsieht.
+
+**Fable-6 P8 (13.11.2026) – Mengenkorrektur der Unter-Charge neu:** `pa_uc_menge_korrigieren($pa, $uc, $komplett, $grund, $von, $vor)`
+- Zwei Mengen: „komplett“ und „bis vor Etikett“ (`null` = unverändert). Mehr „komplett“ geht nicht, solange das Etikett gesperrt ist.
+- **Mehr:** Der Unterschied wird gebucht wie ein Nachtrag (`pa_teilmenge_buchen`, gleiche Materialbuchung).
+- **Weniger** (`pa_uc_weniger`):
+  - Die Teilmengen werden von hinten verringert und die Fertigware zurückgenommen (nur „komplett“).
+  - Bei „bis vor Etikett“ wird `menge_vor_etikett` gesenkt.
+  - Ganz entfernte Teilmengen nehmen ihre Rückstellmuster mit (`prod_probe.anzahl`).
+  - Kartons über der neuen Menge werden storniert (`pa_karton.storniert_am`, Schema-Version 6).
+- **Material zurück** (`pa_material_ueberschuss_zurueck`):
+  - Je Artikel wird das Soll für den neuen Stand berechnet. Das geht mit denselben Stations-Funktionen wie beim Buchen, im Sammel-Modus `$GLOBALS['pa_soll_sammeln']`.
+  - Was der Auftrag mehr verbraucht hat als dieses Soll, geht in genau die Chargen zurück, aus denen gebucht wurde: zuerst die dieser Unter-Charge, dann die übrigen Buchungen des Auftrags, jeweils neueste zuerst. Die Gebinde werden mitgeführt.
+  - Getestet: 100 → 50 Stk gibt genau 50 Gläser, 50 Deckel, 50 Etiketten und 6.000 Bulk zurück (vorher anteilig, z. B. 48 Gläser).
+- Alles läuft in **einer Transaktion**. Im Handler gilt: nur Produktionsleitung (`production`) und Admin; leere oder ungültige Eingaben (Text, negativ) lehnt der Server ab, statt sie wie bisher als 0 zu nehmen.

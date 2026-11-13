@@ -46,7 +46,13 @@ $id = (int)($_GET['id'] ?? 0);
 // Menge einer laufenden Unter-Charge korrigieren (Nico 13.11.2026) – Buchung in pa_uc_menge_korrigieren() (core/pa_ablauf.php).
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'uc_menge') {
     require_once BX_ROOT . '/core/pa_ablauf.php';
-    $r = pa_uc_menge_korrigieren($id, (int)($_POST['uc_id'] ?? 0), (float) zahl_lesen((string)($_POST['menge'] ?? ''), true), (string)($_POST['grund'] ?? ''), (string)(current_user()['name'] ?? 'Team'));
+    // Fable-6 P8: nur Produktion(sleitung)/Admin; leere oder ungültige Eingaben werden abgelehnt (vorher: leer = 0).
+    $mz = function (string $k): array { $roh = trim((string)($_POST[$k] ?? '')); if (!array_key_exists($k, $_POST)) return [true, null];
+        if ($roh === '' || !preg_match('/^\d{1,3}(\.\d{3})*$|^\d+$/', $roh)) return [false, null]; return [true, (float) zahl_lesen($roh, true)]; };
+    [$okK, $mK] = $mz('menge'); [$okV, $mV] = $mz('menge_vor');
+    if (!(has_role('admin') || has_role('production'))) $r = ['ok' => false, 'msg' => 'Mengen korrigieren dürfen nur Produktionsleitung und Admin.'];
+    elseif (!$okK || !$okV) $r = ['ok' => false, 'msg' => 'Bitte eine ganze Zahl (Stk) eintragen – leer oder Text geht nicht.'];
+    else $r = pa_uc_menge_korrigieren($id, (int)($_POST['uc_id'] ?? 0), $mK, (string)($_POST['grund'] ?? ''), (string)(current_user()['name'] ?? 'Team'), $mV);
     header('Location: ?p=produktionsauftrag&id=' . $id . (empty($r['ok']) ? '&teilfehler=' : '&nachok=') . urlencode((string)($r['msg'] ?? '')) . '#unterchargen'); exit;
 }
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['uc_schliessen', 'uc_oeffnen'], true)) {

@@ -21,7 +21,7 @@ function pa_protokoll_daten(int $uc_id): ?array {
         'uc' => $uc, 'pa' => $pa, 'teilmengen' => $tm, 'verbrauch' => $verbrauch,
         'scans' => all("SELECT s.rolle, i.name, COALESCE(c.charge_nr, s.code) AS charge, s.zeit, s.von FROM pa_scan s LEFT JOIN item i ON i.id=s.item_id LEFT JOIN charge c ON c.id=s.charge_id WHERE s.unter_charge_id=? ORDER BY s.id", [$uc_id]),
         'ereignisse' => all("SELECT * FROM pa_ereignis WHERE unter_charge_id=? ORDER BY id", [$uc_id]),
-        'kartons' => all("SELECT * FROM pa_karton WHERE unter_charge_id=? ORDER BY nummer", [$uc_id]),
+        'kartons' => all("SELECT * FROM pa_karton WHERE unter_charge_id=? AND storniert_am IS NULL ORDER BY nummer", [$uc_id]),
         'proben' => $uc['fertig_charge_id'] ? all("SELECT anzahl, bezeichnung, angelegt FROM prod_probe WHERE charge_id=? AND ebene='endprodukt'", [(int)$uc['fertig_charge_id']]) : [],
     ];
 }

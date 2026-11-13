@@ -230,3 +230,5 @@ Darunter Reiter (bs_reiter_html aus core/bestellung_seite.php, Umschalten in bx-
 - Details: Weg-Hinweise, Details, Füllmenge (Pulver, Admin), God-Mode
 Anker wie #unterchargen, #nachtragen, #kimelden öffnen den Reiter, in dem das Element steht. Ohne Anker kommt der zuletzt gewählte Reiter dieser Seite zurück (sessionStorage, gilt auch für die Bestellseite).
 Die doppelte Kopfzeile in _ablauf.php (Kunde, Auftrag, Soll …) ist entfallen – steht in den Kacheln.
+
+**Fable-6 P8 (13.11.2026):** `aktion=uc_menge` nimmt `menge` (komplett) und optional `menge_vor` (bis vor Etikett). Nur Produktionsleitung und Admin dürfen das; leere oder ungültige Eingaben werden abgelehnt. Die Buchung macht `pa_uc_menge_korrigieren()` (`core/pa_ablauf.md`).

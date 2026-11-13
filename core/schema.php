@@ -3490,6 +3490,7 @@ function produktion_fertigware_entnehmen_ohne_auftrag(int $pa_id, array $pa, ?fl
                  ORDER BY (c.mhd IS NULL), c.mhd ASC, c.id ASC", [$rid]);
     $ids = array_values(array_unique(array_map(fn($c) => (int)$c['item_id'], $rows)));
     if (!$ids) { $bi = (int) (rezeptur_bulkitem($rid) ?? 0); if ($bi) $ids = [$bi]; }
+    if (isset($GLOBALS['pa_soll_sammeln']) && $ids) { $GLOBALS['pa_soll_sammeln']['bulk'] = ['items' => $ids, 'soll' => $ziel]; return ['ok'=>true, 'fehlt'=>[]]; }   // Fable-6 P8
     $schon = $ids ? (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id IN (" . implode(',', $ids) . ")", [$pa_id]) : 0.0;
     $benoetigt = $ziel - $schon;
     if ($benoetigt <= max(0.0001, $ziel * 0.001)) return ['ok'=>true, 'fehlt'=>[]];
@@ -3546,6 +3547,7 @@ function produktion_fertigware_entnehmen(int $pa_id, ?float $bis = null, bool $t
     $bulkF = auftrag_bulk_item($aidF);
     $itemIds = array_map('intval', array_column(all("SELECT DISTINCT c.item_id FROM charge c JOIN item i ON i.id=c.item_id WHERE c.auftrag_id=? AND i.kategorie='fertig'", [$aidF]), 'item_id'));
     if ($bulkF && !in_array($bulkF, $itemIds, true)) $itemIds[] = $bulkF;
+    if (isset($GLOBALS['pa_soll_sammeln']) && $itemIds) { $GLOBALS['pa_soll_sammeln']['bulk'] = ['items' => $itemIds, 'soll' => $ziel]; return ['ok'=>true, 'fehlt'=>[]]; }   // Fable-6 P8
     $schon = $itemIds ? (float) scalar("SELECT COALESCE(SUM(menge),0) FROM produktion_verbrauch WHERE pa_id=? AND item_id IN (" . implode(',', $itemIds) . ")", [$pa_id]) : 0.0;
     $benoetigt = $ziel - $schon;
     if ($benoetigt <= max(0.0001, $ziel * 0.001)) return ['ok'=>true, 'fehlt'=>[]];
@@ -12826,6 +12828,12 @@ function produktion_verbraucht(int $pa_id, int $item_id): float {
 // Altbestand)], …]. $trocken = nur prüfen (nichts buchen). $log = Verlaufseintrag am Auftrag.
 // Rückgabe: ['ok'=>bool,'fehlt'=>[['name','benoetigt','verfuegbar','fehlt','einheit']],'gebucht'=>[['name','menge','alternativ','label']]].
 function produktion_posten_entnehmen(int $pa_id, array $posten, bool $trocken = false, bool $log = true): array {
+    // Fable-6 P8: Sammel-Modus für die Mengenkorrektur – nur das Soll je Artikel merken, nichts prüfen oder buchen.
+    if (isset($GLOBALS['pa_soll_sammeln'])) {
+        foreach ($posten as $p) { $iid = (int)$p['item_id']; if ($iid <= 0) continue; $alt = (int)($p['alternativ'] ?? 0);
+            $k = 'i' . $iid; $GLOBALS['pa_soll_sammeln'][$k] = ['items' => array_values(array_unique(array_filter([$iid, $alt]))), 'soll' => (float)($GLOBALS['pa_soll_sammeln'][$k]['soll'] ?? 0) + max(0.0, (float)$p['menge'])]; }
+        return ['ok'=>true, 'fehlt'=>[], 'gebucht'=>[]];
+    }
     $pa = one("SELECT nummer, auftrag_id, kunde_id FROM produktionsauftrag WHERE id=?", [$pa_id]);
     $auf = (int)($pa['auftrag_id'] ?? 0);
     $plan = []; $fehlt = [];
