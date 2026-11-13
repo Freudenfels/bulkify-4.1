@@ -635,7 +635,7 @@ function erp_etikett_status(int $pa_id): array {
     $auf = (int)($pa['auftrag_id'] ?? 0);
     $bestellt = ($auf && tabelle_da('bestellung_position')) ? (int) scalar(
         "SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-         WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$eid, $auf]) : 0;
+         WHERE bp.item_id=? AND bp.auftrag_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND bp.rest_storniert_am IS NULL", [$eid, $auf]) : 0;   // Fable-4 T3.7
     return ['status'=>$bestellt > 0 ? 'bestellt' : 'offen', 'name'=>$name];
 }
 

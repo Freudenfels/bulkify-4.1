@@ -8,7 +8,7 @@ require_once BX_ROOT . '/core/item_link.php';   // Material anklickbar (Nico 12.
 // des Auftrags (Freitext-Position bzw. Fertigware-Artikel). Rückgabe: Liste von Bestellzeilen (neueste zuerst, höchstens 3).
 function pa_material_bestellungen(int $auftrag_id, int $item_id, int $produkt_id): array {
     $sel = "SELECT DISTINCT b.id, b.nummer, b.status, b.station, b.bestelldatum, b.eta_geplant, b.angekommen_am, b.bestaetigt, l.firma
-            FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.status<>'storniert' AND ";
+            FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id WHERE b.status<>'storniert' AND (bp.rest_storniert_am IS NULL OR COALESCE(bp.geliefert_menge,0)>0) AND ";   // Fable-4 T3.7
     if ($item_id > 0)
         return all($sel . "bp.item_id=? AND (bp.auftrag_id=? OR (b.status NOT IN ('geliefert') AND b.angekommen_am IS NULL)) ORDER BY b.id DESC LIMIT 3", [$item_id, $auftrag_id]);
     if ($auftrag_id <= 0) return [];

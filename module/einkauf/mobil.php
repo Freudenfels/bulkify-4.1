@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if ($id && $aktion === 'liefern' && $st === 'bestellt') {
         // Einkauf gerade ziehen (Teil 1): EIN Wareneingang mit vorgewählter Position (Charge, MHD, Menge echt erfasst).
-        $bpErst = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND COALESCE(geliefert_menge,0) < menge ORDER BY sort, id LIMIT 1", [$id]);
+        $bpErst = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND COALESCE(geliefert_menge,0) < menge AND rest_storniert_am IS NULL ORDER BY sort, id LIMIT 1", [$id]);   // Fable-4 T3.7
         header('Location: ?p=wareneingang' . ($bpErst ? '&bp=' . $bpErst : '')); exit;
     }
     header('Location: ?p=einkauf_mobil'); exit;

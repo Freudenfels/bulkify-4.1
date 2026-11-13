@@ -6503,8 +6503,8 @@ function auftrag_fortschritt(array $a, bool $leicht = false): array {
             if ($fehlt === null && $eid > 0)   // ohne PA bzw. in Listen: Bestand des Etiketts gegen die Auftragsmenge
                 $fehlt = max(0.0, (float)$a['menge'] - (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei'", [$eid]));
             $offenBest = $eid > 0 ? one("SELECT MIN(b.eta_geplant) eta, COUNT(*) n FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                         WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL
-                                           AND bp.menge > COALESCE(bp.geliefert_menge,0)", [$eid]) : null;
+                                         WHERE bp.item_id=? AND b.status IN ('gesendet','bestellt') AND b.angekommen_am IS NULL
+                                           AND " . bp_rest_sql() . " > 0", [$eid]) : null;   // Fable-4 T3.7: „Etiketten bestellt“ ohne Entwurf und ohne stornierte Position
             $abgefuellt = $g['abf'] && $fertig($g['abf']);
             if ($fehlt !== null && $fehlt <= 1e-6)      { $txt = 'Etiketten auf Lager';   $sub = $abgefuellt ? 'abgefüllt, bereit zum Etikettieren' : null; }
             elseif ($offenBest && (int)$offenBest['n'] > 0) { $txt = 'Etiketten bestellt'; $sub = !empty($offenBest['eta']) ? 'erwartet ' . date('d.m.Y', strtotime((string)$offenBest['eta'])) : ($abgefuellt ? 'abgefüllt, wartet auf Etiketten' : null); }
@@ -8024,7 +8024,9 @@ function bestellung_position_stornieren(int $bp_id, string $wer = 'Team', string
     if ($grund === '') return ['ok'=>false, 'msg'=>'Bitte einen Grund angeben.'];
     $wer = trim($wer) ?: 'Team';
     $bid = (int)$b['id'];
-    q("UPDATE bestellung_position SET rest_storniert_am=CURDATE(), pos_storno_grund=? WHERE id=?", [mb_substr($grund, 0, 255), $bp_id]);
+    q("UPDATE bestellung_position SET rest_storniert_am=?, pos_storno_grund=? WHERE id=?", [heute_ort(), mb_substr($grund, 0, 255), $bp_id]);
+    // Fable-4 T3.7: Reservierungen/Kopplungen auf dieser Position lösen – sie zählten sonst weiter als gedeckt bzw. bestellt.
+    try { q("UPDATE reservierung SET status='storniert' WHERE bestellung_position_id=? AND status='aktiv'", [$bp_id]); } catch (\Throwable $e) {}
     $mz = rtrim(rtrim(number_format((float)$p['menge'], 3, ',', '.'), '0'), ',');
     $txt = 'Position storniert' . ($lieferant_informieren ? '' : ' ohne Nachricht an den Lieferanten') . ': ' . (string)$p['pname'] . ' (' . $mz . ' ' . (string)$p['einheit'] . ', Grund: ' . mb_substr($grund, 0, 180) . ') – ' . $wer;
     q("UPDATE bestellung SET notiz=CONCAT(COALESCE(notiz,''), ?) WHERE id=?", ["\n[" . gmdate('d.m.Y') . '] ' . $txt, $bid]);
@@ -8663,7 +8665,8 @@ function auftrag_material_quellen(int $item_id): array {
     foreach (all("SELECT bp.id, bp.menge, COALESCE(bp.geliefert_menge,0) AS geliefert, COALESCE(bp.einheit,'') AS einheit, b.nummer, b.status,
                          b.eta_geplant, COALESCE(b.bestelldatum, DATE(b.angelegt)) AS datum, COALESCE(l.firma,'') AS lieferant
                   FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id
-                  WHERE bp.item_id=? AND b.status NOT IN ('storniert','geliefert') AND b.angekommen_am IS NULL
+                  WHERE bp.item_id=? AND b.status NOT IN ('storniert','geliefert') AND b.angekommen_am IS NULL AND bp.rest_storniert_am IS NULL   -- Fable-4 T3.7: stornierte Position ist keine Quelle
+                    AND NOT (b.status='offen' AND COALESCE(b.unterlagen_wartet,0)=1)
                   ORDER BY b.id DESC", [$item_id]) as $bp) {
         $frei = max(0.0, (float)$bp['menge'] - (float)$bp['geliefert']) - bestellposition_reserviert((int)$bp['id']);
         if ($frei > 1e-6) $out['bestellt'][] = $bp + ['frei' => $frei];
@@ -8718,16 +8721,17 @@ function auftrag_material_loesen(int $auftrag_id, int $res_id): bool {
 function bulk_quellen_fuer_auftrag(int $auftrag_id): array {
     $item = auftrag_bulk_item($auftrag_id);
     if (!$item) return ['item'=>0, 'bestellungen'=>[], 'chargen'=>[]];
-    $best = all("SELECT bp.id AS bp_id, bp.menge, bp.einheit, b.nummer, b.status, b.angekommen_am, b.eta_geplant,
+    $best = all("SELECT bp.id AS bp_id, bp.menge, " . bp_rest_sql('bp', '') . " AS rest, bp.einheit, b.nummer, b.status, b.angekommen_am, b.eta_geplant,
                         COALESCE(l.firma,'') AS lieferant
                  FROM bestellung_position bp
                  JOIN bestellung b ON b.id=bp.bestellung_id
                  LEFT JOIN lieferanten l ON l.id=b.lieferant_id
-                 WHERE bp.item_id=? AND b.status<>'storniert'
+                 WHERE bp.item_id=? AND b.status<>'storniert' AND bp.rest_storniert_am IS NULL   -- Fable-4 T3.7
                  ORDER BY b.angelegt DESC", [$item]);
     $bestellungen = [];
     foreach ($best as $bp) {
-        $frei = max(0.0, (float)$bp['menge'] - bestellposition_reserviert((int)$bp['bp_id']));
+        // Fable-4 T3.7: frei = offener Rest (bp_rest_sql: ohne Geliefertes) minus Reserviertes; gelieferte Ware steht unten als Charge.
+        $frei = max(0.0, (float)$bp['rest'] - bestellposition_reserviert((int)$bp['bp_id']));
         $bestellungen[] = $bp + ['frei'=>$frei];
     }
     $ch = all("SELECT id, charge_nr, menge_verfuegbar, mhd FROM charge
@@ -9113,7 +9117,7 @@ function auftrag_deckung(int $auftrag_id): array {
                                'menge' => (float)$c['menge_verfuegbar'], 'einheit' => (string)$items[$bulk]['einheit'], 'e' => $zuE($bulk, (float)$c['menge_verfuegbar']), 'loesbar' => true];
     // (2) gekoppelt: aktive Reservierungen auf Bestellposition/Charge (Bulk + Premix)
     $resBulk = 0.0;
-    foreach (all("SELECT r.id, r.item_id, r.menge, r.bestellung_position_id, r.charge_id, b.nummer, b.angekommen_am, b.status AS bstatus, b.eta_geplant,
+    foreach (all("SELECT r.id, r.item_id, r.menge, r.bestellung_position_id, r.charge_id, b.nummer, b.angekommen_am, b.status AS bstatus, b.eta_geplant, bp.id AS bp_da, bp.rest_storniert_am AS bp_storno,
                          COALESCE(l.firma,'') AS lieferant, c.charge_nr
                   FROM reservierung r
                   LEFT JOIN bestellung_position bp ON bp.id=r.bestellung_position_id LEFT JOIN bestellung b ON b.id=bp.bestellung_id
@@ -9122,7 +9126,7 @@ function auftrag_deckung(int $auftrag_id): array {
                   ORDER BY r.id", [$auftrag_id]) as $r) {
         $iid = (int)$r['item_id']; $m = (float)$r['menge'];
         if ($r['bestellung_position_id']) {
-            if ((string)$r['bstatus'] === 'storniert') continue;
+            if ((string)$r['bstatus'] === 'storniert' || empty($r['bp_da']) || !empty($r['bp_storno'])) continue;   // Fable-4 T3.7: Position storniert/gelöscht = keine Deckung
             // geliefert: hängt die Charge schon am Auftrag, zählt sie oben als feste Zuordnung; sonst zählt die Reservierung,
             // soweit die Ware aus dieser Position noch frei (ohne Auftrag) im Lager liegt.
             if (!empty($r['angekommen_am'])) $m = min($m, (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE bestellung_position_id=? AND status IN ('frei','quarantaene') AND auftrag_id IS NULL", [(int)$r['bestellung_position_id']]));
@@ -9156,7 +9160,7 @@ function auftrag_deckung(int $auftrag_id): array {
         }
         foreach (all("SELECT bp.id, bp.menge, bp.einheit, COALESCE(bp.geliefert_menge,0) AS gel, bp.auftrag_id, b.nummer, b.status, b.eta_geplant, COALESCE(l.firma,'') AS lieferant
                       FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN lieferanten l ON l.id=b.lieferant_id
-                      WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND bp.auftrag_id IS NULL
+                      WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND bp.auftrag_id IS NULL AND bp.rest_storniert_am IS NULL   -- Fable-4 T3.7
                       ORDER BY COALESCE(b.eta_geplant,'9999-12-31'), b.id", [$iid]) as $bp) {
             $f = _deckung_einheit_faktor((string)$bp['einheit'], (string)$it['einheit']);
             $frei = max(0.0, ((float)$bp['menge'] - (float)$bp['gel']) * $f - bestellposition_reserviert((int)$bp['id']));
@@ -10372,7 +10376,7 @@ function material_deckung(int $item_id, float $benoetigt, int $auftrag_id): arra
 function item_bestellungen(int $item_id, int $auftrag_id = 0, bool $freitext = false): array {
     if ($item_id <= 0 && !($freitext && $auftrag_id > 0)) return [];
     $rows = all("SELECT b.*, l.firma AS lieferant, bp.menge AS pos_menge, COALESCE(bp.geliefert_menge,0) AS pos_geliefert,
-                        COALESCE(NULLIF(bp.einheit,''), '') AS pos_einheit, COALESCE(bp.auftrag_id,0) AS pos_auftrag
+                        COALESCE(NULLIF(bp.einheit,''), '') AS pos_einheit, COALESCE(bp.auftrag_id,0) AS pos_auftrag, bp.rest_storniert_am AS pos_storno
                  FROM bestellung_position bp
                  JOIN bestellung b ON b.id = bp.bestellung_id
                  LEFT JOIN lieferanten l ON l.id = b.lieferant_id
@@ -10388,7 +10392,7 @@ function item_bestellungen(int $item_id, int $auftrag_id = 0, bool $freitext = f
         $eingang = (string)$r['status'] === 'geliefert' || !empty($r['angekommen_am']);
         $out[] = [
             'id' => (int)$r['id'], 'nummer' => (string)($r['nummer'] ?: ('#' . $r['id'])), 'bei' => $bei !== '' ? $bei : 'Lieferant offen',
-            'menge' => $eingang ? (float)$r['pos_menge'] : max(0.0, (float)$r['pos_menge'] - (float)$r['pos_geliefert']),
+            'menge' => $eingang ? (float)$r['pos_menge'] : (!empty($r['pos_storno']) ? 0.0 : max(0.0, (float)$r['pos_menge'] - (float)$r['pos_geliefert'])),   // Fable-4 T3.7: storniert = offen 0
             'einheit' => (string)$r['pos_einheit'], 'stufe' => bestellung_stufe($r), 'eingang' => $eingang,
             'datum' => $eingang ? (string)($r['angekommen_am'] ?? '') : (string)($r['eta_geplant'] ?? ''),
             'fuer_auftrag' => $auftrag_id > 0 && (int)$r['pos_auftrag'] === $auftrag_id,
@@ -11331,7 +11335,7 @@ function etikett_bestellt_fuer_auftrag(int $auftrag_id): bool {
     if ($eid <= 0) return false;
     if (item_bestand($eid, false) > 0.0) return true;
     return (int) scalar("SELECT COUNT(*) FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                         WHERE bp.item_id=? AND b.status IN ('bestellt','geliefert')", [$eid]) > 0;
+                         WHERE bp.item_id=? AND b.status IN ('bestellt','geliefert') AND (bp.rest_storniert_am IS NULL OR COALESCE(bp.geliefert_menge,0) > 0)", [$eid]) > 0;   // Fable-4 T3.7
 }
 
 // ===== Kundenetikett-Artikel (pro Produkt, versioniert) ==========================================
@@ -12037,7 +12041,7 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
             $bestellt += (float) scalar("SELECT COALESCE(SUM(r.menge),0) FROM reservierung r JOIN bestellung_position bp ON bp.id=r.bestellung_position_id
                                          JOIN bestellung b ON b.id=bp.bestellung_id
                                          WHERE r.status='aktiv' AND r.auftrag_id IN ($in) AND bp.item_id IS NOT NULL AND r.item_id IN (SELECT id FROM item WHERE kategorie='fertig')
-                                           AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL");
+                                           AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND bp.rest_storniert_am IS NULL");   // Fable-4 T3.7
         $stockRaw = $lagerItem > 0 ? item_bestand($lagerItem, true) : 0.0;   // fertige Packungen (Beutel/Dosen)
         // Bei Schüttgut den Packungs-Bestand in dieselbe Einheit wie den Bedarf bringen (Packungen × Füllmenge = g/ml),
         // sonst würden Beutel von Gramm abgezogen. Stück-Formen bleiben wie bisher (Packungs-Bestand).

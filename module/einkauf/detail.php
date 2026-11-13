@@ -518,7 +518,8 @@ if (!$neu) {
             $rest = max(0.0, (float)$z['bestellt'] - $gel);
             if ($gel > (float)$z['bestellt'] * 1.02 && (float)$z['bestellt'] > 0) $gelHtml .= ' <span class="muted" style="font-size:11px">Mehrlieferung</span>';
             if ((string)$b['status'] === 'storniert' && !$z['storno']) $rest = 0.0;   // Fable-3 T2.8: stornierte Bestellung – offen 0
-            $restHtml = $z['storno'] && $rest > 0.0001 ? '<span class="muted"' . ($z['grund'] !== '' ? ' title="' . h('Grund: ' . $z['grund']) . '"' : '') . '>' . $mz($rest) . ' ' . h($z['einheit']) . ' storniert</span>'
+            // Fable-4 T3.7: stornierte Position = offen 0 (der stornierte Rest steht klein daneben)
+            $restHtml = $z['storno'] && $rest > 0.0001 ? '0 <span class="muted" style="font-size:11px"' . ($z['grund'] !== '' ? ' title="' . h('Grund: ' . $z['grund']) . '"' : '') . '>(' . $mz($rest) . ' ' . h($z['einheit']) . ' storniert)</span>'
                       : ($rest > 0.0001 ? ($bOffen ? '<a href="?p=wareneingang&bp=' . (int)$z['bp'] . '" title="Wareneingang zu dieser Position buchen">' . $mz($rest) . ' ' . h($z['einheit']) . '</a>' : $mz($rest) . ' ' . h($z['einheit'])) : '<span class="muted">–</span>');
             if ((string)$b['status'] === 'storniert' && !$z['storno']) $restHtml = '<span class="muted" title="Bestellung storniert">0 ' . h($z['einheit']) . '</span>';
             echo '<tr><td>' . h($z['name']) . ($z['chargen'] ? ' <span class="muted" style="font-size:11px">' . (int)$z['chargen'] . ' Charge(n)</span>' : '') . '</td><td style="font-size:13px">' . $auf . '</td>'

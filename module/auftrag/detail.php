@@ -1313,7 +1313,7 @@ if (has_role('admin') || has_role('sales')):
       foreach (($ber['fehlend'] ?? []) as $fr) {
           $iid = (int)($fr['item_id'] ?? 0);
           $bst = $iid > 0 ? one("SELECT b.id, b.nummer, b.eta_geplant FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                                  WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL ORDER BY b.id DESC LIMIT 1", [$iid]) : null;
+                                  WHERE bp.item_id=? AND b.status='bestellt' AND b.angekommen_am IS NULL AND bp.rest_storniert_am IS NULL ORDER BY b.id DESC LIMIT 1", [$iid]) : null;   // Fable-4 T3.7
           $fehlDetail[] = ['name'=>(string)($fr['name'] ?? '–'), 'fehlt'=>(float)($fr['fehlt'] ?? 0), 'einheit'=>(string)($fr['einheit'] ?? 'Stk'), 'best'=>$bst, 'quar'=>(float)($fr['quarantaene'] ?? 0), 'iid'=>$iid];
       }
   }

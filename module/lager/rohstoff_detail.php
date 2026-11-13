@@ -832,7 +832,7 @@ if (!$neu && ($it['kategorie'] ?? '') === 'rohstoff') {
         $bstRows = all("SELECT bp.id, bp.menge, bp.einheit, COALESCE(bp.geliefert_menge,0) AS geliefert, bp.ek_preis, bp.auftrag_id,
                                b.id AS bid, b.nummer, b.status, b.bestelldatum, b.angelegt, b.eta_geplant, b.angekommen_am, b.bestellart, b.online_haendler,
                                COALESCE(l.firma,'') AS lieferant, a.nummer AS auftrag_nr,
-                               (b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL) AS offen
+                               (b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL AND bp.rest_storniert_am IS NULL) AS offen
                         FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
                         LEFT JOIN lieferanten l ON l.id=b.lieferant_id LEFT JOIN auftrag a ON a.id=bp.auftrag_id
                         WHERE bp.item_id=? ORDER BY offen DESC, COALESCE(b.bestelldatum, DATE(b.angelegt)) DESC, b.id DESC LIMIT 200", [(int)$id]);
