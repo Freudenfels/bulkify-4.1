@@ -240,3 +240,8 @@ Kommt das Speichern aus dem Bearbeiten-Modus (`?edit=1`), behält jede Weiterlei
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Hinweis „Unterlagen fehlen“ bleibt; Bestellen ist nicht mehr gesperrt (Ware bleibt bis zur Unterlage in Quarantäne).
+
+## Varianten getrennt und Komplettpreise (13.11.2026)
+Hat ein Angebot Varianten (Positionen mit Buchstaben A, B, C …), steht in der Positionstabelle (Übersicht und Bearbeiten) vor jeder Variante eine grüne Kopfzeile „Variante A · 1.000 Pkg. · Größe · Verpackung“; Positionen ohne Buchstaben stehen unter „Zuschläge – gelten für jede Variante“.
+Unter der Endsumme bzw. unter Netto: Komplettpreis je Variante = Positionen der Variante + Zuschläge, in der Übersicht brutto (fett) und netto sowie Preis je Packung netto; beim Bearbeiten netto und je Packung, rechnet beim Tippen mit.
+Die Endsumme bleibt die Summe aller Positionen (wie bisher).

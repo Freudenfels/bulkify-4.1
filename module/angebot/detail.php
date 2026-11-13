@@ -619,7 +619,23 @@ if (!$neu && !$editMode) {
       <?php if (($a['notiz'] ?? '') !== ''): ?><div style="margin-top:12px;white-space:pre-line"><span class="muted">Notiz:</span> <?= h((string)$a['notiz']) ?></div><?php endif; ?>
     </div>
 
-    <?php if ($hatPos): ?>
+    <?php if ($hatPos):
+        // Varianten A/B/C (13.11.2026): Kopfzeile je Variante, Komplettpreis je Variante = Positionen der Variante + Zuschläge (ohne Buchstaben)
+        $varNameU = [];
+        foreach (angebot_optionen((int)$id)['optionen'] as $vo) $varNameU[(string)$vo['gruppe']] = trim(($vo['pakete'] > 0 ? number_format((float)$vo['pakete'], 0, ',', '.') . ' Pkg. · ' : '') . ($vo['groesse'] !== '' ? $vo['groesse'] : $vo['titel']) . ($vo['verpackung'] !== '' ? ' · ' . $vo['verpackung'] : ''));
+        $varSum = []; $extraN = 0.0; $extraU = 0.0; $varPkg = [];
+        foreach ($posU as $pv) {
+            $gv = strtoupper(trim((string)($pv['gruppe'] ?? '')));
+            $nC = (float) angpos_netto_cent($pv); $uC = $nC * (float) mwst_normalisieren((float)$pv['mwst_satz']) / 100;
+            if ($gv === '') { $extraN += $nC; $extraU += $uC; continue; }
+            $varSum[$gv] = ['n' => ($varSum[$gv]['n'] ?? 0) + $nC, 'u' => ($varSum[$gv]['u'] ?? 0) + $uC];
+            if (($pv['quelle'] ?? '') === 'herstellung' && empty($varPkg[$gv])) $varPkg[$gv] = (float)$pv['menge'];
+        }
+        ksort($varSum);
+        $hatVarU = (bool)$varSum; $gPrevU = null; ?>
+    <style>.ang-vgrp td{background:var(--panel-2,rgba(0,0,0,.03));border-top:2px solid var(--gruen,#1D9E75);font-size:13px;padding:8px}
+      .ang-vgrp .pg-b{display:inline-block;min-width:22px;padding:1px 6px;margin-right:6px;border-radius:6px;background:var(--gruen,#1D9E75);color:#fff;text-align:center}
+      .ang-vgrp.pg-extra .pg-b{background:var(--muted,#8a8f98)}</style>
     <div class="bx-panel">
       <h2 style="margin-top:0">Positionen</h2>
       <div class="bx-tablewrap"><table class="bx-table">
@@ -632,7 +648,11 @@ if (!$neu && !$editMode) {
               foreach ($posU as $pp2) { $rid2 = (int)($pp2['rezeptur_id'] ?? 0);
                   if ($rid2 && !isset($rezNrMap[$rid2])) $rezNrMap[$rid2] = (string) scalar("SELECT nummer FROM rezeptur WHERE id=?", [$rid2]); } ?>
         <?php foreach ($posU as $i => $pp): $g = angpos_netto_cent($pp);
-              $artnr = $pp['artikelnr'] !== '' ? (string)$pp['artikelnr'] : ($rezNrMap[(int)($pp['rezeptur_id'] ?? 0)] ?? ''); ?>
+              $artnr = $pp['artikelnr'] !== '' ? (string)$pp['artikelnr'] : ($rezNrMap[(int)($pp['rezeptur_id'] ?? 0)] ?? '');
+              $gU = strtoupper(trim((string)($pp['gruppe'] ?? '')));
+              if ($hatVarU && $gU !== $gPrevU): $gPrevU = $gU; ?>
+          <tr class="ang-vgrp<?= $gU === '' ? ' pg-extra' : '' ?>"><td colspan="7"><?php if ($gU !== ''): ?><span class="pg-b"><?= h($gU) ?></span>Variante <?= h($gU) ?><?= ($varNameU[$gU] ?? '') !== '' ? ' · ' . h($varNameU[$gU]) : '' ?><?php else: ?><span class="pg-b">+</span>Zuschläge – gelten für jede Variante<?php endif; ?></td></tr>
+          <?php endif; ?>
           <tr>
             <td class="muted"><?= $i + 1 ?></td>
             <td><?= $artnr !== '' ? h($artnr) . ($pp['artikelnr'] === '' ? ' <span class="muted" style="font-size:11px" title="Rezepturnummer – die Produkt-Artikelnummer entsteht bei der Auftragsannahme">(Rez.)</span>' : '') : '<span class="muted">–</span>' ?></td>
@@ -657,6 +677,17 @@ if (!$neu && !$editMode) {
           <div class="bx-row" style="justify-content:space-between"><span>USt. <?= rtrim(rtrim(number_format((float)$s,2,',',''),'0'),',') ?>% auf <?= $eur($base) ?></span><span><?= $eur((int) round($base * ((float)$s)/100)) ?></span></div>
         <?php endforeach; ?>
         <div class="bx-row" style="justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-size:18px"><span>Endsumme</span><strong><?= $eur($bruttoU) ?></strong></div>
+        <?php if ($hatVarU): ?>
+        <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px;line-height:1.6">
+          <div class="muted" style="font-size:12px">Komplettpreis je Variante<?= $extraN > 0 ? ' (inkl. Zuschläge ' . $eur((int) round($extraN)) . ' netto)' : '' ?> – der Kunde wählt eine</div>
+          <?php foreach ($varSum as $gv => $vs): $kn = $vs['n'] + $extraN; $kb = $kn + $vs['u'] + $extraU; ?>
+          <div class="bx-row" style="justify-content:space-between;gap:12px;align-items:baseline">
+            <span class="muted" style="min-width:0"><span style="color:var(--text)"><?= h($gv) ?></span><?= ($varNameU[$gv] ?? '') !== '' ? ' · ' . h($varNameU[$gv]) : '' ?><?= !empty($varPkg[$gv]) ? '<div style="font-size:12px">' . $eur((int) round($kn / $varPkg[$gv])) . ' / Packung netto</div>' : '' ?></span>
+            <span style="text-align:right;white-space:nowrap"><strong><?= $eur((int) round($kb)) ?></strong><div class="muted" style="font-size:12px"><?= $eur((int) round($kn)) ?> netto</div></span>
+          </div>
+          <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
       </div>
     </div>
     <?php else: $optU = angebot_optionen((int)$id); ?>
@@ -963,7 +994,17 @@ if (!$neu):
     #postab input,#postab textarea{box-sizing:border-box;width:100%;display:block;min-width:0}
     #postab .p_besch{margin-top:4px;font-size:14px;color:var(--muted);resize:vertical;line-height:1.35}
     #postab .bx-num{white-space:nowrap;text-align:right}
+    /* Varianten getrennt (13.11.2026): Kopfzeile je Variante A/B/C und je Zuschläge */
+    #postab tr.posgrp td{background:var(--panel-2,rgba(0,0,0,.03));border-top:2px solid var(--gruen,#1D9E75);font-size:13px;padding:8px}
+    #postab tr.posgrp .pg-b{display:inline-block;min-width:22px;padding:1px 6px;margin-right:6px;border-radius:6px;background:var(--gruen,#1D9E75);color:#fff;text-align:center}
+    #postab tr.posgrp.pg-extra .pg-b{background:var(--muted,#8a8f98)}
+    #sumVarianten div{white-space:nowrap}
   </style>
+  <?php // Varianten-Namen (A/B/C …) aus angebot_optionen: Größe bzw. Titel + Verpackung – für Kopfzeilen und Komplettpreise
+        $varName = [];
+        foreach (angebot_optionen($id)['optionen'] as $vo) $varName[(string)$vo['gruppe']] = trim(($vo['pakete'] > 0 ? number_format((float)$vo['pakete'], 0, ',', '.') . ' Pkg. · ' : '') . ($vo['groesse'] !== '' ? $vo['groesse'] : $vo['titel']) . ($vo['verpackung'] !== '' ? ' · ' . $vo['verpackung'] : ''));
+        $hatVarianten = (bool) array_filter($pos, fn($pp) => trim((string)($pp['gruppe'] ?? '')) !== '');
+        $gPrev = null; ?>
   <form method="post">
     <input type="hidden" name="aktion" value="pos_save">
     <datalist id="angEinhListe"><option value="Stk"><option value="Packung"><option value="kg"><option value="g"><option value="L"><option value="Beutel"></datalist>
@@ -978,7 +1019,12 @@ if (!$neu):
         <th class="bx-num">EK/Einh</th><th class="bx-num">Marge</th><th class="bx-num">Gesamt</th><th></th>
       </tr></thead>
       <tbody id="posrows">
-        <?php foreach ($pos as $i => $pp): ?>
+        <?php foreach ($pos as $i => $pp):
+            $gNow = strtoupper(trim((string)($pp['gruppe'] ?? '')));
+            if ($hatVarianten && $gNow !== $gPrev):
+                $gPrev = $gNow; ?>
+        <tr class="posgrp<?= $gNow === '' ? ' pg-extra' : '' ?>"><td colspan="10"><?php if ($gNow !== ''): ?><span class="pg-b"><?= h($gNow) ?></span>Variante <?= h($gNow) ?><?= ($varName[$gNow] ?? '') !== '' ? ' · ' . h($varName[$gNow]) : '' ?><?php else: ?><span class="pg-b">+</span>Zuschläge – gelten für jede Variante<?php endif; ?></td></tr>
+        <?php endif; ?>
         <tr class="posrow">
           <td>
             <input type="text" name="p_bez[]" value="<?= h($pp['bezeichnung']) ?>">
@@ -1051,6 +1097,9 @@ if (!$neu):
       <div style="text-align:right;font-size:14px">
         <div>Netto: <strong id="sumNetto"><?= $eur($sumVk) ?></strong></div>
         <div class="muted" style="font-size:12px" id="intMarge">Intern: EK <?= $eur($sumEk) ?> · Marge <?= $eur($marge) ?> (<?= number_format($margePct,0,',','.') ?> %)</div>
+        <?php if ($hatVarianten): ?>
+        <div id="sumVarianten" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)" data-namen="<?= h(json_encode($varName, JSON_UNESCAPED_UNICODE)) ?>"></div>
+        <?php endif; ?>
       </div>
     </div>
     <div class="bx-row" style="margin-top:10px;gap:10px">
@@ -1192,6 +1241,21 @@ function posRecalc(){
     netto+=g; ekges+=m*ek;
   });
   document.getElementById('sumNetto').textContent=nf(netto,2)+' €';
+  var sv=document.getElementById('sumVarianten');
+  if(sv){   // Komplettpreise je Variante (13.11.2026)
+    var gr={}, extra=0, pk={}, namen={}; try{namen=JSON.parse(sv.getAttribute('data-namen')||'{}');}catch(e){}
+    document.querySelectorAll('.posrow').forEach(function(r){
+      var gi=r.querySelector('[name="p_gruppe[]"]'), g=gi?(gi.value||'').trim().toUpperCase():'';
+      var m=parseFloat((r.querySelector('.p_menge').value||'').replace(',','.'))||0, p=parseFloat((r.querySelector('.p_preis').value||'').replace(',','.'))||0;
+      if(g===''){extra+=m*p;return;}
+      gr[g]=(gr[g]||0)+m*p;
+      var q=r.querySelector('[name="p_quelle[]"]'); if(q&&q.value==='herstellung'&&!pk[g])pk[g]=m;
+    });
+    var ks=Object.keys(gr).sort(), h='<div class="muted" style="font-size:12px;margin-bottom:2px">Komplettpreis je Variante'+(extra?' (inkl. Zuschläge '+nf(extra,2)+' €)':'')+'</div>';
+    ks.forEach(function(g){var t=gr[g]+extra, nm=namen[g]||'';
+      h+='<div><span class="muted">'+g+(nm?' · '+nm.replace(/[<>&"]/g,''):'')+':</span> <strong>'+nf(t,2)+' €</strong>'+(pk[g]?' <span class="muted" style="font-size:12px">· '+nf(t/pk[g],2)+' € / Packung</span>':'')+'</div>';});
+    sv.innerHTML=ks.length?h:'';
+  }
   var marge=netto-ekges, pct=netto>0?marge/netto*100:0;
   document.getElementById('intMarge').textContent='Intern: EK '+nf(ekges,2)+' € · Marge '+nf(marge,2)+' € ('+nf(pct,0)+' %)';
 }
