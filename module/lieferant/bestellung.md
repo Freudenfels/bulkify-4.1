@@ -58,3 +58,6 @@ Fehlen zu dieser Bestellung Unterlagen, steht oben ein Kasten „Unterlagen fehl
 
 ## Zahlstatus aus der Buchhaltung (13.11.2026)
 Oberhalb von „Dokumente & Rechnung“ steht je Rechnung der Stand aus `lieferant_rechnung`: „eingegangen, wird geprüft“, „erfasst, noch nicht bezahlt (fällig …)“, „teilbezahlt, offen …“, „bezahlt am TT.MM.JJJJ“ (DE/EN/中文); dieselbe Angabe an der Rechnungszeile. Dokumenttabelle am Handy als Karten.
+
+## Rezeptur-Schnellansicht (13.11.2026)
+In der Liste ist der Artikel anklickbar, wenn die erste Position eine Rezeptur hat (Bulk-Item, Auftrag oder Produkt). Pop-up `lp_rezeptur_popup()` mit Zusammensetzung; Rohstoffe darin mit Wirkstoffgehalten.

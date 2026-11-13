@@ -606,7 +606,7 @@ function lp_rohstoff_popup(): void {
        . 'function esc(s){var d=document.createElement("div");d.textContent=(s==null?"":String(s));return d.innerHTML;}'
        . 'function zahl(x){return Number(x).toLocaleString("de-DE",{maximumFractionDigits:x<10?2:1});}'
        . 'function rows(arr){var h="";(arr||[]).forEach(function(r){h+="<tr><td class=\\"k\\">"+esc(r[0])+"</td><td>"+esc(r[1])+"</td></tr>";});return h;}'
-       . 'document.querySelectorAll("a.lp-roh[data-iid]").forEach(function(a){a.addEventListener("click",function(e){'
+       . 'document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a.lp-roh[data-iid]");if(!a)return;'
        . 'e.preventDefault();var iid=a.getAttribute("data-iid");if(!iid)return;var mg=parseFloat(a.getAttribute("data-mg")||"");'
        . 'document.getElementById("lpRohName").textContent=a.textContent||"";'
        . 'document.getElementById("lpRohBody").innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">…</div>";'
@@ -625,8 +625,33 @@ function lp_rohstoff_popup(): void {
        . 'if(!h)h="<div style=\\"color:var(--muted,#8a8f98)\\">' . h(lp_t('keine_weiteren')) . '</div>";'
        . 'document.getElementById("lpRohBody").innerHTML=h;'
        . '}).catch(function(){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:#8f231b\\">' . h(lp_t('laden_fehler')) . '</div>";});'
-       . '});});'
+       . '});'
        . '})();</script>';
+}
+
+// Rezeptur-Schnellansicht (13.11.2026): Links a.lp-rez[data-rid] öffnen ein Pop-up mit Form, Kapselgröße, Füllgewicht und der
+// Zusammensetzung (lädt ?p=lieferant_rezeptur&id=…&pop=1, gleiche Freigabe-Regel). Rohstoffe darin öffnen lp_rohstoff_popup().
+function lp_rezeptur_popup(): void {
+    lp_rohstoff_popup();
+    echo '<dialog id="lpRezDlg" class="lp-rohdlg" style="max-width:720px">'
+       . '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
+       . '<h2 id="lpRezName" style="margin:0;font-size:18px"></h2>'
+       . '<button type="button" onclick="this.closest(&quot;dialog&quot;).close()" aria-label="' . h(lp_t('schliessen')) . '" '
+       . 'style="background:none;border:0;font-size:20px;cursor:pointer;color:var(--text)">&#10005;</button></div>'
+       . '<div id="lpRezBody" style="margin-top:12px"></div>'
+       . '<div style="margin-top:12px;text-align:right"><a id="lpRezVoll" class="btn btn-ghost btn-sm" href="#">' . h(lp_t('rez_ansehen')) . '</a></div>'
+       . '</dialog>'
+       . '<style>#lpRezBody .bx-panel{padding:0;border:0;background:none;box-shadow:none;margin:0 0 10px}#lpRezBody h2{font-size:14px;margin:6px 0}a.lp-rez{cursor:pointer}#lpRezBody .lp-zus th,#lpRezBody .lp-zus td{white-space:normal}@media (max-width:600px){#lpRezBody .lp-zus th:nth-child(2),#lpRezBody .lp-zus td:nth-child(2){display:none}}</style>'
+       . '<script>(function(){var dlg=document.getElementById("lpRezDlg");if(!dlg)return;'
+       . 'dlg.addEventListener("click",function(e){if(e.target===dlg)dlg.close();});'
+       . 'document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a.lp-rez[data-rid]");if(!a)return;e.preventDefault();'
+       . 'var rid=a.getAttribute("data-rid"),url="?p=lieferant_rezeptur&id="+encodeURIComponent(rid);'
+       . 'document.getElementById("lpRezName").textContent=a.getAttribute("data-titel")||a.textContent||"";'
+       . 'document.getElementById("lpRezVoll").href=url;'
+       . 'var b=document.getElementById("lpRezBody");b.innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">…</div>";dlg.showModal();'
+       . 'fetch(url+"&pop=1",{credentials:"same-origin"}).then(function(r){return r.text();}).then(function(t){b.innerHTML=t;})'
+       . '.catch(function(){b.innerHTML="<div style=\\"color:#8f231b\\">' . h(lp_t('laden_fehler')) . '</div>";});'
+       . '});})();</script>';
 }
 
 // Die Wahl aus ?lang= gilt ab sofort – auch fuer Texte, die vor lp_head() gebaut werden.

@@ -32,9 +32,11 @@ if ($r) {
 
 $formLabel = ['kapsel'=>'Kapseln','tablette'=>'Tabletten','softgel'=>'Softgels','stick'=>'Sticks','pulver'=>'Pulver','fluessig'=>'Flüssig','gummi'=>'Fruchtgummi','gel'=>'Gel'];
 
-lp_head('bulkify – ' . lp_t('rez_ansehen'));
-lp_shell_start('lieferant_rezepturpreise');
+// &pop=1 (13.11.2026): nur der Inhalt für die Schnellansicht im Pop-up (Bestellungen-Liste), ohne Seitenrahmen.
+$pop = !empty($_GET['pop']);
+if (!$pop) { lp_head('bulkify – ' . lp_t('rez_ansehen')); lp_shell_start('lieferant_rezepturpreise'); }
 
+if (!$r && $pop) { echo '<div class="muted">' . h(lp_t('rez_nicht_da')) . '</div>'; exit; }
 if (!$r) {
     echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h(lp_t('rez_nicht_da')) . '</div>';
     echo '<p style="margin-top:12px"><a href="?p=lieferant_rezepturpreise">&larr; ' . h(lp_t('rez_preise_menu')) . '</a></p>';
@@ -55,8 +57,10 @@ if ($r['kapselgroesse_id']) {
 }
 $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 ?>
+<?php if (!$pop): ?>
 <h1 style="margin-bottom:4px"><?= h($r['name']) ?> <span class="muted" style="font-weight:normal;font-size:16px"><?= h($r['nummer']) ?></span></h1>
 <p class="bx-sub"><a href="?p=lieferant_rezepturpreise">&larr; <?= h(lp_t('rez_preise_menu')) ?></a></p>
+<?php endif; ?>
 
 <div class="bx-panel">
   <div class="bx-tablewrap"><table class="bx-table"><tbody>
@@ -78,7 +82,7 @@ $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
             $v = $m / $fuell * 100000.0;   // mg pro 100 g
             return $v >= 1000 ? lp_num($v / 1000, 3) . ' g' : lp_num($v, 3) . ' mg';
         }; ?>
-  <div class="bx-tablewrap"><table class="bx-table">
+  <div class="bx-tablewrap"><table class="bx-table lp-zus">
     <thead><tr><th><?= h(lp_t('wirkstoff')) ?></th><th class="bx-num"><?= h(lp_t('pro_100g')) ?></th><th class="bx-num"><?= h(lp_t('mg_je_einheit')) ?></th></tr></thead>
     <tbody>
       <?php foreach ($zutaten as $z): ?>
@@ -91,4 +95,4 @@ $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
   </table></div>
   <?php endif; ?>
 </div>
-<?php lp_rohstoff_popup(); lp_shell_ende(); lp_foot();
+<?php if ($pop) exit; lp_rohstoff_popup(); lp_shell_ende(); lp_foot();

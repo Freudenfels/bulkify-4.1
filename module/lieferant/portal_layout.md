@@ -77,3 +77,6 @@ Jeder Menüpunkt mit Icon (`bx_portal_nav`): Übersicht Kacheln, Bestellungen Kl
 Neue Schlüssel `zb`, `schliessen`, `keine_angaben`, `keine_weiteren`, `laden_fehler` (Rohstoff-Pop-up und Platzhalter jetzt DE/EN/中文); 中文 einheitlich „CoA“, „我们据此核算成本“, „距上次更新“.
 
 13.11.2026: `app.css` und `bx-ui.js` mit Dateizeit als Version (vorher fest `20261113` – neue Stände kamen aus dem Cache).
+
+## lp_rezeptur_popup() (13.11.2026)
+Schnellansicht einer Rezeptur: Links `a.lp-rez[data-rid]` öffnen ein Pop-up mit Form, Kapselgröße, Füllgewicht und Zusammensetzung (Inhalt kommt von `?p=lieferant_rezeptur&id=…&pop=1`, gleiche Freigabe-Regel wie die Seite). Die Rohstoffe darin öffnen das Rohstoff-Pop-up (`lp_rohstoff_popup()`, jetzt per Delegation am document, damit es auch für nachgeladene Inhalte gilt). Am Handy wird die Spalte „pro 100 g“ im Pop-up ausgeblendet. Unten „Rezeptur ansehen“ = volle Seite. Eingebunden in der Bestellungen-Liste (`lieferant_bestellung`).

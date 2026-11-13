@@ -20,3 +20,6 @@ Zutaten mit `item_id` sind jetzt Links (`a.lp-roh[data-iid]`) → öffnen das Ro
 - Andere Rezepturen: „nicht gefunden oder nicht für Sie freigeschaltet“.
 
 **Bestätigen mit Unterlagen-Sperre, Portal ohne Entwürfe (13.11.2026, Fable-3 T2.2):** Ein Entwurf schaltet keine Rezeptur frei (`bestellung_portal_sichtbar_sql('b')`).
+
+## &pop=1 (13.11.2026)
+Gibt nur den Inhalt (Eckdaten + Zusammensetzung) ohne Seitenrahmen aus – für die Schnellansicht `lp_rezeptur_popup()`. Gleiche Freigabe-Prüfung. Rohstoff-Links tragen `data-mg` (Menge je Einheit).

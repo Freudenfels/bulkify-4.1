@@ -72,6 +72,10 @@ if (!$b):
                     (SELECT COALESCE(NULLIF(i.name,''), bp.bezeichnung)
                        FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id
                        WHERE bp.bestellung_id=b.id ORDER BY bp.sort, bp.id LIMIT 1) AS produkt,
+                    (SELECT COALESCE(i.rezeptur_id, au.rezeptur_id, pr.rezeptur_id)
+                       FROM bestellung_position bp LEFT JOIN item i ON i.id=bp.item_id LEFT JOIN auftrag au ON au.id=bp.auftrag_id
+                       LEFT JOIN produkt pr ON pr.id=au.produkt_id
+                       WHERE bp.bestellung_id=b.id ORDER BY bp.sort, bp.id LIMIT 1) AS rezeptur_id,
                     (SELECT COUNT(*) FROM bestellung_position bp WHERE bp.bestellung_id=b.id) AS n_pos
                   FROM bestellung b WHERE b.lieferant_id=? AND " . bestellung_portal_sichtbar_sql('b') . " ORDER BY (b.status='geliefert'), b.angelegt DESC", [$lid]);
 ?>
@@ -84,7 +88,8 @@ if (!$b):
           $st = (string)$r['station'];
           $lbl = $st === '' ? lp_t('best_neu_lbl') : bestellung_stationen_fuer(lp_sprache())[$st]; ?>
         <tr><td><?= h($r['nummer']) ?></td>
-            <td><?= ($r['produkt'] ?? '') !== '' ? h($r['produkt']) : '<span class="muted">–</span>' ?><?= (int)$r['n_pos'] > 1 ? ' <span class="muted" style="font-size:12px">+' . ((int)$r['n_pos'] - 1) . '</span>' : '' ?></td>
+            <td><?= ($r['produkt'] ?? '') === '' ? '<span class="muted">–</span>'
+                    : (!empty($r['rezeptur_id']) ? '<a href="#" class="lp-rez" data-rid="' . (int)$r['rezeptur_id'] . '" title="' . h(lp_t('rez_ansehen')) . '">' . h($r['produkt']) . '</a>' : h($r['produkt'])) ?><?= (int)$r['n_pos'] > 1 ? ' <span class="muted" style="font-size:12px">+' . ((int)$r['n_pos'] - 1) . '</span>' : '' ?></td>
             <td><?= h(date('d.m.Y', strtotime((string)$r['angelegt']))) ?></td>
             <td><?= $r['eta_geplant'] ? h(date('d.m.Y', strtotime((string)$r['eta_geplant']))) : '<span class="muted">–</span>' ?></td>
             <td><?= h($lbl) ?></td>
@@ -263,4 +268,5 @@ if (!$b):
     </form>
   </div>
 <?php endif;
+lp_rezeptur_popup();   // Schnellansicht Rezeptur + Rohstoffe (13.11.2026)
 lp_shell_ende(); lp_foot();
