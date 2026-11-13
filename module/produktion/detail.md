@@ -210,3 +210,6 @@ Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App,
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 „Bedarf bestellen“ mit „Direkt bestellt“: keine Unterlagen-Sperre mehr (nur Aufgabe „Unterlagen nachfordern“).
+
+## Nachbesserung Fable-5 (13.11.2026): Buchen einer KI-Karte
+`aktion=nachtragen` mit `ki_karte`: Karte aus der Sitzung, `pki_buchen_pruefen()` (sonst Rückweisung mit Grund), KI-Vermerk geht als Option `ki_vermerk` in `pa_nachtrag_buchen()` (steht damit im abgelegten Chargenprotokoll), Verlauf am Auftrag, Karte gelöscht. „Unveränderter Vorschlag“ wird tolerant verglichen (`pa_charge_abweichend`).

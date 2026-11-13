@@ -73,3 +73,11 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
 **Nachtrag lässt die laufende Unter-Charge laufen (Fable-4 T1.1, 13.11.2026):** `pa_nachtrag_unter_charge($pa_id, $bulk, $eimer, $tag)` ist die eine Stelle, die für einen Nachtrag die vorhandene Unter-Charge findet: gleicher Bulk bzw. Eimer am selben Tag, und bei „ohne“ (Bulk 0, Eimer 0) am Tag der laufenden Unter-Charge die laufende. Liefert `pa_starten()` im Nachtrag eine schon laufende zurück (`neu` = false), gilt sie als gefunden: kein Wiederanlauf-Ereignis, nie schließen. Der Nachtrag kennt Eimer (`prod_charge_id`).
 
 **Einlagern bei Rest 0 (Fable-4 T1.2, 13.11.2026):** `pa_einlagern_alt_sperre($pa_id, $von)` schließt eine noch laufende Unter-Charge selbst, wenn nichts mehr offen ist (Rest 0 oder „Rest storniert“), mit Vermerk „beim Einlagern, nichts mehr offen“ im Chargenprotokoll, und `einlager_buchen()` bucht weiter. Bei Rest > 0 bleibt die Sperre; die Meldung nennt Werk-App oder PA-Seite. Auf der PA-Seite steht „abschließen“ an jeder laufenden Unter-Charge, auch bei erledigtem PA.
+
+## Nachbesserung Fable-5 (13.11.2026, Teil 1)
+- `pa_charge_abweichend()` vergleicht über `charge_norm()` („2775 B“ = „2775.B“); `pa_charge_gleich()`, `pa_charge_im_pa()`.
+- `pa_starten()`: eine Chargennummer je Auftrag nur einmal (Unter-Charge oder Lager-Charge) – sonst abgelehnt.
+- `pa_nachtrag_buchen()`: genannte Charge einer vorhandenen Unter-Charge (gleicher Bulk) = darauf nachtragen (deren Tag); Etikett-Sperre gilt immer (kein `nachtrag_komplett` mehr, also nur „bis vor dem Etikettieren“); bis zum Soll nachgetragen = Unter-Charge immer schließen.
+- `pa_voll_produziert_erledigen()` schließt auch die übergebene Unter-Charge (Status laeuft oder nachtrag).
+- `pa_teilmenge_buchen()`: Option `ki_vermerk` schreibt das Ereignis `ki_meldung` sofort nach der Teilmenge – vor jedem Protokoll-Ablegen.
+- Lädt `core/charge_norm.php` und `core/pa_produziert.php`.
