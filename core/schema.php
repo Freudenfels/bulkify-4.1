@@ -4016,7 +4016,7 @@ function fertigware_an_kunde_uebertragen(int $item_id, int $kunde_id, float $men
         q("UPDATE charge SET menge_verfuegbar=?, status=? WHERE id=?", [$vRest, $vRest <= 1e-9 ? 'leer' : 'frei', (int)$c['id']]);
         q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,auftrag_id,pa_id,fremd_kunde_id,standort,energetisiert_am,energetisiert_von,angelegt)
            VALUES (?,?,?,?,?,?,?,?, 'frei', ?,?,?,?, 'lager2', ?,?,?)",
-          [$c['charge_nr'], $item_id, $nimm, $nimm, $c['einheit'] ?: 'Stk', $c['lieferant_id'] ?: null, $c['mhd'] ?: null, $c['wareneingang'] ?: date('Y-m-d'),
+          [$c['charge_nr'], $item_id, $nimm, $nimm, $c['einheit'] ?: 'Stk', $c['lieferant_id'] ?: null, $c['mhd'] ?: null, $c['wareneingang'] ?: heute_ort(),
            'Ins Fremdlager übergeben (aus Charge #' . (int)$c['id'] . ')', $c['auftrag_id'] ?: null, $c['pa_id'] ?: null, $kunde_id,
            $c['energetisiert_am'] ?? null, $c['energetisiert_von'] ?? null, gmdate('Y-m-d H:i:s')]);
         $rest -= $nimm; $neu += $nimm;
@@ -4612,8 +4612,8 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
                      [$item_id, $charge_nr]);
         if ($vorab) {
             $altNotiz = trim((string) scalar("SELECT notiz FROM charge WHERE id=?", [(int)$vorab['id']]));
-            q("UPDATE charge SET menge=?, menge_verfuegbar=?, einheit=?, lieferant_id=COALESCE(?,lieferant_id), mhd=COALESCE(?,mhd), wareneingang=CURDATE(), status=?, notiz=?, auftrag_id=COALESCE(?,auftrag_id), bestellung_position_id=COALESCE(?,bestellung_position_id) WHERE id=?",
-              [$menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, $status,
+            q("UPDATE charge SET menge=?, menge_verfuegbar=?, einheit=?, lieferant_id=COALESCE(?,lieferant_id), mhd=COALESCE(?,mhd), wareneingang=?, status=?, notiz=?, auftrag_id=COALESCE(?,auftrag_id), bestellung_position_id=COALESCE(?,bestellung_position_id) WHERE id=?",
+              [$menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, heute_ort(), $status,   // Wareneingang = Tag in Berlin (Fable-4 T1.7)
                trim(($altNotiz !== '' ? $altNotiz . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
                $auftrag_id ?: null, $bestellung_position_id ?: null, (int)$vorab['id']]);
             charge_kapselgroesse_setzen((int)$vorab['id']);
@@ -4621,8 +4621,8 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
         }
     }
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,auftrag_id,bestellung_position_id,angelegt)
-       VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?,?,?)",
-      [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, $status, $notiz ?: null, $auftrag_id ?: null, $bestellung_position_id ?: null, gmdate('Y-m-d H:i:s')]);
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [$charge_nr ?: null, $item_id, $menge, $menge, $it['einheit'], $lieferant_id ?: null, $mhd ?: null, heute_ort(), $status, $notiz ?: null, $auftrag_id ?: null, $bestellung_position_id ?: null, gmdate('Y-m-d H:i:s')]);   // Fable-4 T1.7: Wareneingang in Ortszeit
     $neu = (int) insert_id();   // ID VOR bedarf_bump() sichern (meta_set() setzt LAST_INSERT_ID sonst auf 0)
     charge_kapselgroesse_setzen($neu);   // Soll-Kette 2d
     bedarf_bump();   // neuer Bestand -> Bedarf-Cache ungueltig

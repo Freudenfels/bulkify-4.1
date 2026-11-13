@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../core/gewicht.php';   // gewicht_lesen() – eine Regel für Gewichte (13.11.2026)
+require_once __DIR__ . '/../../core/zeit_ort.php';   // heute_ort(): Wareneingang in Ortszeit (Fable-4 T1.7)
 // DIE NAHT ZUM DASHBOARD. Die einzige Datei im Lager-Programm, die Tabellen des Dashboards kennt.
 //
 // Warum an einer Stelle: Das Dashboard wird weiterentwickelt (und irgendwann von v5 abgeloest).
@@ -1680,8 +1681,8 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
         if ($vorab) {
             $alt = trim((string)$vorab['notiz']);
             q("UPDATE charge SET menge=?, menge_verfuegbar=?, einheit=?, lieferant_id=COALESCE(?,lieferant_id),
-                      mhd=COALESCE(?,mhd), wareneingang=CURDATE(), status=?, notiz=? WHERE id=?",
-              [$menge, $menge, $einheit, $lief, $mhd ?: null, $status,
+                      mhd=COALESCE(?,mhd), wareneingang=?, status=?, notiz=? WHERE id=?",
+              [$menge, $menge, $einheit, $lief, $mhd ?: null, heute_ort(), $status,   // Wareneingang = Tag in Berlin (Fable-4 T1.7)
                trim(($alt !== '' ? $alt . ' | ' : '') . ($notiz ?: 'Ware eingegangen, mit CoA-Charge abgeglichen')),
                (int)$vorab['id']]);
             erp_charge_kapselgroesse_setzen((int)$vorab['id']);
@@ -1690,8 +1691,8 @@ function erp_wareneingang_buchen(int $item_id, float $menge, string $charge_nr, 
         }
     }
     q("INSERT INTO charge (charge_nr,item_id,menge,menge_verfuegbar,einheit,lieferant_id,mhd,wareneingang,status,notiz,angelegt)
-       VALUES (?,?,?,?,?,?,?,CURDATE(),?,?,?)",
-      [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $lief, $mhd ?: null, $status, $notiz ?: null, jetzt_utc()]);
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      [$charge_nr ?: null, $item_id, $menge, $menge, $einheit, $lief, $mhd ?: null, heute_ort(), $status, $notiz ?: null, jetzt_utc()]);   // Fable-4 T1.7: Ortszeit
     $neu = (int) insert_id();
     erp_charge_kapselgroesse_setzen($neu);   // Soll-Kette 2d: abgeleitet, nicht gemessen
     erp_bedarf_bump();

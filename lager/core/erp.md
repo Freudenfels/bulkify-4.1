@@ -158,3 +158,5 @@ erp_la_scan() / erp_la_abschluss() / erp_charge_gebinde_anhaengen() / erp_la_auf
 - `erp_erwartete_lieferungen()` liefert je Lieferung `sendung` (über `erp_sendung_text()`, eine Kopie der Dashboard-Regel) und `pakete`.
 
 **Ist-Gewicht nach Einheit (Fable-4 T1.4, 13.11.2026):** `erp_menge_einheit_lesen($s, $einheit)` – kg/g/l = `gewicht_lesen()` („24.850“ kg = 24,85 wie in der Werk-App), sonst `erp_menge_parse()`. `erp_gebinde_rueckgabe()` meldet `warnung` = true, wenn das Ist über der ursprünglichen Gebindemenge liegt (gebucht wird trotzdem, Meldung gelb).
+
+**Wareneingang in Ortszeit (Fable-4 T1.7, 13.11.2026):** `erp_wareneingang_buchen()` setzt `charge.wareneingang = heute_ort()` (Europe/Berlin) statt `CURDATE()` (UTC-Sitzung = zwischen 0 und 1/2 Uhr der Vortag).
