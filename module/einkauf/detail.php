@@ -726,3 +726,4 @@ function psum(){
 })();
 </script>
 <?php // Bestellseite 13.11.2026: „Weitere Dokumente“ steht im Reiter Wareneingang & Chargen, Aktionen im Menü „⋯“, Verlauf im Reiter Verlauf.
+render_footer();   // Fable-6 P3: Seitenfuß (Handy-Menü, Hell/Dunkel, Doppelklick-Schutz) fehlte
