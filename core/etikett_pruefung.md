@@ -37,3 +37,6 @@ Titel „Druckdatei Verpackung“. Vorlage je Beutel-Typ in `item.beutel_vorlage
 PDF von AB-3223: Seite 200 × 79 mm, TrimBox 194 × 73 mm = 188 × 67 mm Endformat + 3 mm Beschnitt (plus weitere 3 mm bis zur Seite). Bei der Freigabe wurde 194 × 73 als Etikett-Maß übernommen, danach war das Soll falsch.
 - `etp_soll()`: Ist das Maß am Etikett-Artikel = Glas-Endformat (`etikett_final` am Behälter) + 2 × b, gilt das Glas-Endformat als Soll, b als Beschnitt („Ihr Etikett: 188 × 67 mm, Beschnitt 3 mm“).
 - `etp_mass_ampel()`: auch eine TrimBox = Endformat + 2 × b ist grün („Format passt (188 × 67 mm + 3 mm Beschnitt)“).
+
+## Sofortfix 13.11.2026: Bildauflösung nur Hinweis
+Ab 300 dpi grün, darunter immer gelb – nie rot, auch unter 150 dpi. Text kurz ohne Positionsangaben: „Hinweis: 2 Bilder unter 150 dpi (145 dpi). Im Druck evtl. leicht unscharf. Große Hintergrundbilder sind meist unkritisch.“ (Zahl und Grenze 150 bzw. 300, in Klammern der kleinste Wert; Englisch entsprechend). Die Liste je Bild (Pixel, Größe, Lage) steht in der Zeile als `details` und im Pop-up aufklappbar unter „Details“. Freigabe hängt nur an der Maß-Ampel, „x Abweichungen“ zählt nur die KI-Punkte – die Auflösung zählt dort nicht. Die Druck-Check-Zeilen werden bei jedem Öffnen aus den gespeicherten Messwerten neu gebaut; „Erneut prüfen“ misst neu.

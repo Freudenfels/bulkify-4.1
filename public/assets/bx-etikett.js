@@ -47,7 +47,9 @@
       .map(function (x) { return x[0]; });
   }
   function zeile(z) {
-    return '<div class="bx-et-amp bx-et-' + esc(z.ampel) + '"><span class="bx-et-ico">' + (ICO[z.ampel] || ICO.info) + '</span><div><div class="bx-et-amp-t">' + esc(z.titel) + '</div><div class="bx-et-amp-x">' + esc(z.text) + '</div></div></div>';
+    return '<div class="bx-et-amp bx-et-' + esc(z.ampel) + '"><span class="bx-et-ico">' + (ICO[z.ampel] || ICO.info) + '</span><div><div class="bx-et-amp-t">' + esc(z.titel) + '</div><div class="bx-et-amp-x">' + esc(z.text) + '</div>'
+      + (z.details && z.details.length ? '<details class="bx-et-details"><summary>' + 'Details' + '</summary><ul>' + z.details.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></details>' : '')
+      + '</div></div>';
   }
 
   var D = null, S = null, DOC = null, SEITE = null, KI_LAEUFT = false, POLL = null;

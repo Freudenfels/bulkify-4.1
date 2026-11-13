@@ -16,3 +16,5 @@ Oberfläche zu `core/etikett_pruefung.php`, im Kundenportal und auf der Auftrags
 Sofortfix 13.11.2026: Knopf „Erneut prüfen“ neben „Druck-Check“ (Kunde und Team) – startet Druck-Check und KI-Check für die aktuelle Datei neu.
 
 13.11.2026 (Nico): Hinweise nach oben – Druck-Check und KI-Etikettencheck zeigen rot zuerst, dann gelb, dann Info, grün unten (`sortiert()`).
+
+Sofortfix 13.11.2026 (Bildauflösung): Zeilen mit `details` (Liste) bekommen darunter ein aufklappbares „Details“ (`.bx-et-details`).

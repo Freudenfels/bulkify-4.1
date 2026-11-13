@@ -537,11 +537,15 @@ function etp_technik_zeilen(array $soll, array $pdf, array $mass, ?array $client
                 $z[] = ['k' => 'bilder', 'ampel' => 'gruen', 'titel' => $t('Bildauflösung', 'Image resolution'),
                         'text' => $t('Alle Bilder mindestens 300 dpi (' . count($bilder) . ' Bild' . (count($bilder) === 1 ? '' : 'er') . ')', 'All images at least 300 dpi (' . count($bilder) . ' image' . (count($bilder) === 1 ? '' : 's') . ')')];
             } else {
-                $rot = (float)$niedrig[0]['dpi'] < 150;
-                $liste = implode('; ', array_map($beschr, array_slice($niedrig, 0, 4))) . (count($niedrig) > 4 ? $t(' … und ' . (count($niedrig) - 4) . ' weitere', ' … and ' . (count($niedrig) - 4) . ' more') : '');
-                $z[] = ['k' => 'bilder', 'ampel' => $rot ? 'rot' : 'gelb', 'titel' => $t('Bildauflösung', 'Image resolution'),
-                        'text' => ($rot ? $t('Auflösung zu gering für den Druck (unter 150 dpi). ', 'Resolution too low for print (below 150 dpi). ')
-                                        : $t('Auflösung unter den empfohlenen 300 dpi. ', 'Resolution below the recommended 300 dpi. ')) . $liste];
+                // Sofortfix 13.11.2026 (Nico): Auflösung nie rot – unter 300 dpi immer gelb (Hinweis), kurzer Text ohne Positionsangaben,
+                // die Liste je Bild nur aufklappbar unter „Details“ ('details'). Zählt weder für die Freigabe noch für „x Abweichungen“.
+                $unter150 = array_values(array_filter($niedrig, fn($b) => (float)$b['dpi'] < 150));
+                $grenze = $unter150 ? 150 : 300; $n = $unter150 ? count($unter150) : count($niedrig);
+                $min = (int)round((float)$niedrig[0]['dpi']);
+                $z[] = ['k' => 'bilder', 'ampel' => 'gelb', 'titel' => $t('Bildauflösung', 'Image resolution'),
+                        'text' => $t('Hinweis: ' . $n . ' Bild' . ($n === 1 ? '' : 'er') . ' unter ' . $grenze . ' dpi (' . $min . ' dpi). Im Druck evtl. leicht unscharf. Große Hintergrundbilder sind meist unkritisch.',
+                                     'Note: ' . $n . ' image' . ($n === 1 ? '' : 's') . ' below ' . $grenze . ' dpi (' . $min . ' dpi). May print slightly blurred. Large background images are usually not critical.'),
+                        'details' => array_map($beschr, $niedrig)];
             }
         }
     }
