@@ -83,7 +83,7 @@
     else if (s.art === 'beutel' && s.soll.item_name) h += '<div class="bx-et-soll">' + esc(t.soll) + ': ' + esc(s.soll.item_name) + '</div>';
     // Abschnitt 1: Hochladen
     if (s.gesperrt) h += '<div class="bx-et-hinweis">' + esc(t.gesperrt) + '</div>';
-    else h += '<label class="bx-et-drop' + (akt ? ' klein' : '') + '"><input type="file" accept="application/pdf,.pdf" hidden>'
+    else h += '<label class="bx-et-drop' + (akt ? ' klein' : '') + '"><input type="file" accept="application/pdf,.pdf" data-roh="1" hidden>'
       + '<span class="bx-et-drop-ico">' + ICO.upload + '</span><span>' + (akt ? esc(t.ersetzen) + ' – ' : '') + esc(t.ablage) + ' <u>' + esc(t.waehlen) + '</u> <span class="muted">(' + esc(t.nurpdf) + ')</span></span></label>'
       + '<div class="bx-et-upmsg" role="status"></div>';
     if (akt) {
@@ -122,6 +122,9 @@
       }).join('') + '</ul></details>';
     }
     d.querySelector('.bx-et-inhalt').innerHTML = h;
+    // Team-Seite: Zusatz der Auftragsseite (Download für die Druckerei, Entfernen, Etikett-Erinnerung) unten anhängen
+    var extra = s.wer === 'team' && document.getElementById('etpTeamExtra');
+    if (extra) { var k = extra.cloneNode(true); k.removeAttribute('id'); k.hidden = false; d.querySelector('.bx-et-inhalt').appendChild(k); }
     // Knopfzeile
     var fuss = d.querySelector('.bx-pop-fuss');
     if (akt && !akt.freigabe && !s.freigegeben) fuss.innerHTML = '<button type="button" class="btn btn-ghost" data-et-spaeter>' + esc(t.spaeter) + '</button><button type="button" class="btn btn-primary bx-et-frei-btn" data-et-frei>' + esc(t.freigeben) + '</button>';

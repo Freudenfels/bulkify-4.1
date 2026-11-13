@@ -379,6 +379,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
     etikett_erinnerung_pause($id, !empty($_POST['pause']), (string)(current_user()['name'] ?? ''));
     header('Location: ?p=auftrag&id=' . $id . '&ok=1'); exit;
 }
+// Etikett-Pop-up (13.11.2026, core/etikett_pruefung.php): Status für alle Team-Rollen, Hochladen/Prüfen/Freigeben im Namen des Kunden
+// (mit Pflicht-Grund) nur Admin/Vertrieb.
+if ($id && isset($_GET['etp'])) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !(has_role('admin') || has_role('sales'))) { header('Content-Type: application/json; charset=utf-8'); echo json_encode(['ok' => false, 'fehler' => 'Keine Berechtigung.']); exit; }
+    etp_ajax(['wer' => 'team', 'kunde_id' => 0, 'nutzer' => (string)(current_user()['name'] ?? ''), 'name_vor' => '',
+              'datei_url' => fn(int $dokId, int $pid) => '?p=dokument&id=' . $dokId]);
+    exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['etikett_upload_team','etikett_freigeben_team','etikett_del_team'], true)) {
     if (!(has_role('admin') || has_role('sales'))) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Keine Berechtigung.')); exit; }
     $akt = (string)$_POST['aktion'];
@@ -917,7 +925,16 @@ $kachelnRender = function() use ($stBg, $stFg, $stText, $a, $glasName, $fehltCar
     if ($groesseLbl !== '') { $grK = match((string)($rezeptur['darreichungsform'] ?? '')) { 'kapsel','softgel'=>'Kapselgröße', 'tablette'=>'Tablettenform', 'gummi','stick','pulver','gel','fluessig','oel'=>'Größe je Einheit', default=>'Größe/Form' };
         echo '<div class="bx-card">' . $kachelK($grK, $stift('dlgMenge')) . '<div class="v">' . h($groesseLbl) . '</div></div>'; }
     echo '<div class="bx-card">' . $kachelK('Herstellung', $darfStift ? '<a class="bx-stift" href="#" data-goto="beschaffung" title="Im Reiter Beschaffungsweg festlegen">' . $stiftIco . '</a>' : '') . '<div class="v">' . ($istFremd ? bx_badge('Zukauf','info') : bx_badge('Eigenproduktion','ok')) . '</div></div>';
-    echo '<div class="bx-card">' . $kachelK(h($designLbl), auftrag_braucht_etikett((int)$a['id']) ? $stift('dlgEtikett') : '') . '<div class="v">' . $etikettBadge . '</div></div>';
+    $etpK = auftrag_braucht_etikett((int)$a['id']) ? etp_aktuell((int)$a['id'], false) : null;
+    $etpAmpel = ['gruen' => 'ok', 'gelb' => 'warn', 'rot' => 'err', 'info' => 'info'];
+    $etpZusatz = '';
+    if ($etpK) {
+        $etpZusatz .= '<div class="bx-zusatz" style="margin-top:6px">' . bx_badge('Maß', $etpAmpel[$etpK['mass_ampel']] ?? 'info') . ' v' . (int)$etpK['version'] . '</div>';
+        if ($etpK['ki_zusammenfassung']) $etpZusatz .= '<div class="bx-zusatz">KI: ' . h($etpK['ki_zusammenfassung']) . '</div>';
+        if ($etpK['status'] === 'freigegeben' && $etpK['freigabe_am']) $etpZusatz .= '<div class="bx-zusatz">' . h((string)$etpK['freigabe_name']) . ', ' . h(fmt_zeit((string)$etpK['freigabe_am'], 'd.m.Y H:i')) . ((string)$etpK['freigabe_akteur'] === 'team' ? ' (Team)' : '') . '</div>';
+    }
+    $etpStift = auftrag_braucht_etikett((int)$a['id']) ? '<button type="button" class="bx-stift" title="Etikett hochladen, prüfen, freigeben" data-etp-oeffnen="' . (int)$a['id'] . '">' . $stiftIco . '</button>' : '';
+    echo '<div class="bx-card">' . $kachelK(h($designLbl), $etpStift) . '<div class="v">' . $etikettBadge . '</div>' . $etpZusatz . '</div>';
     if (!empty($a['produkt_id']) && !empty($a['kunde_id']))
         echo '<div class="bx-card">' . $kachelK('Name beim Kunden', $stift('dlgName')) . '<div class="v" style="font-size:15px">' . ($knEff !== '' ? h($knEff) : '<span class="muted">wie intern</span>') . '</div></div>';
     if (!in_array((string)$a['status'], ['versendet', 'storniert'], true)) {
@@ -1110,7 +1127,7 @@ if (has_role('admin') || has_role('sales')):
   <script src="/assets/etikett_vorschau.js"></script>
   <script>(function(){ var el = document.getElementById('etBildVorschau');
     bxEtikettVorschau(el, '?p=dokument&id=<?= (int)$etBild['id'] ?>', <?= $etBildExt === 'pdf' ? 'true' : 'false' ?>);
-    if (el.dataset.dlgOpen) { el.style.cursor = 'pointer'; el.addEventListener('click', function(e){ if (e.target.closest('a')) return; var d = document.getElementById(el.dataset.dlgOpen); if (d) d.showModal(); }); }
+    if (el.dataset.dlgOpen) { el.style.cursor = 'pointer'; el.addEventListener('click', function(e){ if (e.target.closest('a')) return; if (window.bxEtikett) bxEtikett.oeffnen(<?= (int)$id ?>); }); }
   })();</script>
   <?php endif; endif; ?>
   <?php // Stift-Fenster (Teil 1): je änderbarer Kachel genau dieses Feld. Liegen außerhalb jeder Tabelle/jedes Formulars.
@@ -1180,53 +1197,28 @@ if (has_role('admin') || has_role('sales')):
   </dialog>
 
   <?php if (auftrag_braucht_etikett($id)):
-      $etDokA = etikett_datei($id); $etPrev = $etDokA ?: etikett_quelle($id);
-      $etExt  = $etPrev ? strtolower(pathinfo((string)($etPrev['datei_orig'] ?: $etPrev['datei']), PATHINFO_EXTENSION)) : '';
-      $etIstBild = in_array($etExt, ['jpg','jpeg','png','gif','webp','avif','bmp','svg'], true); $etIstPdf = $etExt === 'pdf';
-      $etVers = !empty($a['produkt_id']) ? (int) scalar("SELECT etikett_version FROM item WHERE id=?", [etikett_item_fuer_auftrag_kunde($id, (int)$a['produkt_id'])]) : 0; ?>
-  <dialog id="dlgEtikett" class="bx-dialog" style="max-width:820px">
-    <?= $dlgKopf(h($designLbl), 'dlgEtikett') ?>
-    <div class="bx-row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <?= $etikettBadge ?><?php if ($etVers > 0): ?> <span class="muted" style="font-size:13px">Version v<?= $etVers ?></span><?php endif; ?>
-      <?php if ($etPrev): ?><span class="muted" style="font-size:13px">· <?= h((string)($etPrev['datei_orig'] ?: 'Design')) ?><?= !empty($etPrev['alt']) ? ' · aus einer Vorbestellung' : '' ?></span><?php endif; ?>
-    </div>
-    <?php if ($etPrev): ?>
-    <div style="border:1px solid var(--line);border-radius:10px;background:var(--panel-2,#f6f7f8);padding:10px;display:flex;align-items:center;justify-content:center;min-height:180px">
-      <?php if ($etIstBild): ?><img src="?p=dokument&id=<?= (int)$etPrev['id'] ?>" alt="Etikett-Vorschau" style="max-width:100%;max-height:360px;border-radius:6px">
-      <?php elseif ($etIstPdf): ?><iframe src="?p=dokument&id=<?= (int)$etPrev['id'] ?>#toolbar=0&view=FitH" title="Etikett-Vorschau" style="width:100%;height:380px;border:0;border-radius:6px;background:#fff"></iframe>
-      <?php else: ?><a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" target="_blank" rel="noopener">Datei öffnen</a><?php endif; ?>
-    </div>
-    <div style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" download target="_blank" rel="noopener">Herunterladen (für die Druckerei)</a></div>
-    <?php else: ?><div class="muted" style="padding:16px;border:1px dashed var(--line);border-radius:10px;text-align:center">Noch kein Design hinterlegt.</div><?php endif; ?>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
-      <form method="post" enctype="multipart/form-data" class="bx-row" style="gap:8px;align-items:center;margin:0;flex-wrap:wrap">
-        <input type="hidden" name="aktion" value="etikett_upload_team">
-        <input type="file" name="etikett" required accept="application/pdf,image/*">
-        <button class="btn btn-ghost btn-sm" type="submit"><?= $etDokA ? 'Design ersetzen' : 'Design hochladen' ?></button>
-      </form>
-      <?php if ($etDokA && !$etikettFrei): ?>
-      <form method="post" class="bx-row" style="gap:8px;align-items:center;margin:0;flex-wrap:wrap">
-        <input type="hidden" name="aktion" value="etikett_freigeben_team">
-        <input type="text" name="freigabe_name" required placeholder="Name (Freigabe im Namen des Kunden)" style="min-width:230px">
-        <button class="btn btn-primary btn-sm" type="submit">Freigabe bestätigen</button>
-      </form>
-      <?php endif; ?>
-      <?php if ($etDokA): ?>
+      // Etikett-Pop-up (13.11.2026): Hochladen, Prüfen, Freigeben im Namen des Kunden laufen in bx-etikett.js. Hier nur der Team-Zusatz,
+      // den das Pop-up unten anhängt: Datei für die Druckerei, Entfernen, Etikett-Erinnerung.
+      $etDokA = etikett_datei($id); $etPrev = $etDokA ?: etikett_quelle($id); ?>
+  <div id="etpTeamExtra" hidden>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line)">
+      <?php if ($etPrev): ?><div><a class="btn btn-ghost btn-sm" href="?p=dokument&id=<?= (int)$etPrev['id'] ?>" download target="_blank" rel="noopener">Herunterladen (für die Druckerei)</a></div><?php endif; ?>
+      <?php if ($etDokA && (has_role('admin') || has_role('sales'))): ?>
       <form method="post" style="margin:0" onsubmit="return confirm('Design wirklich entfernen? Die Freigabe wird zurückgesetzt.');">
         <input type="hidden" name="aktion" value="etikett_del_team">
-        <button class="btn btn-ghost btn-sm" type="submit">Entfernen</button>
+        <button class="btn btn-ghost btn-sm" type="submit">Design entfernen</button>
       </form>
       <?php endif; ?>
-      <div class="muted" style="font-size:12px">Das Design gehört zum Produkt (Kundenetikett, neue Version bei Freigabe eines neuen Designs); die Freigabe gilt für diesen Auftrag.</div>
-      <?php $etE = etikett_erinnerung_stand((int)$id); if (!$etDokA || $etE['anzahl'] > 0): // 13.11.2026: tägliche Erinnerung an den Kunden ?>
-      <form method="post" class="bx-row" style="gap:10px;align-items:center;margin:0;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--line)">
+      <?php $etE = etikett_erinnerung_stand((int)$id); if (!$etDokA || $etE['anzahl'] > 0): ?>
+      <form method="post" class="bx-row" style="gap:10px;align-items:center;margin:0;flex-wrap:wrap">
         <input type="hidden" name="aktion" value="etikett_erinnerung_pause"><input type="hidden" name="pause" value="<?= $etE['pause'] ? '0' : '1' ?>">
-        <span style="font-size:13px">Etikett-Erinnerung: <?= $etE['anzahl'] > 0 ? $etE['anzahl'] . ' × gesendet, zuletzt ' . h(fmt_zeit($etE['zuletzt'], 'd.m.Y')) : 'noch keine gesendet' ?><?= $etE['pause'] ? ' · <b style="font-weight:600">pausiert</b>' : '' ?></span>
+        <span style="font-size:13px">Etikett-Erinnerung: <?= $etE['anzahl'] > 0 ? $etE['anzahl'] . ' × gesendet, zuletzt ' . h(fmt_zeit($etE['zuletzt'], 'd.m.Y')) : 'noch keine gesendet' ?><?= $etE['pause'] ? ' · pausiert' : '' ?></span>
         <button class="btn btn-ghost btn-sm" type="submit"><?= $etE['pause'] ? 'Erinnerung wieder aktivieren' : 'Erinnerung pausieren' ?></button>
       </form>
       <?php endif; ?>
     </div>
-  </dialog>
+  </div>
+  <?= etp_einbinden('?p=auftrag&id=' . (int)$id . '&etp=1', (int)($_GET['etikett'] ?? 0) === (int)$id ? (int)$id : 0) ?>
   <?php endif; ?>
 
   <?php if (!empty($a['produkt_id']) && !empty($a['kunde_id'])): ?>
@@ -1487,7 +1479,7 @@ if (has_role('admin') || has_role('sales')):
         <?php elseif ($fState === 'err' && $fStatus === 'Laboranalyse'): ?>
         <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Laborbefund auffällig – vor dem Versand klären.</span> <a href="#labor">Zum Labor</a></div>
         <?php elseif ($fState === 'err'): ?>
-        <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Der Kunde hat noch keine Druckdatei hochgeladen.</span> <a href="#" data-goto="details" data-dlg="dlgEtikett">Selbst hochladen &rarr; Kachel Etikett (Reiter Details)</a></div>
+        <div style="margin-top:8px;font-size:12px"><span style="color:#b23b2f">Der Kunde hat noch keine Druckdatei hochgeladen.</span> <a href="#" data-etp-oeffnen="<?= (int)$id ?>">Selbst hochladen (Etikett-Pop-up)</a></div>
         <?php elseif (!$fDone && $fStatus === 'Etiketten nicht bestellt'): ?>
         <div style="margin-top:8px;font-size:12px"><a href="?p=einkaufsliste">Etiketten bestellen &rarr; Einkauf</a></div>
         <?php endif; ?>

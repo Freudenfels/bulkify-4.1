@@ -399,3 +399,9 @@ Express-Bestellung (fehlende Rohstoffe) und Express-Zukauf (Bulk und Fertigware/
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Beschaffungsweg „Direkt bestellt“: keine Unterlagen-Sperre mehr; fehlende Unterlagen = Aufgabe „Unterlagen nachfordern“.
+
+## Etikett-Pop-up (13.11.2026)
+- Kachel „Etikett“: Stift öffnet das Etikett-Pop-up (bx-etikett.js); unter dem Freigabe-Badge Maß-Ampel mit Version, KI-Zusammenfassung und Freigabe-Vermerk (Name, Zeit, „Team“).
+- Der alte Dialog `dlgEtikett` ist ersetzt. Im Pop-up: Team-Upload (nur PDF), Druck-Check, KI-Etikettencheck, Versionen, Freigabe im Namen des Kunden nur mit Pflicht-Grund (Admin/Vertrieb). Unten der Team-Zusatz `#etpTeamExtra`: Herunterladen für die Druckerei, Design entfernen, Etikett-Erinnerung pausieren.
+- Endpunkt `?p=auftrag&id=…&etp=1&a=…` (`etp_ajax`, wer=team); `&etikett=ID` öffnet das Pop-up direkt (Ziel der Aufgaben „KI meldet Abweichung zum PIB“).
+- Die Etikett-Vorschau auf der Seite und der Link „Selbst hochladen“ öffnen ebenfalls das Pop-up.

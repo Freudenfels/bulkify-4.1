@@ -686,14 +686,20 @@ function etp_ki_auswerten(array $daten, string $sp): array {
         if ($k === 'aussagen' && $amp === 'rot') $amp = 'gelb';        // nur Hinweis
         $punkte[] = ['key' => $k, 'titel' => $titel, 'ampel' => $amp, 'text' => mb_substr(trim((string)($p['begruendung'] ?? ($p ? '' : $t('nicht bewertet', 'not assessed')))), 0, 600)];
     }
+    $z = etp_ki_zus($punkte, $sp);
+    return ['punkte' => $punkte, 'zusammenfassung' => $z['text'], 'rot' => $z['rot'], 'gelb' => $z['gelb'], 'gruen' => $z['gruen']];
+}
+// „9 von 11 Punkten passen · 1 Hinweis · 1 Abweichung“ in der gewünschten Sprache
+function etp_ki_zus(array $punkte, string $sp): array {
+    $t = etp_t($sp);
     $n = count($punkte);
-    $gruen = count(array_filter($punkte, fn($p) => $p['ampel'] === 'gruen'));
-    $gelb  = count(array_filter($punkte, fn($p) => $p['ampel'] === 'gelb'));
-    $rot   = count(array_filter($punkte, fn($p) => $p['ampel'] === 'rot'));
+    $gruen = count(array_filter($punkte, fn($p) => ($p['ampel'] ?? '') === 'gruen'));
+    $gelb  = count(array_filter($punkte, fn($p) => ($p['ampel'] ?? '') === 'gelb'));
+    $rot   = count(array_filter($punkte, fn($p) => ($p['ampel'] ?? '') === 'rot'));
     $zus = $t($gruen . ' von ' . $n . ' Punkten passen', $gruen . ' of ' . $n . ' points fit');
     if ($gelb) $zus .= ' · ' . $gelb . ' ' . $t($gelb === 1 ? 'Hinweis' : 'Hinweise', $gelb === 1 ? 'note' : 'notes');
     if ($rot)  $zus .= ' · ' . $rot . ' ' . $t($rot === 1 ? 'Abweichung' : 'Abweichungen', $rot === 1 ? 'deviation' : 'deviations');
-    return ['punkte' => $punkte, 'zusammenfassung' => $zus, 'rot' => $rot, 'gelb' => $gelb, 'gruen' => $gruen];
+    return ['text' => $zus, 'gruen' => $gruen, 'gelb' => $gelb, 'rot' => $rot];
 }
 // Bilder: [['titel'=>'Vorderseite (1/2)','daten'=>'data:image/jpeg;base64,…'], …]. Rückgabe = gespeicherter KI-Stand.
 function etp_ki_pruefen(int $pid, array $bilder): array {
@@ -761,7 +767,7 @@ function etp_ki_pruefen(int $pid, array $bilder): array {
     $ausw = etp_ki_auswerten((array)$r['daten'], $sp);
     $ausw['test'] = !empty($r['test']);
     q("UPDATE etikett_pruefung SET ki_status='fertig', ki=?, ki_zusammenfassung=?, ki_am=UTC_TIMESTAMP() WHERE id=?",
-      [json_encode($ausw, JSON_UNESCAPED_UNICODE), mb_substr($ausw['zusammenfassung'], 0, 250), $pid]);
+      [json_encode($ausw, JSON_UNESCAPED_UNICODE), mb_substr(etp_ki_zus($ausw['punkte'], 'de')['text'], 0, 250), $pid]);
     // Rote Punkte -> Aufgabe ans Team (normal, einmal je Version)
     if ($ausw['rot'] > 0 && function_exists('aufgabe_neu')) {
         try {
@@ -774,13 +780,17 @@ function etp_ki_pruefen(int $pid, array $bilder): array {
     }
     return etp_ki_stand(etp_pruefung($pid));
 }
-function etp_ki_stand(?array $p): array {
+function etp_ki_stand(?array $p, string $sp = ''): array {
     if (!$p) return ['status' => null];
     $ki = json_decode((string)($p['ki'] ?? ''), true) ?: [];
+    // Titel in der Sprache des Betrachters (Team immer Deutsch), Begründung bleibt wie von der KI geschrieben
+    if ($sp !== '' && !empty($ki['punkte'])) { $def = etp_ki_punkte($sp); foreach ($ki['punkte'] as &$pp) if (isset($def[$pp['key'] ?? ''])) $pp['titel'] = $def[$pp['key']][0]; unset($pp); }
     $st = (string)($p['ki_status'] ?? '');
     // hängengeblieben (z. B. Seite geschlossen): nach 3 Minuten gilt „nicht möglich“
     if ($st === 'laeuft' && !empty($p['ki_am']) && strtotime((string)$p['ki_am'] . ' UTC') < time() - 180) $st = 'nicht_moeglich';
-    return ['status' => $st ?: null, 'punkte' => $ki['punkte'] ?? [], 'zusammenfassung' => (string)($p['ki_zusammenfassung'] ?? ''), 'rot' => (int)($ki['rot'] ?? 0), 'test' => !empty($ki['test'])];
+    $zus = ($sp !== '' && !empty($ki['punkte'])) ? etp_ki_zus($ki['punkte'], $sp)['text'] : (string)($p['ki_zusammenfassung'] ?? '');
+    if ($st === 'nicht_moeglich' && $sp !== '') $zus = etp_t($sp)('Prüfung nicht möglich', 'Check not possible');
+    return ['status' => $st ?: null, 'punkte' => $ki['punkte'] ?? [], 'zusammenfassung' => $zus, 'rot' => (int)($ki['rot'] ?? 0), 'test' => !empty($ki['test'])];
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -927,7 +937,7 @@ function etp_status(int $aid, string $wer, callable $dateiUrl, string $nameVor):
                 'mass' => $mass, 'boxen' => $tech['pdf']['boxen'] ?? [], 'rotate' => (int)($tech['pdf']['rotate'] ?? 0), 'seiten' => (int)($tech['pdf']['seiten'] ?? 1),
                 'client_da' => !empty($tech['client']),
                 'technik' => etp_technik_zeilen($soll, (array)($tech['pdf'] ?? []), $mass, $tech['client'] ?? null, $sp),
-                'ki' => etp_ki_stand($p), 'status' => (string)$p['status'],
+                'ki' => etp_ki_stand($p, $sp), 'status' => (string)$p['status'],
                 'freigabe' => $p['status'] === 'freigegeben' ? ['name' => (string)$p['freigabe_name'], 'am' => $p['freigabe_am'] ? fmt_zeit((string)$p['freigabe_am'], 'd.m.Y H:i') : '',
                                                                 'akteur' => (string)$p['freigabe_akteur'], 'grund' => (string)$p['freigabe_grund'], 'trotzdem' => (int)$p['trotzdem'] === 1] : null];
     }
