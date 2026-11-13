@@ -163,3 +163,10 @@ Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführ
 „Rohstoff angefragt ohne Dokument“: Knöpfe in der Zeile – Unterlage hochladen (CoA/Spec) oder bei allen angefragten Lieferanten über das Portal anfordern.
 
 **Voll produziert / Linie leer (13.11.2026, Werk-App Teil 3):** Neue Prüfung „PA voll produziert, Produktionsschritte offen“ mit Knopf „Schritte erledigen“ (Pflicht-Grund, `pa_voll_produziert_erledigen()`). Beheben-Knöpfe können `grund_pflicht` haben: dann Feld „Grund (Pflicht)“, der Grund geht an die Aktion.
+
+**Nur offene Vorgänge (13.11.2026, Paket Teil 8):** Standardmäßig werden Zeilen ausgeblendet, deren Vorgang abgeschlossen ist:
+- Auftrag versendet oder storniert
+- Produktionsauftrag erledigt oder storniert
+- Bestellung geliefert oder storniert
+
+Erkannt wird das am Öffnen-Link der Zeile bzw. an `_aid` (`dp_nur_offen()`, `dp_vorgang_zu()`). Der Schalter „auch abgeschlossene“ (`&zu=1`) zeigt alle. Oben steht, wie viele Zeilen ausgeblendet sind. „Beheben“ ist davon unberührt.

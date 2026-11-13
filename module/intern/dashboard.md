@@ -18,3 +18,8 @@ Kachel und Liste „Versandbereit“ zählen Aufträge mit Status `erledigt` nur
 
 
 **Offene Rechnungen (Liste rechts):** die 6 neuesten offenen Rechnungen mit dem **offenen Rest** (nicht Brutto); teilbezahlte tragen den kleinen Hinweis „teilbezahlt“ (13.11.2026).
+
+**Zähler nur offene Vorgänge (13.11.2026, Paket Teil 8):**
+- „Offene Angebote“ ohne abgelaufene (gueltig_bis vor heute).
+- „In Produktion“ ohne Produktionsaufträge versendeter oder stornierter Aufträge.
+- „Rohstoffe leer“ nur für Rohstoffe, die ein offener Produktionsauftrag braucht.

@@ -1285,6 +1285,31 @@ function dp_neue_vp_nummer(): string {
 
 // Prüfung ausführen (Fehler, z. B. fehlende Spalte, wird angezeigt statt die Seite zu sprengen).
 // zeilen (optional): fn(array $rows): array – ergänzt Spalten, die sich nicht in SQL rechnen lassen (z. B. Herleitung).
+// Nur offene Vorgänge (Teil 8): Objekt der Zeile über _link (auftrag / produktionsauftrag / bestellung) bzw. _aid bestimmen.
+function dp_vorgang_zu(string $typ, int $id): bool {
+    static $cache = [];
+    $k = $typ . ':' . $id; if (isset($cache[$k])) return $cache[$k];
+    $st = match ($typ) {
+        'auftrag' => (string) scalar("SELECT status FROM auftrag WHERE id=?", [$id]),
+        'produktionsauftrag' => (string) scalar("SELECT status FROM produktionsauftrag WHERE id=?", [$id]),
+        'bestellung' => (string) scalar("SELECT status FROM bestellung WHERE id=?", [$id]),
+        default => '',
+    };
+    return $cache[$k] = match ($typ) {
+        'auftrag' => in_array($st, ['versendet', 'storniert'], true),
+        'produktionsauftrag' => in_array($st, ['erledigt', 'storniert'], true),
+        'bestellung' => in_array($st, ['geliefert', 'storniert'], true),
+        default => false,
+    };
+}
+function dp_nur_offen(array $rows): array {
+    return array_values(array_filter($rows, function ($r) {
+        $l = (string)($r['_link'] ?? '');
+        if (preg_match('/[?&]p=(auftrag|produktionsauftrag|bestellung)&id=(\d+)/', $l, $m)) return !dp_vorgang_zu($m[1], (int)$m[2]);
+        if ((int)($r['_aid'] ?? 0) > 0) return !dp_vorgang_zu('auftrag', (int)$r['_aid']);
+        return true;
+    }));
+}
 function dp_laden(array $c): array {
     try { $rows = all($c['sql']); return ['rows' => isset($c['zeilen']) ? ($c['zeilen'])($rows) : $rows, 'fehler' => '']; }
     catch (\Throwable $e) { return ['rows' => [], 'fehler' => $e->getMessage()]; }
@@ -1362,6 +1387,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beheb
 $ERG = [];
 $dpLaden = (string)($_GET['laden'] ?? '');
 foreach ($CHECKS as $k => $c) $ERG[$k] = (!empty($c['auf_klick']) && $dpLaden !== $k) ? ['rows' => [], 'fehler' => '', 'nicht_geladen' => true] : dp_laden($c);
+// 13.11.2026 (Paket Teil 8, Nico): Standard = nur offene Vorgänge. Zeilen, deren Auftrag versendet/storniert, deren Produktionsauftrag erledigt
+// oder deren Bestellung geliefert/storniert ist, sind ausgeblendet; „auch abgeschlossene“ zeigt sie wieder. „Beheben“ ist davon unberührt.
+$dpAuchZu = !empty($_GET['zu']);
+$dpAusgeblendet = [];
+if (!$dpAuchZu) foreach ($ERG as $k => $e) { $vorher = count($e['rows']); $ERG[$k]['rows'] = dp_nur_offen($e['rows']); $dpAusgeblendet[$k] = $vorher - count($ERG[$k]['rows']); }
 // Dieselbe Charge bei mehreren Bestellungen vorgeschlagen? Über beide Einkauf-Prüfungen hinweg.
 $dpAbglRows = [];
 foreach ($CHECKS as $k => $c) if (!empty($c['abgleich'])) $dpAbglRows = array_merge($dpAbglRows, $ERG[$k]['rows']);
@@ -1394,7 +1424,11 @@ $migr = trim((string)(function_exists('meta_get') ? meta_get('migr_kundenetikett
 render_header('datenpruefung', 'Datenprüfung');
 bx_head('Datenprüfung',
         'Prüfungen auf Altdaten und Unstimmigkeiten. Die Seite liest nur. Geändert wird ausschließlich über „Beheben" für die angehakten Zeilen, mit Eintrag im Feld-Änderungsprotokoll.',
-        bx_btn('Feld-Änderungen', '?p=protokoll&ansicht=felder', 'ghost'));
+        ($dpAuchZu ? bx_btn('Nur offene Vorgänge', '?p=datenpruefung', 'ghost') : bx_btn('auch abgeschlossene', '?p=datenpruefung&zu=1', 'ghost')) . ' '
+        . bx_btn('Feld-Änderungen', '?p=protokoll&ansicht=felder', 'ghost'));
+$dpAusSumme = array_sum($dpAusgeblendet);
+echo '<div class="muted" style="font-size:13px;margin:-6px 0 10px">' . ($dpAuchZu ? 'Zeigt auch abgeschlossene Vorgänge (versendete Aufträge, erledigte Produktionsaufträge, gelieferte Bestellungen).'
+    : 'Nur offene Vorgänge' . ($dpAusSumme > 0 ? ' – ' . $dpAusSumme . ' Zeile(n) zu abgeschlossenen Vorgängen ausgeblendet (Schalter „auch abgeschlossene“).' : '.')) . '</div>';
 
 if (isset($_GET['ok']))  echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['ok']) . '</div>';
 if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['err']) . '</div>';
