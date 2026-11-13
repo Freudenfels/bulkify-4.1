@@ -37,8 +37,9 @@ Im Panel **Analysenwerte je Charge** gibt es **Werte vorschlagen**: Das hochgela
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 bulkify-CoA: Lieferant nur als Nummer (neutralisiert), Methode ohne Lieferantennamen.
 
-## Kein Lieferant im CoA (13.11.2026)
-`build_coa_pdf()` zeigt keine Lieferantennummer mehr (Kunde sieht nie, wer produziert).
+## Lieferant im CoA nur als Nummer (Regel Nico 13.11.2026)
+`build_coa_pdf()` zeigt den Lieferanten nur als Lieferantennummer (L-xxxx), nie Name oder Adresse (Kunde sieht nie, wer produziert).
+(Der frühere Satz „keine Lieferantennummer mehr“ gilt nicht mehr – siehe CLAUDE.md Regel 7.)
 
 **Ohne Lieferantennamen (13.11.2026, Fable-3 T3.6):** `build_coa_pdf()`: der Artikelname (Kopf, Untertitel, Feld „Rohstoff“) läuft durch `kunde_text_neutral()`.
 

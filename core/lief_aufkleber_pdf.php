@@ -1,6 +1,6 @@
 <?php
 // PDF der Lieferanten-Gebindeaufkleber (Paket 12.11.2026 Teil 5). MiniPDF wie bei den Etiketten, Text Englisch,
-// Produktname deutsch und kundenneutral. Kein Lieferantenlogo (Entscheidung Nico), Hersteller als Text.
+// Produktname deutsch und kundenneutral. Kein Lieferantenlogo (Entscheidung Nico); Lieferant nur als Nummer „Supplier no.“ (13.11.2026).
 // Formate: 'a4_1' (ein großer Aufkleber je A4-Seite), 'a4_2' (zwei je A4-Seite), '100x150' (Etikettendrucker).
 // Keine Bag-Nummer, kein „x of n“ – jeder Aufkleber ist gleichwertig, der Scan zählt.
 require_once __DIR__ . '/lib/minipdf.php';

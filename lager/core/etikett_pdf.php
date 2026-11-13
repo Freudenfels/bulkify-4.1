@@ -260,7 +260,7 @@ function lg_karton_etikett_hoch(MiniPDF $pdf, callable $mm, array $c, string $ur
         $pdf->text($midx, $yy + $mm(4.2), $pdf->fit($v2 !== '' ? $v2 : '–', $hw, 13, true), 13, true, $dark);
         $yy += $mm(10.5);
     };
-    $feldAuto('Lieferant', $lieferantTxt);                              // volle Breite -> Name · Nummer immer komplett
+    $feldAuto('Lieferant', $lieferantTxt);                              // volle Breite -> Lieferantennummer (L-xxxx), nie Name (Regel 13.11.2026)
     $feldAuto('Charge (Lieferant)', (string)($c['charge_nr'] ?? ''));   // volle Breite, nie abgeschnitten
     $halb('MHD', $c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–',
           (string)($c['menge_label'] ?? 'Menge'), menge_txt($c['menge_anzeige'] ?? $c['menge_verfuegbar']) . ' ' . (string)$c['einheit']);

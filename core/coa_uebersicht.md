@@ -59,8 +59,9 @@ Lieferantennummer neutralisiert.
 ## Grundcharge beim Kunden (13.11.2026)
 Charge immer über `kunde_charge_anzeige()` (core/kunde_charge.php): nur die Grundcharge (2775), keine Buchstaben, kein Herstellungsdatum.
 
-## Quellchargen ohne Lieferantennummer (13.11.2026)
-In „Eingesetzte Rohstoffe und Quellchargen“ steht nur die Charge, keine Lieferantennummer.
+## Quellchargen mit Lieferantennummer (Regel Nico 13.11.2026)
+In „Eingesetzte Rohstoffe und Quellchargen“ steht die Charge mit der Lieferantennummer (L-xxxx), nie Name oder Adresse des Lieferanten.
+(Der frühere Satz „keine Lieferantennummer“ gilt nicht mehr – siehe CLAUDE.md Regel 7.)
 
 **Ohne Lieferantennamen (13.11.2026, Fable-3 T3.6):** `coa_uebersicht_daten()`: Zutaten- und Produktnamen laufen durch `kunde_text_neutral()`.
 
