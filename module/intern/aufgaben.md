@@ -13,3 +13,8 @@
 **Tabelle `aufgabe`:** titel, beschreibung, prio, status(offen|erledigt), zugewiesen_an, erstellt_von, faellig, ref_typ/ref_id (optionaler Bezug z. B. produktionsauftrag), erledigt_am/von, angelegt(UTC).
 
 **Priorität auch am Produktionsauftrag:** `produktionsauftrag.prio` (Spalte, Default 2); setzbar auf der PA-Detailseite (Dropdown), Badge + Standard-Sortierung nach Prio in der Produktionsliste und im Cockpit.
+
+**Seit 13.11.2026 (Nico):**
+- Die Liste zeigt nur **offene** Aufgaben (Zähler im Menü zählt nur offene). „Wieder öffnen“ gibt es nicht mehr; die POST-Aktion `offen` bucht nichts.
+- Nach **Erledigt** geht es zurück zur offenen Liste mit der kurzen Meldung „Aufgabe erledigt.“ (`?p=aufgaben&erledigt=1`).
+- **Archiv** (`?p=aufgaben&zeige=archiv`, alter Link `zeige=erledigt` landet auch hier): nur lesen, schlichte Tabelle Titel (Link zur Detailseite mit `von=archiv`) · Bezug (`aufgabe_bezug()`, Auftrag/PA/Bestellung/Artikel als Link) · erstellt am · erledigt am · erledigt von. Neueste oben, Suchfeld (Titel, Text, erledigt von), höchstens 500 Zeilen.

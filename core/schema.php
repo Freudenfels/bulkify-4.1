@@ -14639,8 +14639,25 @@ function aufgabe_offen_zahl(int $uid): int {
 function aufgabe_erledigen(int $id, ?int $uid): void {
     q("UPDATE aufgabe SET status='erledigt', erledigt_am=?, erledigt_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $uid, $id]);
 }
-function aufgabe_wieder_offen(int $id): void {
-    q("UPDATE aufgabe SET status='offen', erledigt_am=NULL, erledigt_von=NULL WHERE id=?", [$id]);
+// „Wieder öffnen“ entfällt (Nico 13.11.2026) – bleibt nur als leere Hülle für alte Aufrufe, bucht nichts.
+function aufgabe_wieder_offen(int $id): void {}
+// Bezug einer Aufgabe als Link (Archiv, Detailseite): ['text' => …, 'href' => …] oder null. 13.11.2026.
+function aufgabe_bezug(string $typ, int $id): ?array {
+    if ($typ === '' || $id <= 0) return null;
+    try {
+        if (in_array($typ, ['produktion', 'produktionsauftrag', 'einlagern', 'teilmenge'], true)) {
+            $nr = (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$id]);
+            return ['text' => $nr !== '' ? $nr : 'PA #' . $id, 'href' => '?p=produktionsauftrag&id=' . $id];
+        }
+        if ($typ === 'auftrag') { $nr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$id]); return ['text' => $nr !== '' ? $nr : 'Auftrag #' . $id, 'href' => '?p=auftrag&id=' . $id]; }
+        if ($typ === 'bestellung') { $nr = (string) scalar("SELECT nummer FROM bestellung WHERE id=?", [$id]); return ['text' => $nr !== '' ? $nr : 'Bestellung #' . $id, 'href' => '?p=bestellung&id=' . $id]; }
+        if ($typ === 'item') { $n = (string) scalar("SELECT name FROM item WHERE id=?", [$id]); return ['text' => $n !== '' ? $n : 'Artikel #' . $id, 'href' => '?p=rohstoff&id=' . $id]; }
+        if ($typ === 'produkt') { $n = (string) scalar("SELECT name FROM produkt WHERE id=?", [$id]); return ['text' => $n !== '' ? $n : 'Produkt #' . $id, 'href' => '?p=produkt&id=' . $id]; }
+        if ($typ === 'rezeptur') { $n = (string) scalar("SELECT name FROM rezeptur WHERE id=?", [$id]); return ['text' => $n !== '' ? $n : 'Rezeptur #' . $id, 'href' => '?p=rezeptur_detail&id=' . $id]; }
+        if ($typ === 'charge') { $n = (string) scalar("SELECT COALESCE(charge_nr, CONCAT('#', id)) FROM charge WHERE id=?", [$id]); return ['text' => 'Charge ' . $n, 'href' => '?p=chargen&id=' . $id]; }
+        if ($typ === 'fastaction') return ['text' => 'Notepad', 'href' => '?p=fastaction&notiz=' . $id];
+    } catch (\Throwable $e) {}
+    return null;
 }
 // Aufgabe aus dem Team-Pool übernehmen (sich selbst zuweisen)
 function aufgabe_uebernehmen(int $id, int $uid): void {

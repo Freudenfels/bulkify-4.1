@@ -708,3 +708,5 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 
 
 **Lieferantennummer statt Name (Regel Nico 13.11.2026):** `produktion_bericht_daten()` liefert in `verbrauch` und den Chargen-Listen die Lieferantennummer (Feld `lieferant`), nicht mehr den Namen – der Produktionsbericht ist ein Ausdruck fürs Lager/Produktion.
+
+**Aufgaben (13.11.2026):** `aufgabe_wieder_offen()` ist eine leere Hülle (bucht nichts, „Wieder öffnen“ entfällt). `aufgabe_bezug($ref_typ, $ref_id)` liefert den Bezug als Link (`text`, `href`) für Archiv und Detailseite: produktion/produktionsauftrag/einlagern/teilmenge → PA, auftrag, bestellung, item → Rohstoff, produkt, rezeptur, charge, fastaction.
