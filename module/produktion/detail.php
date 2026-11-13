@@ -568,6 +568,7 @@ if (!$chargeGeb) echo '<div class="bx-panel" style="padding:10px 14px;font-size:
 // Pulver/Granulat: Füllmenge je Packung (g) setzen/korrigieren (nur Admin). Wichtig für Alt-/v3-Aufträge, bei
 // denen hier noch eine Portionszahl statt Gramm steht (dann rechnet der Bedarf zu niedrig). Portion = Summe der
 // Rezeptur-mg; als Hilfe zeigen wir, wie viele Portionen die aktuelle Füllmenge ergibt.
+ob_start();   // -> Reiter Details (13.11.2026)
 if ($istFuellGewicht && has_role('admin')):
     $portionMg = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=(SELECT rezeptur_id FROM produkt WHERE id=?)", [(int)$pa['produkt_id']]);
     if ($portionMg <= 0) $portionMg = (float) scalar("SELECT COALESCE(SUM(menge_mg),0) FROM rezeptur_zutat WHERE rezeptur_id=?", [(int)($pa['rezeptur_id'] ?? 0)]);
@@ -584,6 +585,7 @@ if ($istFuellGewicht && has_role('admin')):
     </form>
   </div>
 <?php endif;
+$panFuell = (string) ob_get_clean();
 
 $mfmt = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
 
@@ -1040,27 +1042,27 @@ ob_start(); ?>
 </div>
 <?php $panDetails = ob_get_clean();
 
-// ============ Ausgabe in klarer Reihenfolge ============
-echo $panWeg;            // Weg-Hinweis (verkürzt/voll)
+// ============ Ausgabe: oben nur das Dringende, der Rest in Reitern (Nico 13.11.2026: „maximal unübersichtlich“) ============
+// Oben: Weg erkannt (verkürzter Weg möglich), Wartet auf Material, JETZT dran. Reiter: Produktion (Standard) · Material ·
+// Bestellungen & Wareneingang · Etikett · Details. Reiter-Baustein wie an der Bestellseite (bs_reiter_html + bx-ui.js), Anker
+// (#unterchargen, #nachtragen, #kimelden …) öffnen den Reiter, in dem das Element steht; der zuletzt gewählte Reiter bleibt.
+require_once BX_ROOT . '/core/bestellung_seite.php';
+$wegOben = $istVollerWeg && $wegUmstellbar && $istZukauf;   // „Fertige Bulkware erkannt“ = Entscheidung, gehört nach oben
+if ($wegOben) echo $panWeg;
 echo $panWartet;         // Wartet auf Material (Alarm)
-pki_ui_render($id);   // Produktion melden (KI), 13.11.2026
-require __DIR__ . '/_ablauf.php';   // Ein Weg (11.11.2026): Kopf, Unter-Chargen/Teilmengen/Kartons, Protokoll, Teilmenge nachtragen
 echo $panJetzt;          // JETZT dran – die eine Aktion
-echo $panEinkauf;        // Material (Komponenten vorhanden/fehlt) – prominent sichtbar
-echo $panStationen;      // Ablauf (Checkliste)
-echo $panFertig;         // Fertigware eingebucht
-// $panTeil (alte „Teilmenge einbuchen“ mit eigener Charge je Buchung) entfällt – ersetzt durch „Teilmenge nachtragen“ (_ablauf.php).
-echo $panZus;            // Zusammensetzung
 
-// Einklappbar: Materialverbrauch (entnommen/FEFO) & Bestellungen (die Material-Übersicht steht oben prominent)
-$grpMatEinkauf = trim($panMaterial . $panBestellungen);
-if ($grpMatEinkauf !== '') {
-    echo '<details class="bx-sek"><summary>Materialverbrauch &amp; Bestellungen</summary>' . $grpMatEinkauf . '</details>';
-}
-// Einklappbar: Wareneingänge, Etikett & Details
-$grpRest = trim($panWareneingaenge . $panEtikett . $panDetails);
-if ($grpRest !== '') {
-    echo '<details class="bx-sek"><summary>Wareneingänge, Etikett &amp; Details</summary>' . $grpRest . '</details>';
-}
-echo $godModeHtml ?? '';   // God-Mode eingeklappt ganz unten (Fable-5 T4.10)
+ob_start(); require __DIR__ . '/_ablauf.php'; $panAblauf = (string) ob_get_clean();   // Kopf, Unter-Chargen/Teilmengen/Kartons, Protokoll, Nachtragen
+ob_start(); pki_ui_render($id); $panKi = (string) ob_get_clean();                     // Produktion melden (KI)
+// $panTeil (alte „Teilmenge einbuchen“) entfällt – ersetzt durch „Teilmenge nachtragen“ (_ablauf.php).
+$leer = fn(string $t) => '<div class="bx-panel muted" style="padding:12px 16px">' . h($t) . '</div>';
+$tabs = [
+    'produktion' => ['Produktion', '', $panAblauf . $panKi . $panStationen . $panFertig],
+    'material'   => ['Material', !empty($fehlListe) ? (string)count($fehlListe) : '', (trim($panEinkauf . $panMaterial . $panZus) !== '' ? $panEinkauf . $panMaterial . $panZus : $leer('Kein Materialbedarf hinterlegt.'))],
+    'einkauf'    => ['Bestellungen & Wareneingang', '', (trim($panBestellungen . $panWareneingaenge) !== '' ? $panBestellungen . $panWareneingaenge : $leer('Noch keine Bestellungen oder Wareneingänge zu diesem Auftrag.'))],
+];
+if (trim($panEtikett) !== '') $tabs['etikett'] = ['Etikett', ($etHatSlot && !$etFrei) ? '•' : '', $panEtikett];
+$tabs['details'] = ['Details', '', ($wegOben ? '' : $panWeg) . $panDetails . $panFuell . ($godModeHtml ?? '')];
+$standardTab = ($pa['status'] === 'vorbereitung' || ($done === 0 && ($ber['status'] ?? '') === 'wartet')) ? 'material' : 'produktion';
+echo '<div class="pa-reiter">' . bs_reiter_html($tabs, $standardTab) . '</div>';
 render_footer();

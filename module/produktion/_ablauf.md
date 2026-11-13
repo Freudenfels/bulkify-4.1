@@ -30,3 +30,5 @@ Die Tabelle „Unter-Chargen und Teilmengen“ zeigt je Unter-Charge, wann produ
 
 ## Menge korrigieren (Nico 13.11.2026)
 Bei einer laufenden Unter-Charge steht neben der Menge ein Stift. Pop-up: neue Menge + Grund (Pflicht) → `aktion=uc_menge` in `detail.php` → `pa_uc_menge_korrigieren()`. Abgeschlossene Unter-Chargen erst „wieder öffnen“.
+
+Nachtrag 13.11.2026: Die Kopfzeile (Kunde, Auftrag, Soll, produziert/offen, Unter-Charge, MHD, Status) entfällt – sie steht in den Kacheln der PA-Seite. Die Ausgabe landet im Reiter Produktion.

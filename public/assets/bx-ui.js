@@ -201,7 +201,7 @@
   window.bxReiter = reiter;
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('[data-bs-tab]');
-    if (t) { reiter(t.getAttribute('data-bs-tab'), t.closest('.bs-reiter')); return; }
+    if (t) { reiter(t.getAttribute('data-bs-tab'), t.closest('.bs-reiter')); merk(t.getAttribute('data-bs-tab')); return; }
     // Menü „⋯“ (details.bs-menu) schließt bei Klick daneben
     var mi = e.target.closest && e.target.closest('.bs-menu-liste button[onclick], .bs-menu-liste a');
     Array.prototype.forEach.call(document.querySelectorAll('details.bs-menu[open]'), function (m) { if (!m.contains(e.target) || (mi && m.contains(mi))) m.removeAttribute('open'); });
@@ -213,9 +213,18 @@
                 versand: 'versand', zahlung: 'zahlung', rechnung: 'zahlung', bezahlt: 'zahlung', nachrichten: 'nachrichten', rueckfragen: 'nachrichten', verlauf: 'verlauf', kosten: 'kosten', preise: 'kosten' };
     var pop = { unterlagen: 'dlgUnterlagen', rechnung: 'dlgRechnung', bezahlt: 'dlgBezahlt' };
     var h = (location.hash || '').replace('#', ''), q = new URLSearchParams(location.search).get('tab') || '';
-    var k = map[h] || map[q]; if (k) reiter(k);
+    var k = map[h] || map[q];
+    if (!k && q && document.querySelector('[data-bs-panel="' + q + '"]')) k = q;
+    if (!k && h) {   // 13.11.2026: Anker auf ein Element in einem Reiter (#unterchargen, #nachtragen …) öffnet diesen Reiter
+      var el = document.getElementById(h), pn = el && el.closest && el.closest('[data-bs-panel]');
+      if (pn) { k = pn.getAttribute('data-bs-panel'); if (reiter(k, pn.closest('.bs-reiter'))) { setTimeout(function () { el.scrollIntoView({ block: 'start' }); }, 50); return; } }
+    }
+    if (!k && !h) { try { k = sessionStorage.getItem(merkKey()) || ''; } catch (e) { k = ''; } }   // zuletzt gewählter Reiter dieser Seite
+    if (k) reiter(k);
     if (pop[h] && document.getElementById(pop[h])) setTimeout(function () { bxPopup.open(pop[h]); }, 150);
   }
+  function merkKey() { var u = new URLSearchParams(location.search); return 'bxReiter:' + (u.get('p') || '') + ':' + (u.get('id') || ''); }
+  function merk(k) { try { sessionStorage.setItem(merkKey(), k); } catch (e) {} }
   window.addEventListener('hashchange', reiterAnker);
 
   // ---------------------------------------------------------------- Lauftext

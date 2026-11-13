@@ -219,3 +219,14 @@ Symbole ✓/✗/▶/○/↗ als SVG (`bx_sym`); God-Mode-Kasten eingeklappt (`de
 
 ## aktion=uc_menge (13.11.2026)
 Menge einer laufenden Unter-Charge korrigieren – Buchung in `pa_uc_menge_korrigieren()` (core/pa_ablauf.php), Rückmeldung oben über `nachok`/`teilfehler`, Anker `#unterchargen`.
+
+## Reiter (13.11.2026, Nico: „maximal unübersichtlich“)
+Oben bleiben nur Kopf, Meldungen, Kacheln, „Fertige Bulkware erkannt“ (Entscheidung), „Wartet auf Material“ und „Jetzt dran“.
+Darunter Reiter (bs_reiter_html aus core/bestellung_seite.php, Umschalten in bx-ui.js):
+- Produktion (Standard): Unter-Chargen und Teilmengen, Teilmenge nachtragen, Produktion melden (KI), Ablauf, Fertigware eingebucht
+- Material (Zähler = fehlende Komponenten; Standard bei Status vorbereitung oder wenn noch nichts erledigt ist und Material fehlt): Material, Entnommene Materialien, Zusammensetzung
+- Bestellungen & Wareneingang
+- Etikett (Punkt, wenn noch nicht freigegeben)
+- Details: Weg-Hinweise, Details, Füllmenge (Pulver, Admin), God-Mode
+Anker wie #unterchargen, #nachtragen, #kimelden öffnen den Reiter, in dem das Element steht. Ohne Anker kommt der zuletzt gewählte Reiter dieser Seite zurück (sessionStorage, gilt auch für die Bestellseite).
+Die doppelte Kopfzeile in _ablauf.php (Kunde, Auftrag, Soll …) ist entfallen – steht in den Kacheln.

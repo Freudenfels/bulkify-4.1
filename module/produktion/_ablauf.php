@@ -22,17 +22,7 @@ $mitarbeiterA = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_i
 // Vorschlag für heute: gleicher Bulk wie die laufende Unter-Charge UND heute = gleicher Buchstabe, sonst der nächste (Nico 12.11.2026).
 $vorgabeA = pa_vorgabe($id, $akt ? (int)$akt['bulk_charge_id'] : (int)($bulkWahl[0]['id'] ?? 0), $akt ? (int)$akt['prod_charge_id'] : 0);
 ?>
-<div class="bx-panel">
-  <div class="bx-row" style="gap:28px;flex-wrap:wrap">
-    <div><div class="muted" style="font-size:12px">Kunde</div><?= !empty($pa['kunde_id']) ? kunde_link((int)$pa['kunde_id'], (string)($pa['kunde_firma'] ?? '')) : '<span class="muted">Lager</span>' ?></div>
-    <div><div class="muted" style="font-size:12px">Auftrag</div><?= !empty($pa['auftrag_id']) ? '<a href="?p=auftrag&id=' . (int)$pa['auftrag_id'] . '">' . h((string)$pa['auftrag_nr']) . '</a>' : '–' ?></div>
-    <div><div class="muted" style="font-size:12px">Soll</div><?= $nfA($pa['menge']) ?> Stk</div>
-    <div><div class="muted" style="font-size:12px">Produziert / offen</div><?= $nfA($gebuchtA) ?> / <?= $nfA($restA) ?> Stk</div>
-    <div><div class="muted" style="font-size:12px">Aktuelle Unter-Charge</div><?= $akt ? '<b style="font-weight:600">' . h((string)$akt['charge_nr']) . '</b>' : '<span class="muted">keine laufend</span>' ?></div>
-    <div><div class="muted" style="font-size:12px">MHD</div><?= $akt ? h(date('d.m.Y', strtotime((string)$akt['mhd']))) : '–' ?></div>
-    <div><div class="muted" style="font-size:12px">Status</div><?= h((string)$pa['status']) ?></div>
-  </div>
-</div>
+<?php // Kopfzeile (Kunde, Auftrag, Soll, produziert/offen, Unter-Charge, MHD, Status) entfällt (13.11.2026): steht schon in den Kacheln oben. ?>
 
 <div class="bx-panel" id="unterchargen">
   <div class="bx-row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
