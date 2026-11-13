@@ -163,9 +163,35 @@ function bx_nav_icon(string $key): string {
         'rohstoffe'     => '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
         'd3k2_rechner'  => '<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/>',
         'buchhaltung'   => '<rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/>',
+        // Portale (13.11.2026): gleicher Stil (24er Raster, Linie 2)
+        'plus_kreis'    => '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+        'kreispfeil'    => '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+        'vertrag'       => '<path d="M12.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v9.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M13.38 15.63a1 1 0 1 0-3-3l-5.01 5a2 2 0 0 0-.5.86l-.84 2.87a.5.5 0 0 0 .62.62l2.87-.84a2 2 0 0 0 .86-.5z"/>',
+        'anhaenger'     => '<path d="M12.59 2.59A2 2 0 0 0 11.17 2H4a2 2 0 0 0-2 2v7.17a2 2 0 0 0 .59 1.42l8.7 8.7a2.43 2.43 0 0 0 3.42 0l6.58-6.58a2.43 2.43 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r="1"/>',
+        'ordner'        => '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+        'person'        => '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+        'hilfe'         => '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+        'sprechblase'   => '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     ];
     if (!isset($p[$key])) return '';
     return '<svg class="bx-navico" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $p[$key] . '</svg>';
+}
+
+// Menüzeile der Portale (Kunde, Lieferant; 13.11.2026): Icon links, Zahl klein am Icon, Text. $rot = roter Zähler.
+function bx_portal_nav(string $href, string $label, string $icon, int $n = 0, bool $on = false, bool $rot = false, string $titel = ''): string {
+    $ico = bx_nav_icon($icon);
+    $zahl = $n > 0 ? '<span class="bx-pnav-n' . ($rot ? ' rot' : '') . '"' . ($titel !== '' ? ' title="' . h($titel) . '"' : '') . '>' . ($n > 99 ? '99+' : $n) . '</span>' : '';
+    return '<a class="bx-pnav' . ($on ? ' on' : '') . '" href="' . h($href) . '"><span class="bx-pnav-ico">' . $ico . $zahl . '</span><span class="bx-pnav-t">' . h($label) . '</span></a>';
+}
+// Handy-Kopfleiste der Portale: bei eingeklapptem Menü nur die Icons mit Zahl (Punkte, bei denen etwas offen ist).
+function bx_portal_mobil_icons(array $punkte): string {
+    $out = '';
+    foreach ($punkte as $p) {
+        if ((int)($p['n'] ?? 0) <= 0) continue;
+        $out .= '<a class="bx-pmob" href="' . h((string)$p['href']) . '" title="' . h((string)$p['label']) . '" aria-label="' . h((string)$p['label'] . ': ' . (int)$p['n']) . '">'
+              . bx_nav_icon((string)$p['icon']) . '<span class="bx-pnav-n' . (!empty($p['rot']) ? ' rot' : '') . '">' . ((int)$p['n'] > 99 ? '99+' : (int)$p['n']) . '</span></a>';
+    }
+    return $out !== '' ? '<span class="bx-pmobs">' . $out . '</span>' : '';
 }
 
 // Zähler offener Anfragen je Nav-Punkt (offen = noch nicht beantwortet/abgelehnt), wie ungelesene Mails

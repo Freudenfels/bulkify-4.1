@@ -526,6 +526,8 @@ function lp_shell_start(string $aktiv): void {
     if ($lid) {
         $offeneAnf = (int) scalar("SELECT COUNT(*) FROM lieferant_anfrage WHERE lieferant_id=? AND status='offen'", [$lid]);
         if ($offeneAnf > 0) $badges['lieferant_anfrage'] = $offeneAnf;
+        $offBest = (int) scalar("SELECT COUNT(*) FROM bestellung WHERE lieferant_id=? AND status='gesendet' AND COALESCE(bestaetigt,0)=0", [$lid]);   // zu bestätigen
+        if ($offBest > 0) $badges['lieferant_bestellung'] = $offBest;
         $neu = nachrichten_ungelesen($lid, 'lieferant');
         if ($neu > 0) $badges['lieferant_nachrichten'] = $neu;
         if (is_file(BX_ROOT . '/core/lieferant_unterlagen.php')) {
@@ -533,16 +535,17 @@ function lp_shell_start(string $aktiv): void {
             try { $nLu = count(lu_offen_lieferant($lid)); if ($nLu > 0) $badges['lieferant_unterlagen'] = $nLu; } catch (\Throwable $e) {}
         }
     }
-    // Kleiner runder Zähler – inline gestylt, damit er ohne Portal-CSS funktioniert.
-    $zaehler = fn(int $n) => ' <span style="display:inline-block;min-width:18px;height:18px;line-height:18px;text-align:center;'
-        . 'background:var(--lime,#c0f24e);color:#10210f;border-radius:999px;padding:0 5px;font-size:11px;font-weight:700;float:right">' . $n . '</span>';
     echo '<div class="bx-shell"><aside class="bx-side">'
        . '<div class="bx-brand"><img src="assets/bulkify-logo-white.png" alt="bulkify" class="bx-logo"><span class="bx-ver">' . h(lp_t('portal')) . '</span></div>'
        . '<nav><div class="bx-navgroup">' . h((string)($lf['firma'] ?? '')) . '</div>';
-    foreach ($menu as $route => $label) {
-        $badge = isset($badges[$route]) ? $zaehler((int)$badges[$route]) : '';
-        echo '<a href="?p=' . h($route) . '"' . ($aktiv === $route ? ' class="on"' : '') . '>' . h($label) . $badge . '</a>';
-    }
+    // Icons je Menüpunkt (13.11.2026), Zahl am Icon; fehlende Unterlagen rot
+    $icons = ['lieferant_portal' => 'apps', 'lieferant_bestellung' => 'auftraege', 'lieferant_anfrage' => 'anfragen', 'lieferant_nachrichten' => 'sprechblase',
+              'lieferant_katalog' => 'produkte', 'lieferant_preisliste' => 'rohstoffe', 'lieferant_rezepturpreise' => 'rezeptur', 'lieferant_unterlagen' => 'rohstoff_unterlagen',
+              'lieferant_dateien' => 'ordner', 'lieferant_profil' => 'person', 'lieferant_ueber' => 'produktion', 'lieferant_hilfe' => 'hilfe'];
+    foreach ($menu as $route => $label)
+        echo bx_portal_nav('?p=' . $route, $label, $icons[$route] ?? 'angebote', (int)($badges[$route] ?? 0), $aktiv === $route, $route === 'lieferant_unterlagen');
+    $mobil = [];
+    foreach ($menu as $route => $label) $mobil[] = ['href' => '?p=' . $route, 'label' => $label, 'icon' => $icons[$route] ?? 'angebote', 'n' => (int)($badges[$route] ?? 0), 'rot' => $route === 'lieferant_unterlagen'];
     // Die Sprache stellt man einmal ein, deshalb steht der Umschalter klein ganz unten.
     // Fuss wie im Kundenportal: EINE Box am unteren Rand – Modus-Umschalter oben, darunter Abmelden + Sprache.
     echo '<div class="bx-userbox">'
@@ -552,7 +555,7 @@ function lp_shell_start(string $aktiv): void {
        .   lp_sprachwahl()
        . '</div>'
        . '</div>'
-       . '</nav></aside>' . bx_menue_scrim() . '<main class="bx-main">' . bx_mobilbar();
+       . '</nav></aside>' . bx_menue_scrim() . '<main class="bx-main">' . bx_mobilbar(bx_portal_mobil_icons($mobil));
     // Admin-Vorschau: sichtbarer Hinweis + Ausstieg (nur wenn ein Team-Mitglied das Portal ansieht).
     if (function_exists('lief_vorschau_id') && lief_vorschau_id() > 0) {
         echo '<div style="background:var(--lime,#c0f24e);color:#10210f;padding:8px 14px;border-radius:8px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'

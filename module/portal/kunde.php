@@ -2469,6 +2469,11 @@ if (in_array(($_GET['v'] ?? ''), ['rechnung_pdf', 'ab_pdf'], true)) {
     echo $pdf; exit;
 }
 
+// Icons je Menüpunkt (13.11.2026, bx_nav_icon in core/layout.php)
+$PORTAL_ICONS = ['start' => 'apps', 'rezepturen' => 'rezeptur', 'produkte' => 'produkte', 'rohstoffe' => 'rohstoffe', 'meine_anfragen' => 'angebote', 'angebote' => 'angebote',
+                 'neue_anfrage' => 'plus_kreis', 'nachbestellen' => 'kreispfeil', 'kontingente' => 'vertrag', 'bestellungen' => 'auftraege', 'rechnungen' => 'buchhaltung',
+                 'etiketten' => 'anhaenger', 'dokumente' => 'ordner', 'fremdprodukte' => 'lager', 'konto' => 'person', 'info' => 'hilfe', 'dienstleistung' => 'plus_kreis',
+                 'anfrage' => 'plus_kreis', 'prodanfrage' => 'plus_kreis', 'rohanfrage' => 'plus_kreis'];
 portal_head('Kundenportal · ' . $k['firma']);
 ?>
 <div class="bx-shell">
@@ -2487,9 +2492,8 @@ portal_head('Kundenportal · ' . $k['firma']);
           if (!$sichtbar) continue;
           if ($gruppe !== ''): ?><div class="bx-navgroup"><?= h($gruppe) ?></div><?php endif;
           foreach ($sichtbar as $key): ?>
-            <a href="<?= $portalLink($key) ?>"<?= $activeItem===$key ? ' class="on"' : '' ?>><?= h($L[$key]) ?><?php
-              $nv = (int)($navBadges[$key] ?? 0);
-              if ($nv > 0): ?> <span class="pt-badge<?= !empty($navBadgeRot[$key]) ? ' pt-badge-rot' : '' ?>" style="float:right" title="<?= $nv ?> <?= h($navBadgeTitel[$key] ?? 'offen') ?>"><?= $nv ?></span><?php endif; ?></a>
+            <?php $nv = (int)($navBadges[$key] ?? 0);   // 13.11.2026: Icon je Menüpunkt, Zahl am Icon
+                  echo bx_portal_nav($portalLink($key), $L[$key], $PORTAL_ICONS[$key] ?? 'angebote', $nv, $activeItem === $key, !empty($navBadgeRot[$key]), $nv . ' ' . ($navBadgeTitel[$key] ?? 'offen')); ?>
           <?php endforeach;
       endforeach; ?>
       <div class="bx-userbox">
@@ -2502,7 +2506,7 @@ portal_head('Kundenportal · ' . $k['firma']);
     </nav>
   </aside>
   <?= bx_menue_scrim() ?>
-  <main class="bx-main"><?= bx_mobilbar() ?><?= $darfBestellen ? etp_band_html($etBand, etp_sprache((int)$k['id'])) : '' ?>
+  <main class="bx-main"><?= bx_mobilbar(bx_portal_mobil_icons(array_map(fn($key) => ['href' => $portalLink($key), 'label' => $L[$key], 'icon' => $PORTAL_ICONS[$key] ?? 'angebote', 'n' => (int)($navBadges[$key] ?? 0), 'rot' => !empty($navBadgeRot[$key])], array_keys(array_filter($L, fn($x, $key) => (int)($navBadges[$key] ?? 0) > 0, ARRAY_FILTER_USE_BOTH))))) ?><?= $darfBestellen ? etp_band_html($etBand, etp_sprache((int)$k['id'])) : '' ?>
   <?php if (isset($_GET['ok'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – Ihre Bestätigung ist eingegangen. Wir starten die Bearbeitung.</div><?php endif; ?>
   <?php if (isset($_GET['anfrage'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Rezepturanfrage ist eingegangen – wir prüfen sie und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['angenommen'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Vielen Dank – die Rezeptur ist angenommen. Sie ist jetzt verbindlich festgelegt.</div><?php endif; ?>

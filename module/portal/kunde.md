@@ -511,3 +511,6 @@ Kachel „Offene Rechnungen“ = `op_summe($kid, 'sichtbar')` (dieselbe Rechnung
 - Auftragsseite und Seite „Etiketten“: Knopf öffnet das Pop-up (`data-etp-oeffnen`) statt eigener Upload-/Freigabe-Formulare.
 - Endpunkt `v=etp` (AJAX, `etp_ajax`), Datei je Version `v=etikett_datei&aid=…&pid=…`, `&etikett=AID` öffnet das Pop-up.
 - Menü-Zähler „Etiketten“ und To-do kommen aus derselben Liste.
+
+## Menü-Icons (13.11.2026)
+Jeder Menüpunkt hat ein Icon (`$PORTAL_ICONS`): Übersicht Kacheln, Rezepturen Kolben, Produkte Paket, Rohstoffe Blatt, Angebote & Anfragen Dokument, Neue Anfrage Plus im Kreis, Nachbestellen Kreispfeil, Jahresverträge Dokument mit Stift, Bestellungen Klemmbrett, Rechnungen Rechner, Etiketten Anhänger, Dokumente Ordner, Mein Lager Lager, Mein Konto Person, Info & Tools Fragezeichen. Zähler als Zahl am Icon; am Handy zeigt die Kopfleiste die Icons mit Zahl.

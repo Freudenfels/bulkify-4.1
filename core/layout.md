@@ -98,3 +98,6 @@ Rückfall: Hat 8 Sekunden nach dem Klick keine Navigation begonnen (`beforeunloa
 
 ## Nachbesserung Fable-5 (13.11.2026)
 Glocke: die Zählabfrage läuft einmal je Seite (`benachrichtigungen_ungelesen_count` mit Zwischenspeicher); der tote Aufruf im Benutzer-Fuß ist entfernt. Aufgaben-Zähler wie die Liste (alle offenen).
+
+## Portal-Menüs mit Icons (13.11.2026)
+`bx_nav_icon()` hat neue Icons im gleichen Stil: `plus_kreis`, `kreispfeil`, `vertrag` (Dokument mit Stift), `anhaenger`, `ordner`, `person`, `hilfe` (Fragezeichen im Kreis), `sprechblase`. `bx_portal_nav($href, $label, $icon, $n, $on, $rot, $titel)` = Menüzeile der Portale: Icon links, Zahl klein am Icon (rot bei `$rot`). `bx_portal_mobil_icons($punkte)` = am Handy in der Kopfleiste nur die Icons mit Zahl (Punkte, bei denen etwas offen ist), Tippfläche 44 px. CSS in `public/assets/app.css` (`.bx-pnav`, `.bx-pmob`).

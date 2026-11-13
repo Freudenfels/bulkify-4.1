@@ -67,3 +67,6 @@ Menüpunkt „Fehlende Unterlagen“ mit Zähler; Texte produkt_spec, datei_fehl
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Text `roh_unterlage_hinweis`: „Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.“ statt „Bestellen können wir erst, wenn alle Unterlagen da sind.“
+
+## Menü-Icons (13.11.2026)
+Jeder Menüpunkt mit Icon (`bx_portal_nav`): Übersicht Kacheln, Bestellungen Klemmbrett, Anfragen Posteingang, Rückfragen Sprechblase, Mein Katalog Paket, Rohstoff-Preise Blatt, Fertigprodukt-Preise Kolben, Fehlende Unterlagen Dokument mit Warnzeichen (Zahl rot), Dateien Ordner, Meine Daten Person, Über uns Fabrik, Anleitung Fragezeichen. Neuer Zähler: Bestellungen, die noch zu bestätigen sind (status gesendet, nicht bestätigt). Am Handy zeigt die Kopfleiste die Icons mit Zahl.
