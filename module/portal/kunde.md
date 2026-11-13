@@ -494,3 +494,8 @@ Nico: „Grundcharge ist 2775, die Buchstaben stehen nur für verschiedene Tage.
 **Produktionsdaten beim Kunden (13.11.2026, Fable-3 T3.3):** Status-Kachel „in Produktion“ ohne „seit <Datum>“. „Neu für Sie“: Produktionsbericht und Informationsdokument ohne Datum, solange der Auftrag nicht versandbereit ist (`auftrag_kunde_datum_frei()`). Energetisierung „Start …“ unverändert (Nico entscheidet).
 
 **PIB-Sperre (13.11.2026, Paket Teil 3.3):** `v=pib` liefert ohne Freigabe 403 („wird gerade geprüft“). Die drei PIB-Knöpfe (Bestellung, Etiketten-Liste, Dokumente) zeigen bis dahin `pib_gesperrt_html()` (Schloss, „PIB wird geprüft“). Altaufträge sind nicht betroffen.
+
+**Spec statt CoA vor der Bestellung (13.11.2026, Paket Teil 5.1):**
+- Rezeptur-Freigabe: „Spec ansehen“ statt „Spec/CoA ansehen“; der Link erscheint nur bei freigegebener bulkify-Spec.
+- Rohstoff-Infoblatt und Katalog-Pop-up: „bulkify-Spec (PDF)“, keine Chargen-CoAs mehr (die kommen mit der Lieferung).
+- `v=coa_pdf` liefert nur noch freigegebene CoAs (`coa_freigegeben=1`).

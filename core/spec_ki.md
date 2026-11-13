@@ -62,3 +62,9 @@ Anlass: Bei der ActiHyal-CoA (Natriumhyaluronat) hat die KI „Assay [Sodium Hya
 - Reine Höchstwerte (NMT/≤) sind keine Gehalte und werden übersprungen.
 
 Der Rückfall greift in `spec_ki_lesen()` (neue Auslesungen) und in `spec_ki_wirkstoffe()` (auch für schon gespeicherte KI-Ergebnisse, z. B. „Angehakte Felder übernehmen“).
+
+**13.11.2026 (Paket Teil 5):** `spec_ki_anwenden()` schreibt die bulkify-Spec nicht mehr still.
+- CoA: Die Werte gehen an die (Vorab-)Charge; liegen sie außerhalb der Spec, greift `spec_coa_charge_pruefen()` (Quarantäne + Aufgabe).
+- Spezifikation: Nur wenn der Rohstoff noch keine Spec-Daten hat, entsteht daraus die bulkify-Spec. Sonst entscheidet das Team im Pop-up „Vergleich mit der bulkify-Spec“ (`core/spec_vergleich.php`).
+- Vorher wurden Grenzwerte und Kennwerte additiv ergänzt und Wirkstoffgehalte bei jedem Upload überschrieben.
+- Gilt für Rohstoff-Upload, Lieferantenportal, Lieferanten-Unterlagen und Massen-Import.

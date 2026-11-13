@@ -377,7 +377,7 @@ function build_coa_pdf(int $charge_id): ?string {
         : 'Dies ist eine Spezifikation (Zielwerte/Grenzwerte). Chargenspezifische Analysenergebnisse (z. B. Schwermetalle, Mikrobiologie) liegen separat als Analysenzertifikat vor.';
     foreach ($p->wrap($freigabe, $R - $L, 9, false) as $wl) { if ($y > 780) { $p->addPage(); $y = 48; } $p->text($L, $y, $wl, 9, false, SPEC_INK); $y += 12; }
     // Stand = CoA-Freigabe der Charge, sonst Eingang der Charge (13.11.2026); dazu „Abgerufen am“ heute.
-    $coaStand = (string)($c['coa_freigegeben_am'] ?? '') !== '' ? (string)$c['coa_freigegeben_am'] : (string)($c['angelegt'] ?? '');
+    $coaStand = (string)($c['coa_freigabe_am'] ?? '') !== '' ? (string)$c['coa_freigabe_am'] : (string)($c['angelegt'] ?? '');
     $y = spec_release($p, $y, $coaStand !== '' ? date('d.m.Y', strtotime($coaStand)) : '–', function_exists('heute_ort') ? date('d.m.Y', strtotime(heute_ort())) : date('d.m.Y'));
     spec_fuss($p, $y + 18);
     return $p->output();

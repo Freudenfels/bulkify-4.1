@@ -193,6 +193,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'analy
     }
     header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=chargen&analyse=1'); exit;
 }
+// 13.11.2026 (Paket Teil 5.3): Pop-up „Vergleich mit der bulkify-Spec“ – übernehmen (überschreiben) oder Stand beibehalten.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), ['spec_vgl_uebernehmen', 'spec_vgl_behalten'], true) && !$neu) {
+    require_once BX_ROOT . '/core/spec_vergleich.php';
+    $wer = (string)(current_user()['name'] ?? '');
+    $dv = (int)($_POST['dok_id'] ?? 0);
+    if ($_POST['aktion'] === 'spec_vgl_uebernehmen') { $rv = spec_vergleich_uebernehmen((int)$id, $dv, $wer); $msgV = $rv['msg']; }
+    else { spec_vergleich_behalten((int)$id, $dv, $wer); $msgV = 'Stand beibehalten – die bulkify-Spec ist unverändert.'; }
+    header('Location: ?p=rohstoff&id=' . (int)$id . '&tab=spec&vglmsg=' . rawurlencode($msgV)); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_upload' && !$neu) {
     $dokId = dokument_upload('item', (int)$id);
     // Frisch hochgeladene Spezifikationen/CoA gleich mit der KI auslesen. Kennwerte/Wirkstoffe/Grenzwerte
@@ -215,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'dok_u
     // Bei KI-Vorschlag direkt in den Reiter Spezifikation – dort steht der Vorschlag zum Übernehmen.
     $zielTab = $kiAuto ? 'spec' : 'dok';
     header('Location: ?p=rohstoff&id=' . $id . '&tab=' . $zielTab . '&gespeichert=1'
-        . ($coaChargeNeu ? '&coacharge=1' : '') . ($kiAuto ? '&kiauto=1&kidok=' . (int)$dokId : '') . ($kiOff ? '&kioff=1' : '')); exit;
+        . ($coaChargeNeu ? '&coacharge=1' : '') . ($kiAuto ? '&kiauto=1&kidok=' . (int)$dokId . '&vergleich=' . (int)$dokId : '') . ($kiOff ? '&kioff=1' : '')); exit;
 }
 // bulkify-Spezifikation für den Kunden freigeben bzw. Freigabe zurückziehen (separater Schritt).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'spec_freigabe' && !$neu) {
@@ -645,8 +654,17 @@ bx_head($neu ? 'Neuer Rohstoff' : $v('name'),
 
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.'
     . (isset($_GET['coacharge']) ? ' Aus der CoA wurde eine Charge angelegt (noch ohne Ware) – bei der Warenannahme wird sie über die Chargennummer abgeglichen und eingebucht.' : '')
-    . (isset($_GET['kiauto']) ? ' Die KI hat die Datei ausgelesen: Kennwerte, Wirkstoffe und Grenzwerte wurden ergänzt. Die <strong>Stammdaten-Vorschläge</strong> (Name, CAS, Herkunft, Allergene …) stehen unten im Reiter <strong>Spezifikation</strong> – dort prüfen und auf <strong>„Übernehmen"</strong> klicken.' : '')
+    . (isset($_GET['kiauto']) ? ' Die KI hat die Datei ausgelesen. Die bulkify-Spec wird dabei nicht still überschrieben – der Vergleich mit der bulkify-Spec steht im Pop-up (nur ohne bisherige Spec entsteht sie direkt aus einer Spezifikation). Die <strong>Stammdaten-Vorschläge</strong> (Name, CAS, Herkunft, Allergene …) stehen unten im Reiter <strong>Spezifikation</strong> – dort prüfen und auf <strong>„Übernehmen"</strong> klicken.' : '')
     . '</div>';
+// 13.11.2026 (Paket Teil 5.3): Vergleichs-Pop-up nach dem Upload bzw. über „Mit bulkify-Spec vergleichen“.
+if (!$neu && (int)($_GET['vergleich'] ?? 0) > 0) { require_once BX_ROOT . '/core/spec_vergleich.php'; echo spec_vergleich_dialog((int)$id, (int)$_GET['vergleich'], '?p=rohstoff&id=' . (int)$id); }
+if (!$neu && isset($_GET['vglmsg'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . h((string)$_GET['vglmsg']) . '</div>';
+if (!$neu) {   // Dokumente mit ausgelesenen Werten: Vergleich jederzeit wieder öffnen
+    $vglDoks = all("SELECT id, datei_orig, typ FROM dokument WHERE objekt_typ='item' AND objekt_id=? AND typ IN ('spec','coa','analyse') AND ki_daten IS NOT NULL AND ki_daten LIKE '{%' ORDER BY id DESC LIMIT 8", [(int)$id]);
+    if ($vglDoks) { echo '<div class="muted" style="font-size:13px;margin:0 0 10px">Mit bulkify-Spec vergleichen: ';
+        foreach ($vglDoks as $vd) echo '<a class="btn btn-ghost btn-sm" style="margin:2px 4px 2px 0" href="?p=rohstoff&id=' . (int)$id . '&tab=spec&vergleich=' . (int)$vd['id'] . '">' . h(strtoupper((string)$vd['typ']) . ' · ' . ($vd['datei_orig'] ?: '#' . $vd['id'])) . '</a>';
+        echo '</div>'; }
+}
 if (isset($_GET['kioff'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Datei gespeichert, aber die KI konnte sie nicht auslesen (KI nicht aktiv oder ein Scan ohne Textebene). Werte bitte von Hand erfassen.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 if (isset($_GET['flok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Ins Fremdlager umgebucht – die Menge zählt jetzt zum Kundenbestand, nicht mehr zu unserem.</div>';

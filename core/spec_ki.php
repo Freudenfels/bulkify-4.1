@@ -226,15 +226,25 @@ function spec_ki_nach_upload(int $dokument_id): bool {
 // $policy=false: Freigabe-Politik NICHT sofort anwenden (Massen-Import: erst alle Dokumente je Rohstoff
 // verarbeiten, dann EINMAL spec_nach_datenaenderung() – sonst löst das zweite Dokument zum selben Rohstoff
 // fälschlich „Änderung, erneute Freigabe" aus).
+// 13.11.2026 (Paket Teil 5, Nico): Die bulkify-Spec ist das Versprechen an den Kunden – ein hochgeladenes Lieferanten-Dokument
+// überschreibt sie NICHT mehr still. Regel (eine Stelle für Rohstoff-Upload, Lieferantenportal, Unterlagen, Massen-Import):
+// - CoA (Werte einer Charge): Werte gehen an die (Vorab-)Charge; liegen sie außerhalb der Spec -> Quarantäne + Aufgabe an QM.
+//   Die Rohstoff-Spec ändert eine CoA nie automatisch.
+// - Spezifikation: Hat der Rohstoff noch KEINE Spec-Daten, entsteht die bulkify-Spec daraus (erste Spec). Sonst bleibt der Stand;
+//   das Team entscheidet im Pop-up „Vergleich mit der bulkify-Spec“ (core/spec_vergleich.php): übernehmen oder beibehalten.
 function spec_ki_anwenden(int $item_id, array $ergebnis, ?int $lieferant_id = null, bool $policy = true): void {
     if ($item_id <= 0 || empty($ergebnis['ok'])) return;
-    spec_ki_coa_charge($item_id, $ergebnis, $lieferant_id);
-    spec_ki_grenzwerte($item_id, $ergebnis);
-    spec_ki_kennwerte($item_id, $ergebnis);    // charakteristische Kennwerte (OPC-Gehalt, DEV, pH …)
-    // Wirkstoffgehalte aus dem Dokument automatisch übernehmen – auch vorhandene aktualisieren (CoA/Spec = Quelle).
-    spec_ki_wirkstoffe($item_id, $ergebnis, false, true);
-    // Freigabe-Politik: Erst-Upload automatisch freigeben, Änderung markiert (alte Version bleibt live).
-    if ($policy) spec_nach_datenaenderung($item_id, 'Upload/Import');
+    $hatteSpec = function_exists('spec_hat_daten') ? spec_hat_daten($item_id) : (bool) scalar("SELECT 1 FROM item_wirkstoff WHERE item_id=? UNION SELECT 1 FROM item_kennwert WHERE item_id=? UNION SELECT 1 FROM item_grenzwert WHERE item_id=? LIMIT 1", [$item_id, $item_id, $item_id]);
+    $cid = spec_ki_coa_charge($item_id, $ergebnis, $lieferant_id);
+    if ($cid && $hatteSpec) { require_once __DIR__ . '/spec_vergleich.php'; spec_coa_charge_pruefen((int)$cid, $item_id, $ergebnis); }
+    $typ = (string)($ergebnis['typ'] ?? '');
+    if (!$hatteSpec && in_array($typ, ['spec', 'beides'], true)) {   // erste Spec: daraus entsteht die bulkify-Spec
+        spec_ki_grenzwerte($item_id, $ergebnis);
+        spec_ki_kennwerte($item_id, $ergebnis);    // charakteristische Kennwerte (OPC-Gehalt, DEV, pH …)
+        spec_ki_wirkstoffe($item_id, $ergebnis, false, true);
+        // Freigabe-Politik: Erst-Upload automatisch freigeben, Änderung markiert (alte Version bleibt live).
+        if ($policy) spec_nach_datenaenderung($item_id, 'Upload/Import');
+    }
 }
 
 // Aus dem KI-Ergebnis den passenden VORHANDENEN Rohstoff finden (kein Neuanlegen).

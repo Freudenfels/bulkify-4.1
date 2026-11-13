@@ -1848,8 +1848,8 @@ foreach ($rezZutaten as $z) if (!empty($z['item_id'])) {
 $rezHatSpecCoa = [];
 if ($rezZutaten) { require_once BX_ROOT . '/core/pdf_spec.php'; require_once BX_ROOT . '/core/spec_ki.php';
   foreach ($rezZutaten as $z) { $iid = (int)($z['item_id'] ?? 0); if ($iid <= 0 || isset($rezHatSpecCoa[$iid])) continue;
-    $hat = (int) scalar("SELECT COUNT(*) FROM charge WHERE item_id=? AND coa_freigegeben=1", [$iid]) > 0;
-    if (!$hat && spec_hat_freigabe($iid)) $hat = true;   // freigegebene Spec-Version mit Daten vorhanden
+    // 13.11.2026 (Paket Teil 5.1): vor der Bestellung zählt nur die bulkify-Spec (garantierte Werte), nicht die CoA einer Charge.
+    $hat = spec_hat_freigabe($iid);
     $rezHatSpecCoa[$iid] = $hat;
   }
 }
@@ -2212,7 +2212,7 @@ if (($_GET['v'] ?? '') === 'coa_pdf') {
     // Item der Charge bestimmen, dann Zugang prüfen (Katalog ODER Rezeptur-Zutat). CoA nur, wenn die
     // Charge WIRKLICH eigene Analysenwerte hat (= es gibt einen bulkify-CoA) – nie das Lieferanten-PDF.
     $coaItem = $cid ? (int) scalar("SELECT i.id FROM charge c JOIN item i ON i.id=c.item_id
-        WHERE c.id=? AND i.kategorie='rohstoff' AND i.gesperrt=0
+        WHERE c.id=? AND i.kategorie='rohstoff' AND i.gesperrt=0 AND COALESCE(c.coa_freigegeben,0)=1   -- 13.11.2026: nur freigegebene CoA (vorher fehlte die Prüfung)
           AND EXISTS (SELECT 1 FROM charge_analyse ca WHERE ca.charge_id=c.id)", [$cid]) : 0;
     $darfCoa = $coaItem && (!empty($k['portal_rohstoffe']) || (!empty($k['portal_rezeptur']) && (bool) scalar(
         "SELECT 1 FROM rezeptur_zutat z JOIN rezeptur r ON r.id=z.rezeptur_id
@@ -3193,12 +3193,12 @@ portal_head('Kundenportal · ' . $k['firma']);
                   <a href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>" target="_blank" rel="noopener" style="margin-right:10px"><?= h($DOKTYP[$d['typ']] ?? $d['typ']) ?></a>
                 <?php endforeach;
                 elseif (!empty($z['item_id']) && !empty($rezHatSpecCoa[(int)$z['item_id']])): ?>
-                  <a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>" title="Spezifikation / Analysenzertifikat (bulkify) auf dem Rohstoff-Infoblatt">Spec/CoA ansehen</a>
+                  <a href="<?= $portalLink('rohstoff') ?>&iid=<?= (int)$z['item_id'] ?>" title="bulkify-Spec mit den garantierten Werten auf dem Rohstoff-Infoblatt">Spec ansehen</a>
                 <?php else: ?><span class="muted">–</span><?php endif; ?></td></tr>
         <?php endforeach; ?>
         <tr style="font-weight:600"><td>Gesamt je <?= $dfP ?></td><td class="bx-num"><?= rtrim(rtrim(number_format($sum,2,',','.'),'0'),',') ?> mg</td><td></td></tr>
       </tbody></table>
-      <div class="muted" style="font-size:12px;margin-top:8px">Analysenzertifikate und Spezifikationen zu den eingesetzten Rohstoffen, soweit wir sie freigegeben haben.</div>
+      <div class="muted" style="font-size:12px;margin-top:8px">bulkify-Spec je Rohstoff: die Werte, die wir garantieren – egal von welchem Lieferanten der Rohstoff später kommt. Die Analysenzertifikate (CoA) einer konkreten Charge bekommen Sie mit Ihrer Lieferung.</div>
       <?php if ($rezDetail['darreichungsform'] === 'kapsel'): $kg = $kapselAnzeige($rezDetail, $sum); $fix = !empty($rezDetail['kapselgroesse_id']); ?>
         <div style="margin-top:10px;font-size:14px"><strong>Kapselgröße:</strong>
           <?= $kg ? h($kg['name']) . ' <span class="muted">(fasst bis ' . (int)$kg['fuellmenge_mg'] . ' mg)</span>' : '<span class="muted">Füllgewicht zu groß für eine Standardkapsel – wir schlagen eine andere Form oder Aufteilung vor.</span>' ?>
@@ -3919,17 +3919,15 @@ portal_head('Kundenportal · ' . $k['firma']);
     <?php // Dokumente gebündelt: Spezifikation (PDF) + Analysenzertifikate (CoA je Charge) + weitere Unterlagen.
       $rohDoks = dokumente_fuer_kunde('item', (int)$rohDetail['id']); ?>
     <div class="bx-panel"><h2>Dokumente</h2>
-      <p class="muted" style="margin-top:0">Spezifikation, Analysenzertifikate und weitere Unterlagen zu diesem Rohstoff.</p>
+      <p class="muted" style="margin-top:0">bulkify-Spec (die Werte, die wir garantieren) und weitere Unterlagen zu diesem Rohstoff. Analysenzertifikate (CoA) gehören zu einer konkreten Charge und kommen mit Ihrer Lieferung.</p>
       <div class="bx-row" style="flex-wrap:wrap;gap:8px">
-        <?php if ($rohHatSpec): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; Spezifikation (PDF)</a><?php endif; ?>
-        <?php foreach ($rohCoas as $co): ?>
-          <a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('coa_pdf') ?>&cid=<?= (int)$co['id'] ?>">&#8681; CoA <?= h($co['charge_nr'] ?: ('#' . (int)$co['id'])) ?><?= $co['mhd'] ? ' <span class="muted">(MHD ' . h(date('m/Y', strtotime((string)$co['mhd']))) . ')</span>' : '' ?></a>
-        <?php endforeach; ?>
+        <?php if ($rohHatSpec): ?><a class="btn btn-ghost btn-sm" target="_blank" href="<?= $portalLink('spec_pdf') ?>&rid=<?= (int)$rohDetail['id'] ?>">&#8681; bulkify-Spec (PDF)</a><?php endif; ?>
+        <?php // 13.11.2026 (Paket Teil 5.1): vor der Bestellung keine Chargen-CoAs mehr – die kommen mit der Lieferung. ?>
         <?php foreach ($rohDoks as $d): ?>
           <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="?p=portal_dok&token=<?= h($token) ?>&id=<?= (int)$d['id'] ?>">&#8681; <?= h(($DOKTYP[$d['typ']] ?? $d['typ']) . ': ' . kunde_dok_titel($d)) ?></a>
         <?php endforeach; ?>
       </div>
-      <?php if (!$rohCoas): ?><p class="muted" style="font-size:12px;margin:10px 0 0">Zu diesem Rohstoff liegt aktuell kein freigegebenes Analysenzertifikat (CoA) vor.</p><?php endif; ?>
+      <?php if (!$rohHatSpec): ?><p class="muted" style="font-size:12px;margin:10px 0 0">Zu diesem Rohstoff liegt noch keine freigegebene bulkify-Spec vor – auf Anfrage.</p><?php endif; ?>
     </div>
 
     <div class="bx-panel"><h2>Anfrage stellen</h2>
@@ -4079,8 +4077,7 @@ portal_head('Kundenportal · ' . $k['firma']);
         } else { html += '<div class="muted">Zu diesem Rohstoff liegen noch keine weiteren Angaben vor.</div>'; }
         // Freigegebene Dokumente zum Download
         var docs = '';
-        if (j && j.spec) docs += '<a class="btn btn-ghost btn-sm" style="margin:6px 6px 0 0" target="_blank" href="?p=portal&token='+rohToken+'&v=spec_pdf&rid='+d.id+'">Spezifikation (PDF)</a>';
-        if (j && j.coas) j.coas.forEach(function(c){ docs += '<a class="btn btn-ghost btn-sm" style="margin:6px 6px 0 0" target="_blank" href="?p=portal&token='+rohToken+'&v=coa_pdf&cid='+c.cid+'">CoA '+rohEsc(c.label)+'</a>'; });
+        if (j && j.spec) docs += '<a class="btn btn-ghost btn-sm" style="margin:6px 6px 0 0" target="_blank" href="?p=portal&token='+rohToken+'&v=spec_pdf&rid='+d.id+'">bulkify-Spec (PDF)</a>';
         if (docs) html += '<div style="margin-top:14px"><div style="color:var(--muted);font-size:13px;margin-bottom:2px">Dokumente</div>'+docs+'</div>';
         body.innerHTML = html;
       })
