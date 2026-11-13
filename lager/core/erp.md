@@ -165,3 +165,7 @@ erp_la_scan() / erp_la_abschluss() / erp_charge_gebinde_anhaengen() / erp_la_auf
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 `erp_wareneingang_buchen()` ruft `erp_unterlagen_quarantaene()` auf (dieselbe Stelle wie das Dashboard, `core/lieferant_unterlagen.php` ohne `core/schema.php`): fehlt die CoA/Spec des Lieferanten, ist die Charge immer in Quarantäne. `erp_charge_status_setzen($cid, 'frei')` lehnt dann ab („Freigabe erst, wenn die CoA/Spec da ist“). `erp_unterlagen_grund()` liefert den Grund für die Anzeige.
+
+**Fable-6 P14 (13.11.2026):**
+- `erp_charge_entnehmen()` sperrt jede Charge in Quarantäne (auch Rohstoff ohne CoA/Spec) und jede gesperrte Charge. Vorher war nur Fertigware in Quarantäne gesperrt.
+- `erp_charge_status_setzen()` setzt „frei“ nur mit QM-Rolle (`lg_darf_qm_freigeben`). Die Unterlagen-Sperre (`lu_freigabe_sperre`) gilt jetzt auch beim Wechsel „gesperrt → frei“, nicht nur aus der Quarantäne.

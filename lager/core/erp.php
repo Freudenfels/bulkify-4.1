@@ -2143,8 +2143,12 @@ function erp_charge_status_setzen(int $charge_id, string $status): array {
     $c = one("SELECT status, menge_verfuegbar FROM charge WHERE id=?", [$charge_id]);
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
     if ((string)$c['status'] === 'leer' || (float)$c['menge_verfuegbar'] <= 0) return ['ok' => false, 'meldung' => 'Leere Charge – Status bleibt.'];
+    // Fable-6 P14 (13.11.2026): „frei“ setzen (aus Quarantäne UND aus „gesperrt“) nur mit QM-Rolle und nur ohne fehlende Unterlagen –
+    // vorher ging „gesperrt -> frei“ an der Freigabe-Sperre vorbei.
+    if ($status === 'frei' && (string)$c['status'] !== 'frei' && function_exists('lg_darf_qm_freigeben') && !lg_darf_qm_freigeben())
+        return ['ok' => false, 'meldung' => 'Freigeben darf nur QM oder Admin (Vier-Augen-Prinzip).'];
     // Sofortfix 13.11.2026: Freigabe erst, wenn die CoA/Spec des Lieferanten da ist (Admin-Ausnahme nur im Dashboard unter Freigaben).
-    if ($status === 'frei' && (string)$c['status'] === 'quarantaene') {
+    if ($status === 'frei' && in_array((string)$c['status'], ['quarantaene', 'gesperrt'], true)) {
         try {
             require_once __DIR__ . '/../../core/lieferant_unterlagen.php';
             if (($luS = lu_freigabe_sperre($charge_id)) !== '')
@@ -2178,9 +2182,11 @@ function erp_charge_entnehmen(int $charge_id, float $menge, bool $gebindeAbgleic
     $c = one("SELECT c.*, i.name AS item_name, i.kategorie FROM charge c JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
     if (!$c) return ['ok' => false, 'meldung' => 'Charge nicht gefunden.'];
     if (!empty($c['fremd_kunde_id'])) return ['ok' => false, 'meldung' => 'Fremdlager-Charge – Entnahme läuft über das Fulfillment.'];
-    // QM-Gate (St-11d): Fertigware in Quarantäne darf das Lager nicht verlassen, bevor QM freigegeben hat.
-    if ((string)$c['status'] === 'quarantaene' && in_array((string)$c['kategorie'], ['fertig', 'verkaufsfertig'], true))
-        return ['ok' => false, 'meldung' => 'Fertigware in Quarantäne – erst nach der QM-Freigabe entnehmen.'];
+    // QM-Gate (St-11d, Fable-6 P14 13.11.2026): Ware in Quarantäne (auch Rohstoff ohne CoA/Spec) oder gesperrte Ware darf nicht entnommen werden.
+    if ((string)$c['status'] === 'quarantaene')
+        return ['ok' => false, 'meldung' => in_array((string)$c['kategorie'], ['fertig', 'verkaufsfertig'], true)
+            ? 'Fertigware in Quarantäne – erst nach der QM-Freigabe entnehmen.' : 'Charge in Quarantäne – erst nach der Freigabe (QM) entnehmen.'];
+    if ((string)$c['status'] === 'gesperrt') return ['ok' => false, 'meldung' => 'Charge gesperrt – keine Entnahme.'];
     if ($menge <= 0) return ['ok' => false, 'meldung' => 'Bitte eine Menge größer 0 angeben.'];
     $verf = (float)$c['menge_verfuegbar'];
     if ($menge > $verf + 1e-9) return ['ok' => false, 'meldung' => 'Nur noch ' . menge_txt($verf) . ' ' . (string)$c['einheit'] . ' verfügbar.'];
