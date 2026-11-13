@@ -172,3 +172,5 @@ Vor der ersten großen Inventur zuerst die eindeutigen **Dubletten zusammenführ
 Erkannt wird das am Öffnen-Link der Zeile bzw. an `_aid` (`dp_nur_offen()`, `dp_vorgang_zu()`). Der Schalter „auch abgeschlossene“ (`&zu=1`) zeigt alle. Oben steht, wie viele Zeilen ausgeblendet sind. „Beheben“ ist davon unberührt.
 
 **Etikett-Freigabe im Portal (Fable-4 T5.5, 13.11.2026):** Prüfung `etikett_freigabe_portal` (auf Klick, nur lesen): je offenem Auftrag Design (eigen/geerbt), Datei da, wie es bis 13.11. aussah und was jetzt passiert.
+
+**Zwei neue Listen (Sofortfix 13.11.2026, Teil 5):** `charge_nicht_eingebucht` – vorgemerkte Charge an geschlossener/eingegangener Bestellung bzw. Position ohne Ware geschlossen, Knopf „Jetzt einbuchen“; `reservierung_ungedeckt` – aktive Reservierungen mit ungedecktem Anteil (Artikel, Auftrag, PR, reserviert, im Lager, unterwegs, ungedeckt, ob der PR „fehlt“ zeigt). Beide auf Klick, nur lesen.

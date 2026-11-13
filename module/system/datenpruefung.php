@@ -98,6 +98,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?? ''), 
     header('Location: ?p=datenpruefung#rohstoff_angefragt_ohne_dok'); exit;
 }
 $CHECKS = [
+    // Sofortfix 13.11.2026 (Teil 5): Ware kam, wurde aber nie eingebucht – vorgemerkte Charge an einer geschlossenen Bestellung bzw.
+    // Position „ohne Ware geschlossen“ (als geliefert geschlossen / Rest storniert, keine Charge). Knopf „Jetzt einbuchen“. Nur lesen.
+    'charge_nicht_eingebucht' => [
+        'titel' => 'Einkauf: Charge eingetragen, nicht eingebucht (bzw. ohne Ware geschlossen)',
+        'info'  => 'Bestellpositionen, an denen eine Charge vorgemerkt ist (Chargen & Dokumente), die nie eingebucht wurde, obwohl die Bestellung geschlossen bzw. eingegangen ist – und Positionen, die „als geliefert geschlossen“ bzw. mit Rest storniert wurden, ohne dass je eine Charge kam. '
+                 . 'Die Ware fehlt dann im Bestand, Reservierungen sind ungedeckt (Beispiel BE-2904 Sanddorn). „Jetzt einbuchen“ öffnet den Wareneingang mit Charge, MHD und Menge vorbelegt; die Bestellung bleibt geliefert.',
+        'auf_klick' => true,
+        'sql'   => "SELECT bp.id AS _bp, bp.bestellung_id AS _bid, b.nummer AS bestellung, b.status, COALESCE(NULLIF(i.name,''), bp.bezeichnung) AS artikel, bp.item_id AS _iid,
+                           bp.menge, bp.einheit, COALESCE(bp.geliefert_menge,0) AS geliefert, bp.rest_storniert_am, b.angekommen_am, COALESCE(b.notiz,'') AS _notiz,
+                           (SELECT COUNT(*) FROM charge c WHERE c.bestellung_position_id=bp.id) AS _n_ch
+                    FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id LEFT JOIN item i ON i.id=bp.item_id
+                    WHERE b.status<>'storniert' AND bp.menge>0 AND COALESCE(bp.pos_storno_grund,'')=''
+                      AND (EXISTS (SELECT 1 FROM bestellung_charge bc WHERE bc.bestellung_position_id=bp.id)
+                           OR (bp.rest_storniert_am IS NOT NULL AND NOT EXISTS (SELECT 1 FROM charge c WHERE c.bestellung_position_id=bp.id)))
+                    ORDER BY b.id DESC",
+        'zeilen' => function (array $rows): array {
+            require_once BX_ROOT . '/core/wareneingang_bestellung.php';
+            $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+            $out = [];
+            foreach ($rows as $r) {
+                $zu = !empty($r['rest_storniert_am']) && (int)$r['_n_ch'] === 0;
+                $geschlossen = $zu || (string)$r['status'] === 'geliefert' || !empty($r['angekommen_am']);
+                $v = webe_vormerkung((int)$r['_bp']);
+                if (!$zu && !($v && $geschlossen)) continue;   // offene Bestellung mit vorgemerkter Charge = normal (Ware kommt noch)
+                $wie = str_contains((string)$r['_notiz'], 'ohne eingebuchte Charge') || str_contains((string)$r['_notiz'], 'Ohne Einbuchen') ? 'als geliefert geschlossen ohne Charge'
+                     : (str_contains((string)$r['_notiz'], 'Rest storniert') ? 'Rest storniert' : ($zu ? 'Rest storniert' : 'eingegangen, Charge nicht eingebucht'));
+                $out[] = ['_id' => (int)$r['_bp'], '_link' => '?p=wareneingang&bp=' . (int)$r['_bp'] . ($v ? '&bch=' . (int)$v['id'] : ''),
+                          '_link_bestellung' => '?p=bestellung&id=' . (int)$r['_bid'], '_link_artikel' => (int)$r['_iid'] > 0 ? '?p=rohstoff&id=' . (int)$r['_iid'] . '&tab=lager' : null,
+                          'bestellung' => (string)$r['bestellung'], 'artikel' => (string)$r['artikel'], 'bestellt' => $mz($r['menge']) . ' ' . $r['einheit'],
+                          'geliefert' => $mz($r['geliefert']) . ' ' . $r['einheit'], 'charge_vorgemerkt' => $v ? (string)$v['charge_nr'] . ($v['mhd'] ? ' · MHD ' . date('d.m.Y', strtotime((string)$v['mhd'])) : '') : '–',
+                          'geschlossen' => $wie . (!empty($r['rest_storniert_am']) ? ' (' . date('d.m.Y', strtotime((string)$r['rest_storniert_am'])) . ')' : ''), 'aktionen' => ''];
+            }
+            return $out;
+        },
+        'html' => ['aktionen' => fn($r) => '<a class="btn btn-primary btn-sm" href="' . h((string)$r['_link']) . '">Jetzt einbuchen</a>'],
+        'korrektur' => '– (nur anzeigen; „Jetzt einbuchen“ bucht über den Wareneingang)',
+    ],
+    // Sofortfix 13.11.2026 (Teil 5): Reservierungen, die weder durch Lager noch durch offene Bestellungen gedeckt sind.
+    'reservierung_ungedeckt' => [
+        'titel' => 'Lager: Reservierung ungedeckt (mehr reserviert als da bzw. unterwegs)',
+        'info'  => 'Aktive Reservierungen mit ungedecktem Anteil: reserviert, aber weder im Lager noch bestellt (Beispiel Sanddorn 6 kg, PR-2761). Spalte „PR fehlt“ = der Produktionsauftrag zeigt bei diesem Artikel „fehlt“. Nur Anzeige.',
+        'auf_klick' => true,
+        'sql'   => "SELECT DISTINCT item_id FROM reservierung WHERE status='aktiv'",
+        'zeilen' => function (array $rows): array {
+            require_once BX_ROOT . '/core/reservierung_deckung.php';
+            $mz = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
+            $out = [];
+            foreach ($rows as $x) {
+                $iid = (int)$x['item_id']; $d = reservierung_deckung($iid);
+                if ($d['ungedeckt'] <= 1e-9) continue;
+                $it = one("SELECT name, einheit FROM item WHERE id=?", [$iid]) ?: ['name' => '#' . $iid, 'einheit' => ''];
+                foreach (all("SELECT r.*, a.nummer AS anr FROM reservierung r LEFT JOIN auftrag a ON a.id=r.auftrag_id WHERE r.item_id=? AND r.status='aktiv'", [$iid]) as $r) {
+                    $z = $d['zeilen'][(int)$r['id']] ?? null;
+                    if (!$z || $z['ungedeckt'] <= 1e-9) continue;
+                    $pa = res_pa_anzeige($r); $fehlt = '';
+                    if ($pa) foreach (auftrag_bedarf_rest((int)$pa['id']) as $b) if ((int)($b['item_id'] ?? 0) === $iid && (float)$b['fehlt'] > 1e-6) $fehlt = 'ja, fehlt ' . $mz($b['fehlt']) . ' ' . $it['einheit'];
+                    $out[] = ['_id' => (int)$r['id'], '_link' => '?p=rohstoff&id=' . $iid . '&tab=lager', '_aid' => (int)$r['auftrag_id'],
+                              '_link_auftrag' => $r['auftrag_id'] ? '?p=auftrag&id=' . (int)$r['auftrag_id'] : null, '_link_pr' => $pa ? '?p=produktionsauftrag&id=' . (int)$pa['id'] : null,
+                              'artikel' => (string)$it['name'], 'auftrag' => (string)($r['anr'] ?? '–'), 'pr' => $pa ? $pa['nummer'] . ($pa['abgeleitet'] ? ' (einziger offener)' : '') : '–',
+                              'art' => !empty($r['pa_id']) ? 'aus Produktion' : 'manuell', 'reserviert' => $mz($z['menge']) . ' ' . $it['einheit'],
+                              'im_lager' => $mz($z['lager']), 'unterwegs' => $mz($z['unterwegs']), 'ungedeckt' => $mz($z['ungedeckt']) . ' ' . $it['einheit'], 'pr_fehlt' => $fehlt ?: 'nein'];
+                }
+            }
+            return $out;
+        },
+        'korrektur' => '– (nur anzeigen; Ware einbuchen bzw. bestellen, oder Reservierung am Rohstoff anpassen)',
+    ],
     // Fable-4 T5.5 (13.11.2026): Etikett-Freigabe im Kundenportal – welche Aufträge landen heute im Pop-up, warum, und was jetzt
     // passiert. Nur lesen: nichts wird freigegeben, keine Aufgabe angelegt (das macht erst das Portal beim Login des Kunden).
     'etikett_freigabe_portal' => [
