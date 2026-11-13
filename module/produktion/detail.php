@@ -62,6 +62,9 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && in_array(($_POST['aktion'] ?
     header('Location: ?p=produktionsauftrag&id=' . $id . ($msg !== '' ? '&teilfehler=' . urlencode($msg) : '&nachok=' . urlencode('Unter-Charge ' . ($ucR['charge_nr'] ?? '') . ($_POST['aktion'] === 'uc_schliessen' ? ' abgeschlossen.' : ' wieder geöffnet.'))) . '#unterchargen'); exit;
 }
 
+// Produktion per KI melden (13.11.2026, Teil 4): Auswerten/Auswahl/Verwerfen; gebucht wird unten über „nachtragen“.
+require_once __DIR__ . '/_ki_melden.php';
+if ($id) pki_ui_post($id, '?p=produktionsauftrag&id=' . $id);
 // Ein Weg (11.11.2026): Teilmenge nachtragen (ersetzt Easy Production) – gleiche Buchung wie in der Werk-App (core/pa_ablauf.php).
 if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'nachtragen') {
     $wer = (string)(current_user()['name'] ?? 'Team');
@@ -74,8 +77,18 @@ if ($id && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') ===
     // lässt die laufende Unter-Charge in Ruhe und verwirft bei einem Fehler alles (kein Buchstabe verbraucht).
     $foto = pa_foto_speichern($_FILES['foto'] ?? [], 'nachtrag' . $id);
     $r = pa_nachtrag_buchen($id, $menge, ['bulk_charge_id' => $bulk, 'datum' => $datumN, 'charge_nr' => $charge, 'grund' => (string)($_POST['grund'] ?? ''), 'mhd' => (string)($_POST['mhd'] ?? '')],
-        ['mitarbeiter' => (string)($_POST['mitarbeiter'] ?? ''), 'rueckstell' => (int) zahl_lesen((string)($_POST['rueckstell'] ?? '0'), true), 'foto' => $foto, 'geliefert' => !empty($_POST['geliefert'])], $wer);
+        ['mitarbeiter' => (string)($_POST['mitarbeiter'] ?? ''), 'rueckstell' => (int) zahl_lesen((string)($_POST['rueckstell'] ?? '0'), true), 'foto' => $foto, 'geliefert' => !empty($_POST['geliefert']),
+         'vor_etikett' => ($_POST['umfang'] ?? '') === 'vor_etikett'], $wer);
     $uc = (int)($r['unter_charge_id'] ?? 0);
+    // 13.11.2026 (Teil 4): per KI gemeldet -> Vermerk mit Originaltext im Chargenprotokoll und Verlauf (wer gemeldet, wer bestätigt).
+    $kiText = trim((string)($_POST['ki_text'] ?? ''));
+    if ($r['ok'] && $kiText !== '') {
+        $kiTxt = 'per KI gemeldet von ' . (trim((string)($_POST['ki_von'] ?? '')) ?: $wer) . ', bestätigt von ' . $wer . ': „' . mb_substr($kiText, 0, 500) . '“';
+        pa_ereignis($id, $uc ?: null, 'ki_meldung', $kiTxt, '', '', '', $wer);
+        $aidK = (int) scalar("SELECT COALESCE(auftrag_id,0) FROM produktionsauftrag WHERE id=?", [$id]);
+        if ($aidK > 0) log_aktivitaet('auftrag', $aidK, 'team', 'Produktion ' . (string) scalar("SELECT nummer FROM produktionsauftrag WHERE id=?", [$id]) . ': ' . $kiTxt, 'status');
+        unset($_SESSION['pki_' . (int)($_POST['ki_ursprung'] ?? 0)]);
+    }
     if ($r['ok'] && !empty($_POST['geliefert']) && !empty($r['charge_id'])) {
         // Schon geliefert (wie Easy Production): die nachgetragene Menge gleich per Lieferschein wieder ausbuchen – kein Phantombestand.
         q("UPDATE charge SET menge_verfuegbar=GREATEST(0, menge_verfuegbar-?), status=IF(menge_verfuegbar<=0.0001,'leer',status) WHERE id=?", [$menge, (int)$r['charge_id']]);
@@ -1006,6 +1019,7 @@ ob_start(); ?>
 // ============ Ausgabe in klarer Reihenfolge ============
 echo $panWeg;            // Weg-Hinweis (verkürzt/voll)
 echo $panWartet;         // Wartet auf Material (Alarm)
+pki_ui_render($id);   // Produktion melden (KI), 13.11.2026
 require __DIR__ . '/_ablauf.php';   // Ein Weg (11.11.2026): Kopf, Unter-Chargen/Teilmengen/Kartons, Protokoll, Teilmenge nachtragen
 echo $panJetzt;          // JETZT dran – die eine Aktion
 echo $panEinkauf;        // Material (Komponenten vorhanden/fehlt) – prominent sichtbar

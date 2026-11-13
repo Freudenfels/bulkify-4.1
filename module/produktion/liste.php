@@ -238,8 +238,11 @@ $sub = ['plan' => 'Aufträge im Plan (noch nicht begonnen) – startklare oben, 
 
 $flash = $_SESSION['prod_flash'] ?? null; unset($_SESSION['prod_flash']);
 $zeigeNeu = isset($_GET['neu']);
+require_once __DIR__ . '/_ki_melden.php';
+pki_ui_post(0, '?p=produktion');   // Produktion melden (KI), 13.11.2026
 render_header('produktion', 'Produktion');
 bx_head('Produktion', count($rows) . ' ' . $sub[$tab], bx_btn('+ Neuer Produktionsauftrag', '?p=produktion&neu=1', 'primary'));
+pki_ui_render(0);
 if ($flash) echo '<div class="bx-panel badge-ok" style="padding:8px 12px">' . h($flash) . '</div>';
 // Übersicht auf einen Blick (anklickbar): echter Stand der Produktion nach Status.
 $kpi = function(string $label, int $wert, string $href, string $farbe = '', bool $aktiv = false) {

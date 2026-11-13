@@ -327,7 +327,7 @@ function pa_nachtrag_buchen(int $pa_id, float $menge, array $d, array $o, string
         if (empty($neu['ok'])) return $neu;
         $uc = pa_unter_charge((int)$neu['unter_charge_id']);
     }
-    $r = pa_teilmenge_buchen($pa_id, (int)$uc['id'], $menge, ['art' => 'nachtrag', 'datum' => $tag, 'von' => $von, 'nachtrag_komplett' => true] + $o);
+    $r = pa_teilmenge_buchen($pa_id, (int)$uc['id'], $menge, ['art' => 'nachtrag', 'datum' => $tag, 'von' => $von, 'nachtrag_komplett' => empty($o['vor_etikett'])] + $o);
     $r['unter_charge_id'] = (int)$uc['id'];
     if ($neu) {
         if (empty($r['ok'])) { pa_nachtrag_verwerfen((int)$uc['id']); $r['unter_charge_id'] = 0; return $r; }
@@ -395,7 +395,8 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
     if ($menge > $rest + 1e-6) return ['ok' => false, 'msg' => 'Es sind nur noch ' . pa_mz($rest) . ' Stk offen.'];
     $von = (string)($o['von'] ?? '');
     $sperre = (string) (pa_fn('produktion_etikett_sperre', 'erp_etikett_sperre', $pa_id) ?? '');
-    $umfang = ($sperre !== '' && empty($o['nachtrag_komplett'])) ? 'vor_etikett' : 'komplett';
+    // 13.11.2026 (Teil 4): $o['vor_etikett'] bucht ausdrücklich nur bis vor dem Etikettieren (z. B. KI-Meldung „ohne Etikett“ / Etikett fehlt).
+    $umfang = (!empty($o['vor_etikett']) || ($sperre !== '' && empty($o['nachtrag_komplett']))) ? 'vor_etikett' : 'komplett';
     $stationen = array_values(array_unique(array_map(fn($r) => (string)$r['station'], all("SELECT station FROM produktion_schritt WHERE pa_id=? ORDER BY sort", [$pa_id]))));
     if ($umfang === 'vor_etikett') $stationen = array_values(array_filter($stationen, fn($s) => $s !== 'Etikettieren'));
     $basis = $umfang === 'vor_etikett' ? max($gebucht, (float)($pa['menge_vor_etikett'] ?? 0)) : $gebucht;
@@ -430,9 +431,9 @@ function pa_teilmenge_buchen(int $pa_id, int $uc_id, float $menge, array $o = []
 
     if ($umfang === 'vor_etikett') {
         if (pa_spalte_da('produktionsauftrag', 'menge_vor_etikett')) q("UPDATE produktionsauftrag SET menge_vor_etikett=?, status=IF(status='offen','laufend',status) WHERE id=?", [(int) round($bis), $pa_id]);
-        pa_ereignis($pa_id, $uc_id, 'teilmenge', pa_mz($menge) . ' Stk bis vor dem Etikettieren (' . $sperre . ')', (string)$menge, (string)($o['foto'] ?? ''), '', $von);
+        pa_ereignis($pa_id, $uc_id, 'teilmenge', pa_mz($menge) . ' Stk bis vor dem Etikettieren (' . ($sperre !== '' ? $sperre : 'ohne Etikett gemeldet') . ')', (string)$menge, (string)($o['foto'] ?? ''), '', $von);
         pa_fn('teilmenge_anweisung_verrechnen', 'erp_teilmenge_anweisung_verrechnen', $pa_id, $menge, 'vor_etikett');
-        return ['ok' => true, 'msg' => pa_mz($menge) . ' Stk bis vor dem Etikettieren gebucht – Etikettieren ist gesperrt: ' . $sperre, 'teilmenge_id' => $tm, 'umfang' => 'vor_etikett'];
+        return ['ok' => true, 'msg' => pa_mz($menge) . ' Stk bis vor dem Etikettieren gebucht' . ($sperre !== '' ? ' – Etikettieren ist gesperrt: ' . $sperre : ' (ohne Etikett gemeldet).'), 'teilmenge_id' => $tm, 'umfang' => 'vor_etikett'];
     }
     // 3) Fertigware: die Charge der Unter-Charge wächst (eine Charge je Unter-Charge)
     $cid = (int)($uc['fertig_charge_id'] ?? 0);
