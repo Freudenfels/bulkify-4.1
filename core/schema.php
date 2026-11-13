@@ -4811,15 +4811,17 @@ function rezeptur_fremd_ek_pro_einheit(int $rid, float $einheiten = 0): ?float {
         foreach (all("SELECT id FROM produkt WHERE rezeptur_id=? AND COALESCE(status,'')<>'inaktiv'", [$rid]) as $pr)
             foreach (produkt_lieferant_preis_zeilen((int)$pr['id']) as $r)
                 $kand[] = ['menge' => (float)$r['menge_ab'], 'preis' => (float)$r['preis'], 'gueltig_bis' => $r['gueltig_bis']];
-    $passend = null; $basis = null;
+    // Fable-4 T3.2 (13.11.2026): liegt die Menge unter ALLEN Staffeln, gilt der Preis der kleinsten Staffel (kleinste Menge ab; bei
+    // mehreren Lieferanten mit gleicher kleinster Staffel der günstigste davon) – nicht der billigste Preis aller Zeilen (größte Staffel).
+    $passend = null; $kleinsteM = null; $kleinsteP = null;
     foreach (lp_gueltig_auswahl($kand, ['rezeptur', $rid])['rows'] as $r) {
         $m = (float)$r['menge']; $p = (float)$r['preis'];
         if ($p <= 0) continue;
-        if ($basis === null || $p < $basis) $basis = $p;
+        if ($kleinsteM === null || $m < $kleinsteM - 1e-9 || (abs($m - $kleinsteM) < 1e-9 && $p < $kleinsteP)) { $kleinsteM = $m; $kleinsteP = $p; }
         if ($einheiten > 0 && $m > 0 && $m > $einheiten) continue;   // höhere Staffel gilt noch nicht
         if ($passend === null || $p < $passend) $passend = $p;
     }
-    $best = $passend ?? $basis;
+    $best = $passend ?? $kleinsteP;
     // (Früher Quelle C: roher lieferant_angebot-Preis. Entfernt – ein über eine Preisanfrage abgegebener
     //  Fremdfertigungspreis wird jetzt als FREIGEGEBENER Preis in rezeptur_lief_angebot gespiegelt (Quelle A),
     //  mit Freigabe-Gate für Änderungen. So kalkulieren wir nie mit einem noch nicht freigegebenen Preis.)
