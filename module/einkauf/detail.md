@@ -122,3 +122,9 @@ Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artik
   - Fertigprodukte (`verkaufsfertig`) sind jetzt bestellbar.
 - **Eine Position:** Eine neue Bestellung hat genau eine Position. Es gibt kein „+ Position“ mehr, und der Server lehnt mehrere ab.
 - **Ohne Art-Auswahl:** Die KI-Vorbelegung und die Rückkehr von der Doppel-Warnung überspringen diesen Schritt.
+
+**Speichern und Zurückziehen abgesichert (Fable-4 T3.3–T3.6, 13.11.2026):**
+- Positionen mit aktiver Reservierung (`bestellung_position_reserviert()`) werden nicht gelöscht und behalten ihren Artikel.
+- Vorhandene Zeile mit leerem Artikel (Artikel nicht in der Auswahl) wird nie gelöscht; `pos_options()` nimmt den vorhandenen Artikel immer in die Auswahl.
+- Server prüft beim Speichern den Status (`bestellung_bearbeitbar_grund()`): nur Entwurf, gesendet, bestellt.
+- „Bestellung zurückziehen“ nur ohne Liefermenge, Charge, Lieferanten-Charge und Reservierung (`bestellung_zurueckziehen_grund()`), sonst grauer Knopf mit Grund „bitte stornieren“.

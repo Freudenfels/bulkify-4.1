@@ -7948,8 +7948,14 @@ function bestellung_positionen_speichern(int $bestellung_id, array $zeilen): arr
     foreach (all("SELECT * FROM bestellung_position WHERE bestellung_id=? AND item_id IS NOT NULL", [$bestellung_id]) as $p) $alt[(int)$p['id']] = $p;
     $gesehen = []; $behalten = 0;
     foreach (array_values($zeilen) as $i => $z) {
-        $iid = (int)($z['item_id'] ?? 0); if ($iid <= 0) continue;
+        $iid = (int)($z['item_id'] ?? 0);
         $pid = (int)($z['id'] ?? 0);
+        // Fable-4 T3.4 (13.11.2026): vorhandene Zeile mit leerem Artikel (Artikel stand nicht in der Auswahl: Fertig-/Handelsware,
+        // gesperrter Artikel) wird nie gelöscht – der vorhandene Artikel bleibt.
+        if ($iid <= 0 && $pid > 0 && isset($alt[$pid])) $iid = (int)$alt[$pid]['item_id'];
+        if ($iid <= 0) continue;
+        // Fable-4 T3.3: hängt eine aktive Reservierung (Beschaffungsweg koppeln / Material zuordnen) an der Position, bleibt der Artikel.
+        if ($pid > 0 && isset($alt[$pid]) && $iid !== (int)$alt[$pid]['item_id'] && bestellung_position_reserviert($pid) > 0) { $iid = (int)$alt[$pid]['item_id']; $behalten++; }
         $einh = scalar("SELECT einheit FROM item WHERE id=?", [$iid]);
         $aid = ($z['auftrag_id'] ?? '') !== '' && (int)$z['auftrag_id'] > 0 ? (int)$z['auftrag_id'] : null;
         if ($pid > 0 && isset($alt[$pid])) {
@@ -7965,11 +7971,41 @@ function bestellung_positionen_speichern(int $bestellung_id, array $zeilen): arr
     foreach ($alt as $pid => $p) {
         if (isset($gesehen[$pid]) || bestellung_position_gesperrt($p) !== '') continue;   // gesperrte bleiben immer
         $haengt = (int) scalar("SELECT COUNT(*) FROM bestellung_charge WHERE bestellung_position_id=?", [$pid])
-                + (int) scalar("SELECT COUNT(*) FROM dokument WHERE bestellung_position_id=?", [$pid]);
+                + (int) scalar("SELECT COUNT(*) FROM dokument WHERE bestellung_position_id=?", [$pid])
+                + bestellung_position_reserviert($pid);   // Fable-4 T3.3: aktive Reservierung / Kopplung an einen Beschaffungsweg
         if ($haengt > 0) { $behalten++; continue; }
         q("DELETE FROM bestellung_position WHERE id=? AND bestellung_id=?", [$pid, $bestellung_id]);
     }
     return ['behalten' => $behalten];
+}
+// Darf eine Bestellung über das Formular gespeichert werden? (Fable-4 T3.5, 13.11.2026) Nur Entwurf, gesendet, bestellt –
+// nie geliefert oder storniert (auch nicht über einen alten Browser-Tab). '' = darf, sonst der Grund.
+function bestellung_bearbeitbar_grund(int $bestellung_id): string {
+    $st = (string) scalar("SELECT status FROM bestellung WHERE id=?", [$bestellung_id]);
+    if ($st === '') return 'Bestellung nicht gefunden.';
+    return in_array($st, ['offen', 'gesendet', 'bestellt'], true) ? '' : 'Die Bestellung ist ' . (['geliefert' => 'geliefert', 'storniert' => 'storniert'][$st] ?? $st) . ' und kann nicht mehr geändert werden.';
+}
+// Darf eine Bestellung zurückgezogen (gelöscht) werden? (Fable-4 T3.6, 13.11.2026) Nur ohne Liefermenge, ohne Charge (Lieferanten-
+// oder Lager-Charge), ohne Aufkleber und ohne aktive Reservierung – sonst „bitte stornieren“. Leere Bestellung (keine Position) immer.
+function bestellung_zurueckziehen_grund(int $bestellung_id): string {
+    if ((int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=?", [$bestellung_id]) === 0) return '';
+    $ids = array_map('intval', array_column(all("SELECT id FROM bestellung_position WHERE bestellung_id=?", [$bestellung_id]), 'id'));
+    $in = implode(',', $ids ?: [0]);
+    $n = fn(string $sql) => (int) (function () use ($sql) { try { return scalar($sql); } catch (\Throwable $e) { return 0; } })();
+    if ((float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [$bestellung_id]) > 0
+        || $n("SELECT COUNT(*) FROM charge WHERE bestellung_position_id IN ($in)") > 0)
+        return 'Es wurde schon geliefert – zurückziehen geht nicht. Bitte stornieren („Rest storniert“ bzw. Position stornieren).';
+    if ($n("SELECT COUNT(*) FROM bestellung_charge WHERE bestellung_position_id IN ($in)") > 0)
+        return 'Der Lieferant hat schon Chargen erfasst – zurückziehen geht nicht. Bitte stornieren.';
+    if ($n("SELECT COUNT(*) FROM reservierung WHERE bestellung_position_id IN ($in) AND status='aktiv'") > 0)
+        return 'Die Bestellung ist einem Auftrag zugeordnet (Reservierung) – erst die Zuordnung lösen oder stornieren.';
+    return '';
+}
+// Anzahl aktiver Reservierungen (Beschaffungsweg koppeln, Material zuordnen, Bulk reservieren) an einer Bestellposition
+// (Fable-4 T3.3). Solche Positionen werden nicht gelöscht und behalten ihren Artikel.
+function bestellung_position_reserviert(int $pos_id): int {
+    try { return (int) scalar("SELECT COUNT(*) FROM reservierung WHERE bestellung_position_id=? AND status='aktiv'", [$pos_id]); }
+    catch (\Throwable $e) { return 0; }
 }
 // Einzelne Bestellposition stornieren (Nico 12.11.2026): die Position bleibt stehen (nichts gelöscht), ihre offene Menge zählt
 // nicht mehr als unterwegs (rest_storniert_am + pos_storno_grund). Geht auch an einer schon eingegangenen Bestellung. Eine Position

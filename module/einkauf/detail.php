@@ -154,6 +154,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Loeschbar: Entwurf ('offen'), komplett leere Bestellung (egal welcher Status) ODER eine bereits
         // "bestellte", die noch NICHT angekommen ist (zuruecknehmen -> Bedarf erscheint wieder in "Zu bestellen").
         $loeschbar = $st === 'offen' || $posAnz === 0 || ($st === 'bestellt' && empty($row['angekommen_am']));
+        // Fable-4 T3.6: nur ohne Liefermenge, Charge und Reservierung – sonst stornieren (Daten zeigen sonst ins Leere).
+        if ($loeschbar && ($zgGrund = bestellung_zurueckziehen_grund((int)$id)) !== '') { header('Location: ?p=bestellung&id=' . $id . '&fehler=' . urlencode($zgGrund)); exit; }
         if ($loeschbar) {
             q("DELETE FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);
             q("DELETE FROM bestellung WHERE id=?", [(int)$id]);
@@ -222,9 +224,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['ki_best'] = $r['daten'] ?? [];
         header('Location: ?p=bestellung&id=neu&ki=1'); exit;
     }
+    // Fable-4 T3.5: serverseitiger Statuscheck – geliefert/storniert ist nicht mehr änderbar (auch nicht aus einem alten Tab).
+    if (!$neu && ($bbG = bestellung_bearbeitbar_grund((int)$id)) !== '') { header('Location: ?p=bestellung&id=' . (int)$id . '&fehler=' . urlencode($bbG)); exit; }
     // Leere Bestellung verhindern: ohne Position sieht der Lieferant im Portal nichts (BE-xxxx „–").
     // Zählt eingehende Lagerartikel-Positionen + (beim Bearbeiten) erhaltene Bulk-/Freitext-Positionen.
-    $neuePosEin = 0; foreach (($_POST['p_item'] ?? []) as $iid) if ((int)$iid > 0) $neuePosEin++;
+    $neuePosEin = 0; foreach (($_POST['p_item'] ?? []) as $iK => $iid) if ((int)$iid > 0 || (int)(($_POST['p_id'] ?? [])[$iK] ?? 0) > 0) $neuePosEin++;   // Fable-4 T3.4: vorhandene Zeile ohne Artikel in der Auswahl zählt mit
     if ($neu && $neuePosEin > 1) {   // 13.11.2026 (Paket Teil 6.2/6.3): jede Bestellung genau eine Position
         header('Location: ?p=bestellung&id=neu&fehler=' . urlencode('Eine Bestellung hat genau eine Position – bitte für jeden Artikel eine eigene Bestellung anlegen.')); exit;
     }
@@ -255,7 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'ek' => zahl_lesen((string)($pe[$i] ?? '0')), 'auftrag_id' => (string)($pa[$i] ?? '')];
     $rS = bestellung_positionen_speichern((int)$id, $zeilen);
     if ($bxDoppelt) bestellung_doppelt_vermerken([(int)$id], $bxDoppelt);
-    header('Location: ?p=bestellung&id=' . $id . '&ok=1' . ($rS['behalten'] ? '&fehler=' . urlencode($rS['behalten'] . ' Position(en) nicht gelöscht: daran hängen Chargen oder Dokumente des Lieferanten.') : '')); exit;
+    header('Location: ?p=bestellung&id=' . $id . '&ok=1' . ($rS['behalten'] ? '&fehler=' . urlencode($rS['behalten'] . ' Position(en) nicht gelöscht bzw. Artikel nicht geändert: daran hängen Chargen, Dokumente des Lieferanten oder eine Zuordnung zu einem Auftrag.') : '')); exit;
 }
 
 $b = $neu ? ['status'=>'offen'] : one("SELECT * FROM bestellung WHERE id=?", [(int)$id]);
@@ -331,6 +335,12 @@ if ($neu) {
 
 function pos_options(array $items, $sel): string {
     $s = '<option value="">– Artikel wählen –</option>';
+    // Fable-4 T3.4 (13.11.2026): der Artikel einer vorhandenen Position steht immer in der Auswahl – auch Fertig-/Handelsware und
+    // gesperrte Artikel, die sonst nicht angeboten werden. Sonst käme die Zeile leer an und würde beim Speichern entfernt.
+    if ((int)$sel > 0 && !in_array((int)$sel, array_map('intval', array_column($items, 'id')), true)) {
+        $nm = (string) scalar("SELECT name FROM item WHERE id=?", [(int)$sel]);
+        if ($nm !== '') $s .= '<option value="' . (int)$sel . '" selected>' . h($nm) . ' (vorhandener Artikel)</option>';
+    }
     // Teil 5/8 (10.11.2026): Suchfeld (rscombo) mit Synonymen; Kapselgröße/Füllgewicht steht im Text (Bulk/Premix/Leerkapsel).
     foreach ($items as $it) { $kl = implode(' · ', array_filter([(string)($it['kg_name'] ?? '') !== '' ? 'Größe ' . preg_replace('/^(Größe|Gr\.?)\s*/iu', '', (string)$it['kg_name']) : '',
                                                     (float)($it['fuell_mg'] ?? 0) > 0 ? rtrim(rtrim(number_format((float)$it['fuell_mg'], 1, ',', '.'), '0'), ',') . ' mg' : '']));
@@ -426,7 +436,9 @@ if (!$neu) {
     echo '<div>Status: ' . (match($b['status']){'offen'=>bx_badge('offen','info'),'bestellt'=>bx_badge('bestellt','warn'),'geliefert'=>bx_badge('geliefert','ok'),default=>bx_badge(status_text($b['status']))}) . '</div><div class="bx-row">';
     if ($b['status'] === 'offen')    echo '<form method="post" style="display:inline"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" title="Diesen Entwurf verwerfen – der Bedarf erscheint wieder im Einkaufsbedarf">Zurück in den Einkaufsbedarf</button></form> ';
     if ($b['status'] !== 'offen' && $posGesamt === 0) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Diese leere Bestellung löschen?\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Diese Bestellung hat keine Positionen – löschen">Leere Bestellung löschen</button></form> ';
-    if ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung zurückziehen und löschen? Der Bedarf erscheint wieder unter „Zu bestellen“.\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung ist noch nicht angekommen – zurückziehen und löschen (Bedarf kommt zurück)">Bestellung zurückziehen</button></form> ';
+    $zgSperre = ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) ? bestellung_zurueckziehen_grund((int)$id) : '';
+    if ($zgSperre !== '') echo '<button class="btn btn-ghost btn-sm" type="button" disabled title="' . h($zgSperre) . '">Bestellung zurückziehen</button> ';
+    elseif ($b['status'] === 'bestellt' && $posGesamt > 0 && empty($b['angekommen_am'])) echo '<form method="post" style="display:inline" onsubmit="return confirm(\'Bestellung zurückziehen und löschen? Der Bedarf erscheint wieder unter „Zu bestellen“.\');"><input type="hidden" name="aktion" value="zurueck_bedarf"><button class="btn btn-ghost btn-sm" type="submit" style="color:#8f231b" title="Bestellung ist noch nicht angekommen – zurückziehen und löschen (Bedarf kommt zurück)">Bestellung zurückziehen</button></form> ';
     if ($b['status'] === 'offen') {
         require_once BX_ROOT . '/core/lieferant_unterlagen.php';
         $luSperre = lu_bestellen_sperre((int)$id);
