@@ -128,3 +128,5 @@ Gewicht & Bestand pro Gebinde (04.11.2026): `erp_rollen_abbuchen()` bucht alle G
 **Ortszeit (13.11.2026, Fable-3 T1.7):** `erp_mhd_standard()` rechnet ab heute in Europe/Berlin (`heute_ort()`), nicht UTC.
 
 **Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** `erp_produktion_rest()` kennt „Rest storniert“ (`pa_rest_storniert()`).
+
+**Werk-App nur Machbares (13.11.2026, Teil 1):** `erp_dashboard_api($route, $felder)`: eine Stelle für alle Loopback-Aufrufe ans Dashboard (Token einlager_api_token); `erp_fertigware_dokumente_melden()` nutzt sie.

@@ -64,15 +64,44 @@ function erp_wa_aeltere_bulk(int $item_id, int $charge_id, string $mhd): string 
     $x = one("SELECT charge_nr FROM charge WHERE item_id=? AND id<>? AND status='frei' AND menge_verfuegbar>0 AND fremd_kunde_id IS NULL AND mhd IS NOT NULL AND mhd<? ORDER BY mhd LIMIT 1", [$item_id, $charge_id, $mhd]);
     return $x ? (string)$x['charge_nr'] : '';
 }
-// Machbar-Stand aus dem Dashboard (pa_machbar, eine Rechnung) – fehlt er, die eigene Bereitschaft als Rückfall.
+// Machbar FRISCH (13.11.2026, Werk-App Teil 1.5): dieselbe Rechnung wie der Plan – einmal je Seitenaufruf per Loopback ans Dashboard
+// (?p=api_pa_machbar, produktion_machbar_schritte für alle offenen PAs). Ein Wareneingang macht einen PA damit sofort sichtbar.
+// Fällt der Aufruf aus, gilt der zuletzt gespeicherte Stand (pa_machbar).
+function erp_wa_machbar_alle(): array {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = [];
+    $j = erp_dashboard_api('api_pa_machbar', [], 20);
+    if (is_array($j) && !empty($j['ok']) && is_array($j['pa'] ?? null))
+        foreach ($j['pa'] as $id => $m) $cache[(int)$id] = ['machbar' => !empty($m['machbar']), 'stufe' => (string)($m['stufe'] ?? ''), 'grund' => (string)($m['grund'] ?? ''), 'etikett_gesperrt' => !empty($m['etikett_gesperrt'])];
+    return $cache;
+}
+// Machbar-Stand eines PA: frisch (s. o.), sonst pa_machbar, sonst die eigene Bereitschaft als Rückfall.
 function erp_wa_machbar(int $pa_id): array {
+    $frisch = erp_wa_machbar_alle();
+    if (isset($frisch[$pa_id])) return $frisch[$pa_id];
     $m = tabelle_da('pa_machbar') ? one("SELECT * FROM pa_machbar WHERE pa_id=?", [$pa_id]) : null;
     if ($m) return ['machbar' => (int)$m['machbar'] === 1, 'stufe' => (string)$m['stufe'], 'grund' => (string)($m['grund'] ?? ''), 'etikett_gesperrt' => (int)$m['etikett_gesperrt'] === 1];
     $b = erp_pa_bereitschaft($pa_id);
     return ['machbar' => in_array((string)($b['status'] ?? ''), ['bereit', 'laeuft'], true), 'stufe' => (string)($b['status'] ?? ''), 'grund' => '', 'etikett_gesperrt' => erp_etikett_sperre($pa_id) !== ''];
 }
-// Tagesplan für die Werk-App: genau die Reihenfolge aus dem Reiter Plan (plan_sort), laufende zuerst. Nicht machbare grau mit Grund –
-// ist der oberste blockiert, rückt der nächste machbare nach vorne (machbare vor gesperrten, sonst Plan-Reihenfolge).
+// Sieht die Werk-App diesen PA? (13.11.2026, Teil 1) '' = ja, sonst der Grund: 'status' (nicht offen/laufend), 'fertig' (produziert ≥ Soll),
+// 'nicht_machbar' (bleibt nur im Dashboard-Plan grau mit Grund), 'datum' (Plan-Datum liegt in der Zukunft, Europe/Berlin; laufende immer).
+function erp_wa_sichtbar_grund(array $pa, array $m): string {
+    $st = (string)($pa['status'] ?? '');
+    if (!in_array($st, ['offen', 'laufend'], true)) return 'status';
+    if ((float)($pa['menge'] ?? 0) > 0 && (float)($pa['produziert'] ?? 0) + 1e-6 >= (float)$pa['menge']) return 'fertig';
+    if (empty($m['machbar'])) return 'nicht_machbar';
+    $d = (string)($pa['geplant_am'] ?? '');
+    if ($st !== 'laufend' && $d !== '' && $d > heute_ort()) return 'datum';
+    return '';
+}
+function erp_wa_pa_sichtbar(int $pa_id): string {
+    $pa = one("SELECT pa.status, pa.menge, pa.geplant_am, (SELECT COALESCE(SUM(c.menge),0) FROM charge c WHERE c.pa_id=pa.id) AS produziert FROM produktionsauftrag pa WHERE pa.id=?", [$pa_id]);
+    return $pa ? erp_wa_sichtbar_grund($pa, erp_wa_machbar($pa_id)) : 'status';
+}
+// Tagesplan für die Werk-App (13.11.2026, Teil 1): NUR was wirklich produziert werden kann – laufende mit offenem Rest, startklare und
+// „bis vor Etikettieren“, in der Plan-Reihenfolge (plan_sort, dann Datum). Nicht machbare, voll produzierte und künftig geplante nie.
 function erp_wa_tagesplan(): array {
     $hatPlan = erp_spalte_da('produktionsauftrag', 'plan_sort');
     $rows = all("SELECT pa.id, pa.nummer, pa.menge, pa.status, pa.geplant_am, " . ($hatPlan ? "pa.plan_sort, pa.linie," : "NULL AS plan_sort, NULL AS linie,") . " pa.mitarbeiter_id,
@@ -84,11 +113,14 @@ function erp_wa_tagesplan(): array {
                    AND EXISTS (SELECT 1 FROM produktion_schritt s WHERE s.pa_id=pa.id AND s.erledigt=0
                                AND s.station NOT IN ('Qualitätsprüfung','Produktions-Freigabe','Versand-Freigabe'))");   // Produktion fertig, nur noch QM -> nicht mehr im Werk
     $heute = (new DateTime('now', new DateTimeZone('Europe/Berlin')))->format('Y-m-d');
-    foreach ($rows as &$r) { $r['_m'] = erp_wa_machbar((int)$r['id']); $r['_lauf'] = (string)$r['status'] === 'laufend'; $r['_heute'] = (string)($r['geplant_am'] ?? '') !== '' && (string)$r['geplant_am'] <= $heute; }
-    unset($r);
-    usort($rows, fn($a, $b) => [!$a['_lauf'], !$a['_m']['machbar'], $a['plan_sort'] === null, (int)$a['plan_sort'], (string)($a['geplant_am'] ?? '9999'), (int)$a['id']]
-                          <=> [!$b['_lauf'], !$b['_m']['machbar'], $b['plan_sort'] === null, (int)$b['plan_sort'], (string)($b['geplant_am'] ?? '9999'), (int)$b['id']]);
-    return $rows;
+    $sicht = [];
+    foreach ($rows as $r) {
+        $r['_m'] = erp_wa_machbar((int)$r['id']); $r['_lauf'] = (string)$r['status'] === 'laufend'; $r['_heute'] = (string)($r['geplant_am'] ?? '') !== '' && (string)$r['geplant_am'] <= $heute;
+        if (erp_wa_sichtbar_grund($r, $r['_m']) === '') $sicht[] = $r;
+    }
+    usort($sicht, fn($a, $b) => [$a['plan_sort'] === null, (int)$a['plan_sort'], (string)($a['geplant_am'] ?? '9999'), (int)$a['id']]
+                           <=> [$b['plan_sort'] === null, (int)$b['plan_sort'], (string)($b['geplant_am'] ?? '9999'), (int)$b['id']]);
+    return $sicht;
 }
 function erp_wa_tara(): array { return tabelle_da('lg_tara') ? all("SELECT id, name, tara_kg FROM lg_tara WHERE aktiv=1 ORDER BY sort, name") : []; }
 // Kapseln je Packung + Kapsel-Bulk? (Gegenprobe Gläser × Kapseln je Glas gegen Kapselzahl aus dem Sackgewicht.)

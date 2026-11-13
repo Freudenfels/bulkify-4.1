@@ -42,3 +42,5 @@ angemeldeten Nutzers und leitet auf dieselbe URL (GET) zurück. Ändert keine Re
 **api_versand aktion=fertig (11.11.2026):** `ids` (Komma-Liste) -> `{ok, fertig:[ids]}`, welche Aufträge wirklich versandbereit sind (`auftrag_status_kunde`). Für die Lager-App.
 
 **Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** `api_einlager` gibt die Sperre („Es läuft noch die Unter-Charge …“) als Meldung an die Lager-App zurück.
+
+**Werk-App nur Machbares (13.11.2026, Teil 1):** Neuer Loopback `api_pa_machbar` (Token): rechnet `produktion_machbar_schritte()` für alle offenen PAs (speichert pa_machbar) und gibt den Stand als JSON an die Werk-App.

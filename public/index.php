@@ -56,6 +56,25 @@ if (($_GET['p'] ?? '') === 'api_qm_freigabe') {
     exit;
 }
 
+// Loopback-API „Machbar frisch“ (13.11.2026, Werk-App Teil 1): die Werk-App fragt hier den Machbar-Stand aller offenen PAs ab.
+// Gerechnet wird mit DERSELBEN Funktion wie der Plan (produktion_machbar_schritte, speichert auch pa_machbar) – nie ein alter Stand.
+if (($_GET['p'] ?? '') === 'api_pa_machbar') {
+    header('Content-Type: application/json; charset=utf-8');
+    $soll  = trim((string) meta_get('einlager_api_token', ''));
+    $token = (string)($_POST['token'] ?? '');
+    if ($soll === '' || !hash_equals($soll, $token)) { http_response_code(401); echo json_encode(['ok'=>false, 'meldung'=>'Token ungültig.']); exit; }
+    try {
+        require_once BX_ROOT . '/core/produktion_plan.php';
+        $out = [];
+        foreach (all("SELECT id FROM produktionsauftrag WHERE status IN ('offen','laufend')") as $r) {
+            $m = produktion_machbar_schritte((int)$r['id'], true);
+            $out[(int)$r['id']] = ['machbar' => (int)$m['machbar'], 'stufe' => (string)$m['stufe'], 'grund' => (string)$m['grund'], 'etikett_gesperrt' => (int)$m['etikett_gesperrt']];
+        }
+        echo json_encode(['ok' => true, 'pa' => $out]);
+    } catch (\Throwable $e) { http_response_code(500); echo json_encode(['ok' => false, 'meldung' => $e->getMessage()]); }
+    exit;
+}
+
 // Soll-Kette 7: Loopback-API „Versand“ für die Lager-App – das Lager legt Sendungen an, die Buchung macht das Dashboard
 // (Fertigware des Auftrags FEFO ausbuchen, Lieferschein-Beleg, Status, Rechnung bei Lieferung, Kundenmail) bzw. bucht ins Lager 2 um.
 if (($_GET['p'] ?? '') === 'api_versand') {

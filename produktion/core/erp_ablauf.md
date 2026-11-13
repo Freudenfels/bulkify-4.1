@@ -13,3 +13,5 @@ Seit 11.11.2026, Teil 4 von `plan-produktion-gefuehrt.md`.
   - Laufende stehen zuerst, nicht machbare grau mit Grund. So rückt der nächste machbare nach vorne.
   - PAs, bei denen nur noch QM offen ist, erscheinen nicht.
 - `erp_wa_tara()`: Gebindetypen aus `lg_tara`. `erp_wa_kapsel_info()`: Kapseln je Packung.
+
+**Werk-App nur Machbares (13.11.2026, Teil 1):** `erp_wa_machbar_alle()` holt den Machbar-Stand aller offenen PAs frisch per Loopback (`?p=api_pa_machbar`, gleiche Rechnung wie der Plan), Rückfall `pa_machbar`. `erp_wa_sichtbar_grund()` / `erp_wa_pa_sichtbar()`: eine Regel für Liste, Direktaufruf und Buchungs-Sperre ('status', 'fertig', 'nicht_machbar', 'datum'). `erp_wa_tagesplan()` liefert nur sichtbare PAs in Plan-Reihenfolge.

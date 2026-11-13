@@ -28,6 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['werk_fehler'] = $T['pin_wrong']; weiter('?p=werk');
     }
     if ($aktion === 'werk_logout') { unset($_SESSION['werk_uid']); weiter('?p=werk'); }
+    // 13.11.2026 (Teil 1.1): nicht machbare oder erst künftig geplante PAs bucht die Werk-App nie (auch nicht per Direktaufruf).
+    $paPost = (int)($_POST['pa_id'] ?? 0);
+    if ($werkUid && $paPost > 0 && in_array(erp_wa_pa_sichtbar($paPost), ['nicht_machbar', 'datum', 'status'], true)) {
+        $_SESSION['werk_flash'] = $T['wa_not_released']; $_SESSION['werk_flash_ok'] = false; weiter('?p=werk');
+    }
     // Soll-Kette 6: Kartonetiketten drucken (Verpackungsschritt) – Kartonanzahl rechnet das System.
     if ($werkUid && $aktion === 'werk_karton') {
         $paId = (int)($_POST['pa_id'] ?? 0);
@@ -359,6 +364,8 @@ header('Content-Type: text/html; charset=utf-8');
   <?php
     $pa = erp_pa($id);
     if (!$pa) { echo '<div class="panel">' . h($T['order_not_found']) . ' <a class="back" href="?p=werk">' . h($T['back']) . '</a></div></div></body></html>'; return; }
+    // 13.11.2026 (Teil 1.1): Direktaufruf eines nicht machbaren / künftig geplanten PA – nur Meldung, keine Buchung.
+    if (in_array(erp_wa_pa_sichtbar($id), ['nicht_machbar', 'datum', 'status'], true)) { echo '<div class="panel" style="font-size:20px">' . h($T['wa_not_released']) . ' <a class="back" href="?p=werk">' . h($T['back']) . '</a></div></div></body></html>'; return; }
     $schritte = erp_pa_schritte($id);
     $total = count($schritte);
     $fertigCnt = 0; foreach ($schritte as $s) if ((int)$s['erledigt'] === 1) $fertigCnt++;
