@@ -2,6 +2,9 @@
 // Beleg-PDF (Angebot/AB/Rechnung) im bulkify-Layout – portiert aus v3 (bulkify-dashboard-v3/beleg_build.php).
 // Abhängigkeitsfrei über MiniPDF. Firmendaten aus app_meta, Logo aus assets/bulkify-logo.jpg.
 require_once __DIR__ . '/lib/minipdf.php';
+// Fable-4 T4.5 (13.11.2026): gleicher Kunden-Filter wie das Dashboard (core/pdf_beleg.php) – keine Lieferantennamen, kein
+// „Handelsware“, eigene Chargen nur als Grundcharge. Der Filter braucht nur scalar/all (in der Buchhaltung vorhanden).
+if (is_file(__DIR__ . '/../../core/kunde_neutral.php')) require_once __DIR__ . '/../../core/kunde_neutral.php';
 require_once __DIR__ . '/schema.php';
 
 // Firmenstammdaten fürs Dokument (aus den Einstellungen).
@@ -186,13 +189,14 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
         $by = $y + 11;
         $p->text($cPos, $by, (string) $i, 8, false, $INK);
         $p->text($cArt, $by, $p->fit((string) ($pos['artikelnr'] ?? ''), 62, 8, false), 8, false, $INK);
-        $p->text($cBez, $by, $p->fit((string) $pos['bezeichnung'], $bezMax, 9, true), 9, true, $INK);
+        $p->text($cBez, $by, $p->fit(function_exists('kunde_position_text') ? kunde_position_text((string) $pos['bezeichnung']) : (string) $pos['bezeichnung'], $bezMax, 9, true), 9, true, $INK);   // Fable-4 T4.5
         $p->textRight($cMengeR, $by, beleg_num((float) $pos['menge']), 8, false, $INK);
         $p->text($cEinh, $by, $p->fit((string) ($pos['einheit'] ?? ''), $einhW, 8, false), 8, false, $INK);
         $p->textRight($cPreisR, $by, beleg_eur((int) $pos['preis_cent'], ''), 8, false, $INK);
         $p->textRight($cGesR, $by, beleg_eur((int) ($pos['gesamt_cent'] ?? round((float)$pos['menge']*(int)$pos['preis_cent'])), ''), 9, true, $INK);
         $y += 15;
         $besch = trim((string) ($pos['beschreibung'] ?? ''));
+        if (function_exists('kunde_position_text')) $besch = kunde_position_text($besch);   // Fable-4 T4.5
         if ($besch !== '') {
             foreach (array_slice(preg_split('/\r?\n/', $besch), 0, 12) as $bl) {
                 $bl = trim($bl); if ($bl === '') continue;
@@ -282,7 +286,7 @@ function build_beleg_pdf(array $b, array $positionen, array $produktStaffel = []
             $sum = 0.0;
             foreach ($zut as $z) {
                 if ($y > 790) { $p->addPage(); $y = 54; }
-                $p->text($L, $y + 8, $p->fit((string) ($z['bezeichnung'] ?? ''), 410, 9, false), 9, false, $INK);
+                $p->text($L, $y + 8, $p->fit(function_exists('kunde_text_neutral') ? kunde_text_neutral((string) ($z['bezeichnung'] ?? '')) : (string) ($z['bezeichnung'] ?? ''), 410, 9, false), 9, false, $INK);
                 $p->textRight($R, $y + 8, beleg_num((float) ($z['menge_mg'] ?? 0)) . ' mg', 9, false, $INK);
                 $sum += (float) ($z['menge_mg'] ?? 0);
                 $y += 12; $p->line($L, $y, $R, $y, 0.3, $LINE);
