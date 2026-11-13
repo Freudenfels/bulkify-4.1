@@ -45,16 +45,17 @@ if ($zeigeArchiv) {
 </form>
 <div class="bx-panel">
   <div class="bx-tablewrap"><table class="bx-table">
-    <thead><tr><th>Titel</th><th>Bezug</th><th>Erstellt am</th><th>Erledigt am</th><th>Erledigt von</th></tr></thead>
+    <thead><tr><th>Titel</th><th>Bezug</th><th>Erstellt</th><th>Erledigt</th><th>von</th></tr></thead>
     <tbody>
     <?php if (!$archiv): ?><tr><td colspan="5" class="muted"><?= $such !== '' ? 'Nichts gefunden.' : 'Noch keine erledigten Aufgaben.' ?></td></tr><?php endif; ?>
     <?php foreach ($archiv as $a): $bz = aufgabe_bezug((string)$a['ref_typ'], (int)$a['ref_id']); ?>
       <tr>
-        <td><a href="?p=aufgabe&amp;id=<?= (int)$a['id'] ?>&amp;von=archiv"><?= h((string)$a['titel']) ?></a></td>
-        <td><?= $bz ? '<a href="' . h($bz['href']) . '">' . h($bz['text']) . '</a>' : '<span class="muted">–</span>' ?></td>
-        <td style="white-space:nowrap"><?= $a['angelegt'] ? h(fmt_zeit($a['angelegt'], 'd.m.Y')) : '–' ?></td>
-        <td style="white-space:nowrap"><?= $a['erledigt_am'] ? h(fmt_zeit($a['erledigt_am'], 'd.m.Y H:i')) : '–' ?></td>
-        <td><?= $a['erledigt_name'] ? h((string)$a['erledigt_name']) : '<span class="muted">–</span>' ?></td>
+        <?php /* Fable-5 T4.3 (D1): Titel mit fester Breite und Lauftext, übrige Spalten schmal und immer sichtbar */ ?>
+        <td><a class="bx-lauf" style="max-width:clamp(110px, 34vw, 560px)" href="?p=aufgabe&amp;id=<?= (int)$a['id'] ?>&amp;von=archiv"><?= h((string)$a['titel']) ?></a></td>
+        <td><?= $bz ? '<a class="bx-lauf" style="max-width:clamp(70px, 16vw, 200px)" href="' . h($bz['href']) . '">' . h($bz['text']) . '</a>' : '<span class="muted">–</span>' ?></td>
+        <td style="white-space:nowrap"><?= $a['angelegt'] ? h(fmt_zeit($a['angelegt'], 'd.m.y')) : '–' ?></td>
+        <td style="white-space:nowrap"><?= $a['erledigt_am'] ? h(fmt_zeit($a['erledigt_am'], 'd.m.y H:i')) : '–' ?></td>
+        <td><span class="bx-lauf" style="max-width:clamp(60px, 14vw, 180px)"><?= $a['erledigt_name'] ? h((string)$a['erledigt_name']) : '<span class="muted">–</span>' ?></span></td>
       </tr>
     <?php endforeach; ?>
     </tbody>

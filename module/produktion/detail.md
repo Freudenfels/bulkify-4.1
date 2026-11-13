@@ -213,3 +213,6 @@ Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuc
 
 ## Nachbesserung Fable-5 (13.11.2026): Buchen einer KI-Karte
 `aktion=nachtragen` mit `ki_karte`: Karte aus der Sitzung, `pki_buchen_pruefen()` (sonst Rückweisung mit Grund), KI-Vermerk geht als Option `ki_vermerk` in `pa_nachtrag_buchen()` (steht damit im abgelegten Chargenprotokoll), Verlauf am Auftrag, Karte gelöscht. „Unveränderter Vorschlag“ wird tolerant verglichen (`pa_charge_abweichend`).
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Symbole ✓/✗/▶/○/↗ als SVG (`bx_sym`); God-Mode-Kasten eingeklappt (`details`) und ganz unten auf der Seite; Laufzettel-Knopf gleich hoch wie die anderen.

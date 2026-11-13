@@ -1565,13 +1565,13 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
 ?>
 <div class="bx-panel">
   <h2 style="margin:0 0 10px">Übersicht <?= $offen ? bx_badge($offen . ' mit Treffern', 'warn') : bx_badge('alles unauffällig', 'ok') ?></h2>
-  <div class="bx-tablewrap"><table class="bx-table">
+  <div class="bx-tablewrap"><table class="bx-table bx-karten-handy"><?php /* Fable-5 T4.2 (D9): Titel umbrechen, am Handy Karten */ ?>
     <thead><tr><th>Prüfung</th><th>Treffer</th><th>Korrektur</th></tr></thead>
     <tbody>
     <?php foreach ($CHECKS as $k => $c): $n = count($ERG[$k]['rows']); $leerOk = $c['leer_ok'] ?? true;
         $kind = $ERG[$k]['fehler'] !== '' ? 'err' : (($leerOk ? $n > 0 : $n === 0) ? 'warn' : 'ok'); ?>
       <tr>
-        <td><a href="#<?= h($k) ?>"><?= h($c['titel']) ?></a></td>
+        <td style="white-space:normal;min-width:280px;max-width:640px"><a href="#<?= h($k) ?>"><?= h($c['titel']) ?></a></td>
         <td><?= !empty($ERG[$k]['nicht_geladen']) ? '<a href="?p=datenpruefung&laden=' . h($k) . '#' . h($k) . '">auf Klick prüfen</a>' : ($ERG[$k]['fehler'] !== '' ? bx_badge('Fehler', 'err') : bx_badge(number_format($n, 0, ',', '.'), $kind)) ?></td>
         <td class="muted"><?= !empty($c['fixes']) ? count($c['fixes']) . ' Knöpfe' : (!empty($c['fix']) ? 'Beheben-Knopf' : 'nur Anzeige') ?></td>
       </tr>
@@ -1617,7 +1617,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
   <?php endif; ?>
   <form method="post" style="margin:0" onsubmit="var n=this.querySelectorAll('input[name=&quot;ids[]&quot;]:checked').length; if(!n){alert('Bitte zuerst Zeilen anhaken.');return false;} return confirm(n+' Zeile(n) beheben? Ausgeführt wird genau die unten angezeigte Korrektur, nur für die angehakten Zeilen. Jede Feld-Änderung landet im Protokoll.');">
     <input type="hidden" name="aktion" value="beheben"><input type="hidden" name="pruefung" value="<?= h($k) ?>">
-    <div class="bx-tablewrap"><table class="bx-table">
+    <div class="bx-tablewrap"><table class="bx-table bx-karten-handy">
       <thead><tr>
         <?php if ($fix): ?><th style="width:28px"><?php if ($waehlbarN): ?><input type="checkbox" title="alle" onclick="this.closest('table').querySelectorAll('input[name=&quot;ids[]&quot;]').forEach(x=>x.checked=this.checked)"><?php endif; ?></th><?php endif; ?>
         <?php foreach ($spalten as $s): ?><th><?= dp_kopf($s) ?></th><?php endforeach; ?>
@@ -1627,7 +1627,7 @@ if (isset($_GET['err'])) echo '<div class="bx-panel" style="border-color:#e6c4c0
       <?php foreach ($rows as $r): ?>
         <tr data-dp-zeile="<?= h($k) ?>-<?= (int)($r['_id'] ?? 0) ?>" style="vertical-align:top">
           <?php if ($fix): ?><td><?php if (!isset($fix['waehlbar']) || ($fix['waehlbar'])($r)): ?><input type="checkbox" name="ids[]" value="<?= (int)$r['_id'] ?>"><?php endif; ?></td><?php endif; ?>
-          <?php foreach ($spalten as $s): $lz = $r['_link_' . $s] ?? null; ?><td<?= isset($c['html'][$s]) ? ' style="white-space:normal;min-width:' . (['vorschlaege' => 360, 'inhalt' => 220, 'aktionen' => 170][$s] ?? 0) . 'px"' : '' ?>><?= isset($c['html'][$s]) ? ($c['html'][$s])($r) : ($lz && $r[$s] !== null && $r[$s] !== '' ? '<a href="' . h((string)$lz) . '">' . dp_wert($s, $r[$s]) . '</a>' : dp_wert($s, $r[$s])) ?></td><?php endforeach; ?>
+          <?php foreach ($spalten as $s): $lz = $r['_link_' . $s] ?? null; ?><td<?= isset($c['html'][$s]) ? ' style="white-space:normal;min-width:' . (['vorschlaege' => 360, 'inhalt' => 220, 'aktionen' => 170][$s] ?? 0) . 'px"' : '' ?>><?= isset($c['html'][$s]) ? ($c['html'][$s])($r) : '<span class="bx-lauf" style="max-width:220px">' . ($lz && $r[$s] !== null && $r[$s] !== '' ? '<a href="' . h((string)$lz) . '">' . dp_wert($s, $r[$s]) . '</a>' : dp_wert($s, $r[$s])) . '</span>' ?></td><?php endforeach; /* Fable-5 T4.1: lange Werte mit Lauftext, Tabelle passt aufs Feld */ ?>
           <?php if ($hatLink): ?><td><?= !empty($r['_link']) ? '<a href="' . h((string)$r['_link']) . '">Öffnen</a>' : '' ?></td><?php endif; ?>
         </tr>
       <?php endforeach; ?>

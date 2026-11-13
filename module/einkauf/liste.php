@@ -106,12 +106,13 @@ $offenCell = function($r) {
 };
 // Inhalt: ein Produkt -> Name + Menge; mehrere -> „N Positionen" + Namensliste (verschiedene, gekürzt).
 $inhalt = function($r) use ($mfmt) {
+    // Fable-5 T4.1 (D2): Inhalt mit fester Breite und Lauftext – die Tabelle bleibt auf Feldbreite.
     if ((int)$r['pos_anz'] <= 1)
-        return h((string)$r['erstes']) . ' <span class="muted">· ' . $mfmt($r['einzel_menge']) . ' ' . h((string)$r['einzel_einheit']) . '</span>';
+        return '<div class="bx-lauf" style="max-width:240px">' . h((string)$r['erstes']) . ' <span class="muted">· ' . $mfmt($r['einzel_menge']) . ' ' . h((string)$r['einzel_einheit']) . '</span></div>';
     $namen = array_values(array_unique($r['produkte']));
     $kurz = array_slice($namen, 0, 4);
     $liste = implode(' · ', array_map('h', $kurz)) . (count($namen) > 4 ? ' …' : '');
-    return '<strong>' . (int)$r['pos_anz'] . ' Positionen</strong><div class="muted" style="font-size:12px;margin-top:2px">' . $liste . '</div>';
+    return '<strong>' . (int)$r['pos_anz'] . ' Positionen</strong><div class="muted bx-lauf" style="font-size:12px;margin-top:2px;max-width:240px">' . $liste . '</div>';
 };
 
 $cols = [
@@ -120,8 +121,10 @@ $cols = [
         $n  = count($r['bulk_basis']);
         // Paket 12.11.2026 Teil 4: offene Bestellung, aber Unterlagen des Lieferanten fehlen (Liste an der Bestellung).
         $luF = (!in_array((string)$r['status'], ['geliefert', 'storniert'], true) && (int)($r['lieferant_id'] ?? 0) > 0) ? lu_bestellung_fehlt((int)$r['id']) : [];
-        return $nr . ($n >= 2 ? ' ' . bx_badge('Bündel: ' . $n . ' Produkte', 'warn') : '')
-             . ($luF ? ' <a href="?p=bestellung&id=' . (int)$r['id'] . '#unterlagen" onclick="event.stopPropagation()" title="' . h(lu_liste_text($luF)) . '">' . bx_badge('Unterlagen fehlen', 'warn') . '</a>' : '');
+        // Fable-5 T4.4 (D3): Badges UNTER der Nummer (lagen am Handy darüber)
+        $bd = ($n >= 2 ? bx_badge('Bündel: ' . $n . ' Produkte', 'warn') . ' ' : '')
+            . ($luF ? '<a href="?p=bestellung&id=' . (int)$r['id'] . '#unterlagen" onclick="event.stopPropagation()" title="' . h(lu_liste_text($luF)) . '">' . bx_badge('Unterlagen fehlen', 'warn') . '</a>' : '');
+        return $nr . ($bd !== '' ? '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">' . $bd . '</div>' : '');
     }],
     'auftrag'         => ['label'=>'Auftrag', 'render'=>fn($r)=> $r['auftraege'] ? implode(', ', array_map(fn($aid, $anr) => '<a href="?p=auftrag&id=' . (int)$aid . '" onclick="event.stopPropagation()">' . h($anr !== '' ? $anr : '#' . $aid) . '</a>', array_keys($r['auftraege']), $r['auftraege'])) : '<span class="muted">Lager</span>'],
     'lieferant_firma' => ['label'=>'Lieferant', 'sort'=>true, 'render'=>fn($r)=> $r['lieferant_firma'] !== '' ? h($r['lieferant_firma']) : '<span class="muted">extern</span>'],

@@ -20,3 +20,6 @@
 - **Archiv** (`?p=aufgaben&zeige=archiv`, alter Link `zeige=erledigt` landet auch hier): nur lesen, schlichte Tabelle Titel (Link zur Detailseite mit `von=archiv`) · Bezug (`aufgabe_bezug()`, Auftrag/PA/Bestellung/Artikel als Link) · erstellt am · erledigt am · erledigt von. Neueste oben, Suchfeld (Titel, Text, erledigt von), höchstens 500 Zeilen.
 
 **13.11.2026 (Paket Teil 2):** Dringlichkeit dringend/normal/später (Auswahl „Dringlichkeit“), Sortierung dringend → normal → später, darin älteste zuerst. Knopf „Öffnen“ führt direkt zum Ziel (`aufgabe_ziel()`). Route für alle Team-Rollen (`*`).
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Archiv: Titel mit fester Breite und Lauftext, Bezug und „von“ ebenso; Datumsspalten kurz (TT.MM.JJ) – alle Spalten bleiben sichtbar, auch am Handy.

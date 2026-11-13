@@ -97,3 +97,6 @@ Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App,
 - **Laufend (T2.1):** laufende PAs sind nie grau; fehlt Material für den Rest, steht „Läuft weiter – Material für den Rest fehlt: …“ rot auf der Karte.
 - **Fertig-Ansicht:** nach dem letzten Schritt (Status erledigt) wird die Seite wieder gezeigt statt „Nicht freigegeben“.
 - **Stand von HH:MM (T2.5):** Hinweis oben im Tagesplan, wenn die Machbar-Rechnung nicht erreichbar war.
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Kopf einzeilig: Logo, Sprache, Name, Abmelden als Symbol (44 px Tippfläche); am Handy kleinere Sprachknöpfe und gekürzter Name.

@@ -38,3 +38,8 @@ Neben „Preis ab“ steht unsere Mindestmenge (`item.moq_menge` + Einheit), die
 
 ## Preis-Anzeige (13.11.2026)
 EK-Spalten über `preis_anzeige()`: unter 0,01 € als „x,xx € / 1.000 <Einheit>“, sonst bis 4 Stellen.
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+- **100 Zeilen je Seite** mit Blättern (Zurück/Weiter, Seitenzahlen), Filter und Sortierung bleiben erhalten; die Suche (`q`) läuft serverseitig über alle Seiten (Name, Art.-Nr., Synonyme), das Tippen filtert die aktuelle Seite sofort.
+- Spalten zusammengefasst: „Preis ab · MOQ“, „Lager · Bedarf“, „Art · Form“; Status nur bei „Inaktive anzeigen“.
+- Marken Spec/CoA/Lief. kräftiger (vorhanden grün fett, fehlt grau durchgestrichen, Kontrast ≥ 4,5 : 1).

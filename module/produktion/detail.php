@@ -440,11 +440,13 @@ if (has_role('admin') && !empty($pa['auftrag_id']) && ($pa['auftrag_status'] ?? 
   </div>
 <?php endif;
 // God-Mode (nur Admin): Produktion auf eine Stufe setzen – Gate überspringen, ohne Bestandsprüfung/-buchung.
+// Fable-5 T4.10 (D19): eingeklappt und ganz unten auf der Seite (vorher oben vor den Daten) – Ausgabe gepuffert, am Seitenende gezeigt.
+ob_start();
 if (has_role('admin')):
     $godSchritte = all("SELECT id, station, erledigt FROM produktion_schritt WHERE pa_id=? ORDER BY sort, id", [$id]);
     if ($godSchritte): ?>
-  <div class="bx-panel" style="border-left:3px solid var(--warn)">
-    <div style="font-weight:600">God-Mode (Admin): Produktion auf Stufe setzen</div>
+  <details class="bx-panel" style="border-left:3px solid var(--warn)">
+    <summary style="cursor:pointer" class="muted">God-Mode (Admin): Produktion auf Stufe setzen</summary>
     <div class="muted" style="font-size:13px;margin:4px 0 10px">Setzt die Produktion auf die gewählte Stufe und überspringt den Gate/„Zaun" (z.&nbsp;B. „kein Glas da") – <strong>ohne Bestandsprüfung, ohne Abbuchung, ohne Lager-Übergabe</strong>. Für Fälle, in denen du den echten Bestand (Gläser/Kapseln) nicht verbrauchen willst. Klick auf eine Stufe = alle Schritte bis dorthin gelten als erledigt, der Rest als offen.</div>
     <div class="bx-row" style="gap:6px;flex-wrap:wrap;align-items:center">
       <form method="post" style="margin:0" onsubmit="return confirm('Alle Schritte wieder auf OFFEN setzen?');"><input type="hidden" name="aktion" value="godmode_stufe"><input type="hidden" name="schritt" value="0"><button class="btn btn-ghost btn-sm" type="submit">Anfang (alles offen)</button></form>
@@ -456,8 +458,8 @@ if (has_role('admin')):
         </form>
       <?php endforeach; ?>
     </div>
-  </div>
-<?php endif; endif; ?>
+  </details>
+<?php endif; endif; $godModeHtml = (string) ob_get_clean(); ?>
 <?php
 // Nachbuchen „komplett versendet" (nur Admin): Auftrag ist versendet, aber Rest nicht eingebucht / Fertigware noch im Lager.
 // Auch wenn der Auftrag wieder auf „In Produktion“ gestellt wurde: Produktion fertig abgehakt, aber Rest nie eingebucht.
@@ -691,7 +693,7 @@ ob_start(); ?>
     ?>
       <tr<?= $isNext ? ' style="background:var(--panel-2)"' : '' ?>>
         <td style="width:44px;text-align:center;font-size:18px">
-          <?= $isDone ? '<span class="bx-ok">&#10003;</span>' : ($isNext ? '&#9654;' : '<span class="muted">&#9675;</span>') ?>
+          <?= $isDone ? '<span class="bx-ok">' . bx_sym('ok', 'erledigt') . '</span>' : ($isNext ? '<span style="color:var(--gruen)">' . bx_sym('weiter', 'als Nächstes') . '</span>' : '<span class="muted">' . bx_sym('offen', 'offen') . '</span>') ?>
         </td>
         <td>
           <strong<?= $isDone ? '' : ($isNext ? '' : ' class="muted"') ?>><?= h($s['station']) ?></strong>
@@ -738,8 +740,8 @@ ob_start(); ?>
           <form method="post" style="margin:0;display:flex;gap:4px;align-items:center">
             <input type="hidden" name="aktion" value="charge_edit"><input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
             <input type="text" name="charge_nr" value="<?= h($c['charge_nr']) ?>" style="width:120px;padding:3px 6px" title="Chargennummer bearbeiten">
-            <button class="btn btn-ghost btn-sm" type="submit" title="Chargennummer speichern">✓</button>
-            <a class="btn btn-ghost btn-sm" href="?p=chargen&id=<?= (int)$c['id'] ?>" title="Charge öffnen">↗</a>
+            <button class="btn btn-ghost btn-sm" type="submit" title="Chargennummer speichern"><?= bx_sym('ok', 'speichern') ?></button>
+            <a class="btn btn-ghost btn-sm" href="?p=chargen&id=<?= (int)$c['id'] ?>" title="Charge öffnen"><?= bx_sym('oeffnen', 'Charge öffnen') ?></a>
           </form>
         </td>
         <td><?= number_format((float)$c['menge'],0,',','.') ?></td>
@@ -902,7 +904,7 @@ if ($bedarfListe):
       <?php foreach ($bedarfListe as $r): $fehlt = (float)$r['fehlt']; $res = (float)($r['reserviert_eigen'] ?? 0); $ok = $fehlt <= 1e-6;
             $tint = $ok ? 'rgba(29,158,117,.08)' : 'rgba(143,35,27,.08)'; ?>
         <tr style="background:<?= $tint ?>">
-          <td style="text-align:center;font-size:16px"><?= $ok ? '<span class="bx-ok">&#10003;</span>' : '<span style="color:#8f231b">&#10007;</span>' ?></td>
+          <td style="text-align:center;font-size:16px"><?= $ok ? '<span class="bx-ok">' . bx_sym('ok', 'reicht') . '</span>' : '<span style="color:#8f231b">' . bx_sym('nein', 'fehlt') . '</span>' ?></td>
           <td><?php $mIid = (int)($r['item_id'] ?? 0); $mLink = $mIid > 0 ? $mIid : pa_material_bulk_item((int)($pa['produkt_id'] ?? 0)); ?>
             <?= item_link_html($mLink, (string)$r['name']) ?>
             <?php foreach (pa_material_bestellungen((int)($pa['auftrag_id'] ?? 0), $mIid, (int)($pa['produkt_id'] ?? 0)) as $mB) echo pa_material_bestellung_html($mB); ?></td>
@@ -1054,4 +1056,5 @@ $grpRest = trim($panWareneingaenge . $panEtikett . $panDetails);
 if ($grpRest !== '') {
     echo '<details class="bx-sek"><summary>Wareneingänge, Etikett &amp; Details</summary>' . $grpRest . '</details>';
 }
+echo $godModeHtml ?? '';   // God-Mode eingeklappt ganz unten (Fable-5 T4.10)
 render_footer();

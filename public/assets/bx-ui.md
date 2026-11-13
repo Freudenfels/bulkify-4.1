@@ -17,3 +17,6 @@ Ein gemeinsamer Baustein für alle Programme (Dashboard, Kunden- und Lieferanten
 **Gewichte (13.11.2026):** `start()` lädt `bx-gewicht.js` nach (Rückfrage bei „1.250“ in Feldern mit `data-gewicht`).
 
 **Pflichtfelder (13.11.2026):** `start()` lädt `bx-pflicht.js`, wenn die Seite `data-pflicht` hat.
+
+## Nachbesserung Fable-5 (13.11.2026)
+Lädt zusätzlich `bx-datei.js`, wenn die Seite ein Datei-Feld oder eine Tabelle `bx-karten-handy` enthält.

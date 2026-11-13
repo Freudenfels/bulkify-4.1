@@ -47,7 +47,7 @@ bx_head('Dashboard', 'Überblick über den laufenden Betrieb');
 // Kennzahlen
 function kachel(string $k, $v, string $href, string $farbe = ''): void {
     echo '<a class="bx-card" style="text-decoration:none;min-width:150px" href="' . h($href) . '">'
-       . '<div class="k">' . h($k) . '</div><div class="v" style="' . $farbe . '">' . $v . '</div></a>';
+       . '<div class="k">' . h($k) . '</div><div class="v" style="' . $farbe . '">' . (is_int($v) ? number_format($v, 0, ',', '.') : $v) . '</div></a>';   // Fable-5 T4.6: Tausenderpunkt (1.620)
 }
 echo '<div class="bx-cards">';
 kachel('Neue Anfragen', $anfragen_neu ?: '<span class="muted">0</span>', '?p=anfragen', $anfragen_neu ? 'color:var(--info)' : '');

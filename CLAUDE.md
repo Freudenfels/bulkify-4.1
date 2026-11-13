@@ -49,6 +49,9 @@ Ein Baustein: `public/assets/bx-ui.js` (in allen Layouts eingebunden). Details: 
 2. **Auswahl mit Suche:** jedes `<select>` mit mehr als 10 Einträgen automatisch (`public/assets/bx-rscombo.js`); Synonyme/Nummern über `data-such` an der Option.
 3. **Lange Texte laufen:** einzeilig mit „…“ (`.bx-lauf`, in `bx_table()` automatisch für Namens-Spalten), beim Darüberfahren/Antippen Lauftext.
 4. **Pflichtfelder (13.11.2026):** Pflichtfelder mit Sternchen, Prüfung vor dem Absenden, bei Fehlern nie Eingaben verlieren. Baustein `data-pflicht` (`public/assets/bx-pflicht.js`, lädt `bx-ui.js`): `data-pflicht` = immer, `data-pflicht="#feld=wert1,wert2"` bzw. `"#haken:checked"` = abhängig; fehlt etwas, wird nicht gesendet, das Feld wird rot mit „… fehlt“. Lehnt der Server ab: Seite mit allen Eingaben zurück (kein Redirect ohne Daten), Feld mit `class="bx-pflicht-fehlt" data-pflicht-msg="…"`.
+5. **Knöpfe und Tippflächen (Fable-5, 13.11.2026):** im ganzen System nur **zwei Knopfgrößen** – normal (`.btn`, 36 px) und klein (`.btn-sm`, 30 px), keine eigenen Höhen per `style`. Am Handy (bis 860 px) sind Knöpfe, Menüzeilen und Glocke **mindestens 44 px** hoch (CSS in `app.css`).
+6. **Handy ohne seitliches Scrollen:** Die Seite ist am Handy nie breiter als der Bildschirm (390 px). Tabellen stehen in `.bx-tablewrap` (eigener Scroll-Rahmen) oder werden mit `class="bx-table bx-karten-handy"` am Handy als Karten je Zeile gezeigt (Beschriftung setzt `bx-datei.js`). Kacheln (`.bx-cards`) am Handy 2 je Zeile.
+7. **Datei-Felder:** rohe `<input type="file">` bekommen automatisch den Knopf „Datei wählen“ im bulkify-Stil (`bx-datei.js`). **Dunkler Modus:** Badges und Hinweise mit dunklem Grund und farbiger Schrift, Kontrast mindestens 4,5 : 1; Symbole ✓/✗ als SVG (`bx_sym()`), nicht als Schriftzeichen.
 
 ## Git-Rhythmus (Multi-PC & parallele Code-Chats)
 Pull am Start, commit+push nach jedem **fertigen, getesteten** Schritt. Einzige gemeinsame Wahrheit = GitHub.

@@ -27,10 +27,15 @@ render_header('apps', 'Apps');
 bx_head('Apps', 'bulkify-Programme öffnen und als App auf Rechner, Tablet oder Handy installieren');
 ?>
 <style>
-  .ap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--sp-4)}
-  .ap-karte{display:flex;flex-direction:column;gap:10px}
-  .ap-kopf{display:flex;gap:14px;align-items:flex-start;justify-content:space-between}
-  .ap-qr{flex:0 0 auto;background:#fff;padding:4px;border-radius:8px;line-height:0}
+  /* Fable-5 T4.11 (D20): Karten gleich hoch (Raster mit gleicher Zeilenhöhe), QR-Code mit festem Platz (120 px), nie über den Rand */
+  .ap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));grid-auto-rows:1fr;gap:var(--sp-4)}
+  .ap-karte{display:flex;flex-direction:column;gap:10px;margin:0;min-width:0;height:100%;box-sizing:border-box}
+  .ap-karte > .bx-row{margin-top:auto}
+  .ap-kopf{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:14px;align-items:start}
+  .ap-kopf > div:first-child{min-width:0;overflow-wrap:anywhere}
+  .ap-qr{width:120px;height:120px;box-sizing:border-box;background:#fff;padding:4px;border-radius:8px;line-height:0;overflow:hidden}
+  .ap-qr svg{width:112px;height:112px;display:block}
+  @media (max-width:420px){.ap-kopf{grid-template-columns:minmax(0,1fr) 96px}.ap-qr{width:96px;height:96px}.ap-qr svg{width:88px;height:88px}}
   .ap-hilfe{font-size:13px}
   .ap-hilfe summary{cursor:pointer}
   .ap-hilfe ul{margin:6px 0 0 18px;padding:0}

@@ -51,6 +51,15 @@ if (!bx_inaktiv_an()) { $vor = count($rows); $rows = array_values(array_filter($
 // Art-/Form-Filter (serverseitig, wie kat/fehlt). Greift für Rohstoffe; bei Leerkapseln ohne Wirkung.
 if ($artF !== '')  $rows = array_values(array_filter($rows, fn($r) => (string)($r['art'] ?? '') === $artF));
 if ($formF !== '') $rows = array_values(array_filter($rows, fn($r) => (string)($r['form'] ?? '') === $formF));
+// Fable-5 T4.8 (D17): Suche serverseitig über alle Seiten (Name, Art.-Nr., lateinischer Name …), danach 100 Zeilen je Seite.
+if ($q !== '') {
+    $qq = mb_strtolower($q);
+    $rows = array_values(array_filter($rows, function ($r) use ($qq) {
+        foreach (['name', 'artikelnummer', 'synonym', 'synonyme', 'latein', 'name_latein', 'inci'] as $f)
+            if (isset($r[$f]) && $r[$f] !== null && mb_strpos(mb_strtolower((string)$r[$f]), $qq) !== false) return true;
+        return false;
+    }));
+}
 
 // Kapselgrößen-Namen für die Leerkapsel-Sicht
 $KGMAP = [];
@@ -121,6 +130,13 @@ if ($fehlt !== '' && !$istKapsel) {
         };
     });
 }
+// Fable-5 T4.8 (D17): 100 Zeilen je Seite (vorher alle 1.691 mit rund 1.700 Knöpfen auf einmal).
+$ROH_JE_SEITE = 100;
+$rows = array_values($rows);
+$rohGesamt = count($rows);
+$rohSeiten = max(1, (int) ceil($rohGesamt / $ROH_JE_SEITE));
+$rohSeite = min($rohSeiten, max(1, (int)($_GET['seite'] ?? 1)));
+$rows = array_slice($rows, ($rohSeite - 1) * $ROH_JE_SEITE, $ROH_JE_SEITE);
 // „Preis ab": günstigster bekannter EK (eigener EK vs. Lieferanten-EK), in der Einheit des Items.
 $preisAb = function ($r) use ($liefMin, $liefAbg) {
     $min = (float)$r['ek_preis'];
@@ -132,9 +148,10 @@ $preisAb = function ($r) use ($liefMin, $liefAbg) {
          . ($abg !== '' ? ' <span class="badge badge-err" title="Preis abgelaufen - Summe unsicher">abgelaufen seit ' . h(date('d.m.Y', strtotime($abg))) . '</span>' : '');
 };
 // Kompakte Verfügbarkeits-Marker: grün = vorhanden, grau = nicht.
-$verfTok = fn($label, $on) => '<span style="font-size:12px;' . ($on ? 'color:var(--gruen);font-weight:600' : 'color:#bbb') . '">' . $label . '</span>';
-$verf = fn($r) => $verfTok('Spec', isset($specSet[(int)$r['id']])) . ' <span style="color:#ddd">·</span> '
-                . $verfTok('CoA', isset($coaSet[(int)$r['id']])) . ' <span style="color:#ddd">·</span> '
+// Fable-5 T4.7 (D17): kräftigere Marken (Kontrast ≥ 4,5 : 1) – vorhanden grün und fett, fehlt grau durchgestrichen.
+$verfTok = fn($label, $on) => '<span class="' . ($on ? 'bx-mark-ja' : 'bx-mark-nein') . '" title="' . h($label . ($on ? ' vorhanden' : ' fehlt')) . '">' . $label . '</span>';
+$verf = fn($r) => $verfTok('Spec', isset($specSet[(int)$r['id']])) . ' <span class="muted">·</span> '
+                . $verfTok('CoA', isset($coaSet[(int)$r['id']])) . ' <span class="muted">·</span> '
                 . $verfTok('Lief.', isset($liefSet[(int)$r['id']]));
 
 // Bedarf (aus offenen Produktionsaufträgen) + Lagerbestand je Rohstoff – für die Spalten „Bedarf"/„Auf Lager".
@@ -170,18 +187,16 @@ $cols = [
     // Anzeige = VOLLSTÄNDIGER Name wie beim Kunden (rohstoff_anzeige_name: inkl. Beschaffenheit „Extrakt" + DEV
     // „20:1"), damit die Live-Suche denselben Namen findet, den der Kunde sieht (sucht über den Zeilentext).
     'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> h(rohstoff_anzeige_name($r))],   // lange Namen: „…“ + Lauftext (bx_table, 13.11.2026)
-    'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
-    'moq_menge'     => ['label' => 'MOQ', 'sort' => true, 'num' => true, 'render' => fn($r) => (float)($r['moq_menge'] ?? 0) > 0
-                        ? '<span' . (trim((string)($r['moq_notiz'] ?? '')) !== '' ? ' title="' . h((string)$r['moq_notiz']) . '"' : '') . '>' . h(moq_zahl((float)$r['moq_menge']) . ' ' . ($r['moq_einheit'] ?: 'kg')) . '</span>'
-                        : '<span class="muted">–</span>'],
-    'bedarf'        => ['label' => 'Bedarf', 'num' => true, 'render' => function($r) use ($bedarfMap, $mgMenge) {
-        $n = $bedarfMap[(int)$r['id']] ?? 0;
-        return $n > 0 ? '<strong>' . $mgMenge($n) . '</strong> ' . h((string)($r['einheit'] ?? '')) : '<span class="muted">–</span>'; }],
-    'bestand'       => ['label' => 'Auf Lager', 'num' => true, 'render' => function($r) use ($bestandMap, $mgMenge) {
-        $b = $bestandMap[(int)$r['id']] ?? 0;
-        return $b > 0 ? $mgMenge($b) . ' ' . h((string)($r['einheit'] ?? '')) : '<span class="muted">0</span>'; }],
-    'art'           => ['label' => 'Art', 'sort' => true, 'render' => fn($r) => ($ART[$r['art'] ?? ''] ?? '') !== '' ? h($ART[$r['art']]) : '<span class="muted">–</span>'],
-    'form'          => ['label' => 'Form', 'sort' => true, 'render' => fn($r)=> h($FORM[$r['form']] ?? $r['form'])],
+    // Fable-5 T4.1 (D17): Spalten zusammengefasst, damit die Tabelle aufs Feld passt – MOQ unter dem Preis, Bedarf/Lager in einer
+    // Spalte, Art und Form in einer Spalte.
+    'ek_preis'      => ['label' => 'Preis ab · MOQ', 'sort' => true, 'num' => true, 'render' => fn($r) => $preisAb($r) . ((float)($r['moq_menge'] ?? 0) > 0
+                        ? '<div class="muted" style="font-size:12px"' . (trim((string)($r['moq_notiz'] ?? '')) !== '' ? ' title="' . h((string)$r['moq_notiz']) . '"' : '') . '>MOQ ' . h(moq_zahl((float)$r['moq_menge']) . ' ' . ($r['moq_einheit'] ?: 'kg')) . '</div>' : '')],
+    'bestand'       => ['label' => 'Lager · Bedarf', 'num' => true, 'render' => function($r) use ($bedarfMap, $bestandMap, $mgMenge) {
+        $b = $bestandMap[(int)$r['id']] ?? 0; $n = $bedarfMap[(int)$r['id']] ?? 0; $e = h((string)($r['einheit'] ?? ''));
+        return ($b > 0 ? $mgMenge($b) . ' ' . $e : '<span class="muted">0</span>')
+             . ($n > 0 ? '<div style="font-size:12px">Bedarf <strong>' . $mgMenge($n) . '</strong> ' . $e . '</div>' : ''); }],
+    'art'           => ['label' => 'Art · Form', 'sort' => true, 'render' => fn($r) => (($ART[$r['art'] ?? ''] ?? '') !== '' ? h($ART[$r['art']]) : '<span class="muted">–</span>')
+                        . '<div class="muted" style="font-size:12px">' . h($FORM[$r['form']] ?? (string)$r['form']) . '</div>'],
     'novelfood'     => ['label' => 'Novel Food', 'sort' => true, 'render' => function($r){
                         $s = (string)($r['novelfood_status'] ?? '');
                         if ($s === '' ) return '<span class="muted" title="noch nicht geprüft">–</span>';
@@ -209,6 +224,7 @@ $cols = [
     'gesperrt'      => ['label' => 'Status', 'sort' => true, 'render' => $statusBadge],
 ];
 }
+if (!bx_inaktiv_an()) unset($cols['gesperrt']);   // Fable-5 T4.1: ohne „Inaktive anzeigen“ sind alle aktiv – Spalte Status entfällt
 if ($kat === 'alle') {
     $cols = array_slice($cols, 0, 2, true)
           + ['kategorie' => ['label'=>'Kategorie','sort'=>true,'render'=>$katBadge]]
@@ -221,7 +237,7 @@ $neuBtn  = ($istKapsel ? bx_btn('Neue Leerkapsel', '?p=rohstoff&id=neu&form=kaps
          . ' ' . bx_btn('Specs/CoAs Massen-Import', '?p=dok_massenimport', 'ghost');
 $fehltLbl = ['irgendwas'=>'etwas fehlt','lief'=>'ohne Lieferant','preis'=>'ohne Preis','spec'=>'ohne Spec','coa'=>'ohne CoA'][$fehlt] ?? '';
 render_header('rohstoffe', $titel);
-bx_head($titel, count($rows) . ' Einträge' . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), bx_inaktiv_schalter($inaktivAus) . ' ' . $neuBtn);
+bx_head($titel, number_format($rohGesamt, 0, ',', '.') . ' Einträge' . ($rohSeiten > 1 ? ' · Seite ' . $rohSeite . ' von ' . $rohSeiten : '') . ($fehltLbl ? ' · Filter: ' . $fehltLbl : ''), bx_inaktiv_schalter($inaktivAus) . ' ' . $neuBtn);
 if (isset($_GET['artfill'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px">Stoffklasse (Art) bei <strong>' . (int)$_GET['artfill'] . '</strong> Rohstoff(en) automatisch vorbelegt. Leer gebliebene bitte am Rohstoff pflegen.</div>';
 if (isset($_GET['nfall'])) echo '<div class="bx-panel badge-ok" style="padding:10px 14px"><strong>' . (int)$_GET['nfall'] . '</strong> Rohstoffe gegen den EU-Novel-Food-Katalog geprüft (mit Datum gespeichert): <strong style="color:var(--err)">' . (int)($_GET['nfnf'] ?? 0) . ' Novel Food</strong>, ' . (int)($_GET['nfpr'] ?? 0) . ' zu prüfen, Rest konform.</div>';
 if (isset($_GET['kiok']))  echo '<div class="bx-panel badge-ok" style="padding:10px 14px">KI-Kurzinfo erzeugt und gespeichert – sie wird dir und dem Kunden als „KI-Info" angezeigt.</div>';
@@ -279,6 +295,18 @@ bx_table($cols, array_values($rows), [
     'rowUrl'  => fn($r) => '?p=rohstoff&id=' . $r['id'],
     'empty'   => 'Keine Einträge gefunden.',
 ]);
+if ($rohSeiten > 1) {   // Fable-5 T4.8: Blättern (100 je Seite), Filter und Sortierung bleiben erhalten
+    $rohBasis = '?p=rohstoffe&kat=' . rawurlencode($kat) . ($q !== '' ? '&q=' . rawurlencode($q) : '') . ($fehlt !== '' ? '&fehlt=' . rawurlencode($fehlt) : '')
+              . ($artF !== '' ? '&art=' . rawurlencode($artF) : '') . ($formF !== '' ? '&form=' . rawurlencode($formF) : '') . '&sort=' . rawurlencode($sort) . '&dir=' . rawurlencode($dir);
+    echo '<div class="bx-row" style="gap:6px;flex-wrap:wrap;align-items:center;margin-top:12px">';
+    if ($rohSeite > 1) echo '<a class="btn btn-ghost btn-sm" href="' . h($rohBasis . '&seite=' . ($rohSeite - 1)) . '">Zurück</a>';
+    for ($i = 1; $i <= $rohSeiten; $i++) {
+        if ($i !== 1 && $i !== $rohSeiten && abs($i - $rohSeite) > 2) { if (abs($i - $rohSeite) === 3) echo '<span class="muted">…</span>'; continue; }
+        echo '<a class="btn btn-' . ($i === $rohSeite ? 'primary' : 'ghost') . ' btn-sm" href="' . h($rohBasis . '&seite=' . $i) . '">' . $i . '</a>';
+    }
+    if ($rohSeite < $rohSeiten) echo '<a class="btn btn-ghost btn-sm" href="' . h($rohBasis . '&seite=' . ($rohSeite + 1)) . '">Weiter</a>';
+    echo '<span class="muted" style="font-size:12px">' . number_format(($rohSeite - 1) * $ROH_JE_SEITE + 1, 0, ',', '.') . '–' . number_format(min($rohGesamt, $rohSeite * $ROH_JE_SEITE), 0, ',', '.') . ' von ' . number_format($rohGesamt, 0, ',', '.') . '</span></div>';
+}
 ?>
 <script>
 (function(){
@@ -293,7 +321,7 @@ bx_table($cols, array_values($rows), [
     var q=(box.value||'').trim().toLowerCase(), sichtbar=0;
     rows.forEach(function(tr){ var m=!q||tr.textContent.toLowerCase().indexOf(q)>=0; tr.hidden=!m; if(m) sichtbar++; });
     leer.hidden=sichtbar>0;
-    cnt.textContent = q ? (sichtbar+' von '+total) : (total+' Einträge');
+    cnt.textContent = q ? (sichtbar+' von '+total+' auf dieser Seite – Enter sucht in allen') : '';
   }
   box.addEventListener('input', filter); filter();
   var v=box.value; box.value=''; box.value=v; box.focus();

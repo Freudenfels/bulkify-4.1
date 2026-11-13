@@ -516,7 +516,7 @@ if (!$neu) {
         echo '<div class="bx-panel"><h2 style="margin-top:0">Positionen</h2>';
         $posStornoOk = has_role('admin') && (string)$b['status'] !== 'storniert';
         $posPortal = bestellung_ist_portal($b) && empty($b['angekommen_am']) && (string)$b['status'] !== 'geliefert';
-        echo '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>Position</th><th>Für Auftrag</th><th class="bx-num">bestellt</th><th class="bx-num">geliefert</th><th class="bx-num">offen</th>' . ($posStornoOk ? '<th></th>' : '') . '</tr></thead><tbody>';
+        echo '<div class="bx-tablewrap"><table class="bx-table bx-karten-handy"><thead><tr><th>Position</th><th>Für Auftrag</th><th class="bx-num">bestellt</th><th class="bx-num">geliefert</th><th class="bx-num">offen</th>' . ($posStornoOk ? '<th></th>' : '') . '</tr></thead><tbody>';
         $bOffen = !in_array((string)$b['status'], ['geliefert','storniert'], true) && empty($b['angekommen_am']);
         foreach ($zeilen as $z) {
             $auf = '<span class="muted">Lager / allgemein</span>';
@@ -528,10 +528,11 @@ if (!$neu) {
             if ($gel > (float)$z['bestellt'] * 1.02 && (float)$z['bestellt'] > 0) $gelHtml .= ' <span class="muted" style="font-size:11px">Mehrlieferung</span>';
             if ((string)$b['status'] === 'storniert' && !$z['storno']) $rest = 0.0;   // Fable-3 T2.8: stornierte Bestellung – offen 0
             // Fable-4 T3.7: stornierte Position = offen 0 (der stornierte Rest steht klein daneben)
-            $restHtml = $z['storno'] && $rest > 0.0001 ? '0 <span class="muted" style="font-size:11px"' . ($z['grund'] !== '' ? ' title="' . h('Grund: ' . $z['grund']) . '"' : '') . '>(' . $mz($rest) . ' ' . h($z['einheit']) . ' storniert)</span>'
+            // Fable-5 T4.5 (D7): stornierte Position = offen 0 (Menge und Grund nur noch im Tooltip und in der Positionszeile)
+            $restHtml = $z['storno'] ? '<span class="muted" title="' . h('storniert: ' . $mz($rest) . ' ' . $z['einheit'] . ($z['grund'] !== '' ? ' · Grund: ' . $z['grund'] : '')) . '">0</span>'
                       : ($rest > 0.0001 ? ($bOffen ? '<a href="?p=wareneingang&bp=' . (int)$z['bp'] . '" title="Wareneingang zu dieser Position buchen">' . $mz($rest) . ' ' . h($z['einheit']) . '</a>' : $mz($rest) . ' ' . h($z['einheit'])) : '<span class="muted">–</span>');
             if ((string)$b['status'] === 'storniert' && !$z['storno']) $restHtml = '<span class="muted" title="Bestellung storniert">0 ' . h($z['einheit']) . '</span>';
-            echo '<tr><td>' . h($z['name']) . ($z['chargen'] ? ' <span class="muted" style="font-size:11px">' . (int)$z['chargen'] . ' Charge(n)</span>' : '') . '</td><td style="font-size:13px">' . $auf . '</td>'
+            echo '<tr><td><span class="bx-lauf" style="max-width:320px">' . h($z['name']) . '</span>' . ($z['storno'] ? ' ' . bx_badge('storniert', 'err') : '') . ($z['chargen'] ? ' <span class="muted" style="font-size:11px">' . (int)$z['chargen'] . ' Charge(n)</span>' : '') . '</td><td style="font-size:13px">' . $auf . '</td>'
                . '<td class="bx-num">' . $mz($z['bestellt']) . ' ' . h($z['einheit']) . '</td>'
                . '<td class="bx-num">' . $gelHtml . '</td><td class="bx-num">' . $restHtml . '</td>';
             if ($posStornoOk) {
@@ -720,7 +721,7 @@ if (!$neu) {
 
   <div class="bx-panel">
     <h2>Positionen</h2>
-    <table class="bx-table">
+    <table class="bx-table bx-karten-handy">
       <thead><tr><th style="width:34%">Artikel</th><th>Für Auftrag <?= bx_hint('Wofür wird das bestellt? Beim Wareneingang wird die Charge automatisch diesem Auftrag zugeordnet. „Lager / allgemein" = Vorrat.') ?></th><th style="width:120px">Menge</th><th style="width:120px">EK / Einheit</th><th class="bx-num">Summe</th><th></th></tr></thead>
       <tbody id="prows">
         <?php $pr = $positionen ?: [['id'=>0,'item_id'=>'','menge'=>'','ek_preis'=>'','auftrag_id'=>'']]; foreach ($pr as $p):

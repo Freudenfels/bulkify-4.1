@@ -199,14 +199,15 @@ $cols = [
     'bereit'       => ['label' => 'Bereit', 'render' => fn($r)=> ($r['_bereit'] ?? '') === 'art_offen' ? bx_badge('Eigen/Fremd offen','warn')
                           : bereitschaft_badge($r['_bereit'] ?? '') . (!empty($r['_eta']) ? ' <span class="muted" style="font-size:12px">bis ' . h(date('d.m.Y', strtotime((string)$r['_eta']))) . '</span>' : '')],
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
-    'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, firma_kurz($r['kunde_firma']))],
-    'produkt_name' => ['label' => 'Produkt', 'render' => function($r) use ($tab) {
-                        $t = $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>';
+    'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> '<div class="bx-lauf" style="max-width:170px">' . kunde_link($r['kunde_id'] ?? null, firma_kurz($r['kunde_firma'])) . '</div>'],
+    'produkt_name' => ['label' => 'Produkt', 'lauf' => false, 'render' => function($r) use ($tab) {
+                        // Fable-5 T4.1: Name mit fester Breite und Lauftext, „Noch offen“ darunter (bricht innerhalb der Breite um)
+                        $t = $r['produkt_name'] ? '<div class="bx-lauf" style="max-width:300px">' . h($r['produkt_name']) . '</div>' : '<span class="muted">–</span>';
                         if ($tab !== 'laufend') return $t;
                         // 13.11.2026 (Werk-App Teil 2): gleiche Zeile wie Werk-App und Plan.
                         $m = function_exists('produktion_machbar_schritte') ? produktion_machbar_schritte((int)$r['id'], false) : [];
                         $o = pa_noch_offen_text((int)$r['id'], !empty($m['etikett_gesperrt']));
-                        return $t . ($o !== '' ? '<div class="muted" style="font-size:12px;white-space:normal">' . h($o) . '</div>' : '');
+                        return $t . ($o !== '' ? '<div class="muted" style="font-size:12px;white-space:normal;max-width:300px">' . h($o) . '</div>' : '');
                      }],
     'etikett'      => ['label' => 'Etikett', 'render' => function($r) use ($etikettDa) {
                         $aid = (int)($r['auftrag_id'] ?? 0);
@@ -216,14 +217,20 @@ $cols = [
                         if (!empty($etikettDa[$aid])) return '<span title="Etikett hinterlegt, Kundenfreigabe fehlt noch">' . bx_badge('nicht freigegeben', 'warn') . '</span>';
                         return '<span title="Kunde hat noch kein Etikett hinterlegt">' . bx_badge('fehlt', 'err') . '</span>';
                      }],
-    'groesse'      => ['label' => 'Kapsel/Tablette', 'render' => function($r){ $g = produktion_groesse_label((int)($r['produkt_id'] ?? 0), true); return $g !== '' ? h($g) : '<span class="muted">–</span>'; }],
-    'produktionsart' => ['label' => 'Art', 'render' => fn($r)=> empty($r['art_festgelegt_am'])
-                        ? '<span title="Eigen/Fremd ist noch nicht festgelegt – erst danach geht der Auftrag in die Produktion">' . bx_badge('festlegen','err') . '</span>'
-                        : (($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info'))],
-    'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true],
+    // Fable-5 T4.1 (D10): Kapsel/Tablette und Eigen/Fremd in EINER schmalen Spalte (Tabelle passt aufs Feld).
+    'produktionsart' => ['label' => 'Art · Etikett', 'render' => function($r) use (&$cols) {
+                        $art = empty($r['art_festgelegt_am'])
+                            ? '<span title="Eigen/Fremd ist noch nicht festgelegt – erst danach geht der Auftrag in die Produktion">' . bx_badge('festlegen','err') . '</span>'
+                            : (($r['produktionsart'] ?? 'fremd')==='eigen' ? bx_badge('Eigen','ok') : bx_badge('Fremd','info'));
+                        $g = produktion_groesse_label((int)($r['produkt_id'] ?? 0), true);
+                        $et = isset($cols['etikett']['render']) ? ($cols['etikett']['render'])($r) : '';   // Etikett-Stand in derselben Spalte
+                        return '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">' . $art . ' ' . $et . '</div>'
+                             . ($g !== '' ? '<div class="muted" style="font-size:12px;margin-top:2px">' . h($g) . '</div>' : '');
+                     }],
+    'menge'        => ['label' => 'Menge', 'sort' => true, 'num' => true, 'render' => fn($r) => number_format((float)($r['menge'] ?? 0), 0, ',', '.')],
     // D1: produzierte Menge direkt in der Tabelle (gebucht / gesamt).
     'produziert'   => ['label' => 'Produziert', 'num' => true, 'render' => function($r) use ($prodMap, $nfPkg) {
-                        $g = (float)($prodMap[(int)$r['id']] ?? 0); $z = (float)($r['menge'] ?? 0);
+                        $g = (float)($r['produziert_stk'] ?? 0); $z = (float)($r['menge'] ?? 0);   // Fable-5 T2.2: nur Fertigware in Stück
                         $farbe = $g <= 0.0001 ? 'var(--muted)' : ($g + 0.001 >= $z && $z > 0 ? 'var(--gruen,#1D9E75)' : 'inherit');
                         return '<span style="color:' . $farbe . '">' . $nfPkg($g) . '</span> <span class="muted">/ ' . $nfPkg($z) . '</span>';
                      }],
@@ -232,14 +239,18 @@ $cols = [
                         $st = trim((string)($r['naechste_station'] ?? ''));
                         if ($st === '') return '<span class="muted">–</span>';
                         // Begonnen = „läuft: <Station>", noch nicht begonnen = „als Nächstes: <Station>".
+                        $fs = ' <span class="muted" style="font-size:12px">(' . (int)$r['n_done'] . '/' . (int)$r['n_total'] . ')</span>';   // Fortschritt in derselben Spalte
                         return (int)($r['n_done'] ?? 0) > 0
-                            ? '<strong>' . h($st) . '</strong>'
-                            : '<span class="muted">als Nächstes: </span>' . h($st);
+                            ? '<strong>' . h($st) . '</strong>' . $fs
+                            : '<span class="muted">als Nächstes: </span>' . h($st) . $fs;
                      }],
-    'fortschritt'  => ['label' => 'Fortschritt', 'render' => fn($r)=> (int)$r['n_done'].' / '.(int)$r['n_total']],
 ];
 unset($cols['_sel']);
 
+// Fable-5 T4.1 (D10): Etikett steht in „Art · Etikett“, Fortschritt in „Aktuelle Station“ – Tabelle passt aufs Feld.
+$cols['etikett']['ausblenden'] = true;
+if ($tab === 'laufend') $cols['bereit']['ausblenden'] = true;   // im Reiter „Läuft“ steht überall „in Produktion“
+$colsAnzeige = array_filter($cols, fn($c) => empty($c['ausblenden']));
 $TABS = ['plan' => 'Plan', 'laufend' => 'Läuft', 'erledigt' => 'Fertig'];
 $TABCOUNT = ['plan' => $anzPlan, 'laufend' => $anzLaufend, 'erledigt' => $anzErledigt];
 $sub = ['plan' => 'Aufträge im Plan (noch nicht begonnen) – startklare oben, nicht machbare grau mit Grund', 'laufend' => 'laufende Produktionen (schon begonnen)', 'erledigt' => 'abgeschlossene Produktionsaufträge'];
@@ -256,7 +267,7 @@ if ($flash) echo '<div class="bx-panel badge-ok" style="padding:8px 12px">' . h(
 $kpi = function(string $label, int $wert, string $href, string $farbe = '', bool $aktiv = false) {
     echo '<a href="' . h($href) . '" class="bx-card" style="margin:0;text-decoration:none;color:inherit;border:1px solid ' . ($aktiv ? 'var(--gruen)' : 'var(--line)') . ($aktiv ? ';background:var(--panel-2)' : '') . '">'
        . '<div class="k muted" style="font-size:12px">' . h($label) . '</div>'
-       . '<div style="font-size:24px;line-height:1.2;margin-top:2px' . ($farbe && $wert > 0 ? ';color:' . $farbe : '') . '">' . $wert . '</div></a>';
+       . '<div style="font-size:24px;line-height:1.2;margin-top:2px' . ($farbe && $wert > 0 ? ';color:' . $farbe : '') . '">' . number_format($wert, 0, ',', '.') . '</div></a>';
 };
 echo '<div class="bx-cards" style="margin-bottom:16px">';
 if (has_role('admin')) $kpi('Beschaffungsweg offen', (int)$vorbereitungN, '?p=produktion_vorbereitung', '#f59e0b');
@@ -399,7 +410,7 @@ if ($zeigeNeu):
 <?php
 
 if ($tab === 'plan') { require __DIR__ . '/_plan.php'; unset($GLOBALS['bx_stock_cache']); render_footer(); return; }
-bx_table($cols, array_values($rows), [
+bx_table($colsAnzeige, array_values($rows), [
     'baseUrl' => '?p=produktion&tab=' . $tab . ($q !== '' ? '&q=' . urlencode($q) : ''),
     'sort'    => $sort,
     'dir'     => $dir,

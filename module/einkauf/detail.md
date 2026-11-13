@@ -137,3 +137,6 @@ Auch bei „Neue Bestellung“ von Hand: offene Bestellungen der Positions-Artik
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Bestellseite: „als bestellt markieren“ immer möglich (kein grauer Knopf, kein „trotzdem bestellen“ mehr). Kasten „Unterlagen des Lieferanten fehlen“ mit gelbem Hinweis, Upload und Knopf „kein Dokument nötig“ (Admin/QM); auch an gelieferten Bestellungen (Charge wartet in Quarantäne). Alte Sperr-Entwürfe (`unterlagen_wartet` = 1): Knopf „Schon bestellt am …“ (Datum, Standard heute) = Abschluss wie „heute bestellt“ ohne Mail, Kennzeichen fällt weg (aktion `schon_bestellt`).
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Positionen als `bx-karten-handy` (am Handy Karten), Name mit Lauftext, Badge „storniert“ an der Position, Spalte „offen“ bei Storno 0 (Menge und Grund im Tooltip). Datei-Felder bekommen den Knopf im bulkify-Stil (bx-datei.js).

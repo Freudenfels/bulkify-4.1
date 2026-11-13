@@ -428,8 +428,8 @@ if ($ohneFestlegung): ?>
     <?php endforeach; ?>
   </div>
   <?php if ($aktTyp === 'wartet'): ?><p class="muted" style="font-size:13px;margin:10px 0 0">Etiketten und bedruckte Beutel, deren Design der Kunde noch nicht freigegeben hat. Sie sind noch nicht bestellbar und stehen deshalb nicht unter „Zu bestellen". Nach der Freigabe erscheinen sie dort automatisch (Menge bereits netto gegen Lager und unterwegs).</p><?php endif; ?>
-  <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table">
-    <thead><tr><th style="width:150px">Bestellen</th><th>Artikel / Produkt</th><th></th><th class="bx-num">zu bestellen</th><th style="width:190px">Lieferant</th><th>Aufträge</th></tr></thead>
+  <div class="bx-tablewrap" style="margin-top:12px"><table class="bx-table bx-karten-handy"><?php /* Fable-5 T4.1/T4.2: am Handy Karten je Zeile */ ?>
+    <thead><tr><th style="width:150px">Bestellen</th><th>Artikel / Produkt</th><th>Art</th><th class="bx-num">zu bestellen</th><th style="width:190px">Lieferant</th><th>Aufträge</th></tr></thead>
     <tbody id="bestTbody">
       <?php if (!$hatWas): ?><tr><td colspan="6" class="muted"><?= $istFreiTyp
           ? 'Noch nichts unter „' . h($BM_KAT[$aktTyp]) . '" eingetragen – weiter unten unter „Neuen Bedarf eintragen" hinzufügen.'
@@ -453,7 +453,7 @@ if ($ohneFestlegung): ?>
             <?php endif; ?>
           </td>
           <td><?= $rolleBadge($a['rolle']) ?></td>
-          <td class="bx-num"><?php if ($gesperrt): ?><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php else: ?><?= $mengeInput($key, (float)$a['zu_bestellen'], (string)$a['einheit']) ?><?php endif; ?><div class="muted" style="font-size:11px">Bedarf <?= $mfmt($a['need']) ?> · Lager <?= $mfmt($a['stock']) ?><?= (float)($a['quarantaene'] ?? 0) > 1e-6 ? ' · Quarantäne ' . $mfmt($a['quarantaene']) : '' ?><?= $a['bestellt'] > 1e-6 ? ' · unterwegs ' . $mfmt($a['bestellt']) : '' ?> · zu bestellen <?= $mfmt($a['zu_bestellen']) ?><?= $istEtikett ? ' · kundenspezifisch' : '' ?></div></td>
+          <td class="bx-num"><?php if ($gesperrt): ?><strong style="color:#8f231b"><?= $mfmt($a['zu_bestellen']) ?> <?= h($a['einheit']) ?></strong><?php else: ?><?= $mengeInput($key, (float)$a['zu_bestellen'], (string)$a['einheit']) ?><?php endif; ?><div class="muted bx-zusatz" style="font-size:11px">Bedarf <?= $mfmt($a['need']) ?> · Lager <?= $mfmt($a['stock']) ?><?= (float)($a['quarantaene'] ?? 0) > 1e-6 ? ' · Quarantäne ' . $mfmt($a['quarantaene']) : '' ?><?= $a['bestellt'] > 1e-6 ? ' · unterwegs ' . $mfmt($a['bestellt']) : '' ?> · zu bestellen <?= $mfmt($a['zu_bestellen']) ?><?= $istEtikett ? ' · kundenspezifisch' : '' ?></div></td>
           <?php $aAbg = []; ?><td><?= $gesperrt ? '<span class="muted">–</span>' : $liefSelect($key, (int)($a['haupt_lieferant'] ?? 0) ?: ($istEtikett ? (int)$etLief['id'] : 0), item_lieferant_preise((int)$a['item_id'], (float)$a['zu_bestellen'], $aAbg), false, [], $aAbg ?? []) ?><?php if (!empty($aAbg) && isset($aAbg[(int)($a['haupt_lieferant'] ?? 0)])): ?><div style="font-size:11px;color:#8f231b">Preis des Hauptlieferanten abgelaufen - <a href="?p=rohstoff&id=<?= (int)$a['item_id'] ?>&tab=ek" target="_blank" rel="noopener">neu anfragen</a></div><?php endif; $aAbg = null; ?><?php if (!empty($a['haupt_lieferant_gesperrt'])): ?><div style="font-size:11px;color:#8f231b">Hauptlieferant gesperrt - bitte einen anderen wählen</div><?php endif; ?></td>
           <?php // Kunde·Produkt je Auftrag nur bei bedruckten Tüten/Beuteln (kundenspezifisch) – bei Gläsern & Co. nicht nötig.
                 $zeigKdPr = (($a['verpackungsart'] ?? '') === 'beutel'); ?>
@@ -494,7 +494,7 @@ if ($ohneFestlegung): ?>
           <td><?= bx_badge('Fertiges Produkt','info') ?></td>
           <?php $bEinh = (string)($b['einheit'] ?? 'Stk'); $bGew = !empty($b['gewicht']);
                 $bLes = fn($v) => $bGew ? gewicht_lesbar((float)$v, $bEinh) : $mfmt($v) . ($bFertig ? ' Pkg' : ' Stk'); ?>
-          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], $bEinh) ?><div class="muted" style="font-size:11px">Bedarf <?= $bLes($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $bLes($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $bLes($b['bestellt']) : '' ?></div></td>
+          <td class="bx-num"><?= $mengeInput($key, (float)$b['zu_bestellen'], $bEinh) ?><div class="muted bx-zusatz" style="font-size:11px">Bedarf <?= $bLes($b['need'] ?? $b['zu_bestellen']) ?> · Lager <?= $bLes($b['stock'] ?? 0) ?><?= ($b['bestellt'] ?? 0) > 1e-6 ? ' · offen ' . $bLes($b['bestellt']) : '' ?></div></td>
           <td><?= $liefSelect($key, 0, $bPreise, true, ['class'=>'bx-bulk-lief', 'data-ab'=>($bAb !== null ? (float)$bAb : ''), 'data-abcur'=>$bAbCur, 'data-einheit'=>$bEinh], $bAbg) ?><?php if ($bAb !== null): ?><div class="muted bx-bulk-sum" style="font-size:11px">ab <?= $preis4($bAb, $bAbCur) ?>/<?= h($bEinh) ?> · Summe <?= $sum2($bSumme, $bAbCur) ?></div><?php if ($bAbLid !== null && isset($bAbg[$bAbLid])): ?><div style="font-size:11px;color:#8f231b">nur abgelaufene Preise - Summe unsicher, neu anfragen</div><?php endif; ?><?php endif; ?></td>
           <td style="font-size:12px"><?php $bHw = false; foreach ($b['orders'] as $o): $bHw = $bHw || !empty($o['handelsware']);
               // Handelsware hat keinen Produktionsauftrag -> Link auf den Auftrag.
@@ -507,7 +507,7 @@ if ($ohneFestlegung): ?>
           <td><?= $elKnoepfe($key, lu_hinweis_text(lu_fehlt(0, (int)$nb['item_id'], 0, true))) ?></td>
           <td><a href="?p=rohstoff&id=<?= (int)$nb['item_id'] ?>" target="_blank" style="text-decoration:none"><?= h($nb['name']) ?></a></td>
           <td><?= bx_badge('Nachbestellung','warn') ?></td>
-          <td class="bx-num"><?= $mengeInput($key, (float)$nb['zu_bestellen'], (string)$nb['einheit']) ?><div class="muted" style="font-size:11px">Meldebestand <?= $mfmt($nb['mindest']) ?> · Lager <?= $mfmt($nb['stock']) ?><?= $nb['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($nb['bestellt']) : '' ?></div></td>
+          <td class="bx-num"><?= $mengeInput($key, (float)$nb['zu_bestellen'], (string)$nb['einheit']) ?><div class="muted bx-zusatz" style="font-size:11px">Meldebestand <?= $mfmt($nb['mindest']) ?> · Lager <?= $mfmt($nb['stock']) ?><?= $nb['bestellt'] > 1e-6 ? ' · offen ' . $mfmt($nb['bestellt']) : '' ?></div></td>
           <td><?php $nbAbg = []; $nbPr = item_lieferant_preise((int)$nb['item_id'], (float)$nb['zu_bestellen'], $nbAbg); ?><?= $liefSelect($key, (int)($nb['haupt_lieferant'] ?? 0), $nbPr, false, [], $nbAbg) ?></td>
           <td style="font-size:12px"><span class="muted">unter Meldebestand</span></td>
         </tr>

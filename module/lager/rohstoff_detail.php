@@ -698,7 +698,10 @@ if (!$neu) {
         echo '<div class="bx-card"><div class="k">Kapselgröße</div><div class="v">' . (!empty($it['kapselgroesse_id']) ? h((string) scalar("SELECT name FROM kapselgroesse WHERE id=?", [(int)$it['kapselgroesse_id']])) : '<span style="color:var(--warn)">fehlt</span>') . '</div></div>';
     if (!empty($it['fremdprodukt']) && (int)($it['fremd_besitzer_id'] ?? 0) > 0)
         echo '<div class="bx-card"><div class="k">Besitzer (Fremdprodukt)</div><div class="v">' . h((string) scalar("SELECT firma FROM kunden WHERE id=?", [(int)$it['fremd_besitzer_id']])) . '</div></div>';
-    echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . $pr . ' €/' . h((string)($it['preis_bezug'] ?: ($it['einheit'] ?: 'Stk'))) . '</div></div>';
+    // Fable-5 T4.9 (D18): ohne Preis „Preis fehlt“ wie auf der Produktseite – nie „0,0000 €/kg“.
+    echo '<div class="bx-card"><div class="k">EK-Preis</div><div class="v">' . ((float)($it['ek_preis'] ?? 0) > 0
+        ? $pr . ' €/' . h((string)($it['preis_bezug'] ?: ($it['einheit'] ?: 'Stk')))
+        : '<span style="color:var(--warn);font-size:var(--fs-lg)">Preis fehlt</span>') . '</div></div>';
     if (($it['kategorie'] ?? '') === 'rohstoff') {
         if (!empty($it['preis_schwankt'])) echo '<div class="bx-card"><div class="k">Preis schwankt</div><div class="v" style="font-size:16px;color:#8a6d1f">' . (int)($it['preis_gueltig_tage'] ?: 14) . ' Tage gültig</div></div>';
         $moqK = rohstoff_moq((int)$id);

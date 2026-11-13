@@ -127,6 +127,14 @@ function kunde_anzeige($kunde_id, ?string $firma, bool $kurz = false): string {
 
 // PDF-Download-Button (Dokument-Icon + Label). Klar als „hier gibt's ein PDF" erkennbar – statt eines nackten Pfeils.
 // $stopRow=true in klickbaren Listenzeilen, damit der Zeilen-Klick nicht mit auslöst.
+// Symbole als SVG statt Schriftzeichen (Fable-5 T4.10, D19): 'ok' (Haken), 'nein' (Kreuz), 'weiter' (Dreieck), 'offen' (Kreis),
+// 'oeffnen' (Pfeil nach rechts oben). Farbe über currentColor; $titel = Text für Screenreader/Tooltip.
+function bx_sym(string $art, string $titel = ''): string {
+    $p = ['ok' => '<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'nein' => '<path d="M6 6l12 12M18 6L6 18"/>', 'weiter' => '<path d="M8 5l11 7-11 7z" fill="currentColor"/>',
+          'offen' => '<circle cx="12" cy="12" r="7"/>', 'oeffnen' => '<path d="M8 16L16 8M9 8h7v7"/>'][$art] ?? '';
+    return '<svg class="bx-sym" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"'
+         . ($titel !== '' ? ' role="img" aria-label="' . h($titel) . '"><title>' . h($titel) . '</title>' : ' aria-hidden="true">') . $p . '</svg>';
+}
 function pdf_btn(string $href, string $label = 'PDF', bool $stopRow = false, string $title = ''): string {
     $stop = $stopRow ? ' onclick="event.stopPropagation()"' : '';
     $t = $title !== '' ? $title : 'Als PDF herunterladen';

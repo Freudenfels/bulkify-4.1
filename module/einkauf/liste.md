@@ -46,3 +46,6 @@ Kennzeichen „Unterlagen fehlen“ an offenen Bestellungen (Link auf die Liste 
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Badge „Unterlagen fehlen“ bleibt. Nach „Vorsorglich“ mit fehlenden Unterlagen der gelbe Kasten (`?lu_hinweis=`).
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Inhalt mit fester Breite und Lauftext (Tabelle auf Feldbreite); Badges „Bündel“/„Unterlagen fehlen“ unter der Bestellnummer; am Handy Suchfeld und Lieferanten-Auswahl in voller Breite.

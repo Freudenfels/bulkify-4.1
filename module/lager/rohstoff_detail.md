@@ -254,3 +254,6 @@ Unter der Stammdaten-Tabelle des KI-Vorschlags steht jetzt „Wirkstoffgehalt la
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Reiter Dokumente: Haken „kein Dokument nötig (z. B. Schrauben, Masken, Handschuhe)“ (nur Admin/QM, postet an `?p=kein_dokument`, protokolliert) für Rohstoffe und Fertigware.
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Kachel EK-Preis: ohne Preis „Preis fehlt“ statt „0,0000 €/kg“.

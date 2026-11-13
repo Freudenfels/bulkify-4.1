@@ -26,3 +26,5 @@ Kachel und Liste „Versandbereit“ zählen Aufträge mit Status `erledigt` nur
 
 ## Nachbesserung Fable-5 (13.11.2026)
 Kachel „Offene Posten“ = `op_summe()` (nur positive Reste), darunter „Guthaben“, wenn es Überzahlungen gibt.
+
+Kacheln zeigen Zahlen mit Tausenderpunkt (1.620), am Handy 2 je Zeile (Fable-5 T4.6).

@@ -44,3 +44,6 @@ Dark Mode (03.11.2026): Die Chat-Blasen von `bx_chat()` sind im Dark Mode dunkel
 - `rowPop` (Funktion → Adresse): Ein Klick öffnet die Seite als Pop-up (`data-pop-url`).
 - `rowPopTitel`: Titel des Pop-ups.
 - `rowId` (Funktion → id): id der Zeile. Nach dem Speichern im Pop-up wird genau diese Zeile neu geladen.
+
+## Nachbesserung Fable-5 (13.11.2026)
+`bx_sym($art, $titel)` – Symbole als SVG statt Schriftzeichen: `ok` (Haken), `nein` (Kreuz), `weiter` (Dreieck), `offen` (Kreis), `oeffnen` (Pfeil). Farbe über currentColor.

@@ -442,3 +442,112 @@ td.bx-lauf,th.bx-lauf{display:table-cell;max-width:260px}
 .bx-dringend a.bx-dringend-n{font-weight:600;text-decoration:none}
 .bx-dringend-sep{opacity:.7;margin:0 4px}
 @media (max-width:860px){.bx-dringend{margin:0 0 var(--sp-4);border-radius:8px;white-space:normal}}
+
+/* ============================================================
+   Nachbesserung Fable-5, Teil 4 (13.11.2026) – Design der internen Seiten
+   ============================================================ */
+/* T4.14 Zwei Knopfgrößen im ganzen System: normal (36 px) und klein (30 px). Am Handy beide mindestens 44 px. */
+.btn{min-height:36px;box-sizing:border-box}
+.btn-sm{min-height:30px;padding:6px 10px}
+button.btn,a.btn,input.btn{vertical-align:middle}
+@media (max-width:860px){
+  .btn,.btn-sm{min-height:44px}
+  .bx-side nav a{min-height:44px}
+  .bx-glocke{width:44px;height:44px}
+  .bx-burger{width:44px;height:44px}
+  .bx-check{white-space:normal}
+  .bx-check label{white-space:normal}
+}
+/* T4.6 Kacheln am Handy: Raster mit zwei gleich breiten Kacheln je Zeile über die volle Breite. */
+@media (max-width:860px){
+  .bx-cards:has(> .bx-card){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-3)}
+  .bx-cards > .bx-card{min-width:0;width:auto;margin:0;padding:var(--sp-3) var(--sp-4)}
+  .bx-cards > .bx-panel{min-width:0 !important;flex:1 1 100% !important;max-width:100%}
+  .bx-cards > .bx-card .v{font-size:var(--fs-lg);overflow-wrap:anywhere}
+}
+/* T4.7 Badges im dunklen Modus: dunkler Grund, farbige Schrift (alle Arten, auch als Hinweis-Panel). Kontrast ≥ 4,5 : 1. */
+:root[data-theme="dark"]{--warn:#f0b35a;--err:#ff8a7a;--info:#7fb8e8;--ok:#4fd1a5}
+:root[data-theme="dark"] .badge{background:#222a1f;color:#c8d3c2;border-color:#3a4436}
+:root[data-theme="dark"] .badge-ok{background:rgba(29,158,117,.18);color:#6ee7b7;border-color:rgba(29,158,117,.45)}
+:root[data-theme="dark"] .badge-warn{background:rgba(201,133,43,.18);color:#f5c16c;border-color:rgba(201,133,43,.45)}
+:root[data-theme="dark"] .badge-err{background:rgba(192,57,43,.20);color:#ff9b8f;border-color:rgba(192,57,43,.5)}
+:root[data-theme="dark"] .badge-info{background:rgba(43,123,191,.20);color:#8cc4f0;border-color:rgba(43,123,191,.5)}
+/* fest eingetragene Hinweis-Farben (braun/rot/orange auf hell) im dunklen Modus aufhellen (D14) */
+:root[data-theme="dark"] [style*="color:#8f231b"],:root[data-theme="dark"] [style*="color: #8f231b"],
+:root[data-theme="dark"] [style*="color:#b23b2f"],:root[data-theme="dark"] [style*="color:#c0392b"],
+:root[data-theme="dark"] [style*="color:#7e1f17"]{color:#ff9b8f!important}
+:root[data-theme="dark"] [style*="color:#b7791f"],:root[data-theme="dark"] [style*="color:#8a6d00"],
+:root[data-theme="dark"] [style*="color:#7a4e0f"],:root[data-theme="dark"] [style*="color:#9a6700"],
+:root[data-theme="dark"] [style*="color:#b45309"]{color:#f5c16c!important}
+:root[data-theme="dark"] [style*="border-color:#e6c4c0"]{border-color:rgba(192,57,43,.5)!important}
+/* D15 Links/Geister-Knöpfe im dunklen Modus immer lesbar */
+:root[data-theme="dark"] .btn-ghost,:root[data-theme="dark"] a.btn-ghost{color:var(--text);border-color:#46523f}
+:root[data-theme="dark"] .btn-danger{color:#ff9b8f;border-color:rgba(192,57,43,.55)}
+:root[data-theme="dark"] .btn-danger:hover{background:rgba(192,57,43,.18)}
+/* D16 Orange auf Weiß lesbar (Kennzahl „Wartet auf Material“ u. a.): dunkleres Orange im hellen Modus */
+:root:not([data-theme="dark"]) [style*="color:#f59e0b"]{color:#b45309!important}
+/* T4.1/T4.2 Tabellen am Handy: nie die ganze Seite seitlich schieben – jede Tabelle in einem eigenen Scroll-Rahmen. */
+@media (max-width:860px){
+  table.bx-table{max-width:100%}
+  .bx-panel > table.bx-table,form > table.bx-table,.bx-panel > form > table.bx-table,details > table.bx-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .settabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .settabs a{white-space:nowrap}
+  .bx-head > *{min-width:0;max-width:100%}
+  .bx-head h1,.bx-sub{overflow-wrap:anywhere}
+  input,select,textarea{max-width:100%}
+  code{overflow-wrap:anywhere}
+}
+/* Karten je Zeile am Handy (Bestellung-Positionen, Bestellen, Datenprüfung): <table class="bx-table bx-karten-handy">.
+   Die Spaltenüberschrift setzt bx-ui.js als data-label an jede Zelle. */
+@media (max-width:860px){
+  table.bx-karten-handy,table.bx-karten-handy tbody,table.bx-karten-handy tr,table.bx-karten-handy td{display:block;width:100%;max-width:100%}
+  table.bx-karten-handy{overflow:visible}
+  table.bx-karten-handy thead{display:none}
+  table.bx-karten-handy tr{border-bottom:1px solid var(--line);padding:8px 0}
+  table.bx-karten-handy tr:last-child{border-bottom:none}
+  table.bx-karten-handy td{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;white-space:normal;border:0;padding:4px 12px;text-align:right;overflow-wrap:anywhere}
+  table.bx-karten-handy td::before{content:attr(data-label);color:var(--muted);font-size:var(--fs-sm);text-align:left;flex:0 0 auto;max-width:45%}
+  table.bx-karten-handy td[data-label=""]::before{display:none}
+  table.bx-karten-handy td > *{max-width:100%;min-width:0}
+  table.bx-karten-handy td *:not(.btn):not(.badge){white-space:normal !important;overflow-wrap:anywhere}
+  table.bx-karten-handy td{min-width:0 !important;max-width:100% !important}
+  table.bx-karten-handy td.bx-lauf{max-width:100%;display:flex}
+}
+/* T4.5 Datei-Knopf im bulkify-Stil (bx-datei.js ersetzt das rohe Browser-Feld; ohne Skript wenigstens der Knopf im Stil) */
+input[type=file]{max-width:100%;font:inherit;color:var(--muted)}
+input[type=file]::file-selector-button{font:inherit;font-size:var(--fs-sm);padding:6px 10px;margin-right:8px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
+.bx-datei{display:inline-flex;align-items:center;gap:8px;max-width:100%;min-width:0}
+.bx-datei input[type=file]{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0)}
+.bx-datei .bx-datei-name{color:var(--muted);font-size:var(--fs-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:220px}
+.bx-datei.bx-pflicht-fehlt .btn{border-color:var(--err)}
+/* D29 Autofill im dunklen Modus (sonst hellblaue Felder) */
+:root[data-theme="dark"] input:-webkit-autofill,:root[data-theme="dark"] input:-webkit-autofill:hover,:root[data-theme="dark"] input:-webkit-autofill:focus{
+  -webkit-text-fill-color:var(--text);-webkit-box-shadow:0 0 0 1000px var(--panel-2) inset;caret-color:var(--text);transition:background-color 9999s}
+/* Symbole ✓/✗ als SVG (bx_sym) */
+.bx-sym{display:inline-block;width:1em;height:1em;vertical-align:-.15em}
+/* T4.4 (D3) Such- und Filterleisten am Handy: Suchfeld volle Breite in eigener Zeile, Auswahl ebenso */
+@media (max-width:860px){
+  .bx-listbar > .bx-search,.bx-listbar > input[type=search],.bx-listbar > input[type=text]{flex:1 1 100%;width:100%;max-width:none;min-width:0}
+  .bx-listbar > .rs-combo,.bx-listbar > select{flex:1 1 100%;width:100%;max-width:none;min-width:0}
+  .bx-listbar > span[style*="flex:1"]{display:none}
+}
+/* T4.1 (D4) Zusatzzeile unter einer Menge („Bedarf … · Lager …“): umbrechen in fester Breite statt rechts abgeschnitten */
+.bx-zusatz{white-space:normal;max-width:220px;margin-left:auto;line-height:1.35}
+/* T4.7 (D17) Marken Spec/CoA/Lief.: vorhanden kräftig grün, fehlt grau durchgestrichen – beide ≥ 4,5 : 1 */
+.bx-mark-ja{font-size:12px;font-weight:600;color:#0f6f50}
+.bx-mark-nein{font-size:12px;color:#6b756a;text-decoration:line-through}
+:root[data-theme="dark"] .bx-mark-ja{color:#6ee7b7}
+:root[data-theme="dark"] .bx-mark-nein{color:#9aa694}
+/* T4.10 (D19) PDF-Knopf gleich hoch wie die anderen Knöpfe (normal 36 px, am Handy 44 px) */
+.pdfbtn{min-height:36px;padding:0 12px;border-radius:var(--r-sm);font-weight:400;font-size:var(--fs)}
+@media (max-width:860px){.pdfbtn{min-height:44px}}
+.bx-table .pdfbtn{min-height:30px;font-size:var(--fs-sm);padding:0 9px}
+/* Handy: lange Knopftexte dürfen umbrechen statt die Seite zu verbreitern */
+@media (max-width:860px){.btn{max-width:100%;white-space:normal;text-align:center;height:auto}}
+/* Vorformatierte Texte (z. B. Korrektur-SQL in der Datenprüfung) nie breiter als das Feld */
+pre{max-width:100%;overflow-x:auto;overflow-wrap:anywhere}
+/* T4.14 Tippflächen im Menü-Fuß am Handy (Menü Einfach/Ausführlich, Dunkler Modus, Abmelden) */
+@media (max-width:860px){
+  .bx-menumodus button{min-height:44px}
+  .bx-themebtn,.bx-logout{min-height:44px;display:flex;align-items:center}
+}

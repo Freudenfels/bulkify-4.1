@@ -143,3 +143,6 @@ Anlass: Beim „Vorsorglich bestellen“ bei Wellgreen kam „keinen aktiven Acc
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Bestellen: keine Entwürfe mehr wegen Unterlagen. Jeder Weg setzt seinen normalen Status. Im Pop-up „heute bestellt“ ein gelber Hinweis „Beim Lieferanten fehlen noch: …“ (data-lu am Knopf), nach dem Bestellen der gelbe Kasten (`?lu_hinweis=`), dazu die Aufgabe „Unterlagen nachfordern“. Der Kasten „Entwurf - Unterlagen fehlen“ zeigt nur noch alte Entwürfe (bis 13.11.2026) und fällt weg, sobald keine mehr da sind. Seitenaufruf: `lu_abgleich()`.
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Tabelle „Bestellen“ mit Klasse `bx-karten-handy` (am Handy Karten je Zeile); Zusatzzeile „Bedarf … · Lager …“ (`.bx-zusatz`) bricht in fester Breite um statt abgeschnitten zu werden.

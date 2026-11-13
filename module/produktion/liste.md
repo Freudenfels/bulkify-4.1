@@ -82,3 +82,6 @@ Die alten Seiten leiten weiter (`public/index.php`), nichts ist gelöscht. Ihre 
 ## Nachbesserung Fable-5 (13.11.2026, Teil 2)
 - **Läuft (T2.4):** dieselbe Regel wie die Werk-App – Status laufend oder schon produziert (`pa_ist_laufend`, Spalte `produziert_stk`); geht vor „Eigen/Fremd offen“.
 - **Kachel „Machbar“ (T2.8):** startklar + „bis vor dem Etikettieren“ (fehlt nur Etikett bzw. ist es nicht freigegeben, `_bereit = bis_etikett`, Badge „bis vor Etikettieren“). „Wartet auf Material“ zählt diese nicht mehr.
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Tabelle auf Feldbreite: Spalte „Art · Etikett“ (Eigen/Fremd, Etikett-Stand, Kapselgröße), Fortschritt in „Aktuelle Station“ (n/m), Kunde und Produkt mit Lauftext, im Reiter „Läuft“ ohne Spalte „Bereit“; Menge und Kacheln mit Tausenderpunkt; „Produziert“ = nur Fertigware in Stück.

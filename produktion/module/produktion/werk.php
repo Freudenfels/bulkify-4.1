@@ -230,6 +230,16 @@ header('Content-Type: text/html; charset=utf-8');
   body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:18px;-webkit-text-size-adjust:100%}
   .wrap{max-width:1100px;margin:0 auto;padding:18px 18px 60px}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px;margin-bottom:16px;position:sticky;top:0;z-index:30;background:var(--bg);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  /* Fable-5 T4.13 (D30): Kopf einzeilig – Logo, Sprache, Name, Abmelden als Symbol (44 px Tippfläche) */
+  .topbar > div:last-child{flex-wrap:nowrap !important;gap:8px !important;min-width:0}
+  .wa-abmelden{min-height:44px;min-width:44px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center}
+  @media (max-width:520px){
+    .topbar{flex-wrap:nowrap;gap:8px}
+    .topbar .brand img{height:24px !important}
+    .topbar .who{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+    .topbar .langbtn{padding:6px 8px;font-size:13px;min-height:44px}
+    .topbar .back{white-space:nowrap;font-size:14px}
+  }
   .brand{font-weight:800;font-size:22px;letter-spacing:.3px}
   .brand b{color:var(--lime)}
   .who{color:var(--muted);font-size:15px}
@@ -333,7 +343,7 @@ header('Content-Type: text/html; charset=utf-8');
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <?= werk_lang_switcher($lang, 0) ?>
       <span class="who"><?= h($werkName) ?></span>
-      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost" style="min-height:48px;padding:10px 18px;font-size:16px" type="submit"><?= h($T['logout']) ?></button></form>
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost wa-abmelden" type="submit" title="<?= h($T['logout']) ?>" aria-label="<?= h($T['logout']) ?>"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button></form>
     </div>
   </div>
   <?php if ($flash): ?><div class="flash <?= $flashOk ? 'ok' : 'err' ?>"><?= h($flash) ?></div><?php endif; ?>
@@ -396,7 +406,7 @@ header('Content-Type: text/html; charset=utf-8');
   <div class="topbar">
     <a class="back" href="?p=werk">&larr; <?= h($T['back_all']) ?></a>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><?= werk_lang_switcher($lang, $id) ?><span class="who"><?= h($werkName) ?></span>
-      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost" style="min-height:44px;padding:8px 16px;font-size:15px" type="submit"><?= h($T['logout']) ?></button></form>
+      <form method="post" style="margin:0"><input type="hidden" name="aktion" value="werk_logout"><button class="btn btn-ghost wa-abmelden" type="submit" title="<?= h($T['logout']) ?>" aria-label="<?= h($T['logout']) ?>"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></button></form>
     </div>
   </div>
   <?php if ($flash): ?><div class="flash <?= $flashOk ? 'ok' : 'err' ?>"><?= h($flash) ?></div><?php endif; ?>

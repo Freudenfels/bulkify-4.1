@@ -182,3 +182,6 @@ Neue Liste `charge_quarantaene_unterlage` „Chargen in Quarantäne wegen fehlen
 
 ## Nachbesserung Fable-5 (13.11.2026)
 Die Prüfung „voll produziert, Schritte offen“ rechnet „produziert“ mit `pa_produziert_sql()` (nur Fertigware in Stück).
+
+## Nachbesserung Fable-5 (13.11.2026, Design)
+Übersicht und Prüf-Tabellen als `bx-karten-handy`; Prüfungs-Titel brechen um; lange Werte mit Lauftext (220 px).
