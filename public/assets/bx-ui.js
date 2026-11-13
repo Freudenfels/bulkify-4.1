@@ -210,7 +210,7 @@
   function reiterAnker() {
     if (!document.querySelector('.bs-reiter')) return;
     var map = { unterlagen: 'wareneingang', wareneingang: 'wareneingang', abgleich: 'wareneingang', chargen: 'wareneingang', chargenbezug: 'wareneingang', aufkleber: 'wareneingang',
-                versand: 'versand', zahlung: 'zahlung', rechnung: 'zahlung', bezahlt: 'zahlung', nachrichten: 'nachrichten', rueckfragen: 'nachrichten', verlauf: 'verlauf' };
+                versand: 'versand', zahlung: 'zahlung', rechnung: 'zahlung', bezahlt: 'zahlung', nachrichten: 'nachrichten', rueckfragen: 'nachrichten', verlauf: 'verlauf', kosten: 'kosten', preise: 'kosten' };
     var pop = { unterlagen: 'dlgUnterlagen', rechnung: 'dlgRechnung', bezahlt: 'dlgBezahlt' };
     var h = (location.hash || '').replace('#', ''), q = new URLSearchParams(location.search).get('tab') || '';
     var k = map[h] || map[q]; if (k) reiter(k);

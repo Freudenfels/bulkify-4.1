@@ -28,6 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $laB = one("SELECT * FROM bestellung WHERE id=?", [(int)$id]);
         if ($laB && ($laR = la_post($laB, 'team', 'de')) !== null) la_post_ausgeben($laB, $laR, '?p=bestellung&id=' . (int)$id);
     }
+    if (in_array($aktion, ['bk_neu', 'bk_storno'], true) && !$neu && ($bkB = one("SELECT * FROM bestellung WHERE id=?", [(int)$id]))) {   // Reiter Kosten (13.11.2026)
+        require_once BX_ROOT . '/core/bestellung_kosten.php';
+        $rK = bk_post($bkB, (string)(current_user()['name'] ?? 'Team'));
+        header('Location: ?p=bestellung&id=' . (int)$id . (!empty($rK['ok']) ? '&okmsg=' : '&fehler=') . rawurlencode((string)($rK['msg'] ?? '')) . '#kosten'); exit;
+    }
     if ($aktion === 'liefern' && !$neu) {
         $bpErst = (int) scalar("SELECT id FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND COALESCE(geliefert_menge,0) < menge AND rest_storniert_am IS NULL ORDER BY sort, id LIMIT 1", [(int)$id]);
         header('Location: ?p=wareneingang' . ($bpErst ? '&bp=' . $bpErst : '')); exit;
@@ -591,6 +596,10 @@ if (!$neu) {
     if ($vb) { echo '<div class="bx-panel">'; bx_chat($vb, (string)$b['nummer']); echo '</div>'; }
     $tabVerlauf = ob_get_clean();
 
+    // ---- Reiter Kosten: Warenwert, Rechnung, Nebenkosten, Gesamtkosten (core/bestellung_kosten.php, 13.11.2026)
+    require_once BX_ROOT . '/core/bestellung_kosten.php';
+    $tabKosten = bk_panel_html($b);
+
     // ---- Reiter (Standard = wo der nächste Schritt liegt)
     $weOffen = $offenBest && in_array($st, ['bestellt', 'gesendet'], true);
     $zahlOffen = in_array($hp['art'], ['rechnung', 'bezahlt'], true);
@@ -599,6 +608,7 @@ if (!$neu) {
         'wareneingang' => ['Wareneingang & Chargen', ($weOffen || $luF) ? '•' : '', $tabWE],
         'versand'      => ['Versand', '', $tabVersand],
         'zahlung'      => ['Zahlung', $zahlOffen ? '•' : '', $tabZahlung],
+        'kosten'       => ['Kosten', '', $tabKosten],
         'nachrichten'  => ['Nachrichten', $bd['ungelesen'] > 0 ? (string)$bd['ungelesen'] : '', $tabNachr],
         'verlauf'      => ['Verlauf', '', $tabVerlauf],
     ], $standard);
