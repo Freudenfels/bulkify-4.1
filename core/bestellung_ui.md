@@ -26,3 +26,6 @@ Versandformular: Anzahl Pakete (Vorschlag = nicht stornierte Gebindeaufkleber) u
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Das Team bestätigt einen Entwurf ohne Admin-Grund – das Feld „Grund (Unterlagen fehlen, nur Admin)“ ist entfallen.
+
+## Schritt-Leiste (13.11.2026, Fable-5 D23)
+Stationen als einheitliche Leiste `ol.bx-schritte`: erledigt (grüner Haken), aktuell (hervorgehoben), offen (grau); keine Station sieht wie ein Knopf aus. Darunter ein Knopf „Nächster Schritt: …“. „Wareneingang bei bulkify“ setzt weiter nur der Wareneingang. Am Handy senkrecht.

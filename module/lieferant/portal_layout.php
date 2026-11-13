@@ -452,7 +452,7 @@ function lp_head(string $titel): void {
     $lang = lp_sprache();
     echo '<!doctype html><html lang="' . h($lang) . '"><head><meta charset="utf-8">'
        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
-       . '<title>' . h($titel) . '</title><link rel="stylesheet" href="assets/app.css"><script src="/assets/bx-ui.js?v=20261113" defer></script>' . pwa_head()
+       . '<title>' . h($titel) . '</title><link rel="stylesheet" href="assets/app.css?v=' . (int) @filemtime(BX_ROOT . '/public/assets/app.css') . '"><script src="/assets/bx-ui.js?v=' . (int) @filemtime(BX_ROOT . '/public/assets/bx-ui.js') . '" defer></script>' . pwa_head()
        . '<script>(function(){try{var t=localStorage.getItem(\'bx-theme\');if(t===\'dark\'||t===\'light\')document.documentElement.setAttribute(\'data-theme\',t);}catch(e){}})();</script>'
        . '</head><body>';
 }

@@ -13,15 +13,16 @@
     w.className = 'bx-datei';
     var b = document.createElement('span');
     b.className = 'btn btn-ghost btn-sm';
-    b.textContent = inp.multiple ? 'Dateien wählen' : 'Datei wählen';
+    var T = window.bxTx || function (k) { return {datei: 'Datei wählen', dateien: 'Dateien wählen', keine: 'keine gewählt', ndateien: 'Dateien'}[k]; };
+    b.textContent = inp.multiple ? T('dateien') : T('datei');
     b.setAttribute('role', 'button'); b.tabIndex = 0;
-    var n = document.createElement('span'); n.className = 'bx-datei-name'; n.textContent = 'keine gewählt';
+    var n = document.createElement('span'); n.className = 'bx-datei-name'; n.textContent = T('keine');
     inp.parentNode.insertBefore(w, inp);
     w.appendChild(inp); w.appendChild(b); w.appendChild(n);
     b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } });
     inp.addEventListener('change', function () {
       var f = inp.files ? Array.prototype.map.call(inp.files, function (x) { return x.name; }) : [];
-      n.textContent = f.length ? (f.length > 1 ? f.length + ' Dateien' : f[0]) : 'keine gewählt';
+      n.textContent = f.length ? (f.length > 1 ? f.length + ' ' + T('ndateien') : f[0]) : T('keine');
       n.title = f.join(', ');
     });
   }

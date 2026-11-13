@@ -73,3 +73,5 @@ Jeder Menüpunkt mit Icon (`bx_portal_nav`): Übersicht Kacheln, Bestellungen Kl
 
 ## Übersetzungsreste (13.11.2026)
 Neue Schlüssel `zb`, `schliessen`, `keine_angaben`, `keine_weiteren`, `laden_fehler` (Rohstoff-Pop-up und Platzhalter jetzt DE/EN/中文); 中文 einheitlich „CoA“, „我们据此核算成本“, „距上次更新“.
+
+13.11.2026: `app.css` und `bx-ui.js` mit Dateizeit als Version (vorher fest `20261113` – neue Stände kamen aus dem Cache).

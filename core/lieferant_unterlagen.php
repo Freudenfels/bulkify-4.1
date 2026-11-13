@@ -400,36 +400,80 @@ function lu_upload(int $lieferant_id, string $feld, string $art, int $item_id, i
     return $did;
 }
 
-// Aufgabenliste „Diese Unterlagen fehlen noch“ (Portal und intern), mit Upload direkt in der Zeile.
-// $nur: optional Filter auf eine Quelle (z. B. ['item_id'=>…, 'rezeptur_id'=>…] einer Anfrage). $sprache de/en/zh.
+// Aufgabenliste „Diese Unterlagen fehlen noch“ (Portal und intern). Design 13.11.2026 (Fable-5 D21/D22): keine rohen Datei-Felder,
+// oben „noch N offen“ und Filter nach Art, gruppiert nach Anfrage/Bestellung, je Unterlage eine Zeile (am Handy Karte) mit Knopf
+// „Hochladen“ -> Pop-up (Datei, Ablaufdatum, Bemerkung). $nur: optional Filter auf eine Quelle; $sprache de/en/zh.
 // Das Formular postet aktion=lu_upload an $ziel (Seite verarbeitet über lu_upload_post()).
 function lu_panel(int $lieferant_id, string $ziel, string $sprache = 'de', ?array $nur = null, bool $team = false): string {
+    static $nr = 0; $nr++;
     $t = fn(string $de, string $en, string $zh) => $sprache === 'de' ? $de : ($sprache === 'zh' ? $zh : $en);
     $liste = isset($nur['liste']) ? (array)$nur['liste'] : ($nur ? lu_fehlt($lieferant_id, (int)($nur['item_id'] ?? 0), (int)($nur['rezeptur_id'] ?? 0)) : lu_offen_lieferant($lieferant_id));
     if (!$liste) return '';
-    $o = '<div class="bx-panel" style="margin:4px 0 14px;padding:12px 14px;border-color:#e7c27a">'
-       . '<div style="font-weight:600;margin-bottom:2px">' . h($t('Diese Unterlagen fehlen noch', 'These documents are still missing', '以下文件仍缺失')) . '</div>'
-       . '<div class="muted" style="font-size:12px;margin-bottom:10px">' . h($team ? 'Unterlage hier im Namen des Lieferanten nachreichen (z. B. per Mail erhalten) – sie zählt sofort.' : $t(
+    $dlg = 'luDlg' . $nr;
+    // Gruppen: erste Quelle (Anfrage, Bestellung, Preis) – sonst „Weitere“
+    $gruppen = [];
+    foreach ($liste as $f) {
+        $q = $f['quellen'] ?? [];
+        $g = $q ? (string) array_key_first($q) : $t('Weitere', 'Other', '其他');
+        $gruppen[$g]['link'] = $q ? (string) reset($q) : '';
+        $gruppen[$g]['f'][] = $f;
+    }
+    $nRoh = count(array_filter($liste, fn($f) => $f['art'] === 'roh'));
+    $nProd = count($liste) - $nRoh;
+    $o = '<div class="bx-panel lu-panel" data-lu-panel style="margin:4px 0 14px;padding:14px 16px;border-color:#e7c27a">'
+       . '<div class="lu-kopf"><div><div class="lu-zaehler">' . h(sprintf($t('Noch %d offen', '%d still open', '还有 %d 项未完成'), count($liste))) . '</div>'
+       . '<div class="muted" style="font-size:13px;margin-top:2px">' . h($team ? 'Unterlage hier im Namen des Lieferanten nachreichen (z. B. per Mail erhalten) – sie zählt sofort.' : $t(
             'Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt. Je Rohstoff genügt eine CoA oder Spezifikation; für das Gesamtprodukt brauchen wir Ihre Spezifikation.',
             'Please upload missing documents, otherwise the goods remain blocked at our site. One CoA or specification per raw material is enough; for the finished product we need your specification.',
-            '请上传缺少的文件，否则货物将在我方被冻结。每种原料提供一份 CoA 或规格书即可；成品需要您的规格书。')) . '</div>'
-       . '<div class="bx-tablewrap"><table class="bx-table"><thead><tr><th>' . h($t('Unterlage', 'Document', '文件')) . '</th><th>' . h($t('für', 'for', '用于')) . '</th><th></th></tr></thead><tbody>';
-    foreach ($liste as $i => $f) {
-        $quellen = '';
-        foreach (($f['quellen'] ?? []) as $q => $link) $quellen .= ($quellen ? ', ' : '') . '<a href="' . h($link) . '">' . h($q) . '</a>';
-        $o .= '<tr><td style="min-width:200px">' . h($f['name']) . '<div class="muted" style="font-size:12px">' . h(lu_braucht_text($f['braucht'], $sprache)) . '</div></td>'
-            . '<td class="muted" style="font-size:12px">' . ($quellen ?: '–') . '</td><td>'
-            . '<form method="post" action="' . h($ziel) . '" enctype="multipart/form-data" class="bx-row" style="gap:8px;flex-wrap:nowrap;margin:0">'
-            . '<input type="hidden" name="aktion" value="lu_upload"><input type="hidden" name="lu_art" value="' . h($f['art']) . '">'
-            . '<input type="hidden" name="lu_item" value="' . (int)$f['item_id'] . '"><input type="hidden" name="lu_rez" value="' . (int)$f['rezeptur_id'] . '">'
-            . ($f['art'] === 'roh'
-                ? '<select name="lu_typ"><option value="coa">CoA</option><option value="spec">' . h($t('Spezifikation', 'Specification', '规格书')) . '</option></select>'
-                : '<input type="hidden" name="lu_typ" value="spec">')
-            . '<input type="file" name="lu_datei" accept="application/pdf,image/*" required>'
-            . '<button class="bx-btn" type="submit">' . h($t('Hochladen', 'Upload', '上传')) . '</button></form>'
-            . ($team && $f['art'] === 'roh' ? '<div style="margin-top:4px">' . lu_kein_dokument_knopf((int)$f['item_id'], (string)$f['name'], $ziel) . '</div>' : '') . '</td></tr>';
+            '请上传缺少的文件，否则货物将在我方被冻结。每种原料提供一份 CoA 或规格书即可；成品需要您的规格书。')) . '</div></div>';
+    if ($nRoh && $nProd)
+        $o .= '<div class="lu-filter" role="group"><button type="button" class="btn btn-ghost btn-sm on" data-lu-f="">' . h($t('Alle', 'All', '全部')) . ' (' . count($liste) . ')</button>'
+            . '<button type="button" class="btn btn-ghost btn-sm" data-lu-f="roh">' . h($t('Rohstoff (CoA/Spec)', 'Raw material (CoA/spec)', '原料（CoA/规格书）')) . ' (' . $nRoh . ')</button>'
+            . '<button type="button" class="btn btn-ghost btn-sm" data-lu-f="produkt">' . h($t('Gesamtprodukt (Spec)', 'Finished product (spec)', '成品（规格书）')) . ' (' . $nProd . ')</button></div>';
+    $o .= '</div>';
+    foreach ($gruppen as $g => $gr) {
+        $o .= '<div class="lu-gruppe"><div class="lu-gtitel">' . ($gr['link'] !== '' ? '<a href="' . h($gr['link']) . '">' . h($g) . '</a>' : h($g)) . ' <span class="muted">· ' . count($gr['f']) . '</span></div>';
+        foreach ($gr['f'] as $f) {
+            $weitere = array_slice(array_keys($f['quellen'] ?? []), 1);
+            $o .= '<div class="lu-zeile" data-lu-art="' . h($f['art']) . '"><div class="lu-text"><div class="lu-name">' . h($f['name']) . '</div>'
+                . '<div class="muted" style="font-size:12.5px">' . h(lu_braucht_text($f['braucht'], $sprache)) . ($weitere ? ' · ' . h($t('auch für', 'also for', '也用于')) . ' ' . h(implode(', ', $weitere)) : '') . '</div></div>'
+                . '<div class="lu-akt"><button type="button" class="btn btn-primary btn-sm" data-lu-dlg="' . $dlg . '" data-lu-a="' . h($f['art']) . '" data-lu-i="' . (int)$f['item_id'] . '" data-lu-r="' . (int)$f['rezeptur_id'] . '" data-lu-n="' . h($f['name']) . '">' . h($t('Hochladen', 'Upload', '上传')) . '</button>'
+                . ($team && $f['art'] === 'roh' ? lu_kein_dokument_knopf((int)$f['item_id'], (string)$f['name'], $ziel) : '') . '</div></div>';
+        }
+        $o .= '</div>';
     }
-    return $o . '</tbody></table></div></div>';
+    // Ein Pop-up je Liste (bx-dialog): Art, Datei, Ablaufdatum, Bemerkung
+    $o .= '<dialog id="' . $dlg . '" class="bx-dialog" style="max-width:520px"><h2>' . h($t('Unterlage hochladen', 'Upload document', '上传文件')) . '</h2>'
+        . '<form method="post" action="' . h($ziel) . '" enctype="multipart/form-data" style="margin:0">'
+        . '<input type="hidden" name="aktion" value="lu_upload"><input type="hidden" name="lu_art"><input type="hidden" name="lu_item"><input type="hidden" name="lu_rez">'
+        . '<div class="lu-dname" style="font-weight:600;margin-bottom:10px"></div>'
+        . '<div class="bx-field lu-typ"><label>' . h($t('Art', 'Type', '类型')) . '</label><select name="lu_typ" data-norscombo><option value="coa">CoA</option><option value="spec">' . h($t('Spezifikation', 'Specification', '规格书')) . '</option></select></div>'
+        . '<div class="bx-field"><label>' . h($t('Datei (PDF oder Bild)', 'File (PDF or image)', '文件（PDF 或图片）')) . '</label><input type="file" name="lu_datei" accept="application/pdf,image/*" required></div>'
+        . '<div class="bx-field"><label>' . h($t('Gültig bis (optional)', 'Valid until (optional)', '有效期至（可选）')) . '</label><input type="date" name="lu_ablauf"></div>'
+        . '<div class="bx-field"><label>' . h($t('Bemerkung (optional)', 'Note (optional)', '备注（可选）')) . '</label><input type="text" name="lu_bemerkung" maxlength="500"></div>'
+        . '<div class="bx-pop-fuss"><button class="btn btn-primary" type="submit">' . h($t('Hochladen', 'Upload', '上传')) . '</button></div></form></dialog>';
+    static $js = false;
+    if (!$js) {
+        $js = true;
+        $o .= '<style>.lu-kopf{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:10px}.lu-zaehler{font-size:18px;font-weight:600}'
+            . '.lu-filter{display:flex;gap:6px;flex-wrap:wrap}.lu-filter .btn.on{border-color:var(--gruen);color:var(--gruen)}'
+            . '.lu-gruppe{margin-top:12px}.lu-gtitel{font-size:13px;margin:0 0 6px;font-weight:600}'
+            . '.lu-zeile{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--panel)}'
+            . '.lu-text{min-width:0;flex:1}.lu-name{overflow-wrap:anywhere}.lu-akt{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:none}'
+            . '@media (max-width:640px){.lu-zeile{flex-direction:column;align-items:stretch}.lu-akt .btn{width:100%}}</style>'
+            . '<script>(function(){document.addEventListener("click",function(e){'
+            . 'var b=e.target.closest&&e.target.closest("[data-lu-dlg]");'
+            . 'if(b){var d=document.getElementById(b.getAttribute("data-lu-dlg"));if(!d)return;var f=d.querySelector("form");'
+            . 'f.lu_art.value=b.getAttribute("data-lu-a");f.lu_item.value=b.getAttribute("data-lu-i");f.lu_rez.value=b.getAttribute("data-lu-r");'
+            . 'd.querySelector(".lu-dname").textContent=b.getAttribute("data-lu-n");var ty=d.querySelector(".lu-typ");if(ty)ty.hidden=b.getAttribute("data-lu-a")!=="roh";'
+            . 'if(b.getAttribute("data-lu-a")!=="roh")f.lu_typ.value="spec";if(window.bxPopup)bxPopup.open(d);else d.showModal();return;}'
+            . 'var fb=e.target.closest&&e.target.closest("[data-lu-f]");if(!fb)return;var p=fb.closest("[data-lu-panel]");'
+            . 'p.querySelectorAll("[data-lu-f]").forEach(function(x){x.classList.toggle("on",x===fb);});var art=fb.getAttribute("data-lu-f");'
+            . 'p.querySelectorAll(".lu-zeile").forEach(function(z){z.hidden=!!art&&z.getAttribute("data-lu-art")!==art;});'
+            . 'p.querySelectorAll(".lu-gruppe").forEach(function(g){g.hidden=!g.querySelector(".lu-zeile:not([hidden])");});'
+            . '});})();</script>';
+    }
+    return $o . '</div>';
 }
 
 // POST aus lu_panel verarbeiten. Rückgabe ['ok'=>bool, 'did'=>int]. KI-Auswertung danach (wie beim Preisangebot).
@@ -460,6 +504,13 @@ function lu_upload_post(int $lieferant_id, string $von = 'lieferant'): array {
         return ['ok' => false, 'did' => 0, 'abgelehnt' => true];
     }
     $did = lu_upload($lieferant_id, 'lu_datei', $art, $iid, $rid, (string)($_POST['lu_typ'] ?? 'spec'), $von);
+    // 13.11.2026: Ablaufdatum und Bemerkung aus dem Pop-up
+    if ($did > 0) {
+        $ab = (string)($_POST['lu_ablauf'] ?? '');
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $ab)) q("UPDATE dokument SET dok_datum=? WHERE id=?", [$ab, $did]);
+        $bem = trim((string)($_POST['lu_bemerkung'] ?? ''));
+        if ($bem !== '') { try { ensure_column('dokument', 'bemerkung', 'VARCHAR(500) NULL'); q("UPDATE dokument SET bemerkung=? WHERE id=?", [mb_substr($bem, 0, 500), $did]); } catch (\Throwable $e) {} }
+    }
     return ['ok' => $did > 0, 'did' => $did];
 }
 // Nach der Antwort an den Browser: KI liest die neue Unterlage (bulkify-Format), Rohstoff-Entwurf wird aktiv.

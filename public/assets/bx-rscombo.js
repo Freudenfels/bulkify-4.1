@@ -26,8 +26,8 @@ function combo(sel){
   var hl=-1,shown=[],last=null;
   function sync(){ // sichtbaren Text an den Select-Wert angleichen (auch wenn anderes Skript den Wert setzt)
     var c=sel.options[sel.selectedIndex];var t=c?c.textContent.trim():'';
-    if(sel.value!==''){box.value=t;box.placeholder=sel.getAttribute('data-ph')||'Suchen…';}
-    else{box.value='';box.placeholder=t&&!/^[–—-]/.test(t)?t:(sel.getAttribute('data-ph')||'Suchen…');}
+    if(sel.value!==''){box.value=t;box.placeholder=sel.getAttribute('data-ph')||(window.bxTx?bxTx('suchen'):'Suchen…');}
+    else{box.value='';box.placeholder=t&&!/^[–—-]/.test(t)?t:(sel.getAttribute('data-ph')||(window.bxTx?bxTx('suchen'):'Suchen…'));}
     box.title=t;last=sel.value;box.disabled=sel.disabled;
   }
   sync();
@@ -46,7 +46,7 @@ function combo(sel){
   function ok(){box.setCustomValidity('');box.classList.remove('rs-invalid');}
   function pick(i){var o=shown[i];if(!o)return;sel.value=o.v;sync();list.hidden=true;ok();sel.dispatchEvent(new Event('change',{bubbles:true}));}
   sel.addEventListener('invalid',function(){box.classList.add('rs-invalid');if(window.__rsInv)return;window.__rsInv=1;setTimeout(function(){window.__rsInv=0;},80);
-    box.setCustomValidity('Bitte aus der Liste auswählen.');box.focus();box.reportValidity();});
+    box.setCustomValidity(window.bxTx?bxTx('liste'):'Bitte aus der Liste auswählen.');box.focus();box.reportValidity();});
   sel.addEventListener('change',function(){if(document.activeElement!==box)sync();});
   box.addEventListener('input',function(){box.setCustomValidity('');render(box.value);});
   box.addEventListener('focus',function(){box.select();render('');});

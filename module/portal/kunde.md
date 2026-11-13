@@ -517,3 +517,6 @@ Jeder Menüpunkt hat ein Icon (`$PORTAL_ICONS`): Übersicht Kacheln, Rezepturen 
 
 ## Anleitung (13.11.2026)
 „Info & Tools“ und Rundgang aus `core/portal_hilfe.php` (DE/EN nach Kundenland), je Ablauf eine Karte mit Icon. Rundgang-Schritt „Angebote & Anfragen“ trifft jetzt den echten Menüpunkt, „live/Echtzeit“ ersetzt durch „die wichtigsten Schritte“. „Angebot ablehnen“ verlangt einen Grund (Feld Pflicht, Server leitet ohne Grund mit Hinweis zurück).
+
+## Design (13.11.2026, Fable-5 D24-D26)
+Start: Tabelle „In Produktion / in Arbeit“ am Handy als Karten (`bx-karten-handy`). Fortschritt am Handy: Auftragsseite senkrecht mit hervorgehobenem aktuellen Schritt, Bestellliste nur Punkte (aktueller Schritt als Text darüber); kein seitliches Scrollen.

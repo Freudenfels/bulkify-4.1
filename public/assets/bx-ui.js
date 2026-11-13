@@ -17,6 +17,24 @@
 (function () {
   if (window.bxUi) return;
   window.bxUi = 1;
+  // Texte in der Sprache der Seite (<html lang>): Portale auf Englisch/Chinesisch fragen nicht mehr fest auf Deutsch (13.11.2026).
+  var LANG = ((document.documentElement.getAttribute('lang') || 'de').slice(0, 2)).toLowerCase();
+  var TX = {
+    zu:    {de: 'Schließen', en: 'Close', zh: '关闭', uk: 'Закрити'},
+    frage: {de: 'Es gibt ungespeicherte Eingaben. Pop-up trotzdem schließen?', en: 'There are unsaved entries. Close anyway?', zh: '有未保存的输入。仍然关闭吗？', uk: 'Є незбережені дані. Все одно закрити?'},
+    speichern: {de: 'Speichern hat nicht geklappt. Bitte erneut versuchen.', en: 'Saving did not work. Please try again.', zh: '保存失败，请重试。', uk: 'Не вдалося зберегти. Спробуйте ще раз.'},
+    netz:  {de: 'Keine Verbindung. Bitte erneut versuchen.', en: 'No connection. Please try again.', zh: '无网络连接，请重试。', uk: 'Немає зʼєднання. Спробуйте ще раз.'},
+    laedt: {de: 'Lädt …', en: 'Loading …', zh: '加载中…', uk: 'Завантаження …'},
+    fehler: {de: 'Konnte nicht geladen werden.', en: 'Could not be loaded.', zh: '无法加载。', uk: 'Не вдалося завантажити.'},
+    suchen: {de: 'Suchen…', en: 'Search…', zh: '搜索…', uk: 'Пошук…'},
+    liste: {de: 'Bitte aus der Liste auswählen.', en: 'Please choose from the list.', zh: '请从列表中选择。', uk: 'Будь ласка, виберіть зі списку.'},
+    datei: {de: 'Datei wählen', en: 'Choose file', zh: '选择文件', uk: 'Вибрати файл'},
+    dateien: {de: 'Dateien wählen', en: 'Choose files', zh: '选择文件', uk: 'Вибрати файли'},
+    keine: {de: 'keine gewählt', en: 'none chosen', zh: '未选择', uk: 'не вибрано'},
+    ndateien: {de: 'Dateien', en: 'files', zh: '个文件', uk: 'файлів'}
+  };
+  function tx(k) { var e = TX[k] || {}; return e[LANG] || e.en || e.de || k; }
+  window.bxTx = tx;
 
   var css = ''
     + '.bx-dialog{max-height:calc(100vh - 48px);overflow:auto;padding:0 !important;display:none;flex-direction:column}'
@@ -57,7 +75,7 @@
     }
     // Wrapper ohne eigenen Inhalt mehr (z. B. <div style="padding:…">) behalten ihr Padding nicht doppelt
     if (!k.querySelector('.bx-pop-x')) {
-      var x = document.createElement('button'); x.type = 'button'; x.className = 'bx-pop-x'; x.setAttribute('aria-label', 'Schließen'); x.innerHTML = '&times;';
+      var x = document.createElement('button'); x.type = 'button'; x.className = 'bx-pop-x'; x.setAttribute('aria-label', tx('zu')); x.innerHTML = '&times;';
       x.addEventListener('click', function () { zu(d); });
       k.appendChild(x);
     }
@@ -82,7 +100,7 @@
   }
   function dirty(d) { return !!d.__dirty; }
   function zu(d, ohneFrage) {
-    if (!ohneFrage && dirty(d) && !confirm('Es gibt ungespeicherte Eingaben. Pop-up trotzdem schließen?')) return false;
+    if (!ohneFrage && dirty(d) && !confirm(tx('frage'))) return false;
     d.__dirty = false;
     try { d.close(); } catch (e) { d.removeAttribute('open'); }
     if (d.hasAttribute('data-pop-temp')) d.remove();
@@ -108,7 +126,7 @@
         .then(function (r) { return r.text().then(function (t) { return { ok: r.ok, t: t }; }); })
         .then(function (r) {
           if (b) { b.disabled = false; b.classList.remove('is-busy'); }
-          if (!r.ok) { alert('Speichern hat nicht geklappt. Bitte erneut versuchen.'); return; }
+          if (!r.ok) { alert(tx('speichern')); return; }
           d.__dirty = false;
           var sel = f.getAttribute('data-pop-refresh') || (d && d.getAttribute('data-pop-refresh')) || '';
           // Antwort ist die Seite nach dem Speichern (Weiterleitung) – Zeilen daraus übernehmen, sonst Seite neu laden
@@ -116,7 +134,7 @@
           if (sel) { fetch(location.href, { credentials: 'same-origin' }).then(function (x) { return x.text(); }).then(function (t) { if (refresh(sel, t)) zu(d, true); else location.reload(); }); return; }
           location.reload();
         })
-        .catch(function () { if (b) { b.disabled = false; b.classList.remove('is-busy'); } alert('Keine Verbindung. Bitte erneut versuchen.'); });
+        .catch(function () { if (b) { b.disabled = false; b.classList.remove('is-busy'); } alert(tx('netz')); });
     }, true);
   }
   function aufwerten(d) {
@@ -144,7 +162,7 @@
     url: function (url, titel, refreshSel) {
       var d = document.createElement('dialog'); d.className = 'bx-dialog'; d.setAttribute('data-pop-temp', '1'); d.style.maxWidth = '980px';
       if (refreshSel) d.setAttribute('data-pop-refresh', refreshSel);
-      d.innerHTML = '<div class="bx-pop-kopf"><h2></h2></div><div class="muted" style="padding:10px 0 20px">Lädt …</div>';
+      d.innerHTML = '<div class="bx-pop-kopf"><h2></h2></div><div class="muted" style="padding:10px 0 20px">' + tx('laedt') + '</div>';
       d.querySelector('h2').textContent = titel || '';
       document.body.appendChild(d); aufwerten(d); d.showModal();
       fetch(url, { credentials: 'same-origin' }).then(function (r) { return r.text(); }).then(function (t) {
@@ -159,7 +177,7 @@
         });
         Array.prototype.forEach.call(box.querySelectorAll('script'), function (s) { var n = document.createElement('script'); n.textContent = s.textContent; s.replaceWith(n); });
         fuss(d); if (window.bxRsComboInit) window.bxRsComboInit(box);
-      }).catch(function () { d.children[1].textContent = 'Konnte nicht geladen werden.'; });
+      }).catch(function () { d.children[1].textContent = tx('fehler'); });
       return d;
     }
   };

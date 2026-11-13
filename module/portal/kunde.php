@@ -2601,7 +2601,7 @@ portal_head('Kundenportal · ' . $k['firma']);
       <h2 style="margin:0">In Produktion / in Arbeit <span class="muted" style="font-weight:400;font-size:14px">(<?= count($inProd) ?>)</span></h2>
       <a class="btn btn-ghost btn-sm" href="<?= $portalLink('bestellungen') ?>">Alle Bestellungen</a>
     </div>
-    <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table">
+    <div class="bx-tablewrap" style="margin-top:10px"><table class="bx-table bx-karten-handy"><?php /* 13.11.2026 (Fable-5 D26): am Handy Karten je Auftrag */ ?>
       <thead><tr><th>Auftrag</th><th>Produkt</th><th class="bx-num">Menge</th><th>Status</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($inProdShow as $a): ?>

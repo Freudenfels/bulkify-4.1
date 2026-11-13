@@ -55,20 +55,19 @@ function bestellung_ablauf_panel(array $b, string $wer = 'team', string $sprache
                : (!empty($b['teilgeliefert_am']) ? '<span class="muted" style="font-size:13px">' . $t('Teillieferung eingegangen', 'Partial delivery received', '部分到货') . ': ' . $h(date('d.m.Y', strtotime((string)$b['teilgeliefert_am']))) . '</span>' : ''))
             . '</div>';
 
-        // 2) Stationen – kumulativ, ein Knopf je Schritt.
-        $o .= '<div class="bx-row" style="gap:8px;flex-wrap:wrap">';
+        // 2) Stationen (Design 13.11.2026, Fable-5 D23): einheitliche Schritt-Leiste – erledigt (Haken), aktuell (hervorgehoben),
+        //    offen (grau); keine Station sieht wie ein Knopf aus. Darunter genau EIN Knopf für den nächsten Schritt.
+        //    „Wareneingang bei bulkify“ setzt nur der Wareneingang (Nacht 4b).
+        $o .= '<ol class="bx-schritte">';
         foreach ($keys as $i => $key) {
-            $erreicht = $i <= $ist;
-            if ($fertig || $erreicht || $key === 'eingegangen') {   // „Wareneingang bei bulkify" setzt nur der Wareneingang (Nacht 4b)
-                $o .= '<span class="bx-badge ' . ($erreicht ? 'badge-ok' : '') . '" style="padding:6px 12px;border-radius:999px">'
-                    . ($erreicht ? '&#10003; ' : '') . $h($stationen[$key]) . '</span>';
-            } else {
-                $o .= '<form method="post" style="margin:0"><input type="hidden" name="aktion" value="lief_station">'
-                    . '<input type="hidden" name="station" value="' . $h($key) . '">'
-                    . '<button class="btn btn-ghost btn-sm" type="submit">' . $h($stationen[$key]) . '</button></form>';
-            }
+            $zust = $i <= $ist ? ($i === $ist ? 'jetzt' : 'fertig') : 'offen';
+            $o .= '<li class="' . $zust . '"><span class="bx-schritt-p">' . ($i < $ist || ($i === $ist && $fertig) ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ($i + 1)) . '</span><span class="bx-schritt-t">' . $h($stationen[$key]) . '</span></li>';
         }
-        $o .= '</div>';
+        $o .= '</ol>';
+        $naechster = $keys[$ist + 1] ?? null;
+        if (!$fertig && $naechster !== null && $naechster !== 'eingegangen')
+            $o .= '<form method="post" style="margin:4px 0 0"><input type="hidden" name="aktion" value="lief_station"><input type="hidden" name="station" value="' . $h($naechster) . '">'
+                . '<button class="btn btn-primary btn-sm" type="submit">' . $h($t('Nächster Schritt', 'Next step', '下一步')) . ': ' . $h($stationen[$naechster]) . '</button></form>';
 
         // 3) Versanddaten – Pflicht, bevor „versendet" gesetzt werden kann.
         if (!$fertig) {

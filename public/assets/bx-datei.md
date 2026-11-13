@@ -9,3 +9,5 @@ Teil des Oberflächen-Standards (Nachbesserung Fable-5, Teil 4). Wird automatisc
    (CSS in `app.css`). Das Skript schreibt die Spaltenüberschrift als `data-label` an jede Zelle.
 
 Läuft auch auf später eingefügten Inhalten (Pop-ups) über einen MutationObserver.
+
+13.11.2026: Knopf „Datei wählen“ und „keine gewählt“ in der Sprache der Seite (über `bxTx`).

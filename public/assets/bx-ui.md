@@ -20,3 +20,6 @@ Ein gemeinsamer Baustein für alle Programme (Dashboard, Kunden- und Lieferanten
 
 ## Nachbesserung Fable-5 (13.11.2026)
 Lädt zusätzlich `bx-datei.js`, wenn die Seite ein Datei-Feld oder eine Tabelle `bx-karten-handy` enthält.
+
+## Sprache (13.11.2026)
+Texte (Rückfrage bei ungespeicherten Eingaben, Schließen, Lädt, Fehler, Suchfeld, Datei-Knopf) richten sich nach `<html lang>` (de/en/zh/uk); `window.bxTx(key)` liefert sie auch für `bx-rscombo.js` und `bx-datei.js`.

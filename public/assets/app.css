@@ -655,3 +655,32 @@ pre{max-width:100%;overflow-x:auto;overflow-wrap:anywhere}
 .bx-pmob{position:relative;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;color:#fff;border-radius:10px}
 .bx-pmob .bx-navico{width:22px;height:22px}
 .bx-pmob .bx-pnav-n{top:3px;left:23px}
+
+/* Schritt-Leiste (13.11.2026): erledigt / aktuell / offen – Lieferanten-Bestellung (core/bestellung_ui.php) */
+.bx-schritte{list-style:none;display:flex;gap:6px;padding:0;margin:4px 0 10px;flex-wrap:wrap}
+.bx-schritte li{display:flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;font-size:13px;color:var(--muted);background:var(--panel-2);border:1px solid var(--line)}
+.bx-schritt-p{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;background:var(--line);color:var(--text);flex:none}
+.bx-schritt-p svg{width:14px;height:14px}
+.bx-schritte li.fertig{color:var(--text)}
+.bx-schritte li.fertig .bx-schritt-p{background:var(--gruen);color:#fff}
+.bx-schritte li.jetzt{color:var(--text);border-color:var(--gruen);background:rgba(29,158,117,.10);font-weight:600}
+.bx-schritte li.jetzt .bx-schritt-p{background:var(--gruen);color:#fff}
+@media (max-width:640px){.bx-schritte{flex-direction:column;gap:4px}.bx-schritte li{border-radius:10px}}
+
+/* Kunden-Fortschritt am Handy (13.11.2026, Fable-5 D24/D25): Auftragsseite senkrecht mit hervorgehobenem aktuellen Schritt,
+   Bestellliste nur Punkte (der aktuelle Schritt steht als „Schritt x/y: …“ darüber) – keine überlappenden Beschriftungen, kein Seiten-Scroll. */
+@media (max-width:640px){
+  .bx-htrack{flex-direction:column;min-width:0;padding-top:4px}
+  .bx-hstep{display:grid;grid-template-columns:26px 1fr;column-gap:12px;align-items:center;text-align:left;padding:8px 8px 8px 0;border-radius:10px}
+  .bx-hstep::before{top:-50%;left:11.5px;width:3px;height:100%}
+  .bx-hstep .dot{grid-row:1 / span 2}
+  .bx-hstep .lbl{margin-top:0;font-size:14px}
+  .bx-hstep .date{margin-top:0;grid-column:2}
+  .bx-hstep.current,.bx-hstep.teil,.bx-hstep.err{background:rgba(29,158,117,.10);padding-left:0}
+  .bx-hstep.current .lbl,.bx-hstep.teil .lbl{font-weight:600}
+  .bx-hstep.err{background:rgba(192,57,43,.08)}
+  .bx-steps .bx-step .lbl{display:none}
+  .bx-steps .bx-step .dot{width:20px;height:20px;font-size:11px}
+  .bx-steps .bx-step::before{top:9px}
+  .bx-order-row [style*="white-space:nowrap"]{white-space:normal !important}
+}
