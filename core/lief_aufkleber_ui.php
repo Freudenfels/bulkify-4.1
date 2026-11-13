@@ -95,7 +95,7 @@ function la_panel(array $b, string $ziel, string $von, string $sprache): string 
             $o .= '<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px">'
                 . '<div class="bx-row" style="gap:18px;flex-wrap:wrap;align-items:center">'
                 . '<div><span class="muted" style="font-size:12px">' . h($t('Charge', 'Batch', '批号')) . '</span><div style="font-weight:600">' . h((string)$c['charge_nr']) . '</div></div>'
-                . '<div><span class="muted" style="font-size:12px">' . h($t('MHD', 'Expiry', '有效期')) . '</span><div>' . h($c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–') . '</div></div>'
+                . '<div><span class="muted" style="font-size:12px">' . h($t('MHD', 'Expiry', '保质期')) . '</span><div>' . h($c['mhd'] ? date('d.m.Y', strtotime((string)$c['mhd'])) : '–') . '</div></div>'
                 . '<form method="post" action="' . h($ziel) . '#aufkleber" class="bx-row" style="gap:6px;align-items:flex-end;margin:0">'
                 . '<input type="hidden" name="aktion" value="la_herstell"><input type="hidden" name="bc_id" value="' . (int)$c['id'] . '">'
                 . '<div><span class="muted" style="font-size:12px">' . h($t('Herstelldatum', 'Production date', '生产日期')) . '</span><input type="date" name="herstell_datum" value="' . h((string)($c['herstell_datum'] ?? '')) . '" style="width:auto"></div>'
@@ -105,8 +105,8 @@ function la_panel(array $b, string $ziel, string $von, string $sprache): string 
                 . '<input type="hidden" name="aktion" value="la_drucken"><input type="hidden" name="bc_id" value="' . (int)$c['id'] . '">'
                 . '<div><span class="muted" style="font-size:12px">' . h($t('Netto je Gebinde (kg)', 'Net per package (kg)', '每件净重 (kg)')) . '</span><input type="text" inputmode="decimal" name="netto" data-gewicht="kg" required style="width:110px"></div>'
                 . '<div><span class="muted" style="font-size:12px">' . h($t('Brutto (kg, optional)', 'Gross (kg, optional)', '毛重 (kg, 可选)')) . '</span><input type="text" inputmode="decimal" name="brutto" data-gewicht="kg" style="width:110px"></div>'
-                . '<div><span class="muted" style="font-size:12px">' . h($t('Stück je Gebinde (optional)', 'Pieces per package (optional)', '每件数量 (可选)')) . '</span><input type="text" inputmode="numeric" name="stueck" style="width:120px"></div>'
-                . '<div><span class="muted" style="font-size:12px">' . h($t('Anzahl', 'Quantity', '数量')) . '</span><input type="number" min="1" max="200" name="anzahl" value="1" required style="width:80px"></div>'
+                . '<div><span class="muted" style="font-size:12px">' . h($t('Stück je Gebinde (optional)', 'Pieces per package (optional)', '每件件数（可选）')) . '</span><input type="text" inputmode="numeric" name="stueck" style="width:120px"></div>'
+                . '<div><span class="muted" style="font-size:12px">' . h($t('Anzahl', 'Quantity', '标签张数')) . '</span><input type="number" min="1" max="200" name="anzahl" value="1" required style="width:80px"></div>'
                 . '<div><span class="muted" style="font-size:12px">' . h($t('Format', 'Format', '格式')) . '</span><select name="la_fmt">' . $fmtOpt . '</select></div>'
                 . '<button class="btn btn-primary btn-sm" type="submit">' . h($t('Aufkleber drucken', 'Print labels', '打印标签')) . '</button></form>';
             if ($c['aufkleber']) {

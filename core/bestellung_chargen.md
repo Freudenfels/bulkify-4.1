@@ -50,3 +50,5 @@ bestellung_versand_coa_fehlt(): „versendet“ nur mit CoA je Charge (Rohstoff,
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Nach dem Upload einer CoA/Spec an der Bestellposition läuft `lu_abgleich()`: Aufgabe „Unterlagen nachfordern“ erledigt sich, eine Charge in Quarantäne bekommt die QM-Aufgabe. Eine CoA/Spec an einer Bestellposition zählt als Unterlage des Artikels.
+
+13.11.2026: 中文-Texte schreiben „CoA“ einheitlich.

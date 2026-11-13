@@ -285,7 +285,7 @@ function bestellung_chargen_post(array $b, string $von, string $sprache = 'de'):
         $mitDatei = !empty($_FILES['bch_coa']['name']) && ($_FILES['bch_coa']['error'] ?? 1) === UPLOAD_ERR_OK;
         if ($nr === '') {
             // Nur das CoA hochgeladen (Nico 08.11.2026): Charge, MHD und Menge liest die KI aus, bestätigt wird im Prüf-Popup.
-            if (!$mitDatei) return $t('Bitte die Chargennummer eintragen oder ein CoA hochladen.', 'Please enter the batch number or upload a CoA.', '请输入批号或上传 COA。');
+            if (!$mitDatei) return $t('Bitte die Chargennummer eintragen oder ein CoA hochladen.', 'Please enter the batch number or upload a CoA.', '请输入批号或上传 CoA。');
             [, $f] = bch_datei_speichern('bch_coa', $b, 'coa', $bp, null, $von, $t);
             return $f;
         }
@@ -439,7 +439,7 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
     $o .= '<p class="muted" style="margin:0 0 12px;font-size:13px">' . $t(
           'Charge, MHD und CoA je Position (bei Teillieferung oder zwei Chargen eine Zeile je Charge), dazu die Spezifikation. Team und Lieferant pflegen dieselbe Liste. Beim Wareneingang gegen diese Bestellung hängen die Unterlagen automatisch an der Charge.',
           'Batch number, best-before date and CoA per item (one line per batch for partial deliveries or two batches), plus the specification. bulkify and you maintain the same list.',
-          '每个项目的批号、保质期和 COA（分批交货或两个批次时每个批次一行），以及规格书。bulkify 和您维护同一列表。') . '</p>';
+          '每个项目的批号、保质期和 CoA（分批交货或两个批次时每个批次一行），以及规格书。bulkify 和您维护同一列表。') . '</p>';
     foreach ($pos as $p) {
         $bp = (int)$p['id'];
         $zeilen = bch_zeilen($bp);
@@ -454,7 +454,7 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
                 $coas = array_values(array_filter($docs, fn($d) => (string)$d['typ'] === 'coa' && charge_gleich((string)($d['charge_nr'] ?? ''), (string)$z['charge_nr'])));
                 $coaHtml = '';
                 foreach ($coas as $d) $coaHtml .= $docLink($d) . ' ' . $delDoc($d) . ' ';
-                if (!$coas) $coaHtml = '<span class="muted">' . $t('kein CoA', 'no CoA', '无 COA') . '</span>';
+                if (!$coas) $coaHtml = '<span class="muted">' . $t('kein CoA', 'no CoA', '无 CoA') . '</span>';
                 $ein = array_values(array_filter($einH, fn($c) => charge_gleich((string)$c['charge_nr'], (string)$z['charge_nr'])));
                 // Sofortfix 13.11.2026: vorgemerkt, aber nicht eingebucht -> rot „nicht im Lager“ + „Jetzt einbuchen“ (auch bei geschlossener Bestellung).
                 $einHtml = $ein ? $t('ja', 'yes', '是') . ', ' . $dat($ein[0]['wareneingang'])
@@ -481,7 +481,7 @@ function bestellung_chargen_panel(array $b, string $von = 'team', string $sprach
         $o .= '<div class="muted" style="font-weight:600;padding:0 6px">' . $t('oder', 'or', '或') . '</div>';
         $o .= '<form method="post" enctype="multipart/form-data" style="margin:0;flex:1 1 300px;min-width:0">'
             . '<input type="hidden" name="aktion" value="bch_doc"><input type="hidden" name="bp_id" value="' . $bp . '"><input type="hidden" name="dok_typ" value="coa">'
-            . '<div class="bx-field" style="margin:0"><label>' . $t('CoA mit KI auslesen', 'Read CoA automatically', '自动读取 COA') . '</label>'
+            . '<div class="bx-field" style="margin:0"><label>' . $t('CoA mit KI auslesen', 'Read CoA automatically', '自动读取 CoA') . '</label>'
             . '<div class="bx-row" style="gap:8px;align-items:center;flex-wrap:wrap"><input type="file" name="bch_datei" required accept=".pdf,.png,.jpg,.jpeg,.webp" style="max-width:240px">'
             . '<button class="btn btn-primary btn-sm" type="submit">' . $t('Hochladen', 'Upload', '上传') . '</button></div></div></form>';
         $o .= '</div>';

@@ -70,3 +70,6 @@ Text `roh_unterlage_hinweis`: „Bitte fehlende Unterlagen hochladen, sonst blei
 
 ## Menü-Icons (13.11.2026)
 Jeder Menüpunkt mit Icon (`bx_portal_nav`): Übersicht Kacheln, Bestellungen Klemmbrett, Anfragen Posteingang, Rückfragen Sprechblase, Mein Katalog Paket, Rohstoff-Preise Blatt, Fertigprodukt-Preise Kolben, Fehlende Unterlagen Dokument mit Warnzeichen (Zahl rot), Dateien Ordner, Meine Daten Person, Über uns Fabrik, Anleitung Fragezeichen. Neuer Zähler: Bestellungen, die noch zu bestätigen sind (status gesendet, nicht bestätigt). Am Handy zeigt die Kopfleiste die Icons mit Zahl.
+
+## Übersetzungsreste (13.11.2026)
+Neue Schlüssel `zb`, `schliessen`, `keine_angaben`, `keine_weiteren`, `laden_fehler` (Rohstoff-Pop-up und Platzhalter jetzt DE/EN/中文); 中文 einheitlich „CoA“, „我们据此核算成本“, „距上次更新“.

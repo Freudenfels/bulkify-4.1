@@ -283,7 +283,7 @@ if ($a['status'] === 'bestaetigt') {
       <summary class="btn btn-ghost btn-sm" style="list-style:none">Ablehnen</summary>
       <form method="post" style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
         <input type="hidden" name="aktion" value="angebot_ablehnen"><input type="hidden" name="angebot_id" value="<?= (int)$a['id'] ?>">
-        <input type="text" name="grund" placeholder="Grund (optional)" style="max-width:280px">
+        <input type="text" name="grund" placeholder="Grund (Pflicht)" required data-pflicht style="max-width:280px">
         <button class="btn btn-danger btn-sm" type="submit">Angebot ablehnen</button>
       </form>
     </details>

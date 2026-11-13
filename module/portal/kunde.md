@@ -514,3 +514,6 @@ Kachel „Offene Rechnungen“ = `op_summe($kid, 'sichtbar')` (dieselbe Rechnung
 
 ## Menü-Icons (13.11.2026)
 Jeder Menüpunkt hat ein Icon (`$PORTAL_ICONS`): Übersicht Kacheln, Rezepturen Kolben, Produkte Paket, Rohstoffe Blatt, Angebote & Anfragen Dokument, Neue Anfrage Plus im Kreis, Nachbestellen Kreispfeil, Jahresverträge Dokument mit Stift, Bestellungen Klemmbrett, Rechnungen Rechner, Etiketten Anhänger, Dokumente Ordner, Mein Lager Lager, Mein Konto Person, Info & Tools Fragezeichen. Zähler als Zahl am Icon; am Handy zeigt die Kopfleiste die Icons mit Zahl.
+
+## Anleitung (13.11.2026)
+„Info & Tools“ und Rundgang aus `core/portal_hilfe.php` (DE/EN nach Kundenland), je Ablauf eine Karte mit Icon. Rundgang-Schritt „Angebote & Anfragen“ trifft jetzt den echten Menüpunkt, „live/Echtzeit“ ersetzt durch „die wichtigsten Schritte“. „Angebot ablehnen“ verlangt einen Grund (Feld Pflicht, Server leitet ohne Grund mit Hinweis zurück).

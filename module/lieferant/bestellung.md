@@ -53,3 +53,5 @@ Stückpreis über `preis_anzeige()` (unter 0,01 je 1.000), Summen aus dem genaue
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Fehlen zu dieser Bestellung Unterlagen, steht oben ein Kasten „Unterlagen fehlen – Bitte fehlende Unterlagen hochladen, sonst bleibt die Ware bei uns gesperrt.“ mit Link auf „Fehlende Unterlagen“ (DE/EN/ZH). „Bestellen erst mit Unterlagen“ gibt es nicht mehr.
+
+13.11.2026: Platzhalter „z. B.“ bei Tracking/Spediteur über `lp_t('zb')` übersetzt.

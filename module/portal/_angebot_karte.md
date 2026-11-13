@@ -13,3 +13,5 @@ Zeigt Status, PDF, Verpackung/Deckel/Etikett, die Rezeptur (Zutaten + Nährwerte
 
 ## Paket 12.11.2026 Teil 3 (Lieferant nie für Kunden sichtbar)
 Positionstexte über kunde_position_text.
+
+13.11.2026: Feld „Grund“ beim Ablehnen ist Pflicht (`required data-pflicht`).

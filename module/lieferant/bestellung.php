@@ -199,8 +199,8 @@ if (!$b):
       <input type="hidden" name="aktion" value="pakete_add">
       <div class="bx-grid">
         <div class="bx-field" style="grid-column:1/-1"><label><?= h(lp_t('vp_trackings')) ?> <span class="muted" style="font-weight:400">(<?= h(lp_t('vp_eine_pro_zeile')) ?>)</span></label>
-          <textarea name="trackings" rows="4" placeholder="z. B.&#10;1Z999AA10123456784&#10;1Z999AA10123456785"></textarea></div>
-        <div class="bx-field"><label><?= h(lp_t('vp_spediteur')) ?> <span class="muted" style="font-weight:400">(<?= h(lp_t('optional')) ?>)</span></label><input type="text" name="spediteur" placeholder="z. B. UPS, DHL, DPD"></div>
+          <textarea name="trackings" rows="4" placeholder="<?= h(lp_t('zb')) ?>&#10;1Z999AA10123456784&#10;1Z999AA10123456785"></textarea></div>
+        <div class="bx-field"><label><?= h(lp_t('vp_spediteur')) ?> <span class="muted" style="font-weight:400">(<?= h(lp_t('optional')) ?>)</span></label><input type="text" name="spediteur" placeholder="<?= h(lp_t('zb')) ?> UPS, DHL, DPD"></div>
         <div class="bx-field"><label><?= h(lp_t('vp_anzahl_pakete')) ?> <span class="muted" style="font-weight:400">(<?= h(lp_t('vp_anzahl_hint')) ?>)</span></label><input type="number" name="pakete_angekuendigt" min="0" value="<?= $angekuendigt ?: '' ?>" style="max-width:140px"></div>
       </div>
       <div class="bx-row" style="margin-top:12px"><button class="btn btn-primary btn-sm" type="submit"><?= h(lp_t('vp_speichern')) ?></button></div>

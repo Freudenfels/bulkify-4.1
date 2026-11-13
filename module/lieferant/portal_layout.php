@@ -58,7 +58,7 @@ function lp_t(string $key, string $sprache = ''): string {
                               'zh'=>'仅当其他数量的价格不同时才需填写。上方价格适用于询价数量。空行将被忽略。'],
         'anfrage_offen'   => ['de'=>'offen',                  'en'=>'open', 'zh'=>'待处理'],
         'anfrage_beant'   => ['de'=>'beantwortet',            'en'=>'answered', 'zh'=>'已回复'],
-        'dateien'         => ['de'=>'Dokumente (CoA, Spezifikation, Angebot)', 'en'=>'Documents (CoA, specification, quote)', 'zh'=>'文件（COA、Spec、报价单）'],
+        'dateien'         => ['de'=>'Dokumente (CoA, Spezifikation, Angebot)', 'en'=>'Documents (CoA, specification, quote)', 'zh'=>'文件（CoA、Spec、报价单）'],
         'datei_gelesen'   => ['de'=>'Die Unterlage wurde automatisch ausgewertet – vielen Dank.',
                               'en'=>'The document has been read automatically – thank you.',
                               'zh'=>'文件已自动读取——谢谢。'],
@@ -171,7 +171,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'ansehen'         => ['de'=>'Ansehen',                 'en'=>'View', 'zh'=>'查看'],
         'artikelnummer'   => ['de'=>'Artikelnummer',           'en'=>'Part no.', 'zh'=>'物料编号'],
         'coa_mitschicken' => ['de'=>'bitte mitschicken',       'en'=>'please attach', 'zh'=>'请一并提供'],
-        'coa_spec_titel'  => ['de'=>'CoA / Spezifikation (optional mitschicken)', 'en'=>'CoA / Specification (optional)', 'zh'=>'COA / 规格书（可选一并提交）'],
+        'coa_spec_titel'  => ['de'=>'CoA / Spezifikation (optional mitschicken)', 'en'=>'CoA / Specification (optional)', 'zh'=>'CoA / 规格书（可选一并提交）'],
         'coa_spec_hinweis'=> ['de'=>'Jede Sprache – wir übernehmen die Werte automatisch in unser bulkify-Format.', 'en'=>'Any language – we automatically convert the values into our bulkify format.', 'zh'=>'任何语言均可——我们会自动转换为 bulkify 格式。'],
         'coa_angefordert' => ['de'=>'Von uns angefordert',      'en'=>'Requested by us', 'zh'=>'我们已要求'],
         'variante'        => ['de'=>'Ihre konkrete Variante / Gehalt', 'en'=>'Your specific variant / content', 'zh'=>'您的具体品种/含量'],
@@ -275,7 +275,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'preisliste'      => ['de'=>'Rohstoff-Preise',          'en'=>'Raw-material prices', 'zh'=>'原料价格'],
         'preisliste_sub'  => ['de'=>'Ihre Rohstoffpreise. Bitte alle 4 Wochen aktualisieren – wir kalkulieren damit.',
                               'en'=>'Your raw-material prices. Please update every 4 weeks – we calculate with them.',
-                              'zh'=>'您的原料价格。请每 4 周更新一次，我们据此报价。'],
+                              'zh'=>'您的原料价格。请每 4 周更新一次，我们据此核算成本。'],
         'preisliste_leer' => ['de'=>'Noch keine Preise. Unten hinzufügen.', 'en'=>'No prices yet. Add below.', 'zh'=>'暂无价格，请在下方添加。'],
         'preis_weitere'   => ['de'=>'Weitere Preisangaben (ohne Staffel)', 'en'=>'Further prices (no tiers)', 'zh'=>'其他价格（无阶梯）'],
         'preis_weitere_sub'=>['de'=>'Frühere, frei eingetragene Preise. Die strukturierten Rohstoffpreise mit Staffel stehen oben.',
@@ -286,7 +286,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'preis_aktuell'   => ['de'=>'Ihre Preise sind aktuell.', 'en'=>'Your prices are up to date.', 'zh'=>'您的价格是最新的。'],
         'preis_intervall_hint'=>['de'=>'Regel: aktualisieren alle', 'en'=>'Rule: update every', 'zh'=>'规则：每'],
         'tage'            => ['de'=>'Tage',                     'en'=>'days', 'zh'=>'天'],
-        'zuletzt_vor'     => ['de'=>'zuletzt vor',              'en'=>'last update', 'zh'=>'上次更新于'],
+        'zuletzt_vor'     => ['de'=>'zuletzt vor',              'en'=>'last updated', 'zh'=>'距上次更新'],
         'alle_aktuell'    => ['de'=>'Alle als aktuell bestätigen', 'en'=>'Confirm all as current', 'zh'=>'全部确认为最新'],
         'aktualisieren'   => ['de'=>'Aktualisieren',            'en'=>'Update', 'zh'=>'更新'],
         'alle_speichern'  => ['de'=>'Alle Preise speichern',    'en'=>'Save all prices', 'zh'=>'保存全部价格'],
@@ -365,6 +365,12 @@ function lp_t(string $key, string $sprache = ''): string {
                               'zh'=>'个包裹已预报——可在下方补充物流单号。'],
         'vp_trackings'    => ['de'=>'Tracking-/Sendungsnummern', 'en'=>'Tracking / shipment numbers', 'zh'=>'物流/运单号'],
         'vp_eine_pro_zeile'=>['de'=>'eine pro Zeile',          'en'=>'one per line', 'zh'=>'每行一个'],
+        // 13.11.2026: deutsche Reste im Portal übersetzt (Fable-5 Anhang E 2.3/2.4)
+        'zb'              => ['de'=>'z. B.', 'en'=>'e.g.', 'zh'=>'例如'],
+        'schliessen'      => ['de'=>'schließen', 'en'=>'close', 'zh'=>'关闭'],
+        'keine_angaben'   => ['de'=>'Keine Angaben.', 'en'=>'No details.', 'zh'=>'暂无信息。'],
+        'keine_weiteren'  => ['de'=>'Keine weiteren Angaben.', 'en'=>'No further details.', 'zh'=>'暂无更多信息。'],
+        'laden_fehler'    => ['de'=>'Konnte nicht geladen werden.', 'en'=>'Could not be loaded.', 'zh'=>'无法加载。'],
         'vp_anzahl_pakete'=> ['de'=>'Anzahl Pakete',           'en'=>'Number of parcels', 'zh'=>'包裹数量'],
         'vp_anzahl_hint'  => ['de'=>'optional, falls Nummern noch fehlen', 'en'=>'optional, if numbers are still missing', 'zh'=>'可选，若暂无单号'],
         'vp_speichern'    => ['de'=>'Pakete speichern',        'en'=>'Save parcels', 'zh'=>'保存包裹'],
@@ -380,7 +386,7 @@ function lp_t(string $key, string $sprache = ''): string {
         'dok_titel_opt'   => ['de'=>'Titel (optional)',        'en'=>'Title (optional)', 'zh'=>'标题（可选）'],
         'dok_max'         => ['de'=>'max.',                    'en'=>'max.', 'zh'=>'最大'],
         'dok_hochladen'   => ['de'=>'Dokument hochladen',      'en'=>'Upload document', 'zh'=>'上传文件'],
-        'bd_coa'          => ['de'=>'CoA / Analysenzertifikat', 'en'=>'CoA / certificate of analysis', 'zh'=>'COA / 分析证书'],
+        'bd_coa'          => ['de'=>'CoA / Analysenzertifikat', 'en'=>'CoA / certificate of analysis', 'zh'=>'CoA / 分析证书'],
         'bd_rechnung'     => ['de'=>'Rechnung',                'en'=>'Invoice', 'zh'=>'发票'],
         'bd_lieferschein' => ['de'=>'Lieferschein',            'en'=>'Delivery note', 'zh'=>'送货单'],   // Aufräumen 15
         'bd_analyse'      => ['de'=>'Laboranalyse',            'en'=>'Lab analysis', 'zh'=>'实验室分析'],
@@ -573,7 +579,7 @@ function lp_rohstoff_popup(): void {
     echo '<dialog id="lpRohDlg" class="lp-rohdlg">'
        . '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
        . '<h2 id="lpRohName" style="margin:0;font-size:18px"></h2>'
-       . '<button type="button" onclick="document.getElementById(\'lpRohDlg\').close()" aria-label="schließen" '
+       . '<button type="button" onclick="document.getElementById(\'lpRohDlg\').close()" aria-label="' . h(lp_t('schliessen')) . '" '
        . 'style="background:none;border:0;font-size:20px;cursor:pointer;color:var(--text)">&#10005;</button></div>'
        . '<div id="lpRohBody" style="margin-top:12px"></div>'
        . '</dialog>'
@@ -598,13 +604,13 @@ function lp_rohstoff_popup(): void {
        . 'document.getElementById("lpRohBody").innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">…</div>";'
        . 'dlg.showModal();'
        . 'fetch("?p=lieferant_rohstoff_info&iid="+encodeURIComponent(iid)).then(function(r){return r.json();}).then(function(d){'
-       . 'if(!d||!d.name){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">Keine Angaben.</div>";return;}'
+       . 'if(!d||!d.name){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">' . h(lp_t('keine_angaben')) . '</div>";return;}'
        . 'document.getElementById("lpRohName").textContent=d.name;'
        . 'var h="";if(d.rows&&d.rows.length)h+="<table><tbody>"+rows(d.rows)+"</tbody></table>";'
        . 'if(d.wirkstoffe&&d.wirkstoffe.length){h+="<h3>"+' . $wlab . '+"</h3><table><tbody>"+rows(d.wirkstoffe)+"</tbody></table>";}'
-       . 'if(!h)h="<div style=\\"color:var(--muted,#8a8f98)\\">Keine weiteren Angaben.</div>";'
+       . 'if(!h)h="<div style=\\"color:var(--muted,#8a8f98)\\">' . h(lp_t('keine_weiteren')) . '</div>";'
        . 'document.getElementById("lpRohBody").innerHTML=h;'
-       . '}).catch(function(){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:#8f231b\\">Konnte nicht geladen werden.</div>";});'
+       . '}).catch(function(){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:#8f231b\\">' . h(lp_t('laden_fehler')) . '</div>";});'
        . '});});'
        . '})();</script>';
 }

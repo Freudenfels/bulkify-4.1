@@ -6,6 +6,7 @@ require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/dokument_ui.php';
 require_once BX_ROOT . '/core/nachbestellung.php';
 require_once BX_ROOT . '/core/rohstoff_moq.php';   // Mindestmenge je Rohstoff: im Portal anzeigen + sperren
+require_once BX_ROOT . '/core/portal_hilfe.php';   // Anleitung Info und Tools + Rundgang DE/EN (13.11.2026)
 
 $token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
 agb_seed_wenn_leer();   // AGB-Entwurf anlegen, solange keine Fassung existiert
@@ -470,6 +471,8 @@ if ($k && ($_GET['v'] ?? '') === 'umkarton_vorlage') {
 if ($k && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'angebot_ablehnen') {
     $aid = (int)($_POST['angebot_id'] ?? 0);
     $ang = $aid ? one("SELECT * FROM angebot WHERE id=? AND kunde_id=?", [$aid, (int)$k['id']]) : null;
+    // 13.11.2026: Grund ist Pflicht (wie bei der Rezeptur) – ohne Grund zurück mit Hinweis.
+    if ($ang && $ang['status'] === 'gesendet' && trim((string)($_POST['grund'] ?? '')) === '') { header('Location: ?p=portal&token=' . $token . '&v=meine_anfragen&oatab=zubestaetigen&ablehngrund=1'); exit; }
     if ($ang && $ang['status'] === 'gesendet') {
         q("UPDATE angebot SET status='abgelehnt', ablehnung_grund=? WHERE id=?", [trim($_POST['grund'] ?? ''), $aid]);
         log_aktivitaet('kunde', (int)$k['id'], 'kunde', 'Angebot ' . $ang['nummer'] . ' im Portal abgelehnt' . (trim($_POST['grund'] ?? '') !== '' ? ': ' . trim($_POST['grund']) : '.'), 'angebot', 'angebot', $aid);
@@ -2513,6 +2516,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <?php if (isset($_GET['gesendet'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre Anfrage ist eingegangen – wir prüfen sie und melden uns mit einem Angebot.</div><?php endif; ?>
   <?php if (isset($_GET['geaendert'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre geänderte Menge ist eingegangen – wir überarbeiten das Angebot und melden uns.</div><?php endif; ?>
   <?php if (isset($_GET['abgeleitet'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Ihre eigene Rezeptur ist eingegangen – wir prüfen sie und melden uns mit einem Vorschlag.</div><?php endif; ?>
+  <?php if (isset($_GET['ablehngrund'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Bitte nennen Sie kurz den Grund, warum das Angebot nicht passt – dann können wir es überarbeiten.</div><?php endif; ?>
   <?php if (isset($_GET['geloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Anfrage gelöscht.</div><?php endif; ?>
   <?php if (isset($_GET['admingeloescht'])): ?><div class="bx-panel badge-ok" style="padding:12px 16px">Angebot und zugehörige Anfrage gelöscht (Team).</div><?php endif; ?>
   <?php if (isset($_GET['adminsperre'])): ?><div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">Nicht löschbar: zu diesem Angebot gibt es bereits einen Auftrag. Erst den Auftrag stornieren.</div><?php endif; ?>
@@ -5652,48 +5656,52 @@ portal_head('Kundenportal · ' . $k['firma']);
   // AGB und Kontakt. Bewusst ohne interne Zahlen – rein kundenorientiert.
   $firma = function_exists('beleg_firma') ? beleg_firma() : ['name'=>'bulkify','email'=>'info@bulkify.pro'];
   $firmaTel = trim((string) meta_get('firma_telefon', ''));
+  // 13.11.2026: Texte in der Sprache des Kunden (core/portal_hilfe.php), je Ablauf eine Karte mit Icon.
+  $hSp = portal_hilfe_sprache((int)$k['id']); $HT = portal_hilfe_texte($hSp);
   // Karten nur zu freigeschalteten Bereichen zeigen (sonst führt der Link auf die Übersicht zurück).
   $infoCards = [];
-  if (isset($L['dokumente']))  $infoCards[] = ['label'=>'Dokumente',              'desc'=>'Alle Unterlagen je Bestellung: Auftragsbestätigung, Rechnung, Lieferschein, PIB, Produktionsbericht, Informationsdokument/Laboranalyse.', 'href'=>$portalLink('dokumente'), 'cta'=>'Öffnen'];
-  if (isset($L['etiketten']))  $infoCards[] = ['label'=>'Etiketten',              'desc'=>'Ihre Etiketten-Designs je Bestellung hochladen und freigeben.', 'href'=>$portalLink('etiketten'), 'cta'=>'Öffnen'];
-  $infoCards[] = ['label'=>'Angebote',    'desc'=>'Angebote prüfen, Menge wählen und verbindlich annehmen.',      'href'=>$portalLink('meine_anfragen') . '&oatab=zubestaetigen', 'cta'=>'Öffnen'];
-  $infoCards[] = ['label'=>'Bestellungen','desc'=>'Produktion und Versand Ihrer Aufträge verfolgen.',             'href'=>$portalLink('bestellungen'), 'cta'=>'Öffnen'];
-  $infoCards[] = ['label'=>'Mein Konto',  'desc'=>'Stammdaten, Adressen und Zugang pflegen.',                      'href'=>$portalLink('konto'), 'cta'=>'Öffnen'];
-  if (agb_aktuell()) $infoCards[] = ['label'=>'AGB', 'desc'=>'Unsere Allgemeinen Geschäftsbedingungen nachlesen.', 'href'=>$portalLink('agb'), 'cta'=>'Lesen'];
+  if (isset($L['dokumente']))  $infoCards[] = ['label'=>$HT['k_dok'][0], 'desc'=>$HT['k_dok'][1], 'href'=>$portalLink('dokumente'), 'cta'=>$HT['oeffnen'], 'icon'=>'ordner'];
+  if (isset($L['etiketten']))  $infoCards[] = ['label'=>$HT['k_et'][0],  'desc'=>$HT['k_et'][1],  'href'=>$portalLink('etiketten'), 'cta'=>$HT['oeffnen'], 'icon'=>'anhaenger'];
+  $infoCards[] = ['label'=>$HT['k_ang'][0],   'desc'=>$HT['k_ang'][1],   'href'=>$portalLink(isset($L['meine_anfragen']) ? 'meine_anfragen' : 'angebote') . '&oatab=zubestaetigen', 'cta'=>$HT['oeffnen'], 'icon'=>'angebote'];
+  $infoCards[] = ['label'=>$HT['k_best'][0],  'desc'=>$HT['k_best'][1],  'href'=>$portalLink('bestellungen'), 'cta'=>$HT['oeffnen'], 'icon'=>'auftraege'];
+  $infoCards[] = ['label'=>$HT['k_konto'][0], 'desc'=>$HT['k_konto'][1], 'href'=>$portalLink('konto'), 'cta'=>$HT['oeffnen'], 'icon'=>'person'];
+  if (agb_aktuell()) $infoCards[] = ['label'=>$HT['k_agb'][0], 'desc'=>$HT['k_agb'][1], 'href'=>$portalLink('agb'), 'cta'=>$HT['lesen'], 'icon'=>'vertrag'];
   ?>
-  <h1 style="margin-bottom:4px">Info &amp; Tools</h1>
-  <p class="bx-sub">Alles für den Einstieg – so läuft die Zusammenarbeit, und hier finden Sie Ihre Unterlagen.</p>
+  <style>
+    .ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:14px}
+    .ph-karte{display:flex;flex-direction:column;gap:6px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)}
+    .ph-kopf{display:flex;align-items:center;gap:10px}
+    .ph-ico{flex:none;width:34px;height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;background:rgba(29,158,117,.12);color:var(--gruen)}
+    .ph-ico .bx-navico{width:19px;height:19px}
+    .ph-t{font-weight:600}
+    .ph-x{font-size:13.5px;line-height:1.55;color:var(--muted)}
+    @media (max-width:860px){ .ph-grid{grid-template-columns:1fr} }
+  </style>
+  <h1 style="margin-bottom:4px"><?= h($HT['titel']) ?></h1>
+  <p class="bx-sub"><?= h($HT['sub']) ?></p>
 
   <div class="bx-panel">
-    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px">
-      <h2 style="margin:0">So funktioniert bulkify</h2>
-      <button type="button" class="btn btn-primary btn-sm" id="obTourStart">Geführter Rundgang</button>
+    <div class="bx-row" style="justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <h2 style="margin:0"><?= h($HT['so']) ?></h2>
+      <button type="button" class="btn btn-primary btn-sm" id="obTourStart"><?= h($HT['rundgang']) ?></button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px">
-      <?php
-      $flow = [
-        ['1','Anfrage stellen','Rezeptur, Produkt oder Rohstoff anfragen – ohne Aufwand, in wenigen Minuten.'],
-        ['2','Angebot erhalten','Wir prüfen und senden Ihnen ein Angebot. Sie wählen die Menge und nehmen an.'],
-        ['3','Produktion','Wir fertigen Ihre Charge – Sie verfolgen jeden Schritt live im Portal.'],
-        ['4','Lieferung','Ihre Ware wird versandt; Rechnung und alle Dokumente liegen im Portal bereit.'],
-      ];
-      foreach ($flow as $f): ?>
-        <div style="padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)">
-          <div class="muted" style="font-size:12px">Schritt <?= h($f[0]) ?></div>
-          <div style="font-weight:600;margin:4px 0 4px"><?= h($f[1]) ?></div>
-          <div class="muted" style="font-size:13px;line-height:1.5"><?= h($f[2]) ?></div>
+    <div class="ph-grid">
+      <?php foreach (portal_hilfe_ablauf($hSp, $L) as $i => $f): ?>
+        <div class="ph-karte">
+          <div class="ph-kopf"><span class="ph-ico"><?= bx_nav_icon($f['icon']) ?></span><div><div class="muted" style="font-size:12px"><?= h($HT['schritt']) ?> <?= $i + 1 ?></div><div class="ph-t"><?= h($f['titel']) ?></div></div></div>
+          <div class="ph-x"><?= h($f['text']) ?></div>
         </div>
       <?php endforeach; ?>
     </div>
   </div>
 
   <div class="bx-panel">
-    <h2 style="margin-top:0">Schnell zu Ihren Unterlagen</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
+    <h2 style="margin-top:0"><?= h($HT['schnell']) ?></h2>
+    <div class="ph-grid" style="margin-top:0">
       <?php foreach ($infoCards as $c): ?>
-        <div style="display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)">
-          <div style="font-weight:600"><?= h($c['label']) ?></div>
-          <div class="muted" style="font-size:13px;line-height:1.5;flex:1"><?= h($c['desc']) ?></div>
+        <div class="ph-karte">
+          <div class="ph-kopf"><span class="ph-ico"><?= bx_nav_icon($c['icon']) ?></span><span class="ph-t"><?= h($c['label']) ?></span></div>
+          <div class="ph-x" style="flex:1"><?= h($c['desc']) ?></div>
           <a class="btn btn-ghost btn-sm" style="align-self:flex-start" href="<?= $c['href'] ?>"><?= h($c['cta']) ?></a>
         </div>
       <?php endforeach; ?>
@@ -5702,11 +5710,11 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <?php $zertL = zertifikate(true); if ($zertL): ?>
   <div class="bx-panel" id="zertifikate">
-    <h2 style="margin-top:0">Herstellerzertifikate</h2>
-    <p class="muted" style="margin:0 0 10px;font-size:14px">Unsere Zertifikate und Nachweise als Hersteller – z. B. für Ihren Händler oder Marktplatz.</p>
+    <h2 style="margin-top:0"><?= h($HT['zert']) ?></h2>
+    <p class="muted" style="margin:0 0 10px;font-size:14px"><?= h($HT['zert_sub']) ?></p>
     <div class="bx-row" style="gap:8px;flex-wrap:wrap">
       <?php foreach ($zertL as $z): ?>
-      <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="<?= $portalLink('zertifikat') ?>&id=<?= (int)$z['id'] ?>"><?= h((string)$z['titel']) ?><?= $z['dok_datum'] ? ' · gültig bis ' . h(date('d.m.Y', strtotime((string)$z['dok_datum']))) : '' ?></a>
+      <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="<?= $portalLink('zertifikat') ?>&id=<?= (int)$z['id'] ?>"><?= h((string)$z['titel']) ?><?= $z['dok_datum'] ? ' · ' . h($HT['gueltig']) . ' ' . h(date('d.m.Y', strtotime((string)$z['dok_datum']))) : '' ?></a>
       <?php endforeach; ?>
     </div>
   </div>
@@ -5714,11 +5722,11 @@ portal_head('Kundenportal · ' . $k['firma']);
 
   <?= $apHtml() ?>
   <div class="bx-panel">
-    <h2 style="margin-top:0">Noch Fragen? Wir sind für Sie da.</h2>
-    <p class="muted" style="margin:0 0 10px;font-size:14px">Schreiben Sie uns jederzeit – wir helfen gern weiter.</p>
+    <h2 style="margin-top:0"><?= h($HT['fragen']) ?></h2>
+    <p class="muted" style="margin:0 0 10px;font-size:14px"><?= h($HT['fragen_sub']) ?></p>
     <div class="bx-row" style="gap:18px;flex-wrap:wrap">
-      <?php if (!empty($firma['email'])): ?><a class="btn btn-primary btn-sm" href="mailto:<?= h($firma['email']) ?>">E-Mail: <?= h($firma['email']) ?></a><?php endif; ?>
-      <?php if ($firmaTel !== ''): ?><a class="btn btn-ghost btn-sm" href="tel:<?= h(preg_replace('/[^0-9+]/', '', $firmaTel)) ?>">Telefon: <?= h($firmaTel) ?></a><?php endif; ?>
+      <?php if (!empty($firma['email'])): ?><a class="btn btn-primary btn-sm" href="mailto:<?= h($firma['email']) ?>"><?= h($HT['mail']) ?>: <?= h($firma['email']) ?></a><?php endif; ?>
+      <?php if ($firmaTel !== ''): ?><a class="btn btn-ghost btn-sm" href="tel:<?= h(preg_replace('/[^0-9+]/', '', $firmaTel)) ?>"><?= h($HT['tel']) ?>: <?= h($firmaTel) ?></a><?php endif; ?>
     </div>
   </div>
 
@@ -6079,15 +6087,10 @@ $tourAuto = ($view === 'start') && !$internVorschau && $darfBestellen && !empty(
 (function(){
   var token = <?= json_encode((string)$token) ?>;
   // Schritte: sel = Zielelement (optional). Fehlt das Element/ist es unsichtbar, wird mittig ohne Markierung gezeigt.
-  var STEPS = [
-    {sel:null,                        title:'Willkommen in Ihrem Portal', text:'Ein kurzer Rundgang (ca. 30 Sekunden) zeigt Ihnen die wichtigsten Bereiche. Sie können jederzeit überspringen.'},
-    {sel:'.bx-sidesuche',             title:'Alles schnell finden',       text:'Über die Suche finden Sie Rezepturen, Produkte, Bestellungen und Dokumente auf einen Griff.'},
-    {sel:'#obChecklist',              title:'Erste Schritte',             text:'Diese Checkliste führt Sie vom Konto bis zur ersten Bestellung – Schritt für Schritt.'},
-    {sel:'a[href*="v=angebote"]',     title:'Angebote annehmen',          text:'Hier prüfen Sie Angebote, wählen die Menge und bestätigen verbindlich.'},
-    {sel:'a[href*="v=bestellungen"]', title:'Bestellungen verfolgen',     text:'Verfolgen Sie Produktion und Versand Ihrer Aufträge in Echtzeit.'},
-    {sel:'a[href*="v=konto"]',        title:'Mein Konto',                 text:'Stammdaten, Adressen und Zugang pflegen Sie jederzeit selbst.'},
-    {sel:'a[href*="v=info"]',         title:'Info & Tools',               text:'Hier finden Sie diese Hilfe, Ihre Unterlagen und können den Rundgang jederzeit erneut starten.'}
-  ];
+  // 13.11.2026: Schritte und Knöpfe in der Sprache des Kunden (core/portal_hilfe.php); „Angebote & Anfragen“ zielt auf den echten Menüpunkt.
+  <?php $tourT = portal_hilfe_texte(portal_hilfe_sprache((int)$k['id'])); ?>
+  var STEPS = <?= json_encode($tourT['tour'], JSON_UNESCAPED_UNICODE) ?>;
+  var TB = <?= json_encode($tourT['tour_btn'], JSON_UNESCAPED_UNICODE) ?>;
   var box=document.getElementById('bxTour'); if(!box) return;
   var ring=box.querySelector('.bxt-ring'), card=box.querySelector('.bxt-card');
   var elStep=box.querySelector('.bxt-step'), elTitle=box.querySelector('.bxt-title'), elText=box.querySelector('.bxt-text');
@@ -6101,9 +6104,9 @@ $tourAuto = ($view === 'start') && !$internVorschau && $darfBestellen && !empty(
     setTimeout(function(){ var r=el.getBoundingClientRect(); ring.style.left=(r.left-6)+'px'; ring.style.top=(r.top-6)+'px'; ring.style.width=(r.width+12)+'px'; ring.style.height=(r.height+12)+'px'; ring.hidden=false; }, 160);
   }
   function render(){
-    var s=seq[cur]; elStep.textContent='Schritt '+(cur+1)+' von '+seq.length;
+    var s=seq[cur]; elStep.textContent=(TB.von==='of'?'Step ':'Schritt ')+(cur+1)+' '+TB.von+' '+seq.length;
     elTitle.textContent=s.title; elText.textContent=s.text;
-    bPrev.hidden=(cur===0); bNext.textContent=(cur===seq.length-1)?'Fertig':'Weiter';
+    bPrev.hidden=(cur===0); bNext.textContent=(cur===seq.length-1)?TB.done:TB.next; bPrev.textContent=TB.prev; bSkip.textContent=TB.skip;
     place(s._el);
   }
   function start(){
