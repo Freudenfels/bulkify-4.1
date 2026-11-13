@@ -389,7 +389,6 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     if (function_exists('current_user') && ($u = current_user())) {
         $rollen = function_exists('rollen_liste') ? rollen_liste() : [];
         $meine = array_map(fn($r) => $rollen[$r] ?? $r, user_rollen());
-        $nBenach = function_exists('benachrichtigungen_ungelesen_count') ? benachrichtigungen_ungelesen_count((int)$u['id']) : 0;
         // 13.11.2026: Benachrichtigungen nur noch als Glocke im Menü-Kopf (vorher zusätzlich hier und im Menü = doppelt).
         $benachUnten = '';
         echo "<div class=\"bx-userbox\">" . $benachUnten

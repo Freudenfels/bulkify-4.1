@@ -138,6 +138,7 @@ if (!$neu) {
     // Offene Posten (13.11.2026): offen + teilbezahlt, Brutto minus Zahlungen – gleiche Rechnung wie Dashboard und Buchhaltung.
     require_once BX_ROOT . '/core/offene_posten.php';
     $offen  = op_summe($kid);
+    $guthaben = op_guthaben($kid);   // Fable-5: Überzahlung als eigene Zeile
 }
 
 // ---- Reiter "Preise": Produkt + Menge -> kundenspezifischer Schnellpreis ----
@@ -242,7 +243,8 @@ if (!$neu) {
     echo '<div class="bx-cards">';
     echo '<div class="bx-card"><div class="k">Status</div><div class="v">' . ($gesperrt ? bx_badge('gesperrt','err') : bx_badge('aktiv','ok')) . '</div></div>';
     echo '<div class="bx-card"><div class="k">Umsatz gesamt</div><div class="v">' . ($umsatz>0 ? number_format($umsatz,2,',','.').' €' : '<span class="muted">–</span>') . '</div></div>';
-    echo '<div class="bx-card"><div class="k">Offene Posten</div><div class="v" style="' . ($offen>0?'color:var(--warn)':'') . '">' . ($offen>0 ? number_format($offen,2,',','.').' €' : '<span class="muted">0 €</span>') . '</div></div>';
+    echo '<div class="bx-card"><div class="k">Offene Posten</div><div class="v" style="' . ($offen>0?'color:var(--warn)':'') . '">' . ($offen>0 ? number_format($offen,2,',','.').' €' : '<span class="muted">0 €</span>') . '</div>'
+       . (($guthaben ?? 0) > 0 ? '<div class="muted" style="font-size:12px">Guthaben ' . number_format($guthaben,2,',','.') . ' €</div>' : '') . '</div>';
     echo '<div class="bx-card"><div class="k">Bestellungen</div><div class="v">' . (count($k_auftraege) ?: '<span class="muted">0</span>') . '</div></div>';
     echo '<div class="bx-card"><div class="k">Kunde seit</div><div class="v">' . ($seit ? h(date('m.Y', strtotime($seit))) : '–') . '</div></div>';
     echo '</div>';
@@ -322,7 +324,7 @@ if (!$neu) {
     <div class="bx-panel"><h2>Aufträge (<?= count($k_auftraege) ?>)</h2>
       <?php bx_table($colsAuf, $k_auftraege, ['rowUrl'=>fn($r)=>'?p=auftrag&id='.$r['id'], 'empty'=>'Noch keine Aufträge.']); ?>
     </div>
-    <div class="bx-panel"><h2>Rechnungen (<?= count($k_rechnungen) ?>) · offene Posten: <?= $eur($offen) ?></h2>
+    <div class="bx-panel"><h2>Rechnungen (<?= count($k_rechnungen) ?>) · offene Posten: <?= $eur($offen) ?><?= ($guthaben ?? 0) > 0 ? ' · Guthaben: ' . $eur($guthaben) : '' ?></h2>
       <?php bx_table($colsRe, $k_rechnungen, ['rowUrl'=>fn($r)=>'/buchhaltung/?p=rechnung&id='.$r['id'], 'empty'=>'Noch keine Rechnungen.']); ?>
     </div>
   </section>

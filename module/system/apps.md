@@ -7,3 +7,6 @@ Seite „Apps“ (`?p=apps`, Menüpunkt „Apps“; Nico 13.11.2026): alle bulki
 - Sichtbar je Rolle wie die Unterseiten im Menü: Werk-App/Produktion production, Lager-App production/fulfillment/einkauf/labor, CRM nur Admin, Buchhaltung finance; Admin sieht alles.
 - Nur Admin: Download der Lager-Brücke (Windows-Programm für Etikettendruck und Regal-Leuchten) mit Autostart oder als Testversion mit Fenster.
 - Route für alle angemeldeten Team-Nutzer (`'*'` in `route_rollen_map()`).
+
+## Nachbesserung Fable-5 (13.11.2026)
+CRM-Kachel für jede Team-Rolle, die das CRM öffnen darf (wie `crm/core/auth.php`, nicht Lieferant/Kunde). Adressen und QR-Codes immer `https://` (nur der lokale Testrechner localhost/127.0.0.1 bleibt http).

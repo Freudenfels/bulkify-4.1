@@ -6,7 +6,7 @@
 
 **Anlegen:** Titel, Details, **Priorität** (1=Hoch, 2=Normal, 3=Niedrig, `prio_liste()`/`prio_badge()`), Zuweisen an (Team/Person), Fällig bis. `aufgabe_neu(...)`.
 
-**Abarbeiten:** Aktionen per POST – `erledigt` (setzt status+erledigt_am/von), `offen` (wieder öffnen), `uebernehmen` (Team-Aufgabe sich selbst zuweisen). Liste sortiert nach Prio, dann Fälligkeit; überfällige Termine rot. Umschalter offene/erledigte.
+**Abarbeiten:** Aktionen per POST – `erledigt` (setzt status+erledigt_am/von, nur bei offenen – ein zweites „Erledigt“ überschreibt nichts, Fable-5 T3.3) und `uebernehmen` (Team-Aufgabe sich selbst zuweisen). „Wieder öffnen“ gibt es nicht mehr. Liste sortiert nach Prio, dann Alter; erledigte stehen im Archiv. Der Menü-Zähler zählt genau wie die Liste (alle offenen).
 
 **Cockpit-Anbindung:** Das Werk-Cockpit zeigt „Meine Aufgaben" (eigene + Team) mit direktem „Erledigt"-Button (`aktion=aufgabe_erledigt`, bleibt auf dem Cockpit). Kachel „Meine offenen Aufgaben" + Nav-Badge (Anzahl offener Aufgaben, wie ungelesene Mails).
 

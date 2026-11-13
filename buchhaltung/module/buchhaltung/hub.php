@@ -34,7 +34,8 @@ if ($tab === 'uebersicht'):
 // 13.11.2026: offene Posten aus einer Rechnung (core/offene_posten.php, gleich wie Dashboard und OP Debitoren).
 $opRows = bh_op_rechnungen();
 $op = 0.0; $op_ueberfaellig = 0.0;
-foreach ($opRows as $r) { $op += (float)$r['rest']; if ((int)$r['tage_ueberfaellig'] > 0) $op_ueberfaellig += (float)$r['rest']; }
+$op_guthaben = 0.0;   // Fable-5: Überzahlung = Guthaben, eigene Zeile, nicht abziehen
+foreach ($opRows as $r) { if ((float)$r['rest'] < 0) { $op_guthaben -= (float)$r['rest']; continue; } $op += (float)$r['rest']; if ((int)$r['tage_ueberfaellig'] > 0) $op_ueberfaellig += (float)$r['rest']; }
 $anz_offen = count($opRows);
 $umsatz_jahr = (float) scalar(
     "SELECT COALESCE(SUM(CASE WHEN typ='gutschrift' THEN -netto ELSE netto END),0) FROM beleg
@@ -55,7 +56,7 @@ $zuletzt_bezahlt = all(
 $jahr = (int) date('Y');
 
 echo '<div class="bx-cards">';
-fkachel('Forderungen (offen)', $op > 0 ? $eur($op) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=op', $op > 0 ? 'color:var(--warn)' : '');
+fkachel('Forderungen (offen)', ($op > 0 ? $eur($op) : '<span class="muted">0 €</span>') . ($op_guthaben > 0 ? '<div class="muted" style="font-size:12px;font-weight:400">Guthaben ' . $eur($op_guthaben) . '</div>' : ''), '?p=buchhaltung&tab=op', $op > 0 ? 'color:var(--warn)' : '');
 fkachel('davon überfällig', $op_ueberfaellig > 0 ? $eur($op_ueberfaellig) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=op', $op_ueberfaellig > 0 ? 'color:var(--err)' : '');
 fkachel('Verbindlichkeiten (offen)', $verb > 0 ? $eur($verb) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=verbindlichkeiten', $verb > 0 ? 'color:var(--warn)' : '');
 fkachel('davon überfällig', $verb_ue > 0 ? $eur($verb_ue) : '<span class="muted">0 €</span>', '?p=buchhaltung&tab=verbindlichkeiten', $verb_ue > 0 ? 'color:var(--err)' : '');

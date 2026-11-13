@@ -36,3 +36,6 @@ Seit 07.11.2026 stehen **beide USt-Sichten immer nebeneinander** (Spalten + Kach
 - **USt laut Rechnung** – nach Rechnungsdatum, offene/teilbezahlte Rechnungen voll (Soll).
 - **USt eingenommen** – nur wirklich bezahlt: je Zahlung anteilig Zahlung / Brutto × USt, im Monat der Zahlung (Ist).
 Der Umschalter heißt jetzt „Zahllast nach" und steuert nur noch Vorsteuer + Zahllast.
+
+## Nachbesserung Fable-5 (13.11.2026)
+Forderungen = nur positive Reste; Überzahlungen als „Guthaben“ unter der Kachel.

@@ -13,3 +13,9 @@ Wer ruft es?
 - Buchhaltung (`buchhaltung/core/buchhaltung.php` → `bh_op_rechnungen()` ruft `op_rechnungen()`): Offene Posten Debitoren, Mahnlauf.
 
 Die Datei hängt nur an `all()` und kann deshalb auch vom eigenen Programm Buchhaltung eingebunden werden.
+
+## Nachbesserung Fable-5 (13.11.2026, Teil 3)
+- `op_summe()` zählt nur **positive** Reste; Überzahlungen (negative Reste) liefert `op_guthaben()` – eigene Zeile „Guthaben“, nie von den offenen Posten abziehen. Beide nehmen optional `$ids` (nur diese Belege, z. B. gefilterte Rechnungsliste).
+- Filter `'sichtbar'` = nur für den Kunden freigegebene Rechnungen (Kundenportal).
+- Robust (T3.2): fehlen `mahnstufe`, `letzte_mahnung`, `kategorie` oder `kunde_sichtbar` (Datenbank ohne je geöffnete Buchhaltung), liefert `op_rechnungen()` Standardwerte statt abzubrechen (`op_beleg_spalten`). Zusätzlich legt `core/schema.php` die drei Spalten additiv an.
+- Benutzt jetzt auch von der Rechnungsliste der Buchhaltung und vom Kundenportal.

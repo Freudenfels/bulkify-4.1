@@ -16,3 +16,6 @@
 
 ## Produkt-Spalte (Stand 2026-10-23)
 Die Liste zeigt je Rechnung das **Produkt**: aus dem verknüpften Auftrag (`COALESCE(auftrag.produkt_bezeichnung, produkt.kundenname, produkt.name)`), bei freien Rechnungen ohne Auftrag als **Fallback die erste Beleg-Position** (`$belProdukt`/`$belPosMap`). Die Suche findet auch über den Produktnamen. Gilt für normale und DL-Rechnungen.
+
+## Nachbesserung Fable-5 (13.11.2026)
+Kopf „offene Posten“ aus der zentralen Rechnung (`op_summe` über die angezeigten Belege, offen + teilbezahlt, Brutto minus Zahlungen) statt Brutto aller „offen“; Überzahlungen als „Guthaben (Überzahlung)“. Gilt auch für die DR-Liste.

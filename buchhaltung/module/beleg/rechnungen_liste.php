@@ -38,8 +38,12 @@ if ($q !== '') {
 }
 $rows = bx_sort_rows($rows, $sort, $dir);
 
-$offen = 0.0;
-foreach ($rows as $r) if ($r['status'] === 'offen') $offen += (float)$r['brutto'];
+// Fable-5 T3.1 (13.11.2026): offene Posten aus der zentralen Rechnung (core/offene_posten.php) über die angezeigten Belege –
+// offen + teilbezahlt, Brutto minus Zahlungen; Überzahlungen als eigene Zeile „Guthaben“.
+require_once dirname(__DIR__, 3) . '/core/offene_posten.php';
+$opIds = array_map(fn($r) => (int)$r['id'], $rows);
+$offen = op_summe(0, '', $opIds);
+$guthaben = op_guthaben(0, '', $opIds);
 
 $eur = fn($x) => number_format((float)$x, 2, ',', '.') . ' €';
 $datum = fn($r) => $r['datum'] ? h(date('d.m.Y', strtotime($r['datum']))) : '';
@@ -63,7 +67,7 @@ $cols = [
 ];
 
 render_header($route, $nurDL ? 'Dienstleistungs-Rechnungen' : 'Rechnungen');
-bx_head($nurDL ? 'Dienstleistungs-Rechnungen (DR-)' : 'Rechnungen', count($rows) . ' Einträge · offene Posten: ' . $eur($offen));
+bx_head($nurDL ? 'Dienstleistungs-Rechnungen (DR-)' : 'Rechnungen', count($rows) . ' Einträge · offene Posten: ' . $eur($offen) . ($guthaben > 0 ? ' · Guthaben (Überzahlung): ' . $eur($guthaben) : ''));
 if (isset($_GET['verrechnet'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">' . (int)$_GET['verrechnet'] . ' Rechnung(en) storniert &amp; verrechnet (Gutschrift erzeugt).</div>';
 ?>
 <div class="bx-row" style="gap:8px;margin:0 0 12px">

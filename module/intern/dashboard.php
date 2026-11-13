@@ -23,7 +23,8 @@ $versandAlle    = array_values(array_filter($versandAlle, fn($a) => ($a['kategor
 $versandbereit  = count($versandAlle);
 // Offene Posten (13.11.2026): offen + teilbezahlt, je Rechnung Brutto minus Zahlungen – eine Rechnung mit der Buchhaltung (core/offene_posten.php).
 $opRows         = op_rechnungen();
-$offene_posten  = round(array_sum(array_map(fn($r) => (float)$r['rest'], $opRows)), 2);
+$offene_posten  = op_summe();      // Fable-5: nur positive Reste
+$op_guthaben    = op_guthaben();   // Überzahlungen – eigene Zeile, nie abziehen
 $rohstoff_leer  = (int) scalar("SELECT COUNT(*) FROM item i WHERE i.kategorie='rohstoff' AND i.gesperrt=0
                                 AND (SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge c WHERE c.item_id=i.id AND c.status='frei') <= 0
                                 AND EXISTS (SELECT 1 FROM produktionsauftrag pa LEFT JOIN produkt pp ON pp.id=pa.produkt_id
@@ -53,7 +54,7 @@ kachel('Neue Anfragen', $anfragen_neu ?: '<span class="muted">0</span>', '?p=anf
 kachel('Offene Angebote', $angebote_offen ?: '<span class="muted">0</span>', '?p=angebote');
 kachel('In Produktion', $prod_offen ?: '<span class="muted">0</span>', '?p=produktion');
 kachel('Versandbereit', $versandbereit ?: '<span class="muted">0</span>', '?p=versand', $versandbereit ? 'color:var(--gruen)' : '');
-kachel('Offene Posten', $offene_posten > 0 ? number_format($offene_posten,2,',','.').' €' : '<span class="muted">0 €</span>', '/buchhaltung/?p=op_debitoren', $offene_posten > 0 ? 'color:var(--warn)' : '');
+kachel('Offene Posten', ($offene_posten > 0 ? number_format($offene_posten,2,',','.').' €' : '<span class="muted">0 €</span>') . ($op_guthaben > 0 ? '<div class="muted" style="font-size:12px;font-weight:400">Guthaben ' . number_format($op_guthaben,2,',','.') . ' €</div>' : ''), '/buchhaltung/?p=op_debitoren', $offene_posten > 0 ? 'color:var(--warn)' : '');
 kachel('Rohstoffe leer', $rohstoff_leer ?: '<span class="muted">0</span>', '?p=lager', $rohstoff_leer ? 'color:var(--err)' : '');
 echo '</div>';
 ?>

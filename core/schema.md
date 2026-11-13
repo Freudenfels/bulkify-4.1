@@ -731,3 +731,6 @@ Neue Spalten: `item.kein_dokument`, `item.kein_dokument_grund`, `item.kein_dokum
 
 ## Nachbesserung Fable-5 (13.11.2026, Teil 2)
 `produktion_gebucht()` = `pa_produziert()` (nur Fertigware in Stück, `core/pa_produziert.php`, oben geladen). `bereitschaft_badge('bis_etikett')` = „bis vor Etikettieren“.
+
+## Nachbesserung Fable-5 (13.11.2026, Teil 3)
+`aufgabe_erledigen()` nur bei offenen (`AND status='offen'`); `aufgabe_offen_zahl()` = alle offenen (wie die Liste), einmal je Seite; `benachrichtigungen_ungelesen_count()` mit Zwischenspeicher. Spalten `beleg.kategorie`, `beleg.mahnstufe`, `beleg.letzte_mahnung` additiv.

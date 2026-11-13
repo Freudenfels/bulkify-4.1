@@ -1980,6 +1980,10 @@ function init_schema(): void {
     ensure_column('item', 'moq_einheit', "VARCHAR(10) NULL");
     ensure_column('item', 'moq_notiz', "VARCHAR(190) NULL");
     // Sofortfix 13.11.2026: „kein Dokument nötig“ (Schrauben, Masken, Handschuhe …) – Artikel braucht keine CoA/Spec (lu_item_pflichtig).
+    // Fable-5 T3.2: Spalten, die offene Posten lesen – auch ohne je geöffnete Buchhaltung (gleiche Typen wie buchhaltung/core/schema.php).
+    ensure_column('beleg', 'kategorie', "VARCHAR(20) NOT NULL DEFAULT 'produkt'");
+    ensure_column('beleg', 'mahnstufe', "TINYINT NOT NULL DEFAULT 0");
+    ensure_column('beleg', 'letzte_mahnung', "DATE NULL");
     ensure_column('item', 'kein_dokument', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('item', 'kein_dokument_grund', "VARCHAR(255) NULL");
     ensure_column('item', 'kein_dokument_von', "VARCHAR(190) NULL");
@@ -14704,9 +14708,12 @@ function benachrichtigungen_auto_pruefen(): void {
     } catch (Throwable $e) { /* best-effort */ }
 }
 // Ungelesene fuer EINEN Benutzer = Benachrichtigungen ohne Lese-Eintrag dieses Benutzers.
+// Fable-5 T3.5: einmal je Seite und Benutzer (Glocke, Menü) – Zwischenspeicher je Aufruf.
 function benachrichtigungen_ungelesen_count(int $benutzer_id): int {
+    static $c = [];
+    if (isset($c[$benutzer_id])) return $c[$benutzer_id];
     if ($benutzer_id <= 0 || !table_exists('benachrichtigung')) return 0;
-    return (int) scalar("SELECT COUNT(*) FROM benachrichtigung b
+    return $c[$benutzer_id] = (int) scalar("SELECT COUNT(*) FROM benachrichtigung b
         WHERE NOT EXISTS (SELECT 1 FROM benachrichtigung_gelesen g WHERE g.benachrichtigung_id=b.id AND g.benutzer_id=?)",
         [$benutzer_id]);
 }
@@ -14826,11 +14833,14 @@ function aufgaben_fuer_benutzer(int $uid, string $status = 'offen'): array {
                 WHERE a.status=? AND (a.zugewiesen_an=? OR a.zugewiesen_an IS NULL)
                 ORDER BY a.prio ASC, (a.faellig IS NULL), a.faellig ASC, a.angelegt ASC", [$status, $uid]);
 }
+// Fable-5 T3.3 (13.11.2026): der Menü-Zähler zählt genau wie die Liste „Aufgaben“ (alle offenen) – einmal je Seite.
 function aufgabe_offen_zahl(int $uid): int {
-    return (int) scalar("SELECT COUNT(*) FROM aufgabe WHERE status='offen' AND (zugewiesen_an=? OR zugewiesen_an IS NULL)", [$uid]);
+    static $n = null;
+    return $n ??= (int) scalar("SELECT COUNT(*) FROM aufgabe WHERE status='offen'");
 }
+// Fable-5 T3.3: nur eine offene Aufgabe wird erledigt – ein zweites „Erledigt“ überschreibt Zeit und Name nicht.
 function aufgabe_erledigen(int $id, ?int $uid): void {
-    q("UPDATE aufgabe SET status='erledigt', erledigt_am=?, erledigt_von=? WHERE id=?", [gmdate('Y-m-d H:i:s'), $uid, $id]);
+    q("UPDATE aufgabe SET status='erledigt', erledigt_am=?, erledigt_von=? WHERE id=? AND status='offen'", [gmdate('Y-m-d H:i:s'), $uid, $id]);
 }
 // „Wieder öffnen“ entfällt (Nico 13.11.2026) – bleibt nur als leere Hülle für alte Aufrufe, bucht nichts.
 function aufgabe_wieder_offen(int $id): void {}

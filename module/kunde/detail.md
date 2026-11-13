@@ -59,3 +59,6 @@ Auswahl + Knopf hängen per `form="betreuerForm"` daran (wie `#ezMailForm`). Reg
 Feld „Internes Kürzel" im Reiter Stammdaten (Spalte `kunden.kuerzel`, max. 20 Zeichen, leer = NULL). Muss eindeutig sein
 (Groß-/Kleinschreibung egal) – sonst Fehlermeldung, nichts gespeichert. **Nur intern:** erscheint in den internen Tabellen
 statt des Firmennamens (über `kunde_link()` / `kunde_anzeige()` in core/ui.php), nie in PDFs, Mails oder im Kundenportal.
+
+## Nachbesserung Fable-5 (13.11.2026)
+Offene Posten = `op_summe($kid)`, Überzahlung als „Guthaben“ (Kachel und Kopf im Reiter Rechnungen).

@@ -2029,8 +2029,14 @@ $FORMLBL_P = ['pulver'=>'Pulver','granulat'=>'Granulat','extrakt'=>'Extrakt','fl
 $offenAngebote = count(array_filter($angebote, fn($a) => $a['status'] === 'gesendet'));
 // Offener Betrag = Summe der RESTE (Brutto − Zahlungen) über alle Rechnungen – Teilzahlungen korrekt abgezogen,
 // nicht mehr der volle Brutto nur anhand des rohen Status. „Offene Rechnungen" = alle mit Restbetrag > 0.
-$offenRechnungen = array_values(array_filter($rechnungen, fn($r) => ($reZahl[(int)$r['id']]['rest'] ?? 0.0) > 0.005));
-$offenBetrag = array_sum(array_map(fn($r) => (float)($reZahl[(int)$r['id']]['rest'] ?? 0.0), $rechnungen));
+// Fable-5 T3.1 (13.11.2026): eine Rechnung mit Dashboard und Buchhaltung (core/offene_posten.php), Filter „freigegeben“ (kunde_sichtbar).
+// Überzahlung = Guthaben, eigene Zeile, nie von den offenen Rechnungen abziehen.
+require_once BX_ROOT . '/core/offene_posten.php';
+$opPortal = array_values(array_filter(op_rechnungen('sichtbar', (int)$kid), fn($r) => (float)$r['rest'] > 0.005));
+$opPortalIds = array_flip(array_map(fn($r) => (int)$r['id'], $opPortal));
+$offenRechnungen = array_values(array_filter($rechnungen, fn($r) => isset($opPortalIds[(int)$r['id']])));
+$offenBetrag = op_summe((int)$kid, 'sichtbar');
+$portalGuthaben = op_guthaben((int)$kid, 'sichtbar');
 $inArbeit = count(array_filter($auftraege, fn($a) => $a['status'] !== 'versendet'));
 // Menü-Zähler: was ist offen bzw. in Bearbeitung (Kundensicht) – als Badge am jeweiligen Menüpunkt.
 $navKontingente = (int) scalar("SELECT COUNT(*) FROM angebot WHERE kunde_id=? AND jahresvertrag=1 AND status<>'offen' AND kunde_ausgeblendet=0 AND NOT EXISTS (SELECT 1 FROM kontingent kk WHERE kk.angebot_id=angebot.id)", [$kid])
@@ -2586,7 +2592,7 @@ portal_head('Kundenportal · ' . $k['firma']);
   <div class="pt-cards">
     <a class="pt-card" href="<?= $portalLink('meine_anfragen') ?>&oatab=zubestaetigen" style="text-decoration:none;color:inherit"><div class="k">Offene Angebote</div><div class="val"><?= $offenAngebote ?></div></a>
     <a class="pt-card" href="<?= $portalLink('bestellungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Bestellungen in Arbeit</div><div class="val"><?= $inArbeit ?></div></a>
-    <a class="pt-card" href="<?= $portalLink('rechnungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Offene Rechnungen</div><div class="val"><?= $eur($offenBetrag) ?></div></a>
+    <a class="pt-card" href="<?= $portalLink('rechnungen') ?>" style="text-decoration:none;color:inherit"><div class="k">Offene Rechnungen</div><div class="val"><?= $eur($offenBetrag) ?></div><?php if ($portalGuthaben > 0): ?><div class="muted" style="font-size:12px">Guthaben <?= $eur($portalGuthaben) ?></div><?php endif; ?></a>
   </div>
 
   <?php // In Produktion / in Arbeit: aktive Aufträge des Kunden (nicht versendet/storniert) mit ihrem echten Status.

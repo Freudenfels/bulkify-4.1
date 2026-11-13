@@ -8,8 +8,10 @@ require_once BX_ROOT . '/core/qr.php';
 $rollen = function_exists('user_rollen') ? user_rollen() : [];
 $admin  = in_array('admin', $rollen, true);
 $hat    = fn(array $r) => $admin || (bool) array_intersect($rollen, $r);
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$basis  = $scheme . '://' . (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+// Fable-5 T3.4: QR-Adressen immer https:// (hinter dem Proxy sieht PHP sonst „http“); nur der lokale Testrechner bleibt http.
+$hostA  = (string)($_SERVER['HTTP_HOST'] ?? 'app.bulkify.pro');
+$lokal  = (bool) preg_match('/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/', $hostA);
+$basis  = ($lokal ? 'http' : 'https') . '://' . $hostA;
 
 // Jede App: Name, wofür, Adresse, installierbar (eigenes Web-Manifest) ja/nein, wer sie sieht.
 $apps = [
@@ -17,7 +19,7 @@ $apps = [
     ['name' => 'Werk-App (Produktion am Tablet)', 'wofuer' => 'Für die Mitarbeiter an der Linie: Tagesplan, Start mit Bulk-Scan, Abfüllen, Teilmengen, Kartons. Anmeldung per PIN.', 'url' => '/produktion/?p=werk', 'pwa' => true, 'zeigen' => $hat(['production'])],
     ['name' => 'Lager-App', 'wofuer' => 'Tablet/Handy am Regal: Suchen, Einbuchen, Umbuchen, Versand, Inventur, Etiketten.', 'url' => '/lager/', 'pwa' => true, 'zeigen' => $hat(['production', 'fulfillment', 'einkauf', 'labor'])],
     ['name' => 'Produktion (Team)', 'wofuer' => 'Produktionsaufträge im Büro: Schritte, Qualitätsprüfung, Laufzettel.', 'url' => '/produktion/', 'pwa' => false, 'zeigen' => $hat(['production'])],
-    ['name' => 'CRM', 'wofuer' => 'Fürs Handy: Kontakte, Wiedervorlagen, wer wartet auf mich.', 'url' => '/crm/', 'pwa' => true, 'zeigen' => $admin],
+    ['name' => 'CRM', 'wofuer' => 'Fürs Handy: Kontakte, Wiedervorlagen, wer wartet auf mich.', 'url' => '/crm/', 'pwa' => true, 'zeigen' => $admin || (bool) array_diff($rollen, ['lieferant', 'kunde', 'partner'])],   // T3.4: wie crm/core/auth.php – jede Team-Rolle
     ['name' => 'Buchhaltung', 'wofuer' => 'Belege, Zahlungen, offene Posten, Mahnungen.', 'url' => '/buchhaltung/', 'pwa' => false, 'zeigen' => $hat(['finance'])],
 ];
 

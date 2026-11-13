@@ -23,3 +23,6 @@ Kachel und Liste „Versandbereit“ zählen Aufträge mit Status `erledigt` nur
 - „Offene Angebote“ ohne abgelaufene (gueltig_bis vor heute).
 - „In Produktion“ ohne Produktionsaufträge versendeter oder stornierter Aufträge.
 - „Rohstoffe leer“ nur für Rohstoffe, die ein offener Produktionsauftrag braucht.
+
+## Nachbesserung Fable-5 (13.11.2026)
+Kachel „Offene Posten“ = `op_summe()` (nur positive Reste), darunter „Guthaben“, wenn es Überzahlungen gibt.
