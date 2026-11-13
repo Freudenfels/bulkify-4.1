@@ -15185,9 +15185,9 @@ function rezeptur_naehrwerte_speichern(int $rid, array $rows): void {
         if ($name === '') continue;
         $einheit = ($r['einheit'] ?? 'mg') === 'µg' ? 'µg' : 'mg';
         // Eingabe erfolgt in der gewählten Einheit; intern immer in mg je Einheit speichern (wie die Ableitung).
-        $eingabe = (float)str_replace(',', '.', (string)($r['mg'] ?? 0));
+        $eingabe = zahl_lesen((string)($r['mg'] ?? 0), true);   // Fable-4 T2.2: Mengen-Lesart („1.000“ mg = 1000, „0,045“ = 0,045)
         $mg = $einheit === 'µg' ? $eingabe / 1000 : $eingabe;
-        $nrv = isset($r['nrv']) && $r['nrv'] !== '' ? (float)str_replace(',', '.', (string)$r['nrv']) : null;
+        $nrv = isset($r['nrv']) && $r['nrv'] !== '' ? zahl_lesen((string)$r['nrv'], true) : null;
         $nid = naehrstoff_id_by_name($name, false);
         q("INSERT INTO rezeptur_naehrwert (rezeptur_id,naehrstoff_id,name,menge_mg,nrv_wert,einheit,ie_mg,einheit_anzeige,quelle,sort)
            VALUES (?,?,?,?,?,?,NULL,NULL,'manuell',?)",

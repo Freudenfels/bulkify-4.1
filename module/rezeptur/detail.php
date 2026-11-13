@@ -524,7 +524,7 @@ if (!$neu && $rezDelFehler !== ''): $rezVerw = rezeptur_verwendung((int)$id); if
         $anz  = $einh === 'µg' ? (float)$n['mg'] * 1000 : (float)$n['mg'];
         $nwRows[] = ['name'=>$n['name'], 'anz'=>$anz, 'einheit'=>$einh, 'nrv'=>$n['nrv']];
     }
-    $nwFmt = fn($x) => rtrim(rtrim(number_format((float)$x, 4, ',', '.'), '0'), ',');
+    $nwFmt = fn($x) => rtrim(rtrim(number_format((float)$x, 4, ',', ''), '0'), ',');   // Fable-4 T2.2: Vorbelegung ohne Tausenderpunkt
 ?>
 <?php
   // Materialkosten + Gesamt-Einwaage je Einheit aus den Lieferanten-Kilopreisen (günstigste Staffel bei Batchgröße).

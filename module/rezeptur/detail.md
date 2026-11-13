@@ -121,3 +121,5 @@ Neben „Fertigprodukt anfragen“ steht bei Stück-Formen der Knopf **„Premix
 **Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.
 
 **PIB prüfen (13.11.2026, Paket Teil 3):** Oben steht der Kasten „PIB prüfen“ (`#pibpruefen`) mit jedem wartenden Auftrag dieser Rezeptur: PIB-Vorschau im Pop-up, Link „Nährwerte und Angaben“, Knopf „PIB geprüft“ (`aktion=pib_geprueft` → `pib_freigeben()`), Hinweis „PIB unvollständig: …“. Nach dem Speichern der Zutaten prüft `pib_rezeptur_geaendert()`, ob freigegebene Aufträge neu geprüft werden müssen.
+
+**Nährwerte von Hand (Fable-4 T2.2, 13.11.2026):** `rezeptur_naehrwerte_speichern()` liest Menge und NRV mit `zahl_lesen(…, true)` („1.000“ mg = 1000); die Rezeptur-Seite belegt ohne Tausenderpunkt vor. Vorher wurde aus 1.000 mg beim Speichern 1 mg.
