@@ -739,3 +739,6 @@ Neue Spalten: `item.kein_dokument`, `item.kein_dokument_grund`, `item.kein_dokum
 Bindet `core/etikett_pruefung.php` ein (Etikett hochladen, prüfen, freigeben in einem Pop-up).
 
 13.11.2026: bindet `core/eingangsrechnung.php` ein.
+
+## 13.11.2026 Etikett-Maß bei der Freigabe
+`etikett_glas_endformat($behaelter_id)` (Endformat des Glases aus `etikett_final`), `etikett_plus_beschnitt($mass, $endformat)` (b, wenn Maß = Endformat + 2 × b, 1–6 mm). `etikett_mass_aus_pdf_setzen()`: enthält die TrimBox den Beschnitt (= Glas-Endformat + 2 × b), wird das Glas-Endformat als Maß gespeichert und die TrimBox als Druckmaß (`etikett_druck`).

@@ -160,9 +160,15 @@ function etp_soll(int $aid): array {
     $it = $eid > 0 ? one("SELECT id, name, breite_mm, hoehe_mm, etikett_final, etikett_druck, etikett_format FROM item WHERE id=?", [$eid]) : null;
     $w = (float)($it['breite_mm'] ?? 0); $h = (float)($it['hoehe_mm'] ?? 0);
     if (($w <= 0 || $h <= 0) && $it) { $m = etikett_masse($it['etikett_final'] ?: $it['etikett_format']); if ($m) [$w, $h] = $m; }
+    // Sofortfix 13.11.2026 (AB-3223): Steht am Etikett-Artikel „Glas-Endformat + 2 × Beschnitt“ (Maß wurde aus einer TrimBox übernommen,
+    // die den Beschnitt enthält), gilt das Endformat des Glases; der Unterschied ist der Beschnitt.
+    $glas = etikett_glas_endformat((int)($a['vp_id'] ?? 0));
+    $bGlas = ($glas && $w > 0 && $h > 0) ? etikett_plus_beschnitt([$w, $h], $glas) : null;
+    if ($bGlas !== null) { [$w, $h] = $glas; }
     // Etiketten liegen quer (Breite = lange Seite um das Glas) – so zeigen wir das Maß auch an: 120 × 45 mm.
     if ($w > 0 && $h > $w) [$w, $h] = [$h, $w];
-    if ($it && $w > 0 && ($d = etikett_masse((string)($it['etikett_druck'] ?? '')))) {
+    if ($bGlas !== null) $besch = $bGlas;
+    elseif ($it && $w > 0 && ($d = etikett_masse((string)($it['etikett_druck'] ?? '')))) {
         $diff = (max($d) - $w) / 2;
         if ($diff >= 0.5 && $diff <= 6) $besch = round($diff, 1);
     }
@@ -476,10 +482,10 @@ function etp_mass_ampel(array $soll, ?array $ist, string $sp, array $pdf = []): 
     $mitB = fn($b) => $b !== null && $b >= 0.3 ? $t(' + ' . etp_mm($b) . ' mm Beschnitt', ' + ' . etp_mm($b) . ' mm bleed') : '';
     $diff = max(abs($iw - $sw), abs($ih - $sh));
     if ($diff <= 1.0) return ['ampel' => 'gruen', 'ist' => [$iw, $ih], 'diff' => $diff, 'beschnitt' => $beschnitt, 'text' => $t('Format passt (', 'Format fits (') . $sollL . $mitB($beschnitt) . ')'];
-    // Seite = Endformat + 2 × b (ohne eigene TrimBox), b zwischen Soll-Beschnitt und 5 mm, ±1 mm
-    if (!$eigeneTrim) {
+    // Seite (ohne eigene TrimBox) bzw. TrimBox = Endformat + 2 × b, b zwischen Soll-Beschnitt und 5 mm, ±1 mm (AB-3223: TrimBox enthält den Beschnitt)
+    {
         $b = (($iw - $sw) + ($ih - $sh)) / 4;
-        $sollB = (float)($soll['beschnitt'] ?? 2);
+        $sollB = min(2.0, (float)($soll['beschnitt'] ?? 2));
         if ($b >= $sollB - 1 && $b <= 6 && max(abs($iw - 2 * $b - $sw), abs($ih - 2 * $b - $sh)) <= 1) {
             $b = round($b * 2) / 2;   // auf 0,5 mm
             return ['ampel' => 'gruen', 'ist' => [$iw, $ih], 'diff' => 0, 'beschnitt' => $b, 'text' => $t('Format passt (', 'Format fits (') . $sollL . $mitB($b) . ')'];

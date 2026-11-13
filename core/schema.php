@@ -11862,6 +11862,19 @@ function pdf_etikett_mass(string $pfad): ?array {
 // eines NEUEN Designs (kundenetikett_nach_freigabe), nie rückwirkend für bestehende Etiketten. Ausrichtung wie das bisher
 // gespeicherte Maß (z. B. 60 x 172 = schmal x lang), damit der Vergleich mit dem Glas-Endformat gleich bleibt.
 // etikett_druck = MediaBox (Druckdatei inkl. Beschnitt), wenn die Datei eine eigene TrimBox/ArtBox hat. Rückgabe: geändert ja/nein.
+// Etikett-Endformat des Glases (Behälter-Artikel, etikett_final „67 x 188“) oder null. (Sofortfix 13.11.2026)
+function etikett_glas_endformat(int $behaelter_id): ?array {
+    if ($behaelter_id <= 0) return null;
+    $m = etikett_masse((string) scalar("SELECT etikett_final FROM item WHERE id=?", [$behaelter_id]));
+    return ($m && $m[0] > 0 && $m[1] > 0) ? $m : null;
+}
+// Ist $mass = $endformat + 2 × b (b 1–6 mm, je Seite ±1 mm, Ausrichtung egal)? Rückgabe b (auf 0,5 mm) oder null.
+function etikett_plus_beschnitt(array $mass, array $endformat): ?float {
+    $a = [max($mass), min($mass)]; $e = [max($endformat), min($endformat)];
+    $b = (($a[0] - $e[0]) + ($a[1] - $e[1])) / 4;
+    if ($b < 1 || $b > 6 || max(abs($a[0] - 2 * $b - $e[0]), abs($a[1] - 2 * $b - $e[1])) > 1) return null;
+    return round($b * 2) / 2;
+}
 function etikett_mass_aus_pdf_setzen(int $item_id, array $dok): bool {
     if ($item_id <= 0 || empty($dok['datei'])) return false;
     $pfad = BX_UPLOADS . '/' . basename((string)$dok['datei']);
@@ -11870,11 +11883,18 @@ function etikett_mass_aus_pdf_setzen(int $item_id, array $dok): bool {
     $vor = one("SELECT * FROM item WHERE id=? AND verpackung_rolle='etikett'", [$item_id]);
     if (!$vor) return false;
     $w = round((float)$em['w'], 1); $h = round((float)$em['h'], 1);
+    // Sofortfix 13.11.2026 (AB-3223): enthält die TrimBox den Beschnitt (= Glas-Endformat + 2 × b), gilt das Glas-Endformat;
+    // die TrimBox ist dann das Druckmaß inklusive Beschnitt.
+    $glasPid = (int)($vor['produkt_id'] ?? 0);
+    $glas = $glasPid > 0 ? etikett_glas_endformat((int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$glasPid])) : null;
+    $druckTrim = null;
+    if ($glas && etikett_plus_beschnitt([$w, $h], $glas) !== null) { $druckTrim = [$w, $h]; [$w, $h] = ($w >= $h) === ($glas[0] >= $glas[1]) ? $glas : [$glas[1], $glas[0]]; }
     $ab = (float)($vor['breite_mm'] ?? 0); $ah = (float)($vor['hoehe_mm'] ?? 0);
     if ($ab > 0 && $ah > 0 && (($ab < $ah) !== ($w < $h))) [$w, $h] = [$h, $w];
     $z = fn($x) => rtrim(rtrim(number_format($x, 1, '.', ''), '0'), '.');
     $druck = $vor['etikett_druck'] ?? null;
-    if ($em['quelle'] !== 'MediaBox') {
+    if ($druckTrim) { [$dw, $dh] = $druckTrim; if (($w < $h) !== ($dw < $dh)) [$dw, $dh] = [$dh, $dw]; $druck = $z($dw) . ' x ' . $z($dh); }
+    elseif ($em['quelle'] !== 'MediaBox') {
         $mb = pdf_boxen($pfad)['MediaBox'] ?? null;
         if ($mb) { [$dw, $dh] = [round($mb[0], 1), round($mb[1], 1)]; if (($w < $h) !== ($dw < $dh)) [$dw, $dh] = [$dh, $dw]; $druck = $z($dw) . ' x ' . $z($dh); }
     }
