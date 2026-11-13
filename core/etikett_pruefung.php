@@ -443,30 +443,51 @@ function etp_pdf_lesen(string $pfad): array {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Maß-Ampel: Ist-Maß aus der vorhandenen TrimBox-Funktion (pdf_etikett_mass: TrimBox → ArtBox → MediaBox) gegen das Soll.
-// grün ≤ 1 mm, gelb 1–3 mm, rot > 3 mm (Freigabe dann nur mit „trotzdem verwenden“).
-function etp_mass_ampel(array $soll, ?array $ist, string $sp): array {
+// Maß-Ampel (Sofortfix 13.11.2026): Vergleich in dieser Reihenfolge –
+// 1) hat das PDF eine eigene TrimBox (bzw. ArtBox), die kleiner als die Seite ist: TrimBox gegen das Endformat (dazu der gemessene Beschnitt);
+// 2) sonst die Seite (BleedBox bzw. MediaBox): passt sie direkt, gut; ist sie Endformat + 2 × b mit b zwischen Soll-Beschnitt und 5 mm (±1 mm),
+//    passt das Format ebenfalls (grün, „+ b mm Beschnitt“) – kein Gelb nur wegen fehlender TrimBox.
+// Größerer Beschnitt als das Soll ist in Ordnung. grün ≤ 1 mm, gelb 1–3 mm, rot > 3 mm („trotzdem verwenden“).
+// $pdf = etp_pdf_lesen() (Seitenboxen); $ist = Rückfall aus pdf_etikett_mass(), wenn keine Boxen gelesen wurden.
+// Rückgabe zusätzlich 'beschnitt' (gemessen bzw. abgeleitet, mm) für die Beschnitt-Zeile.
+function etp_mass_ampel(array $soll, ?array $ist, string $sp, array $pdf = []): array {
     $t = etp_t($sp);
-    if (!$ist) return ['ampel' => 'rot', 'text' => $t('Das Format der Datei ist nicht lesbar.', 'The format of the file cannot be read.'), 'ist' => null];
-    [$iw, $ih] = [(float)$ist['w'], (float)$ist['h']];
+    $bx = (array)($pdf['boxen'] ?? []);
+    $mmB = fn(array $b) => [($b[2] - $b[0]) * 25.4 / 72, ($b[3] - $b[1]) * 25.4 / 72];
+    $trim = $bx['TrimBox'] ?? ($bx['ArtBox'] ?? null);
+    $aussen = $bx['BleedBox'] ?? ($bx['MediaBox'] ?? null);
+    $rand = null;
+    if ($trim && $aussen) $rand = min($trim[0] - $aussen[0], $trim[1] - $aussen[1], $aussen[2] - $trim[2], $aussen[3] - $trim[3]) * 25.4 / 72;
+    $eigeneTrim = $trim && $rand !== null && $rand >= 0.3;
+    if ($eigeneTrim) [$iw, $ih] = $mmB($trim);
+    elseif ($aussen) [$iw, $ih] = $mmB($aussen);
+    elseif ($trim) [$iw, $ih] = $mmB($trim);
+    elseif ($ist) [$iw, $ih] = [(float)$ist['w'], (float)$ist['h']];
+    else return ['ampel' => 'rot', 'text' => $t('Das Format der Datei ist nicht lesbar.', 'The format of the file cannot be read.'), 'ist' => null, 'beschnitt' => null];
+    $beschnitt = $eigeneTrim ? round($rand, 1) : null;
     $sw = (float)($soll['w'] ?? 0); $sh = (float)($soll['h'] ?? 0);
     if ($sw <= 0 || $sh <= 0) {
-        return ['ampel' => 'info', 'ist' => [$iw, $ih], 'text' => $soll['art'] === 'beutel'
+        return ['ampel' => 'info', 'ist' => [$iw, $ih], 'beschnitt' => $beschnitt, 'text' => $soll['art'] === 'beutel'
             ? $t('Gesamtformat ' . etp_mm_label($iw, $ih) . ' (für diesen Beutel ist noch keine Vorlage hinterlegt)', 'Overall format ' . etp_mm_label($iw, $ih) . ' (no template stored for this pouch yet)')
             : $t('Format ' . etp_mm_label($iw, $ih) . ' (kein Soll-Format hinterlegt)', 'Format ' . etp_mm_label($iw, $ih) . ' (no target format stored)')];
     }
-    // Ausrichtung wie das Soll
-    if (($iw >= $ih) !== ($sw >= $sh)) [$iw, $ih] = [$ih, $iw];
+    if (($iw >= $ih) !== ($sw >= $sh)) [$iw, $ih] = [$ih, $iw];   // Ausrichtung wie das Soll
+    $sollL = etp_mm_label($sw, $sh);
+    $mitB = fn($b) => $b !== null && $b >= 0.3 ? $t(' + ' . etp_mm($b) . ' mm Beschnitt', ' + ' . etp_mm($b) . ' mm bleed') : '';
     $diff = max(abs($iw - $sw), abs($ih - $sh));
-    $sollL = etp_mm_label($sw, $sh); $istL = etp_mm_label($iw, $ih);
-    // Datei ohne TrimBox, deren Seite genau Endformat + Beschnitt ist: Format passt, nur die Box fehlt.
-    $b = (float)($soll['beschnitt'] ?? 2);
-    if (($ist['quelle'] ?? '') === 'MediaBox' && $diff > 1 && max(abs($iw - 2 * $b - $sw), abs($ih - 2 * $b - $sh)) <= 1)
-        return ['ampel' => 'gelb', 'ist' => [$iw, $ih], 'diff' => $diff, 'text' => $t('Format passt nur mit Beschnitt gerechnet (' . $istL . ' = ' . $sollL . ' + ' . etp_mm($b) . ' mm Beschnitt) – im PDF fehlt die TrimBox (Endformat).',
-            'Format only matches including bleed (' . $istL . ' = ' . $sollL . ' + ' . etp_mm($b) . ' mm bleed) – the PDF has no TrimBox (final size).')];
-    if ($diff <= 1.0) return ['ampel' => 'gruen', 'ist' => [$iw, $ih], 'diff' => $diff, 'text' => $t('Format passt (' . $sollL . ')', 'Format fits (' . $sollL . ')')];
-    if ($diff <= 3.0) return ['ampel' => 'gelb', 'ist' => [$iw, $ih], 'diff' => $diff, 'text' => $t('Format weicht um ' . etp_mm($diff) . ' mm ab (' . $istL . ' statt ' . $sollL . ')', 'Format differs by ' . etp_mm($diff) . ' mm (' . $istL . ' instead of ' . $sollL . ')')];
-    return ['ampel' => 'rot', 'ist' => [$iw, $ih], 'diff' => $diff, 'text' => $t('Format passt nicht (' . $istL . ' statt ' . $sollL . ')', 'Format does not fit (' . $istL . ' instead of ' . $sollL . ')')];
+    if ($diff <= 1.0) return ['ampel' => 'gruen', 'ist' => [$iw, $ih], 'diff' => $diff, 'beschnitt' => $beschnitt, 'text' => $t('Format passt (', 'Format fits (') . $sollL . $mitB($beschnitt) . ')'];
+    // Seite = Endformat + 2 × b (ohne eigene TrimBox), b zwischen Soll-Beschnitt und 5 mm, ±1 mm
+    if (!$eigeneTrim) {
+        $b = (($iw - $sw) + ($ih - $sh)) / 4;
+        $sollB = (float)($soll['beschnitt'] ?? 2);
+        if ($b >= $sollB - 1 && $b <= 6 && max(abs($iw - 2 * $b - $sw), abs($ih - 2 * $b - $sh)) <= 1) {
+            $b = round($b * 2) / 2;   // auf 0,5 mm
+            return ['ampel' => 'gruen', 'ist' => [$iw, $ih], 'diff' => 0, 'beschnitt' => $b, 'text' => $t('Format passt (', 'Format fits (') . $sollL . $mitB($b) . ')'];
+        }
+    }
+    $istL = etp_mm_label($iw, $ih);
+    if ($diff <= 3.0) return ['ampel' => 'gelb', 'ist' => [$iw, $ih], 'diff' => $diff, 'beschnitt' => $beschnitt, 'text' => $t('Format weicht um ' . etp_mm($diff) . ' mm ab (' . $istL . ' statt ' . $sollL . ')', 'Format differs by ' . etp_mm($diff) . ' mm (' . $istL . ' instead of ' . $sollL . ')')];
+    return ['ampel' => 'rot', 'ist' => [$iw, $ih], 'diff' => $diff, 'beschnitt' => $beschnitt, 'text' => $t('Format passt nicht (' . $istL . ' statt ' . $sollL . ')', 'Format does not fit (' . $istL . ' instead of ' . $sollL . ')')];
 }
 
 // Technischer Druck-Check (ohne KI). $pdf = etp_pdf_lesen(), $client = Messung aus dem Browser (Bilder-dpi, Text in Zonen)
@@ -479,6 +500,7 @@ function etp_technik_zeilen(array $soll, array $pdf, array $mass, ?array $client
     $trim = $bx['TrimBox'] ?? ($bx['ArtBox'] ?? null); $aussen = $bx['BleedBox'] ?? ($bx['MediaBox'] ?? null);
     $rand = null;
     if ($trim && $aussen) $rand = min($trim[0] - $aussen[0], $trim[1] - $aussen[1], $aussen[2] - $trim[2], $aussen[3] - $trim[3]) * 25.4 / 72;
+    if (($rand === null || $rand < 0.3) && !empty($mass['beschnitt'])) $rand = (float)$mass['beschnitt'];   // Sofortfix 13.11.: Seite = Endformat + 2 × b
     if ($rand === null || $rand < 0.3) {
         // MediaBox = Endformat + Beschnitt ohne TrimBox (siehe Maß-Ampel) zählt als „Beschnitt nicht erkennbar“
         $z[] = ['k' => 'beschnitt', 'ampel' => 'gelb', 'titel' => $t('Beschnitt', 'Bleed'),
@@ -595,7 +617,7 @@ function etp_anlegen(int $aid, array $dok, string $akteur, string $nutzer): int 
     $istPdf = strtolower(pathinfo($pfad, PATHINFO_EXTENSION)) === 'pdf';
     $pdf = $istPdf ? etp_pdf_lesen($pfad) : ['ok' => false];
     $ist = $istPdf ? pdf_etikett_mass($pfad) : null;
-    $mass = etp_mass_ampel($soll, $ist, $sp);
+    $mass = etp_mass_ampel($soll, $ist, $sp, (array)$pdf);
     $version = 1 + (int) scalar("SELECT COUNT(*) FROM etikett_pruefung WHERE auftrag_id=?", [$aid]);
     q("INSERT INTO etikett_pruefung (auftrag_id, dokument_id, version, art, datei, datei_orig, soll_w, soll_h, ist_w, ist_h, mass_ampel, technik, status, hochgeladen_von, hochgeladen_nutzer, angelegt)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'wartet', ?,?, UTC_TIMESTAMP())",
@@ -626,6 +648,21 @@ function etp_hochladen(int $aid, string $feld, string $akteur, string $nutzer, s
     log_aktivitaet('kunde', $kid, $akteur === 'team' ? 'team' : 'kunde', auftrag_design_label($aid) . ' hochgeladen (Auftrag ' . $nr . ', Version ' . (int) scalar("SELECT version FROM etikett_pruefung WHERE id=?", [$pid]) . ')' . ($akteur === 'team' ? ' vom Team' : '') . ' – wartet auf Freigabe.', 'etikett', 'auftrag', $aid);
     return ['ok' => true, 'pid' => $pid];
 }
+// „Erneut prüfen“ (Sofortfix 13.11.2026): Druck-Check (PDF-Leser, Maß-Ampel) und KI für die aktuelle Datei neu – ohne neuen Upload.
+// Die Browser-Messung (dpi) und der KI-Check starten danach im Pop-up automatisch neu (client/ki leer).
+function etp_neu_pruefen(int $pid): void {
+    $p = etp_pruefung($pid); if (!$p) return;
+    $aid = (int)$p['auftrag_id'];
+    $pfad = BX_UPLOADS . '/' . basename((string)$p['datei']);
+    $istPdf = strtolower(pathinfo($pfad, PATHINFO_EXTENSION)) === 'pdf';
+    $pdf = $istPdf ? etp_pdf_lesen($pfad) : ['ok' => false];
+    $ist = $istPdf ? pdf_etikett_mass($pfad) : null;
+    $soll = etp_soll($aid);
+    $mass = etp_mass_ampel($soll, $ist, etp_sprache((int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid])), (array)$pdf);
+    q("UPDATE etikett_pruefung SET soll_w=?, soll_h=?, ist_w=?, ist_h=?, mass_ampel=?, technik=?, ki=NULL, ki_status=NULL, ki_zusammenfassung=NULL, ki_am=NULL WHERE id=?",
+      [$soll['w'], $soll['h'], $mass['ist'][0] ?? null, $mass['ist'][1] ?? null, $mass['ampel'], json_encode(['pdf' => $pdf, 'client' => null, 'mass_quelle' => $ist['quelle'] ?? null], JSON_UNESCAPED_UNICODE), $pid]);
+    log_aktivitaet('auftrag', $aid, 'system', 'Etikett-Check Version ' . (int)$p['version'] . ' erneut geprüft.', 'etikett', 'auftrag', $aid);
+}
 // Messung aus dem Browser (pdf.js) übernehmen: Bilder mit dpi, Text in Siegel-/Zipper-Zonen.
 function etp_client_speichern(int $pid, array $c): void {
     $p = etp_pruefung($pid); if (!$p) return;
@@ -650,8 +687,8 @@ function etp_ki_punkte(string $sp): array {
     return [
         'produktname'      => [$t('Produktname und „Nahrungsergänzungsmittel“', 'Product name and “food supplement”'), 'Produktname wie im PIB und die Verkehrsbezeichnung „Nahrungsergänzungsmittel“ (bzw. in der Etikettsprache) sind vorhanden.'],
         'zutaten'          => [$t('Zutatenliste (Reihenfolge, Allergene)', 'Ingredients (order, allergens)'), 'Zutatenliste vollständig, absteigend nach Gewicht wie im PIB, Allergene hervorgehoben (fett o. ä.), Kapselhülle genannt.'],
-        'naehrstoffe'      => [$t('Nährstoffe je Tagesdosis und %NRV', 'Nutrients per daily dose and %NRV'), 'Nährstoff-/Wirkstofftabelle je Tagesdosis: Mengen und %NRV stimmen mit dem PIB überein (Zahlen, Einheiten, Rundung).'],
-        'verzehr'          => [$t('Verzehrempfehlung / Tagesdosis', 'Recommended daily intake'), 'Verzehrempfehlung mit Anzahl Einheiten je Tag passt zum PIB.'],
+        'naehrstoffe'      => [$t('Nährstoffe je Tagesdosis und %NRV', 'Nutrients per daily dose and %NRV'), 'Die Tagesdosis des Etiketts gilt (der Kunde darf eine andere Tagesdosis als der PIB-Standard wählen). PIB-Werte je 1 Einheit × Anzahl Einheiten laut Etikett mit der Tabelle vergleichen. Erlaubt: Rundung wie auf dem Etikett, Mengen ±5 %, %NRV ±2 Prozentpunkte. Rot nur bei Abweichung außerhalb dieser Grenzen.'],
+        'verzehr'          => [$t('Verzehrempfehlung / Tagesdosis', 'Recommended daily intake'), 'Grün, wenn die Verzehrempfehlung eine Anzahl Einheiten je Tag nennt und die Tabelle dieselbe Tagesdosis nutzt – auch wenn sie vom PIB-Standard abweicht (dann Zusatz „Tagesdosis laut Etikett …, Werte umgerechnet“). Rot nur, wenn Verzehrempfehlung und Tabelle auf dem Etikett nicht zusammenpassen.'],
         'warnhinweise'     => [$t('Pflicht-Warnhinweise', 'Mandatory warnings'), 'Pflichthinweise NemV: empfohlene Tagesdosis nicht überschreiten; kein Ersatz für eine ausgewogene, abwechslungsreiche Ernährung und gesunde Lebensweise; außerhalb der Reichweite von kleinen Kindern lagern. Plus produktspezifische Warnhinweise aus dem PIB.'],
         'fuellmenge'       => [$t('Füllmenge / Anzahl Kapseln', 'Net quantity / number of capsules'), 'Füllmenge bzw. Anzahl Einheiten und ggf. Nettogewicht passen zum PIB.'],
         'inverkehrbringer' => [$t('Inverkehrbringer mit Anschrift', 'Food business operator with address'), 'Name und vollständige Anschrift des Inverkehrbringers stehen auf dem Etikett.'],
@@ -665,14 +702,100 @@ function etp_rezeptur_text(int $aid): string {
     $a = one("SELECT a.produkt_id, a.menge, COALESCE(a.rezeptur_id, p.rezeptur_id) AS rid, p.einheiten_pro_packung, p.einnahme_pro_tag, p.allergene, r.darreichungsform
               FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id LEFT JOIN rezeptur r ON r.id=COALESCE(a.rezeptur_id, p.rezeptur_id) WHERE a.id=?", [$aid]);
     if (!$a) return '';
-    $z = ['Darreichungsform: ' . ($a['darreichungsform'] ?: '-'), 'Einheiten je Packung: ' . (float)($a['einheiten_pro_packung'] ?? 0), 'Einnahme je Tag: ' . (float)($a['einnahme_pro_tag'] ?? 0)];
+    $pib = etp_pib_je_einheit($aid);
+    $z = ['Darreichungsform: ' . ($a['darreichungsform'] ?: '-'), 'Füllmenge laut Auftrag (unabhängig von der Tagesdosis prüfen): ' . (float)($a['einheiten_pro_packung'] ?? 0) . ' ' . $pib['einheit_mz'] . ' je Packung',
+          'PIB-Standard-Tagesdosis (nur Vergleich, keine Vorgabe): ' . $pib['standard'] . ' ' . ($pib['standard'] == 1 ? $pib['einheit'] : $pib['einheit_mz'])];
     if (trim((string)($a['allergene'] ?? '')) !== '') $z[] = 'Allergene laut Produkt: ' . $a['allergene'];
+    if ($pib['werte']) {
+        $z[] = 'PIB-Werte je 1 ' . $pib['einheit'] . ':';
+        foreach ($pib['werte'] as $w) $z[] = '- ' . $w['name'] . ': ' . rtrim(rtrim(number_format($w['mg'] * ($w['einheit'] === 'µg' ? 1000 : 1), 4, ',', ''), '0'), ',') . ' ' . $w['einheit'] . ($w['nrv_pct'] !== null ? ' (' . number_format($w['nrv_pct'], 1, ',', '') . ' % NRV)' : '');
+    }
     if (!empty($a['rid'])) {
-        $z[] = 'Zutaten je Einheit (absteigend):';
+        $z[] = 'Zutaten je ' . $pib['einheit'] . ' (absteigend):';
         foreach (all("SELECT COALESCE(i.name, rz.bezeichnung) AS name, rz.menge_mg FROM rezeptur_zutat rz LEFT JOIN item i ON i.id=rz.item_id WHERE rz.rezeptur_id=? ORDER BY rz.menge_mg DESC", [(int)$a['rid']]) as $r)
             $z[] = '- ' . $r['name'] . ': ' . rtrim(rtrim(number_format((float)$r['menge_mg'], 3, ',', ''), '0'), ',') . ' mg';
     }
     return implode("\n", $z);
+}
+// PIB-Werte je 1 Einheit (Kapsel, Tablette, Portion) und die PIB-Standard-Tagesdosis eines Auftrags (Sofortfix 13.11.2026).
+// Pulver/Granulat: die Rezeptur ist eine Portion (Tagesdosis), Standard 1.
+function etp_pib_je_einheit(int $aid): array {
+    $a = one("SELECT COALESCE(a.rezeptur_id, p.rezeptur_id) AS rid, p.einnahme_pro_tag, r.darreichungsform FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+              LEFT JOIN rezeptur r ON r.id=COALESCE(a.rezeptur_id, p.rezeptur_id) WHERE a.id=?", [$aid]) ?: [];
+    $form = (string)($a['darreichungsform'] ?? '');
+    $td = function_exists('form_ist_tagesdosis') && form_ist_tagesdosis($form);
+    [$e, $mz] = match (true) { in_array($form, ['kapsel', 'softgel'], true) => ['Kapsel', 'Kapseln'], $form === 'tablette' => ['Tablette', 'Tabletten'], $td => ['Portion', 'Portionen'], default => ['Einheit', 'Einheiten'] };
+    $werte = [];
+    if (!empty($a['rid'])) {
+        if (!function_exists('pib_naehr')) require_once __DIR__ . '/pdf_pib.php';
+        foreach (pib_naehr((int)$a['rid']) as $n) {
+            $nrvMg = ($n['nrv'] === null || $n['nrv'] === '') ? 0 : ((string)$n['einheit'] === 'µg' ? (float)$n['nrv'] / 1000 : (float)$n['nrv']);
+            $werte[] = ['name' => (string)$n['name'], 'mg' => (float)$n['mg'], 'einheit' => (string)$n['einheit'], 'nrv_mg' => $nrvMg, 'nrv_pct' => $nrvMg > 0 ? (float)$n['mg'] / $nrvMg * 100 : null];
+        }
+    }
+    $std = $td ? 1 : max(1, (int) round((float)($a['einnahme_pro_tag'] ?? 1)));
+    return ['werte' => $werte, 'standard' => $std, 'einheit' => $e, 'einheit_mz' => $mz];
+}
+// Nachrechnung im Server (Sofortfix 13.11.2026): Die KI liest Tagesdosis und Tabellenwerte vom Etikett ('tagesdosis', 'naehrwerte');
+// der Server rechnet PIB je Einheit × Tagesdosis des Etiketts und bewertet mit Toleranz (Rundung wie gezeigt, Mengen ±5 %,
+// %NRV ±2 Prozentpunkte). Überschreibt die Punkte 'verzehr' und 'naehrstoffe', wenn die KI die Angaben geliefert hat.
+// Höchstmengen/UL sind im System nicht hinterlegt – dieser Punkt entfällt.
+function etp_ki_nachpruefen(array $daten, int $aid, string $sp): array {
+    $t = etp_t($sp);
+    $td = (array)($daten['tagesdosis'] ?? []);
+    $nText = isset($td['verzehr_einheiten']) && is_numeric($td['verzehr_einheiten']) ? (float)$td['verzehr_einheiten'] : null;
+    $nTab  = isset($td['tabelle_einheiten']) && is_numeric($td['tabelle_einheiten']) ? (float)$td['tabelle_einheiten'] : null;
+    if ($nText === null && $nTab === null) return $daten;
+    $pib = etp_pib_je_einheit($aid);
+    $n = $nTab ?? $nText;
+    $eLbl = fn($x) => etp_mm($x) . ' ' . ($x == 1 ? $pib['einheit'] : $pib['einheit_mz']);
+    $set = function (string $key, string $ampel, string $text) use (&$daten) {
+        $gefunden = false;
+        foreach ((array)($daten['punkte'] ?? []) as $i => $p) if (($p['key'] ?? '') === $key) { $daten['punkte'][$i]['ampel'] = $ampel; $daten['punkte'][$i]['begruendung'] = $text; $gefunden = true; }
+        if (!$gefunden) $daten['punkte'][] = ['key' => $key, 'ampel' => $ampel, 'begruendung' => $text];
+    };
+    // Verzehrempfehlung / Tagesdosis
+    if ($nText !== null && $nTab !== null && abs($nText - $nTab) > 0.01) {
+        $set('verzehr', 'rot', $t('Verzehrempfehlung nennt ' . $eLbl($nText) . ', die Tabelle ist auf ' . $eLbl($nTab) . ' bezogen – das passt auf dem Etikett nicht zusammen.',
+                                  'The recommended intake says ' . etp_mm($nText) . ', the table refers to ' . etp_mm($nTab) . ' – these do not match on the label.'));
+    } else {
+        $txt = $t('Verzehrempfehlung nennt ' . $eLbl($n) . ' je Tag, die Tabelle nutzt dieselbe Tagesdosis.', 'The recommended intake states ' . etp_mm($n) . ' per day, the table uses the same daily dose.');
+        if (abs($n - $pib['standard']) > 0.01)
+            $txt .= ' ' . $t('Tagesdosis laut Etikett ' . $eLbl($n) . ' (PIB-Standard ' . $eLbl($pib['standard']) . '), Werte auf ' . $eLbl($n) . ' umgerechnet und geprüft.',
+                             'Daily dose on the label ' . etp_mm($n) . ' (PIB standard ' . etp_mm($pib['standard']) . '), values converted to ' . etp_mm($n) . ' and checked.');
+        $set('verzehr', 'gruen', $txt);
+    }
+    // Nährstoffe: Etikett gegen PIB je Einheit × n
+    $tab = array_values(array_filter((array)($daten['naehrwerte'] ?? []), 'is_array'));
+    if ($tab && $pib['werte']) {
+        $norm = fn($s) => preg_replace('/[^a-z0-9]/', '', strtolower(strtr((string)$s, ['ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss', 'Ä' => 'ae', 'Ö' => 'oe', 'Ü' => 'ue'])));
+        $inMg = function ($wert, string $e): ?float {
+            $e = strtolower(trim($e)); $v = (float) str_replace(',', '.', (string)$wert);
+            return match ($e) { 'mg' => $v, 'g' => $v * 1000, 'µg', 'ug', 'mcg' => $v / 1000, default => null };
+        };
+        $stellen = fn($wert) => ($p = strpos(str_replace(',', '.', (string)$wert), '.')) === false ? 0 : strlen(str_replace(',', '.', (string)$wert)) - $p - 1;
+        $fehler = []; $ok = 0;
+        foreach ($pib['werte'] as $w) {
+            $treffer = null;
+            foreach ($tab as $z) { $a = $norm($z['name'] ?? ''); $b = $norm($w['name']); if ($a !== '' && (str_contains($a, $b) || str_contains($b, $a))) { $treffer = $z; break; } }
+            if (!$treffer) continue;
+            $soll = $w['mg'] * $n;
+            $istMg = $inMg($treffer['menge'] ?? null, (string)($treffer['einheit'] ?? 'mg'));
+            if ($istMg !== null && $soll > 0) {
+                $faktor = $istMg > 0 ? $istMg / (float) str_replace(',', '.', (string)$treffer['menge']) : 1;   // mg je angezeigter Einheit
+                $rundTol = 0.5 * pow(10, -$stellen($treffer['menge'])) * $faktor;
+                if (abs($istMg - $soll) > max(0.05 * $soll, $rundTol + 1e-9))
+                    $fehler[] = $w['name'] . ': ' . $t('Etikett ', 'label ') . $treffer['menge'] . ' ' . $treffer['einheit'] . ', ' . $t('erwartet ', 'expected ') . rtrim(rtrim(number_format($soll * ($w['einheit'] === 'µg' ? 1000 : 1), 3, ',', ''), '0'), ',') . ' ' . $w['einheit'];
+            }
+            if (isset($treffer['nrv_prozent']) && is_numeric($treffer['nrv_prozent']) && $w['nrv_pct'] !== null && abs((float)$treffer['nrv_prozent'] - $w['nrv_pct'] * $n) > 2)
+                $fehler[] = $w['name'] . ': ' . $t('%NRV Etikett ', '%NRV label ') . $treffer['nrv_prozent'] . ' %, ' . $t('erwartet ', 'expected ') . number_format($w['nrv_pct'] * $n, 0, ',', '') . ' %';
+            $ok++;
+        }
+        if ($fehler) $set('naehrstoffe', 'rot', $t('Abweichung zum PIB (auf ' . $eLbl($n) . ' umgerechnet): ', 'Deviation from the PIB (converted to ' . etp_mm($n) . '): ') . implode('; ', $fehler) . '.');
+        elseif ($ok > 0) $set('naehrstoffe', 'gruen', $t('Mengen und %NRV passen zur Tagesdosis von ' . $eLbl($n) . ' (PIB je ' . $pib['einheit'] . ' × ' . etp_mm($n) . ', Rundung wie auf dem Etikett).',
+                                                        'Amounts and %NRV match the daily dose of ' . etp_mm($n) . ' (PIB per unit × ' . etp_mm($n) . ', rounding as shown).'));
+    }
+    return $daten;
 }
 function etp_ki_auswerten(array $daten, string $sp): array {
     $t = etp_t($sp);
@@ -756,15 +879,19 @@ function etp_ki_pruefen(int $pid, array $bilder): array {
              . "Kunde (Auftraggeber): " . trim(($k['firma'] ?? '') . ', ' . ($k['strasse'] ?? '') . ', ' . ($k['plz'] ?? '') . ' ' . ($k['ort'] ?? '') . ', ' . ($k['land'] ?? '')) . "\n\n"
              . "Prüfpunkte (jeden genau einmal bewerten):\n" . $punkte . "\n"
              . "Ampel: gruen = passt; gelb = Hinweis/unklar/fehlt teilweise; rot = klare Abweichung zum PIB oder Pflichtangabe fehlt. "
+             . "Die Tagesdosis des Etiketts gilt, nicht der PIB-Standard: lies sie aus der Verzehrempfehlung und aus dem Tabellenkopf (z. B. „pro Tagesdosis (2 Kapseln)“) und rechne die PIB-Werte je Einheit auf diese Dosis um. "
+             . "Toleranz: Rundung wie auf dem Etikett, Mengen ±5 %, %NRV ±2 Prozentpunkte. Füllmenge immer gegen den Auftrag prüfen. "
              . "Begründung kurz und konkret (max. 2 Sätze), zitiere die betroffene Stelle in Anführungszeichen. Erfinde nichts: was auf den Bildern nicht lesbar ist, ist gelb mit „nicht lesbar“. "
              . "Schreibe die Begründungen auf " . ($sp === 'en' ? 'Englisch' : 'Deutsch') . ".\n"
-             . 'Antwortformat: {"punkte":[{"key":"produktname","ampel":"gruen|gelb|rot","begruendung":"…"}, …]}';
+             . 'Antwortformat: {"punkte":[{"key":"produktname","ampel":"gruen|gelb|rot","begruendung":"…"}, …], '
+             . '"tagesdosis":{"verzehr_einheiten":Zahl aus der Verzehrempfehlung oder null,"tabelle_einheiten":Zahl aus dem Tabellenkopf oder null}, '
+             . '"naehrwerte":[{"name":"…","menge":Zahl wie auf dem Etikett,"einheit":"mg|µg|g","nrv_prozent":Zahl oder null}, …]}';
         $inhalt[] = ['type' => 'text', 'text' => $anw];
         $r = ki_json($inhalt, ['system' => 'Du bist eine sorgfältige Lebensmittelrecht-Assistenz für Etiketten von Nahrungsergänzungsmitteln. Du gibst Hinweise, keine Rechtsberatung.',
                                'max_tokens' => 4000, 'timeout' => 75, 'versuche' => 1, 'budget' => 75, 'zweck' => 'etikettcheck']);
         if (empty($r['ok'])) return $fehler((string)($r['fehler'] ?? 'KI-Fehler'));
     }
-    $ausw = etp_ki_auswerten((array)$r['daten'], $sp);
+    $ausw = etp_ki_auswerten(etp_ki_nachpruefen((array)$r['daten'], $aid, $sp), $sp);   // Sofortfix 13.11.: Tagesdosis des Etiketts, Nachrechnung
     $ausw['test'] = !empty($r['test']);
     q("UPDATE etikett_pruefung SET ki_status='fertig', ki=?, ki_zusammenfassung=?, ki_am=UTC_TIMESTAMP() WHERE id=?",
       [json_encode($ausw, JSON_UNESCAPED_UNICODE), mb_substr(etp_ki_zus($ausw['punkte'], 'de')['text'], 0, 250), $pid]);
@@ -802,6 +929,8 @@ function etp_freigeben(int $aid, string $name, string $akteur, array $o, string 
     if ($name === '') return ['ok' => false, 'fehler' => $t('Bitte Ihren Namen angeben.', 'Please enter your name.')];
     if ($akteur === 'team' && trim((string)($o['grund'] ?? '')) === '') return ['ok' => false, 'fehler' => 'Bitte den Grund angeben (z. B. „Kunde hat am Telefon freigegeben“).'];
     $p = etp_aktuell($aid);
+    if ($p) { $techF = json_decode((string)$p['technik'], true) ?: [];
+              $p['mass_ampel'] = etp_mass_ampel(etp_soll($aid), $p['ist_w'] !== null ? ['w' => (float)$p['ist_w'], 'h' => (float)$p['ist_h']] : null, $sp, (array)($techF['pdf'] ?? []))['ampel']; }
     if ($p && $p['mass_ampel'] === 'rot' && empty($o['trotzdem']))
         return ['ok' => false, 'fehler' => $t('Das Format passt nicht. Bitte bestätigen Sie „trotzdem verwenden“ oder laden Sie eine passende Datei hoch.', 'The format does not fit. Please confirm “use anyway” or upload a matching file.')];
     $r = etikett_freigabe_setzen($aid, $name, $akteur === 'team' ? 'team' : 'kunde');
@@ -878,6 +1007,7 @@ function etp_texte(string $sp, bool $beutel, string $wer): array {
         'leg_zone'     => $t('hier kein Text', 'no text here'),
         'drehen'       => $t('gedreht ansehen', 'view rotated'),
         'technik'      => $t('Druck-Check', 'Print check'),
+        'neu_pruefen'  => $t('Erneut prüfen', 'Check again'),
         'ki'           => $t('KI-Etikettencheck', 'AI label check'),
         'ki_laeuft'    => $t('KI-Etikettencheck läuft … (20–60 Sekunden)', 'AI label check running … (20–60 seconds)'),
         'ki_hinweis'   => $t('Dies ist eine automatische KI-Prüfung. Die KI kann Fehler machen und Dinge übersehen. Sie ersetzt keine fachliche oder rechtliche Prüfung. Bitte prüfen Sie Ihr Etikett selbst sorgfältig.',
@@ -931,7 +1061,7 @@ function etp_status(int $aid, string $wer, callable $dateiUrl, string $nameVor):
     $akt = null;
     if ($p) {
         $tech = json_decode((string)$p['technik'], true) ?: [];
-        $mass = etp_mass_ampel($soll, $p['ist_w'] !== null ? ['w' => (float)$p['ist_w'], 'h' => (float)$p['ist_h'], 'quelle' => (string)($tech['mass_quelle'] ?? 'TrimBox')] : null, $sp);
+        $mass = etp_mass_ampel($soll, $p['ist_w'] !== null ? ['w' => (float)$p['ist_w'], 'h' => (float)$p['ist_h'], 'quelle' => (string)($tech['mass_quelle'] ?? 'TrimBox')] : null, $sp, (array)($tech['pdf'] ?? []));
         $akt = ['id' => (int)$p['id'], 'version' => (int)$p['version'], 'datei_orig' => (string)$p['datei_orig'], 'url' => $dateiUrl((int)$p['dokument_id'], (int)$p['id']),
                 'ist_pdf' => strtolower(pathinfo((string)$p['datei'], PATHINFO_EXTENSION)) === 'pdf',
                 'mass' => $mass, 'boxen' => $tech['pdf']['boxen'] ?? [], 'rotate' => (int)($tech['pdf']['rotate'] ?? 0), 'seiten' => (int)($tech['pdf']['seiten'] ?? 1),
@@ -993,6 +1123,7 @@ function etp_ajax(array $ctx): void {
     $p = $pid > 0 ? etp_pruefung($pid) : null;
     if ($pid > 0 && (!$p || (int)$p['auftrag_id'] !== $aid)) $raus(['ok' => false, 'fehler' => 'Version nicht gefunden.']);
     if ($a === 'technik' && $p) { etp_client_speichern($pid, (array)($json['client'] ?? [])); $raus($status()); }
+    if ($a === 'neu_pruefen' && $p) { etp_neu_pruefen($pid); $raus($status()); }   // Sofortfix 13.11.: Druck-Check und KI für die aktuelle Datei neu
     if ($a === 'ki' && $p) {
         if (function_exists('session_write_close')) @session_write_close();   // die Sitzung nicht 60 s sperren
         etp_ki_pruefen($pid, (array)($json['bilder'] ?? []));

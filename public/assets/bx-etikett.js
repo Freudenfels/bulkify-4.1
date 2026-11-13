@@ -94,7 +94,7 @@
         + (s.art === 'beutel' && s.soll.vorlage ? '<span><i class="l-zone"></i>' + esc(t.leg_zone) + '</span>' : '') + '</div>'
         + '<div class="bx-et-flaechen"></div>'
         + '<div class="muted bx-et-datei">' + esc(t.version) + ' ' + akt.version + ' · <a href="' + esc(akt.url) + '" target="_blank" rel="noopener">' + esc(akt.datei_orig) + '</a></div>'
-        + '</div><div class="bx-et-rechts"><h3>' + esc(t.technik) + '</h3><div class="bx-et-technik">' + akt.technik.map(zeile).join('') + '</div></div></div>';
+        + '</div><div class="bx-et-rechts"><div class="bx-et-tkopf"><h3>' + esc(t.technik) + '</h3><button type="button" class="btn btn-ghost btn-sm" data-et-neu>' + esc(t.neu_pruefen) + '</button></div><div class="bx-et-technik">' + akt.technik.map(zeile).join('') + '</div></div></div>';
       // KI
       h += '<section class="bx-et-ki"><h3>' + esc(t.ki) + '</h3><div class="bx-et-kihinweis">' + esc(t.ki_hinweis) + '</div><div class="bx-et-kiinhalt">' + kiHtml(akt.ki) + '</div>'
         + '<div class="bx-et-verantw">' + esc(t.verantwortlich) + '</div>'
@@ -154,6 +154,12 @@
     if ((b = d.querySelector('[data-et-spaeter]'))) b.onclick = function () { schliessen(); bandNeu(); };
     if ((b = d.querySelector('[data-et-frei]'))) b.onclick = freigeben;
     if ((b = d.querySelector('[data-et-kineu]'))) b.onclick = function () { kiStarten(true); };
+    // Sofortfix 13.11.2026: Druck-Check und KI-Check für die aktuelle Datei neu (ohne neuen Upload)
+    if ((b = d.querySelector('[data-et-neu]'))) b.onclick = function () {
+      var knopf = this; knopf.disabled = true;
+      api('neu_pruefen', S.aid, { pid: S.aktuell.id }).then(function (r) { knopf.disabled = false; if (r && r.ok) { KI_LAEUFT = false; zeigen(r, true); } })
+        .catch(function () { knopf.disabled = false; });
+    };
     if ((b = d.querySelector('[data-et-buchen]'))) b.onclick = function (e) {
       e.preventDefault(); var box = b.parentNode;
       box.innerHTML = '<div>' + esc(t.buchen_frage) + '</div><button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px">' + esc(t.buchen) + '</button>';

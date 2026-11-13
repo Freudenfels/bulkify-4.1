@@ -12,3 +12,5 @@ Oberfläche zu `core/etikett_pruefung.php`, im Kundenportal und auf der Auftrags
 - Daten gehen als Formularfeld `daten` (JSON) – ein reiner JSON-Body würde vom Server als „Upload zu groß“ umgeleitet.
 - Nach der Freigabe: grüner Haken „Freigegeben – danke!“, Pop-up schließt, Band wird neu geladen (`a=band`); Seiten mit `[data-etp-neuladen]` laden neu, das Team-Dashboard lädt immer neu.
 - `&etikett=AID` öffnet das Pop-up beim Laden und wird danach aus der Adresse entfernt.
+
+Sofortfix 13.11.2026: Knopf „Erneut prüfen“ neben „Druck-Check“ (Kunde und Team) – startet Druck-Check und KI-Check für die aktuelle Datei neu.

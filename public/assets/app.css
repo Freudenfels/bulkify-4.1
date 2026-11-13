@@ -684,3 +684,4 @@ pre{max-width:100%;overflow-x:auto;overflow-wrap:anywhere}
   .bx-steps .bx-step::before{top:9px}
   .bx-order-row [style*="white-space:nowrap"]{white-space:normal !important}
 }
+.bx-et-tkopf{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.bx-et-tkopf h3{margin:0}
