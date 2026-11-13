@@ -89,3 +89,5 @@ Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App,
 **Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Hier: kg je Gebinde, Restmischung kg, Rückgabe je Charge und je Gebinde: je nach Einheit der Charge/des Gebindes (`pr_menge_einheit_lesen()`, kg/g = Gewicht, Stk = Menge).
 
 **Werk-App nur Machbares (13.11.2026, Teil 1):** Kachel-Liste nur sichtbare PAs; Direktaufruf und jede Buchung (POST mit pa_id) eines nicht machbaren / künftig geplanten PA: „Nicht freigegeben - bitte im Büro melden“ (DE/EN/UK).
+
+**Noch offen (13.11.2026, Werk-App Teil 2):** Jede Karte zeigt „Noch offen: Schritte · Menge“ (Stationen übersetzt, DE/EN/UK), bei „bis vor Etikettieren“ zusätzlich „Etikett fehlt - nur bis vor dem Etikettieren“.

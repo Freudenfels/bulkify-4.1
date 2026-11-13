@@ -5,6 +5,7 @@
 require_once BX_ROOT . '/core/ui.php';
 require_once BX_ROOT . '/core/schema.php';
 require_once BX_ROOT . '/core/produktion_plan.php';   // Teil 2: Plan (Reihenfolge, Linie, machbar je Schritt)
+require_once BX_ROOT . '/core/pa_ablauf.php';         // pa_noch_offen_text() – „Noch offen“ (13.11.2026)
 produktion_plan_schema();
 // Plan speichern (Reihenfolge per Ziehen, Datum/Linie/Mitarbeiter je Zeile) – AJAX, Antwort JSON.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'plan_speichern') {
@@ -191,7 +192,14 @@ $cols = [
                           : bereitschaft_badge($r['_bereit'] ?? '') . (!empty($r['_eta']) ? ' <span class="muted" style="font-size:12px">bis ' . h(date('d.m.Y', strtotime((string)$r['_eta']))) . '</span>' : '')],
     'nummer'       => ['label' => 'Nummer', 'sort' => true],
     'kunde_firma'  => ['label' => 'Kunde', 'sort' => true, 'render' => fn($r)=> kunde_link($r['kunde_id'] ?? null, firma_kurz($r['kunde_firma']))],
-    'produkt_name' => ['label' => 'Produkt', 'render' => fn($r)=> $r['produkt_name']?h($r['produkt_name']):'<span class="muted">–</span>'],
+    'produkt_name' => ['label' => 'Produkt', 'render' => function($r) use ($tab) {
+                        $t = $r['produkt_name'] ? h($r['produkt_name']) : '<span class="muted">–</span>';
+                        if ($tab !== 'laufend') return $t;
+                        // 13.11.2026 (Werk-App Teil 2): gleiche Zeile wie Werk-App und Plan.
+                        $m = function_exists('produktion_machbar_schritte') ? produktion_machbar_schritte((int)$r['id'], false) : [];
+                        $o = pa_noch_offen_text((int)$r['id'], !empty($m['etikett_gesperrt']));
+                        return $t . ($o !== '' ? '<div class="muted" style="font-size:12px;white-space:normal">' . h($o) . '</div>' : '');
+                     }],
     'etikett'      => ['label' => 'Etikett', 'render' => function($r) use ($etikettDa) {
                         $aid = (int)($r['auftrag_id'] ?? 0);
                         // Bulk-/Lagerproduktion ohne Kundenauftrag -> kein Kunden-Etikett nötig.

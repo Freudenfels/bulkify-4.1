@@ -59,3 +59,5 @@ Zusätzlich hat `produktion_verbrauch.teilmenge_id` den Verbrauch je Teilmenge.
   - Datum in der Zukunft: abgelehnt.
 
 **Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** `pa_rest_storniert($pa_id)`: PA mit „Rest storniert“ abgeschlossen = kein offener Rest (für `produktion_rest()` und `erp_produktion_rest()`). `pa_einlagern_alt_sperre($pa_id)`: Einlagern über den alten Weg nicht, solange eine Unter-Charge läuft.
+
+**Noch offen (13.11.2026, Werk-App Teil 2):** `pa_noch_offen($pa)` = offene Produktionsschritte (ohne QM-Stationen, `pa_qm_stationen()`) + offene Menge (Soll minus gebuchte Fertigware); `pa_noch_offen_text()` baut daraus „Noch offen: Verpacken, Etikettieren · 825 Stk“ (+ „Etikett fehlt - nur bis vor dem Etikettieren“). Eine Rechnung für Werk-App, Plan und „Läuft“.

@@ -30,7 +30,8 @@ $nf = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
         <div class="muted" style="font-size:12px"><?= h((string)$r['nummer']) ?><?= $r['kunde_firma'] ? ' · ' . h(firma_kurz((string)$r['kunde_firma'])) : '' ?><?= ($r['produktionsart'] ?? '') === 'eigen' ? ' · Eigen' : ' · Fremd' ?></div></td>
       <td class="bx-num"><?= h($nf($r['menge'])) ?><?php $g = (float)($prodMap[$pid] ?? 0); if ($g > 0): ?><div class="muted" style="font-size:12px">produziert <?= h($nf($g)) ?></div><?php endif; ?></td>
       <td><?= match ($m['stufe']) { 'startklar' => bx_badge('startklar', 'ok'), 'bis_etikett' => bx_badge('bis vor Etikettieren', 'warn'), 'gesperrt' => bx_badge('nicht machbar'), default => bx_badge($m['stufe']) } ?>
-        <?php if ($m['grund'] !== ''): ?><div class="pp-grund"><?= h((string)$m['grund']) ?></div><?php endif; ?></td>
+        <?php if ($m['grund'] !== ''): ?><div class="pp-grund"><?= h((string)$m['grund']) ?></div><?php endif; ?>
+        <?php $offenTxt = pa_noch_offen_text($pid, !empty($m['etikett_gesperrt'])); if ($offenTxt !== ''): ?><div class="pp-grund" style="color:var(--text)"><?= h($offenTxt) ?></div><?php endif; ?></td>
       <td><input type="date" class="pp-f" data-f="datum" value="<?= h((string)($r['geplant_am'] ?? '')) ?>"></td>
       <td><select class="pp-f" data-f="linie" data-norscombo><option value="">–</option><?php foreach ($linien as $l): ?><option<?= (string)($r['linie'] ?? '') === $l ? ' selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?></select></td>
       <td><select class="pp-f" data-f="mitarbeiter"><option value="">–</option><?php foreach ($mitarbeiter as $u): ?><option value="<?= (int)$u['id'] ?>"<?= (int)($r['mitarbeiter_id'] ?? 0) === (int)$u['id'] ? ' selected' : '' ?>><?= h((string)$u['name']) ?></option><?php endforeach; ?></select></td>

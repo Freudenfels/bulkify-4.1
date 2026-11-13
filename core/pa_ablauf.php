@@ -165,6 +165,28 @@ function pa_unter_chargen(int $pa_id): array {
 }
 // Wurde der PA mit „Rest storniert“ abgeschlossen (Ereignis abschluss/storniert)? Dann gibt es keinen offenen Rest mehr –
 // kein Phantombestand über den alten Einlager-Weg (Fable-3 T4.2, 13.11.2026). Eine Regel für Dashboard und Produktions-App.
+// QM-Stationen (gehören nicht zur Produktion im Werk). Gleiche Liste wie produktion_qm_stationen() im Dashboard.
+function pa_qm_stationen(): array { return ['Qualitätsprüfung', 'Produktions-Freigabe', 'Versand-Freigabe']; }
+// Was ist an einem PA noch zu tun? (13.11.2026, Werk-App Teil 2) – EINE Rechnung für Werk-App, Plan und „Läuft“:
+// offene Produktionsschritte (ohne QM-Stationen, in Reihenfolge) und offene Menge (Soll minus gebuchte Fertigware).
+function pa_noch_offen(int $pa_id): array {
+    $qm = pa_qm_stationen();
+    $schritte = [];
+    foreach (all("SELECT station FROM produktion_schritt WHERE pa_id=? AND erledigt=0 ORDER BY sort, id", [$pa_id]) as $s)
+        if (!in_array((string)$s['station'], $qm, true) && !in_array((string)$s['station'], $schritte, true)) $schritte[] = (string)$s['station'];
+    $soll = (float) scalar("SELECT menge FROM produktionsauftrag WHERE id=?", [$pa_id]);
+    $ist = (float) scalar("SELECT COALESCE(SUM(menge),0) FROM charge WHERE pa_id=?", [$pa_id]);
+    return ['schritte' => $schritte, 'menge' => max(0.0, $soll - $ist)];
+}
+// Zeile „Noch offen: Verpacken, Etikettieren · 825 Stk“ (+ „Etikett fehlt - nur bis vor dem Etikettieren“). $label übersetzt Stationen
+// (Werk-App DE/EN/UK), $vorlage/$etikettTxt kommen aus den Sprachtexten. '' = nichts mehr offen.
+function pa_noch_offen_text(int $pa_id, bool $etikett_gesperrt = false, string $vorlage = 'Noch offen: %1$s · %2$s Stk',
+                            ?callable $label = null, string $etikettTxt = 'Etikett fehlt - nur bis vor dem Etikettieren'): string {
+    $o = pa_noch_offen($pa_id);
+    if (!$o['schritte'] && $o['menge'] <= 0) return '';
+    $st = $o['schritte'] ? implode(', ', array_map(fn($s) => $label ? $label($s) : $s, $o['schritte'])) : '–';
+    return sprintf($vorlage, $st, pa_mz($o['menge'])) . ($etikett_gesperrt ? ' · ' . $etikettTxt : '');
+}
 function pa_rest_storniert(int $pa_id): bool {
     try { return (int) scalar("SELECT COUNT(*) FROM pa_ereignis WHERE pa_id=? AND typ='abschluss' AND wert='storniert'", [$pa_id]) > 0; }
     catch (\Throwable $e) { return false; }

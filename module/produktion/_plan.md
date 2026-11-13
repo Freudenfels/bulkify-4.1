@@ -10,3 +10,5 @@ Die Tabelle lässt sich am Griff ziehen. Je Zeile:
 - Datum, Linie, Mitarbeiter
 
 Gespeichert wird sofort per AJAX (`aktion=plan_speichern`). Die Werk-App zeigt genau diese Reihenfolge.
+
+**Noch offen (13.11.2026, Werk-App Teil 2):** Unter dem Status steht „Noch offen: Schritte · Menge“ (`pa_noch_offen_text()`).
