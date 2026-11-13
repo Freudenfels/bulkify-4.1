@@ -158,7 +158,7 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 <?php // Notiz-Popups – damit die Tabelle schmal bleibt, steht die volle Notiz im Dialog statt in der Zeile.
 $hatNotiz = false;
 foreach ($rows as $r): if (empty($r['notiz'])) continue; $hatNotiz = true; ?>
-<dialog id="nz<?= (int)$r['id'] ?>" class="nz-dlg">
+<dialog id="nz<?= (int)$r['id'] ?>" class="nz-dlg bx-dialog">
   <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px">
     <h2 style="margin:0;font-size:17px">Notiz zu <?= h($r['nummer']) ?></h2>
     <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('dialog').close()" aria-label="schließen">&#10005;</button>

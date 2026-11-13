@@ -43,6 +43,12 @@ Es hat Vorrang vor älteren MDs; neue Anweisungen von Nico gehen vor und werden 
 6. **Demo-Seeding ist AUS** (`app_meta seed_demo_off=1`) – die Demo-Seeds legen sonst beim Seitenaufruf wieder Daten an.
 7. **Lieferant auf Dokumenten und Etiketten nur als Lieferantennummer (L-xxxx), nie Name/Adresse** (Kundendokumente und alles im Lager; Regel Nico 13.11.2026). Interne Bildschirmseiten dürfen den Namen zeigen. `kunde_text_neutral()` ersetzt L-Nummern nie.
 
+## Oberflächen-Standard (Regel Nico 13.11.2026, im ganzen System)
+Ein Baustein: `public/assets/bx-ui.js` (in allen Layouts eingebunden). Details: Handbuch Abschnitt 1, Punkt 11.
+1. **Pop-up statt neuer Seite/neuem Fenster:** `<dialog class="bx-dialog">` – Titel + X oben, Knöpfe unten (Hauptknopf rechts), Inhalt scrollt innen, Escape/Klick daneben schließt (Rückfrage bei Ungespeichertem), Speichern ohne Seitenwechsel per `data-pop-ajax` + `data-pop-refresh`. Seite im Pop-up: `bxPopup.url()` / `data-pop-url`. Kein eigenes Dialog-CSS mehr bauen.
+2. **Auswahl mit Suche:** jedes `<select>` mit mehr als 10 Einträgen automatisch (`public/assets/bx-rscombo.js`); Synonyme/Nummern über `data-such` an der Option.
+3. **Lange Texte laufen:** einzeilig mit „…“ (`.bx-lauf`, in `bx_table()` automatisch für Namens-Spalten), beim Darüberfahren/Antippen Lauftext.
+
 ## Git-Rhythmus (Multi-PC & parallele Code-Chats)
 Pull am Start, commit+push nach jedem **fertigen, getesteten** Schritt. Einzige gemeinsame Wahrheit = GitHub.
 

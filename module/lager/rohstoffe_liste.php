@@ -169,7 +169,7 @@ $cols = [
     // Namen sind teils sehr lang – kleiner + umbrechen (Tabelle ist sonst global nowrap und läuft über den Rand).
     // Anzeige = VOLLSTÄNDIGER Name wie beim Kunden (rohstoff_anzeige_name: inkl. Beschaffenheit „Extrakt" + DEV
     // „20:1"), damit die Live-Suche denselben Namen findet, den der Kunde sieht (sucht über den Zeilentext).
-    'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> '<span style="white-space:normal">' . h(rohstoff_anzeige_name($r)) . '</span>'],
+    'name'          => ['label' => 'Name', 'sort' => true, 'render' => fn($r)=> h(rohstoff_anzeige_name($r))],   // lange Namen: „…“ + Lauftext (bx_table, 13.11.2026)
     'ek_preis'      => ['label' => 'Preis ab', 'sort' => true, 'num' => true, 'render' => $preisAb],
     'moq_menge'     => ['label' => 'MOQ', 'sort' => true, 'num' => true, 'render' => fn($r) => (float)($r['moq_menge'] ?? 0) > 0
                         ? '<span' . (trim((string)($r['moq_notiz'] ?? '')) !== '' ? ' title="' . h((string)$r['moq_notiz']) . '"' : '') . '>' . h(moq_zahl((float)$r['moq_menge']) . ' ' . ($r['moq_einheit'] ?: 'kg')) . '</span>'

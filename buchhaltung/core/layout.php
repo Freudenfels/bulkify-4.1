@@ -54,7 +54,7 @@ function render_header(string $aktiv = 'buchhaltung', string $titel = ''): void 
     echo "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\">";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
     echo "<title>" . h($titel ? "$titel – $marke $ver" : "$marke $ver") . "</title>";
-    echo "<link rel=\"stylesheet\" href=\"/assets/app.css?v=$cssmt\">";
+    echo "<link rel=\"stylesheet\" href=\"/assets/app.css?v=$cssmt\"><script src=\"/assets/bx-ui.js?v=$cssmt\" defer></script>";
     echo "<script>(function(){try{var t=localStorage.getItem('bx-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>";
     echo "<script>(function(){try{var r=document.documentElement;"
        . "var w=parseInt(localStorage.getItem('bx-side-w'),10);"

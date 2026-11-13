@@ -53,7 +53,7 @@ bx_head('Kunden', count($rows) . ' Einträge', bx_inaktiv_schalter($inaktivAus) 
 if (isset($_GET['geloescht'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Kunde gelöscht (' . (int)$_GET['geloescht'] . ' Datensätze entfernt).</div>';
 if (isset($_GET['kifehler'])) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b;padding:12px 16px">' . h((string)$_GET['kifehler']) . '</div>';
 ?>
-<dialog id="kundeKiDlg" style="border:1px solid var(--line,#ddd);border-radius:12px;max-width:560px;width:92%;padding:0">
+<dialog id="kundeKiDlg" class="bx-dialog" style="max-width:560px">
   <form method="post" action="?p=kunde_ki" style="margin:0;padding:18px 20px">
     <input type="hidden" name="aktion" value="ki_kunde">
     <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:6px">

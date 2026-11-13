@@ -61,7 +61,7 @@ function kopf(string $titel, string $aktiv = ''): void {
     echo '<!doctype html><html lang="de"><head><meta charset="utf-8">'
        . '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
        . '<title>' . h($titel !== '' ? $titel . ' – ' . BX_MARKE . ' ' . BX_TITEL : BX_MARKE . ' ' . BX_TITEL) . '</title>'
-       . '<link rel="stylesheet" href="/assets/app.css">'
+       . '<link rel="stylesheet" href="/assets/app.css"><script src="/assets/bx-ui.js?v=20261113" defer></script>'
        . '<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">'
        . '<link rel="icon" href="/assets/icons/favicon.ico" sizes="any">'
        . '<link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">'

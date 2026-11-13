@@ -993,7 +993,7 @@ $mg  = fn($x) => rtrim(rtrim(number_format((float)$x, 2, ',', '.'), '0'), ','); 
 function portal_head(string $titel): void {
     echo "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\">";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
-    echo "<title>" . h($titel) . "</title><link rel=\"stylesheet\" href=\"assets/app.css?v=" . (int) @filemtime(BX_ROOT . '/public/assets/app.css') . "\">";
+    echo "<title>" . h($titel) . "</title><link rel=\"stylesheet\" href=\"assets/app.css?v=" . (int) @filemtime(BX_ROOT . '/public/assets/app.css') . "\"><script src=\"/assets/bx-ui.js?v=" . (int) @filemtime(BX_ROOT . '/public/assets/bx-ui.js') . "\" defer></script>";
     echo '<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/icons/favicon.ico" sizes="any"><link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png"><link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">';
     echo "<style>"
        . ".pt-badge{display:inline-block;background:var(--lime);color:#10210f;border-radius:10px;padding:0 7px;font-size:12px;font-weight:600}"

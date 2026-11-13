@@ -101,8 +101,8 @@ if (isset($_GET['erledigt'])) echo '<div id="bxToast" class="badge-ok" style="po
 <div class="bx-row" style="margin-bottom:12px">
   <button type="button" class="btn" style="background:var(--gruen,#2f6f4f);border-color:transparent;color:#fff" onclick="document.getElementById('newAufDlg').showModal()">+ Neue Aufgabe</button>
 </div>
-<dialog id="newAufDlg">
-  <form method="post" style="margin:0;padding:18px 20px">
+<dialog id="newAufDlg" class="bx-dialog" style="max-width:560px">
+  <form method="post" style="margin:0">
     <input type="hidden" name="aktion" value="neu">
     <div class="bx-row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h2 style="margin:0;font-size:17px">Neue Aufgabe</h2>

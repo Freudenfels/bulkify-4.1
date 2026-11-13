@@ -149,7 +149,7 @@ function rohstoff_steckbrief_block(int $item_id, string $back): void {
       <?= $it['steckbrief_bearb_am'] ? ' · bearbeitet am ' . h(fmt_zeit($it['steckbrief_bearb_am'], 'd.m.Y H:i')) . ($it['steckbrief_bearb_von'] ? ' von ' . h((string)$it['steckbrief_bearb_von']) : '') : '' ?>
       · nur intern, nicht im Kunden- oder Lieferantenportal
     </div>
-    <dialog id="<?= $dlg ?>" style="max-width:760px;width:96%;border:1px solid var(--line);border-radius:10px;padding:16px;background:var(--panel);color:var(--text)">
+    <dialog id="<?= $dlg ?>" class="bx-dialog" data-titel="Steckbrief bearbeiten" style="max-width:760px">
       <form method="post" action="?p=rohstoff_steckbrief" style="margin:0">
         <input type="hidden" name="aktion" value="speichern"><input type="hidden" name="item_id" value="<?= $item_id ?>"><input type="hidden" name="back" value="<?= h($back) ?>">
         <div style="margin-bottom:8px">Steckbrief bearbeiten <span class="muted" style="font-size:12px">- eigene Ergänzungen, z. B. Erfahrungen aus der Produktion</span></div>

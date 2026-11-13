@@ -428,3 +428,8 @@ body.bx-zieht{cursor:col-resize;user-select:none}
 .bx-glocke-zahl{position:absolute;top:-4px;right:-8px;min-width:18px;height:18px;line-height:18px;padding:0 4px;border-radius:9px;background:var(--lime);color:#10210f;font-size:11px;font-weight:700;text-align:center}
 .bx-mobilbar .bx-glocke{margin-left:auto}
 html[data-side="zu"] .bx-brand .bx-glocke{margin-left:0}
+
+/* Oberflächen-Standard (13.11.2026): lange Kachel-Titel mit „…“, beim Darüberfahren Lauftext (public/assets/bx-ui.js) */
+.bx-card .k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.bx-lauf{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.bx-lauf,th.bx-lauf{display:table-cell;max-width:260px}

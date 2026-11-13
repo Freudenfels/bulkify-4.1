@@ -93,7 +93,7 @@ if (isset($_GET['fehler'])) echo '<div class="bx-panel" style="padding:10px 14px
 </div>
 
 <?php if ($info): ?>
-<dialog id="arDlg" open style="max-width:640px;width:calc(100% - 32px);border:1px solid var(--line);border-radius:14px;padding:0">
+<dialog id="arDlg" class="bx-dialog" open style="max-width:640px">
   <div style="padding:18px 20px">
     <div class="bx-row" style="justify-content:space-between;align-items:flex-start;gap:10px">
       <h2 style="margin:0;font-size:17px">Auftrag <?= h($info['nummer']) ?></h2>

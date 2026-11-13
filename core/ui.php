@@ -211,6 +211,10 @@ function bx_table(array $cols, array $rows, array $opts = []): void {
         foreach ($cols as $key => $c) {
             $numcls = !empty($c['num']) ? ' class="bx-num"' : '';
             $val = isset($c['render']) ? $c['render']($row) : h((string)($row[$key] ?? ''));
+            // Oberflächen-Standard (13.11.2026): lange Namen einzeilig mit „…“, beim Darüberfahren Lauftext (bx-ui.js).
+            // Automatisch für Namens-Spalten, sonst per 'lauf' => Breite in px; 'lauf' => false schaltet es aus.
+            $lauf = $c['lauf'] ?? (in_array($key, ['name', 'produkt_name', 'produkt', 'artikel', 'rohstoff', 'bezeichnung', 'titel', 'item_name'], true) ? 320 : false);
+            if ($lauf && $val !== '' && strpos($val, '<table') === false) $val = '<div class="bx-lauf" style="max-width:' . (int)$lauf . 'px">' . $val . '</div>';
             echo '<td' . $numcls . '>' . $val . '</td>';
         }
         echo '</tr>';

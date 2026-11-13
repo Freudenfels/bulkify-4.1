@@ -37,3 +37,5 @@ Liegt die fehlende Menge in Quarantäne, steht dort gelb „in Quarantäne … �
 Dark Mode (03.11.2026): Die Chat-Blasen von `bx_chat()` sind im Dark Mode dunkel getönt (Team grün, Gegenstelle lime) mit heller Schrift. Auch verlinkte Einträge (↗) und das Datum sind lesbar (`public/assets/app.css`). Vorher blieben die Flächen hell, Links nutzten die helle Dark-Mode-Schrift.
 
 **Schalter (Block C, 11.11.2026):** `bx_inaktiv_an()` / `bx_inaktiv_schalter($anzahl)` – Listen blenden Gesperrte/Inaktive standardmäßig aus, `?inaktiv=1` zeigt sie (Knopf im Seitenkopf mit Anzahl).
+
+**Lange Namen (13.11.2026):** `bx_table()` setzt Namens-Spalten (name, produkt_name, produkt, artikel, rohstoff, bezeichnung, titel, item_name) automatisch einzeilig mit „…“ (`.bx-lauf`, max. 320 px), beim Darüberfahren Lauftext. Je Spalte `'lauf' => px` oder `'lauf' => false`.
