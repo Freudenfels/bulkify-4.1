@@ -40,3 +40,5 @@ Zusatz: Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft, gle
 **Ungültiges UTF-8 (Fable-4 T4.2, 13.11.2026):** Scheitert ein `preg_*` mit `/u` (Latin-1-Zeichen, abgeschnittener Umlaut), gibt `kunde_text_neutral()` / `kunde_position_text()` den Text unverändert weiter – nie leer.
 
 **Artikelnamen mit Lieferantennamen (Fable-4 T4.4, 13.11.2026):** `kunde_filter_artikel_treffer()` – Liste aller Artikel, deren Name einen Lieferantennamen enthält (voller Name, Weiterer Name oder erstes Wort ab 4 Zeichen), mit Vorschlag ohne den Namen. Nur Anzeige in den Einstellungen (Reiter Firma), umbenannt wird nichts.
+
+**Lieferant = Kunde (live gesehen 13.11.2026):** Beginnt ein Kundenname mit dem Lieferantennamen oder umgekehrt (ohne Rechtsform, ab 6 Zeichen), gilt der Lieferant als dieselbe Firma und wird nie ersetzt (Lieferant „PURE HEALTH ALLIANCE INC.“ = Kunde „Pure Health Alliance INC. Zweigniederlassung“ – vorher stand in dessen Mails „bulkify Zweigniederlassung“). Die Artikel-Liste lässt solche Lieferanten aus.

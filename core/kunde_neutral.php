@@ -134,6 +134,14 @@ function kunde_filter_name_grund(array $l, array $kundenNamen = []): string {
     $f = trim((string)($l['firma'] ?? ''));
     if ($f === '') return 'kein Name';
     if (isset($kundenNamen[mb_strtolower($f)])) return 'heißt wie ein Kunde';
+    // Fable-4 T4.1 (live gesehen 13.11.2026): Lieferant „PURE HEALTH ALLIANCE INC.“ = Kunde „Pure Health Alliance INC. Zweigniederlassung“.
+    // Beginnt ein Kundenname mit dem Lieferantennamen (oder umgekehrt, ab 6 Zeichen), ist es dieselbe Firma – nie ersetzen, sonst stünde
+    // in den Mails und im Portal dieses Kunden „bulkify Zweigniederlassung“.
+    $fl = mb_strtolower(trim((string) preg_replace(kunde_filter_rechtsform_muster(), '', $f)));
+    if (mb_strlen($fl) >= 6) foreach (array_keys($kundenNamen) as $kn) {
+        $kn = (string)$kn;
+        if (mb_strlen($kn) >= 6 && (mb_strpos($kn, $fl) === 0 || mb_strpos($fl, mb_strtolower(trim((string) preg_replace(kunde_filter_rechtsform_muster(), '', $kn)))) === 0)) return 'heißt wie ein Kunde';
+    }
     $kat = array_filter(array_map('trim', explode(',', (string)($l['kat'] ?? $l['kategorien'] ?? ''))));
     if ($kat && !array_diff($kat, ['labor'])) return 'Labor (darf genannt werden)';
     if (preg_match('/bulkify|maniso/i', $f)) return 'eigene Firma';
@@ -196,11 +204,14 @@ function kunde_filter_artikel_treffer(): array {
     $partner = kn_spalte_da('lieferanten', 'ist_partner') ? " AND COALESCE(ist_partner,0)=0" : '';
     $aliasSql = kn_spalte_da('lieferanten', 'kunden_alias') ? "COALESCE(kunden_alias,'')" : "''";
     $namen = [];
+    $kundenNamen = [];
+    try { foreach (all("SELECT LOWER(TRIM(firma)) AS f FROM kunden WHERE firma IS NOT NULL AND firma<>''") as $kk) $kundenNamen[(string)$kk['f']] = true; } catch (\Throwable $e) {}
     foreach (all("SELECT id, firma, lieferantennummer, COALESCE(kategorien,'') AS kat, $aliasSql AS alias FROM lieferanten WHERE firma IS NOT NULL AND firma<>''" . $partner) as $l) {
         $kat = array_filter(array_map('trim', explode(',', (string)$l['kat'])));
         if ($kat && !array_diff($kat, ['labor'])) continue;
         $f = trim((string)$l['firma']);
         if (kunde_filter_paketdienst($f) || preg_match('/bulkify|maniso|^L-\d+$/i', $f)) continue;
+        if (kunde_filter_name_grund($l, $kundenNamen) === 'heißt wie ein Kunde') continue;   // Kundenname im Kunden-Etikett ist kein Treffer
         $v = [$f];
         $erstes = (string)(preg_split('/[\s,]+/u', $f)[0] ?? '');
         if (mb_strlen($erstes) >= 4 && !isset(kunde_filter_woerter()[mb_strtolower($erstes)])) $v[] = $erstes;
