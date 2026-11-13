@@ -39,3 +39,6 @@ EK- und VK-Staffel: Textfeld mit Auswahl „je Stk“ / „je 1.000 Stk“ (`pre
 **Preis-Anzeige (13.11.2026, Fable-3 T4.7):** Preise laufen durch die zentrale `preis_zahl()` (core/schema.php): bis 6 Nachkommastellen, Nullen am Ende weg, mindestens 2 – Leerkapseln 0,00295 stehen nicht mehr als 0,0030. Nur Anzeige, gerechnet wird mit dem gespeicherten Wert.
 
 **Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Mengen-/Preisfelder werden mit `zahl_feld()` (Komma, kein Tausenderpunkt) vorbelegt, damit Speichern ohne Änderung den Wert nicht verändert.
+
+## Druckvorlage für bedruckte Beutel (13.11.2026)
+Reiter „Druckvorlage“ (nur Verpackungsart Beutel): Gesamtformat, Beschnitt, Sicherheitsabstand, Flächen (Name, Lage in mm von oben links, Haken „auf dem Kopf“ = 180°), Siegelnähte und Zipper (Zonen ohne Text), optional Stanzkontur-PDF. Speichern über `etp_vorlage_aus_post()` (core/etikett_pruefung.php) in `item.beutel_vorlage`; die Aufgabe „Vorlage für … fehlt“ wird dabei erledigt. Das Etikett-Pop-up zeigt damit die Flächen beschriftet, Siegel/Zipper schraffiert, prüft Text in diesen Zonen und schickt jede Fläche einzeln (gedrehte richtig herum) an die KI.

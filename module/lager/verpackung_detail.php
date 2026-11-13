@@ -62,6 +62,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'vksta
     }
     header('Location: ?p=verpackung&id=' . $id . '&tab=verkauf&gespeichert=1'); exit;
 }
+// Druckvorlage für bedruckte Beutel (13.11.2026, core/etikett_pruefung.php): Gesamtformat, Flächen, Siegelnähte/Zipper, Stanzkontur.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beutel_vorlage_save' && is_numeric($id)) {
+    $msg = etp_vorlage_aus_post((int)$id, $_POST);
+    log_aktivitaet('item', (int)$id, 'team', $msg, 'status');
+    header('Location: ?p=verpackung&id=' . $id . '&tab=druckvorlage&gespeichert=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'etikett_save' && is_numeric($id)) {
     // Etiketten-Mengenstaffel speichern. EK je Etikett = Gesamtpreis / Menge (sub-Cent-genau).
     q("DELETE FROM etikett_preis WHERE item_id=?", [(int)$id]);
@@ -209,6 +215,7 @@ if (!$neu) {
     <a href="#" data-tab="lager">Lager</a>
     <a href="#" data-tab="fuell" data-only="primaer">Füllmengen</a>
     <a href="#" data-tab="etipreis" data-only="primaer">Etikettenpreise</a>
+    <?php if (($it['verpackungsart'] ?? '') === 'beutel'): ?><a href="#" data-tab="druckvorlage">Druckvorlage</a><?php endif; ?>
     <a href="#" data-tab="dok">Dokumente (PPWR)</a>
     <a href="#" data-tab="verw">Verwendung</a>
     <a href="#" data-tab="verlauf">Verlauf</a>
@@ -301,6 +308,63 @@ if (!$neu) {
   <?php endif; /* darf_verkauf */ ?>
 
   <?php if (!$neu): ?>
+  <?php if (($it['verpackungsart'] ?? '') === 'beutel' && is_numeric($id)):
+      etp_schema();
+      $bv = etp_vorlage_lesen((string) scalar("SELECT beutel_vorlage FROM item WHERE id=?", [(int)$id])) ?? ['w' => '', 'h' => '', 'beschnitt' => 2, 'sicher' => 3, 'flaechen' => [], 'zonen' => [], 'stanzkontur_dok' => null];
+      $bvF = $bv['flaechen']; while (count($bvF) < max(3, count($bv['flaechen']) + 1)) $bvF[] = ['name' => '', 'x' => '', 'y' => '', 'w' => '', 'h' => '', 'drehung' => 0];
+      $bvZ = $bv['zonen'];    while (count($bvZ) < max(4, count($bv['zonen']) + 1)) $bvZ[] = ['art' => 'siegel', 'name' => '', 'x' => '', 'y' => '', 'w' => '', 'h' => ''];
+      $bvN = fn($x) => $x === '' || $x === null ? '' : rtrim(rtrim(number_format((float)$x, 1, ',', ''), '0'), ',');
+      $bvStanz = !empty($bv['stanzkontur_dok']) ? one("SELECT id, datei_orig FROM dokument WHERE id=?", [(int)$bv['stanzkontur_dok']]) : null; ?>
+  <section data-panel="druckvorlage" hidden>
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="aktion" value="beutel_vorlage_save">
+      <div class="bx-panel">
+        <h2 style="margin-top:0">Druckvorlage für den bedruckten Beutel</h2>
+        <p class="muted" style="margin-top:0">Damit prüft das Etikett-Pop-up die Druckdatei des Kunden: Gesamtformat, Flächen (gedrehte Flächen werden zum Lesen gedreht), Text in Siegelnaht oder Zipper. Alle Maße in mm, Lage von oben links des Endformats (Druckbogen ohne Beschnitt). Breite leer = ganze Breite, Höhe leer = bis unten.</p>
+        <div class="bx-grid" style="margin-bottom:12px">
+          <div class="bx-field"><label>Gesamtformat Breite (mm)</label><input type="text" name="bv_w" value="<?= h($bvN($bv['w'])) ?>" inputmode="decimal" placeholder="z. B. 134"></div>
+          <div class="bx-field"><label>Gesamtformat Höhe (mm)</label><input type="text" name="bv_h" value="<?= h($bvN($bv['h'])) ?>" inputmode="decimal" placeholder="z. B. 486"></div>
+          <div class="bx-field"><label>Beschnitt (mm)</label><input type="text" name="bv_beschnitt" value="<?= h($bvN($bv['beschnitt'])) ?>" inputmode="decimal"></div>
+          <div class="bx-field"><label>Sicherheitsabstand (mm)</label><input type="text" name="bv_sicher" value="<?= h($bvN($bv['sicher'])) ?>" inputmode="decimal"></div>
+        </div>
+        <h3 style="font-size:15px;margin:8px 0 6px">Flächen</h3>
+        <div class="bx-tablewrap"><table class="bx-table">
+          <thead><tr><th>Name</th><th>von links</th><th>von oben</th><th>Breite</th><th>Höhe</th><th>auf dem Kopf</th></tr></thead>
+          <tbody>
+          <?php foreach ($bvF as $i => $f): ?>
+            <tr><td><input type="text" name="bv_f_name[<?= $i ?>]" value="<?= h($f['name']) ?>" placeholder="z. B. Vorderseite" style="min-width:140px"></td>
+              <td><input type="text" name="bv_f_x[<?= $i ?>]" value="<?= h($bvN($f['x'])) ?>" inputmode="decimal" style="width:80px"></td>
+              <td><input type="text" name="bv_f_y[<?= $i ?>]" value="<?= h($bvN($f['y'])) ?>" inputmode="decimal" style="width:80px"></td>
+              <td><input type="text" name="bv_f_w[<?= $i ?>]" value="<?= h($bvN($f['w'])) ?>" inputmode="decimal" style="width:80px"></td>
+              <td><input type="text" name="bv_f_h[<?= $i ?>]" value="<?= h($bvN($f['h'])) ?>" inputmode="decimal" style="width:80px"></td>
+              <td><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="bv_f_dreh[<?= $i ?>]" value="1" <?= (int)($f['drehung'] ?? 0) === 180 ? 'checked' : '' ?>> 180°</label></td></tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table></div>
+        <h3 style="font-size:15px;margin:14px 0 6px">Siegelnähte und Zipper (hier kein Text)</h3>
+        <div class="bx-tablewrap"><table class="bx-table">
+          <thead><tr><th>Art</th><th>Name</th><th>von links</th><th>von oben</th><th>Breite</th><th>Höhe</th></tr></thead>
+          <tbody>
+          <?php foreach ($bvZ as $i => $z): ?>
+            <tr><td><select name="bv_z_art[<?= $i ?>]"><option value="siegel" <?= $z['art'] === 'siegel' ? 'selected' : '' ?>>Siegelnaht</option><option value="zipper" <?= $z['art'] === 'zipper' ? 'selected' : '' ?>>Zipper</option></select></td>
+              <td><input type="text" name="bv_z_name[<?= $i ?>]" value="<?= h($z['name']) ?>" placeholder="z. B. Siegelnaht oben" style="min-width:140px"></td>
+              <td><input type="text" name="bv_z_x[<?= $i ?>]" value="<?= h($bvN($z['x'])) ?>" inputmode="decimal" style="width:80px"></td>
+              <td><input type="text" name="bv_z_y[<?= $i ?>]" value="<?= h($bvN($z['y'])) ?>" inputmode="decimal" style="width:80px"></td>
+              <td><input type="text" name="bv_z_w[<?= $i ?>]" value="<?= h($bvN($z['w'])) ?>" inputmode="decimal" style="width:80px"></td>
+              <td><input type="text" name="bv_z_h[<?= $i ?>]" value="<?= h($bvN($z['h'])) ?>" inputmode="decimal" style="width:80px"></td></tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table></div>
+        <div class="bx-grid" style="margin-top:12px">
+          <div class="bx-field"><label>Stanzkontur (PDF, optional)</label><input type="file" name="bv_stanz" accept="application/pdf">
+            <?php if ($bvStanz): ?><div class="muted" style="font-size:12px;margin-top:4px"><a href="?p=verpackung_dok&id=<?= (int)$bvStanz['id'] ?>" target="_blank"><?= h($bvStanz['datei_orig'] ?: 'Stanzkontur') ?></a> · <label style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" name="bv_stanz_weg" value="1"> entfernen</label></div><?php endif; ?>
+          </div>
+        </div>
+        <div class="bx-row" style="margin-top:var(--sp-4)"><button class="btn btn-primary" type="submit">Druckvorlage speichern</button></div>
+      </div>
+    </form>
+  </section>
+  <?php endif; ?>
   <section data-panel="verw" hidden><div class="bx-panel"><h2>Verwendung in Produkten</h2><?php bx_bald('Produkte'); ?></div></section>
   <section data-panel="verlauf" hidden><div class="bx-panel"><h2>Verlauf</h2><?php bx_chat($verlauf, $v('name')); ?></div></section>
   <?php endif; ?>

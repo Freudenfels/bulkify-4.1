@@ -133,8 +133,9 @@ function etp_vorlage_aus_post(int $item_id, array $post): string {
             }
         }
     }
-    $norm = etp_vorlage_lesen(json_encode($v));
-    q("UPDATE item SET beutel_vorlage=? WHERE id=?", [json_encode($norm, JSON_UNESCAPED_UNICODE), $item_id]);
+    $norm = etp_vorlage_lesen(json_encode($v, JSON_INVALID_UTF8_SUBSTITUTE));
+    if (!$norm) return 'Druckvorlage nicht gespeichert – bitte Gesamtformat prüfen.';
+    q("UPDATE item SET beutel_vorlage=? WHERE id=?", [json_encode($norm, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE), $item_id]);
     // offene Aufgabe „Vorlage fehlt“ erledigen
     try { q("UPDATE aufgabe SET status='erledigt' WHERE ref_typ='beutel_vorlage_fehlt' AND ref_id=? AND status='offen'", [$item_id]); } catch (Throwable $e) {}
     return 'Druckvorlage gespeichert.';
@@ -913,7 +914,7 @@ function etp_status(int $aid, string $wer, callable $dateiUrl, string $nameVor):
         try {
             if ((int) scalar("SELECT COUNT(*) FROM aufgabe WHERE ref_typ='beutel_vorlage_fehlt' AND ref_id=? AND status='offen'", [$soll['item_id']]) === 0)
                 aufgabe_neu('Vorlage für ' . $soll['item_name'] . ' fehlt', 'Für den bedruckten Beutel fehlt die Druckvorlage (Gesamtformat, Flächen, Siegelnähte, Zipper). Ohne Vorlage prüft das Etikett-Pop-up nur das Gesamtformat. Anlass: Auftrag ' . $a['nummer'] . '.',
-                            2, null, null, null, 'beutel_vorlage_fehlt', $soll['item_id'], '?p=verpackung&id=' . $soll['item_id'] . '#druckvorlage');
+                            2, null, null, null, 'beutel_vorlage_fehlt', $soll['item_id'], '?p=verpackung&id=' . $soll['item_id'] . '&tab=druckvorlage');
         } catch (Throwable $e) {}
     }
     $p = etp_aktuell($aid);
