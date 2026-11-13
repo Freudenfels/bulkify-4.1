@@ -444,7 +444,7 @@ function lu_panel(int $lieferant_id, string $ziel, string $sprache = 'de', ?arra
     }
     // Ein Pop-up je Liste (bx-dialog): Art, Datei, Ablaufdatum, Bemerkung
     $o .= '<dialog id="' . $dlg . '" class="bx-dialog" style="max-width:520px"><h2>' . h($t('Unterlage hochladen', 'Upload document', '上传文件')) . '</h2>'
-        . '<form method="post" action="' . h($ziel) . '" enctype="multipart/form-data" style="margin:0">'
+        . '<form method="post" action="' . h($ziel) . '" enctype="multipart/form-data">'
         . '<input type="hidden" name="aktion" value="lu_upload"><input type="hidden" name="lu_art"><input type="hidden" name="lu_item"><input type="hidden" name="lu_rez">'
         . '<div class="lu-dname" style="font-weight:600;margin-bottom:10px"></div>'
         . '<div class="bx-field lu-typ"><label>' . h($t('Art', 'Type', '类型')) . '</label><select name="lu_typ" data-norscombo><option value="coa">CoA</option><option value="spec">' . h($t('Spezifikation', 'Specification', '规格书')) . '</option></select></div>'
