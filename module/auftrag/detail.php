@@ -189,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
             aenderung_protokollieren('produkt', $pid, ['verpackung_id' => $au['p_vp'] ?? null], ['verpackung_id' => $vp], 'auftrag');
         }
     } elseif ($feld === 'fuellmenge') {
-        $n = (int) round((float) zahl_lesen((string)($_POST['einheiten'] ?? '0')));
+        $n = (int) round((float) zahl_lesen((string)($_POST['einheiten'] ?? '0'), true));   // Fable-4 T2.1: Mengen-Lesart („1.000“ = 1000)
         if ($n > 0) {
             if ($pid > 0 && !($nurA && (int)($au['einheiten_pro_packung'] ?? 0) <= 0)) {
                 q("UPDATE produkt SET einheiten_pro_packung=? WHERE id=?", [$n, $pid]);
@@ -1142,7 +1142,7 @@ if (has_role('admin') || has_role('sales')):
     <form method="post" style="margin:0">
       <input type="hidden" name="aktion" value="kachel_speichern"><input type="hidden" name="feld" value="fuellmenge">
       <div class="bx-field" style="margin:0"><label><?= $istFuellG ? 'Füllmenge je Packung (g)' : 'Stk je Packung' ?></label>
-        <input type="text" inputmode="numeric" name="einheiten" value="<?= $einhProP > 0 ? h(number_format($einhProP, 0, ',', '.')) : '' ?>" required></div>
+        <input type="text" inputmode="numeric" name="einheiten" value="<?= $einhProP > 0 ? h(number_format($einhProP, 0, ',', '')) : '' ?>" required></div>
       <?= $nurAuftragHaken($dlgPEinh <= 0, $dlgPEinh > 0 ? 'Gilt am Produkt (auch künftige Aufträge). Der Produktwert hat Vorrang – eine Abweichung nur für diesen Auftrag geht über „Für diesen Auftrag überarbeiten“ (Rezeptur).' : '') ?>
       <div style="margin-top:14px"><button class="btn btn-primary btn-sm" type="submit">Speichern</button></div>
     </form>
