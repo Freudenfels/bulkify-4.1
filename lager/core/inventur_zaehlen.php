@@ -62,6 +62,65 @@ function inv_scan(array $inv, string $code): array {
     if (!$o) return ['typ' => 'unbekannt', 'msg' => 'Code nicht gefunden.'];
     return ['typ' => 'objekt'] + inv_objekt_info($inv, $o);
 }
+// ---- Inventur mit Blinkern (Sofortfix 13.11.2026) ------------------------------------------------------------------
+// Im Lager gibt es keine Regal-Barcodes, sondern Kisten mit Blinkern (Kiste 11 … 54, Kleinregal, Paletten). Beim Zählen wird eine
+// Kiste gewählt (Liste mit Suche oder Barcode/Blinker scannen) -> ihr Blinker leuchtet blau. „Platz fertig“ schaltet ihn aus und
+// schlägt die nächste offene Kiste vor (die gleich blinkt). Kiste ohne Blinker: wählbar mit Hinweis. Brücke weg: Hinweis, zählen geht.
+
+// Auswahl zum Zählen: Inventur mit Umfang = deren offene Bereiche; „ganzes Lager“ = alle Kisten und aktiven Plätze (des Lagers),
+// jeweils ohne fertig gezählte. Reihenfolge: Kisten nach Name natürlich sortiert (Kiste 11, 12, … 54), danach Plätze.
+// Je Eintrag ['key','name','blinker'(bool),'status'].
+function inv_auswahl(array $inv): array {
+    $inv_id = (int)$inv['id'];
+    $status = [];
+    foreach (all("SELECT schluessel, status FROM lg_inventur_bereich WHERE inventur_id=?", [$inv_id]) as $b) $status[(string)$b['schluessel']] = (string)$b['status'];
+    $kisten = []; $plaetze = [];
+    if ((int)$inv['ganz']) {
+        foreach (all("SELECT k.id, k.name, (SELECT COUNT(*) FROM lg_leiste l WHERE l.kiste_id=k.id) AS bl FROM lg_kiste k") as $k)
+            $kisten[] = ['key' => 'k:' . (int)$k['id'], 'name' => 'Kiste ' . (string)$k['name'], 'sort' => (string)$k['name'], 'blinker' => (int)$k['bl'] > 0];
+        foreach (inv_plaetze((string)$inv['lager'] === '2' ? 'lager2' : 'lager1') as $p)
+            $plaetze[] = ['key' => 'p:' . (int)$p['id'], 'name' => inv_platz_name($p), 'sort' => inv_platz_name($p), 'blinker' => false];
+    } else {
+        foreach (inv_bereiche($inv_id) as $b) {
+            $key = (string)$b['schluessel']; $bl = false;
+            if (preg_match('/^k:(\d+)$/', $key, $m)) $bl = (int) scalar("SELECT COUNT(*) FROM lg_leiste WHERE kiste_id=?", [(int)$m[1]]) > 0;
+            $e = ['key' => $key, 'name' => (string)$b['name'], 'sort' => preg_replace('/^Kiste\s+/u', '', (string)$b['name']), 'blinker' => $bl];
+            if ($key[0] === 'k') $kisten[] = $e; else $plaetze[] = $e;
+        }
+    }
+    $nat = fn($a, $b) => strnatcasecmp($a['sort'], $b['sort']);
+    usort($kisten, $nat); usort($plaetze, $nat);
+    $out = [];
+    foreach (array_merge($kisten, $plaetze) as $e) {
+        $st = $status[$e['key']] ?? 'offen';
+        if ($st === 'fertig') continue;
+        unset($e['sort']); $out[] = $e + ['status' => $st];
+    }
+    return $out;
+}
+// Blinker eines Bereichs an/aus. Nur Kisten haben einen Blinker (Plätze ohne Leiste: 'blinker' => false, Hinweis „kein Blinker“).
+// Farbe blau, längste Dauer (180 s; „Nochmal leuchten“ verlängert). Brücke nicht erreichbar: ok=false mit Hinweis – Zählen geht weiter.
+// Rückgabe ['ok','blinker','msg'].
+function inv_bereich_blinker(string $key, bool $an = true): array {
+    if (!preg_match('/^k:(\d+)$/', $key, $m)) return ['ok' => true, 'blinker' => false, 'msg' => 'kein Blinker'];
+    if (!function_exists('kiste_blinker')) require_once __DIR__ . '/kiste.php';
+    $l = kiste_blinker((int)$m[1]);
+    if (!$l) return ['ok' => true, 'blinker' => false, 'msg' => 'kein Blinker an dieser Kiste'];
+    try { $r = $an ? leiste_finden((int)$l['id'], 'blau', 180, false) : leiste_aus((int)$l['id']); }
+    catch (\Throwable $e) { $r = ['ok' => false, 'meldung' => $e->getMessage()]; }
+    if (!empty($r['ok'])) return ['ok' => true, 'blinker' => true, 'msg' => $an ? 'Kiste blinkt (blau)' : 'Blinker aus'];
+    return ['ok' => false, 'blinker' => true, 'msg' => 'Blinker nicht erreichbar – zählen geht trotzdem. (' . (string)($r['meldung'] ?? '') . ')'];
+}
+// Nächste offene Kiste nach $nach_key (Reihenfolge wie inv_auswahl), sonst die erste offene. null = alles gezählt.
+function inv_naechster_bereich(array $inv, string $nach_key = ''): ?array {
+    $l = array_values(array_filter(inv_auswahl($inv), fn($e) => $e['key'] !== $nach_key && $e['status'] !== 'laeuft'));
+    if (!$l) return null;
+    $alle = array_column(inv_auswahl($inv), 'key');
+    $pos = array_search($nach_key, $alle, true);
+    if ($pos !== false) foreach ($l as $e) if (array_search($e['key'], $alle, true) > $pos) return $e;
+    return $l[0];
+}
+
 // Bereich (Platz/Kiste) zum Zählen öffnen. Ganzes Lager: Bereich entsteht hier. Sonst nur Bereiche der Inventur.
 function inv_bereich_starten(array $inv, string $key): array {
     $inv_id = (int)$inv['id'];
@@ -75,11 +134,11 @@ function inv_bereich_starten(array $inv, string $key): array {
     if ((string)$b['status'] === 'fertig') {
         // Nachzählen auf einem fertigen Platz (zweite Person): Platz öffnen nur für die Nachzähl-Aufgaben.
         if ((int) scalar("SELECT COUNT(*) FROM lg_inventur_diff WHERE bereich_id=? AND status='nachzaehlen'", [(int)$b['id']]) > 0)
-            return ['ok' => true, 'bereich_id' => (int)$b['id'], 'name' => (string)$b['name'], 'nachzaehlen' => true, 'msg' => (string)$b['name'] . ' · nur Nachzählen'];
+            return ['ok' => true, 'bereich_id' => (int)$b['id'], 'key' => $key, 'name' => (string)$b['name'], 'nachzaehlen' => true, 'msg' => (string)$b['name'] . ' · nur Nachzählen'];
         return ['ok' => false, 'msg' => (string)$b['name'] . ' ist schon fertig gezählt. Wieder öffnen kann der Admin.', 'fertig' => true];
     }
     if ((string)$b['status'] === 'offen') q("UPDATE lg_inventur_bereich SET status='laeuft', gestartet_am=?, gestartet_von=? WHERE id=?", [jetzt_utc(), lg_uid() ?: null, (int)$b['id']]);
-    return ['ok' => true, 'bereich_id' => (int)$b['id'], 'name' => (string)$b['name'], 'msg' => (string)$b['name'] . ' · Zählung läuft'];
+    return ['ok' => true, 'bereich_id' => (int)$b['id'], 'key' => $key, 'name' => (string)$b['name'], 'msg' => (string)$b['name'] . ' · Zählung läuft'];
 }
 // Ist aus der Eingabe rechnen – immer in der Einheit des Artikels.
 function inv_ist_rechnen(array $o, array $e): array {
@@ -178,7 +237,7 @@ function inv_bereich_fertig(array $inv, int $bereich_id): array {
     if (!$b || (int)$b['inventur_id'] !== (int)$inv['id']) return ['ok' => false, 'msg' => 'Platz nicht gefunden.'];
     q("UPDATE lg_inventur_bereich SET status='fertig', fertig_am=?, fertig_von=? WHERE id=?", [jetzt_utc(), lg_uid() ?: null, $bereich_id]);
     if (function_exists('inv_abgleich_bereich')) inv_abgleich_bereich($inv, $bereich_id);
-    return ['ok' => true, 'msg' => (string)$b['name'] . ' ist gezählt. Nächsten Platz scannen.'];
+    return ['ok' => true, 'key' => (string)$b['schluessel'], 'msg' => (string)$b['name'] . ' ist gezählt.'];
 }
 // Nachzählen-Aufgaben für diesen Nutzer (blind: Artikel, Charge, wo zuletzt gezählt – keine Mengen).
 function inv_nachzaehl_aufgaben(array $inv): array {

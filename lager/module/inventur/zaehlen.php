@@ -5,9 +5,10 @@
 $inv = inv_get((int)($_GET['id'] ?? 0));
 if (!$inv || !inv_darf_zaehlen($inv)) { flash('Diese Inventur ist nicht zum Zählen offen.', 'warn'); weiter('?p=inventur'); }
 $id = (int)$inv['id'];
-$offeneBereiche = (int)$inv['ganz'] ? [] : array_values(array_filter(inv_bereiche($id), fn($b) => $b['status'] !== 'fertig'));
+// Sofortfix 13.11.2026: Auswahl immer da (auch „ganzes Lager“) – alle Kisten (Kiste 11, 12, …) und Plätze, ohne fertig gezählte.
+$auswahl = inv_auswahl($inv);
 kopf('Zählen', 'inventur');
-seitenkopf('Zählen: ' . (string)$inv['name'], 'Blind zählen – du siehst keine Soll-Mengen. Erst den Platz scannen, dann jedes Gebinde.', '<a class="btn btn-ghost" href="?p=inventur_lauf&id=' . $id . '">Übersicht</a>');
+seitenkopf('Zählen: ' . (string)$inv['name'], 'Blind zählen – du siehst keine Soll-Mengen. Kiste wählen – sie blinkt. Dann jedes Gebinde darin scannen.', '<a class="btn btn-ghost" href="?p=inventur_lauf&id=' . $id . '">Übersicht</a>');
 flash_zeigen();
 ?>
 <style>
@@ -30,10 +31,16 @@ flash_zeigen();
   .iz-treffer div{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
   .iz-treffer div:hover{background:var(--row-hover)}
   .iz-gross{font-size:18px} .muted.klein{font-size:13px}
+  .iz [hidden]{display:none!important}   /* .iz-karte (display:flex) darf hidden nicht überschreiben */
 </style>
 <div class="iz" id="iz" data-inv="<?= $id ?>">
-  <div class="iz-platz" id="izPlatz">Platz scannen</div>
-  <?php if ($offeneBereiche): ?><div class="iz-zeile"><select id="izBereichWahl"><option value="">… oder Platz wählen</option><?php foreach ($offeneBereiche as $b): ?><option value="<?= h((string)$b['schluessel']) ?>"><?= h((string)$b['name']) ?></option><?php endforeach; ?></select></div><?php endif; ?>
+  <div class="iz-platz" id="izPlatz">Kiste wählen - sie blinkt</div>
+  <div class="muted" id="izLicht" style="margin-top:-6px"></div>
+  <div class="iz-karte" id="izNext" hidden style="border-color:var(--gruen)"><div>Nächste Kiste: <b style="font-weight:600" id="izNextName"></b> <span class="muted" id="izNextLicht"></span></div>
+    <div class="iz-zeile"><button class="btn btn-primary" id="izNextOk" type="button">Diese Kiste zählen</button><span class="muted">oder unten eine andere wählen</span></div></div>
+  <div class="iz-zeile"><select id="izBereichWahl" style="flex:1;min-width:260px"><option value="">Kiste wählen (oder scannen) …</option><?php foreach ($auswahl as $e): ?><option value="<?= h($e['key']) ?>"><?= h($e['name'] . ($e['blinker'] ? '' : ' · kein Blinker') . ($e['status'] === 'laeuft' ? ' · läuft' : '')) ?></option><?php endforeach; ?></select>
+    <button class="btn btn-ghost" id="izLeuchten" type="button" disabled>Nochmal leuchten</button></div>
+  <?php if (!$auswahl): ?><p class="muted" style="margin:0">Keine offene Kiste mehr – alles gezählt. Regal-Barcodes (LP-…) lassen sich weiter scannen, falls es sie später gibt.</p><?php endif; ?>
   <div class="iz-scan"><input type="text" id="izCode" placeholder="Scannen oder Code eintippen" autocomplete="off" autofocus><button class="btn btn-primary" id="izOk" type="button">OK</button><button class="btn btn-ghost" id="izCam" type="button" hidden>Kamera</button></div>
   <video id="izVideo" playsinline style="width:100%;max-height:260px;display:none;border-radius:12px;background:#000"></video>
   <div id="izMsg"></div>
@@ -45,7 +52,7 @@ flash_zeigen();
 </div>
 <script>
 (function(){
-  var INV=document.getElementById('iz').dataset.inv, bereich=0, platzName='', nurNz=false, ART=null, TARA=[];
+  var INV=document.getElementById('iz').dataset.inv, bereich=0, platzName='', bereichKey='', naechsterKey='', nurNz=false, ART=null, TARA=[];
   var $=function(i){return document.getElementById(i);}, code=$('izCode'), karte=$('izKarte'), msgEl=$('izMsg');
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   function zahl(v){ v=String(v||'').trim(); if(v.indexOf(',')>=0) v=v.replace(/\./g,'').replace(',','.'); else if(/^\d{1,3}(\.\d{3})+$/.test(v)) v=v.replace(/\./g,''); return parseFloat(v)||0; }
@@ -60,8 +67,13 @@ flash_zeigen();
   function api(a,data,cb){ var fd=data instanceof FormData?data:new FormData(); if(!(data instanceof FormData)) for(var k in (data||{})) fd.append(k,data[k]);
     fetch('?p=inventur_api&id='+INV+'&a='+a,{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json();}).then(cb).catch(function(){ msg('Keine Verbindung – nichts verloren, bitte nochmal.',false); }); }
   function fokus(){ setTimeout(function(){ code.focus(); },50); }
-  function platzSetzen(r){ if(!r.ok){ msg(r.msg,false); return; } bereich=r.bereich_id; platzName=r.name; nurNz=!!r.nachzaehlen;
-    try{ localStorage.setItem('inv-'+INV+'-bereich', JSON.stringify({b:bereich,n:platzName,z:nurNz})); }catch(e){}
+  // Blinker-Hinweis (Sofortfix 13.11.2026): „Kiste blinkt“, „kein Blinker“ oder „Blinker nicht erreichbar – zählen geht trotzdem“.
+  function licht(l){ $('izLicht').textContent = l ? l.msg : ''; $('izLicht').style.color = l && !l.ok ? '#8f231b' : ''; }
+  function platzSetzen(r){ if(!r.ok){ msg(r.msg,false); return; } bereich=r.bereich_id; platzName=r.name; bereichKey=r.key||''; nurNz=!!r.nachzaehlen;
+    if(naechsterKey && naechsterKey!==bereichKey) api('aus',{key:naechsterKey},function(){});   // Vorschlag nicht genommen: dessen Blinker aus
+    $('izNext').hidden=true; naechsterKey=''; licht(r.licht); $('izLeuchten').disabled=!bereichKey;
+    var bwS=$('izBereichWahl'); if(bwS && bereichKey) bwS.value=bereichKey;
+    try{ localStorage.setItem('inv-'+INV+'-bereich', JSON.stringify({b:bereich,n:platzName,z:nurNz,k:bereichKey})); }catch(e){}
     $('izPlatz').textContent=r.msg; $('izPlatz').classList.add('an'); $('izOhne').disabled=nurNz; $('izFertig').disabled=nurNz; karte.innerHTML=''; msg('',true); scans(); }
   function scans(){ if(!bereich) return; api('scans',{bereich:bereich},function(j){ var l=j.scans||[]; $('izAnz').textContent=l.length?l.length+' Scan(s)':'';
       $('izListe').innerHTML=l.length?l.map(function(s){return '<div><span>'+esc(s.artikel)+(s.klaerfall?' <span class="muted klein">'+esc(s.klaerfall)+'</span>':'')+(s.nachzaehlung?' <span class="muted klein">Nachzählung</span>':'')+'</span><b style="font-weight:600;white-space:nowrap">'+esc(s.ist)+'</b></div>';}).join(''):'<span class="muted">Noch nichts.</span>'; }); }
@@ -121,7 +133,16 @@ flash_zeigen();
   $('izOk').addEventListener('click',function(){ scan(code.value); });
   var bw=$('izBereichWahl'); if(bw) bw.addEventListener('change',function(){ if(bw.value) api('start',{key:bw.value},function(r){ platzSetzen(r); fokus(); }); });
   $('izFertig').addEventListener('click',function(){ if(!bereich||!confirm(platzName+' fertig gezählt? Danach kann nur der Admin den Platz wieder öffnen.')) return;
-    api('fertig',{bereich:bereich},function(r){ msg(r.msg,r.ok); if(r.ok){ bereich=0; try{ localStorage.removeItem('inv-'+INV+'-bereich'); }catch(e){} $('izPlatz').textContent='Nächsten Platz scannen'; $('izPlatz').classList.remove('an'); $('izOhne').disabled=true; $('izFertig').disabled=true; $('izListe').innerHTML='<span class="muted">Noch nichts.</span>'; $('izAnz').textContent=''; if(bw){ var o=bw.querySelector('option[value="'+bw.value+'"]'); if(o) o.remove(); bw.value=''; } } fokus(); }); });
+    api('fertig',{bereich:bereich},function(r){ msg(r.msg,r.ok); if(r.ok){ bereich=0; bereichKey=''; try{ localStorage.removeItem('inv-'+INV+'-bereich'); }catch(e){} $('izPlatz').textContent='Kiste wählen - sie blinkt'; $('izPlatz').classList.remove('an'); $('izOhne').disabled=true; $('izFertig').disabled=true; $('izListe').innerHTML='<span class="muted">Noch nichts.</span>'; $('izAnz').textContent=''; $('izLeuchten').disabled=true;
+      licht(r.aus && !r.aus.ok ? r.aus : null);
+      if(r.liste) auswahlNeu(r.liste);
+      // Nächste offene Kiste vorschlagen – sie blinkt schon; ein Tipp startet sie, oder unten eine andere wählen.
+      if(r.naechster){ naechsterKey=r.naechster.key; $('izNextName').textContent=r.naechster.name; $('izNextLicht').textContent=r.naechster.licht ? '· '+r.naechster.licht.msg : ''; $('izNext').hidden=false; if(bw) bw.value=''; }
+      else { $('izNext').hidden=true; msg((r.msg||'')+' Alle Kisten gezählt.',true); } } fokus(); }); });
+  function auswahlNeu(liste){ if(!bw) return; bw.innerHTML='<option value="">Kiste wählen (oder scannen) …</option>'+liste.map(function(e){ return '<option value="'+esc(e.key)+'">'+esc(e.name+(e.blinker?'':' · kein Blinker')+(e.status==='laeuft'?' · läuft':''))+'</option>'; }).join('');
+    if(window.bxRsComboInit) try{ window.bxRsComboInit(bw.parentNode); }catch(e){} }
+  $('izNextOk').addEventListener('click',function(){ if(naechsterKey) api('start',{key:naechsterKey},function(r){ platzSetzen(r); fokus(); }); });
+  $('izLeuchten').addEventListener('click',function(){ if(bereichKey) api('leuchten',{key:bereichKey},function(r){ licht(r.licht); fokus(); }); });
   // Gefunden ohne Etikett: Artikel suchen (Synonyme, Kapselgröße/Füllgewicht sichtbar), Charge blind abtippen, MHD, Menge, Pflichtfoto.
   $('izOhne').addEventListener('click',function(){ ladeStamm(function(){
     karte.innerHTML='<form class="iz-karte" id="izKf"><div class="iz-art">Gefunden ohne Etikett</div>'
@@ -153,7 +174,7 @@ flash_zeigen();
     function stop(){ if(strom) strom.getTracks().forEach(function(t){t.stop();}); strom=null; vid.style.display='none'; cam.textContent='Kamera'; }
     function suche(){ if(!strom) return; det.detect(vid).then(function(c){ if(c&&c.length){ var v=c[0].rawValue; stop(); scan(v); } else setTimeout(suche,250); }).catch(function(){ setTimeout(suche,400); }); } }
   // Weitermachen nach Unterbrechung: zuletzt offener Platz.
-  try{ var w=JSON.parse(localStorage.getItem('inv-'+INV+'-bereich')||'null'); if(w&&w.b){ bereich=w.b; platzName=w.n; nurNz=!!w.z; $('izPlatz').textContent=w.n+' · Zählung läuft'; $('izPlatz').classList.add('an'); $('izOhne').disabled=nurNz; $('izFertig').disabled=nurNz; scans(); } }catch(e){}
+  try{ var w=JSON.parse(localStorage.getItem('inv-'+INV+'-bereich')||'null'); if(w&&w.b){ bereich=w.b; platzName=w.n; nurNz=!!w.z; bereichKey=w.k||''; $('izLeuchten').disabled=!bereichKey; $('izPlatz').textContent=w.n+' · Zählung läuft'; $('izPlatz').classList.add('an'); $('izOhne').disabled=nurNz; $('izFertig').disabled=nurNz; scans(); } }catch(e){}
   nachzaehlen(); fokus();
 })();
 </script>

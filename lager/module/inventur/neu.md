@@ -10,3 +10,5 @@ Felder:
 - Grenzen für „kleine Differenzen übernehmen“
 
 Plätze, die schon in einer offenen Inventur sind, sind gesperrt. So sind mehrere Teil-Inventuren nacheinander möglich.
+
+**Alle Kisten auswählen (Sofortfix 13.11.2026):** Haken über der Liste setzt alle Kisten (gesperrte bleiben aus).

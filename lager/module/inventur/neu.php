@@ -34,6 +34,7 @@ flash_zeigen();
       <?php foreach (erp_inv_warenarten() as $k => $l): ?><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="warenarten[]" value="<?= h($k) ?>"> <?= h($l) ?></label><?php endforeach; ?>
     </div></div>
   <div class="bx-field"><label>Plätze und Kisten (keine Auswahl = ganzes Lager)</label>
+    <?php if ($kisten): ?><label style="display:flex;gap:6px;align-items:center;margin:4px 0 8px"><input type="checkbox" id="invAlleKisten"> alle Kisten auswählen (<?= count($kisten) ?>)</label><?php endif; ?>
     <?php if (!$plaetze && !$kisten): ?><p class="muted">Noch keine Lagerplätze angelegt – unter „Lagerplätze“ ein Raster anlegen und die Etiketten drucken. Ohne Plätze zählt die Inventur das ganze Lager.</p><?php endif; ?>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 14px;max-height:280px;overflow:auto">
       <?php foreach ($plaetze as $p): $key = 'p:' . (int)$p['id']; ?><label style="display:flex;gap:6px;align-items:center<?= isset($gesperrt[$key]) ? ';opacity:.5' : '' ?>" title="<?= isset($gesperrt[$key]) ? h('in „' . $gesperrt[$key] . '“') : '' ?>"><input type="checkbox" name="bereiche[]" value="<?= h($key) ?>"<?= isset($gesperrt[$key]) ? ' disabled' : '' ?>> <span class="lg-code"><?= h(inv_platz_name($p)) ?></span><?= (string)$p['lager'] === 'lager2' ? ' <span class="muted">L2</span>' : '' ?></label><?php endforeach; ?>
@@ -57,5 +58,8 @@ flash_zeigen();
 </form>
 <script>
 (function(){ var l=document.getElementById('invLager'), k=document.getElementById('invKunde'); function z(){ k.hidden = l.value!=='2'; } l.addEventListener('change', z); z(); })();
+// Sofortfix 13.11.2026: alle Kisten auf einmal wählen (gesperrte – schon in einer anderen offenen Inventur – bleiben aus).
+(function(){ var a=document.getElementById('invAlleKisten'); if(!a) return; a.addEventListener('change', function(){
+  document.querySelectorAll('input[name="bereiche[]"][value^="k:"]').forEach(function(c){ if(!c.disabled) c.checked=a.checked; }); }); })();
 </script>
 <?php fuss();

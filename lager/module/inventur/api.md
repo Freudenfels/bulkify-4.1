@@ -14,3 +14,5 @@ Aktionen:
 - `kf_etikett`: Klärfall-Etikett als PDF
 
 Zugriff nur, solange die Inventur zählbar ist und der Nutzer zählen darf (`inv_darf_zaehlen`).
+
+**Blinker (Sofortfix 13.11.2026):** neue Aktionen `auswahl`, `leuchten`, `aus`; `start` und Scan einer Kiste schalten den Blinker an (`licht`), `fertig` schaltet ihn aus (`aus`) und liefert `naechster` (blinkt schon) und die neue `liste`.
