@@ -305,6 +305,7 @@ $m = fn($k, $d = '') => h((string) meta_get($k, $d));
 
 render_header('einstellungen', 'Einstellungen');
 bx_head('Einstellungen', 'System – nach Kategorien');
+if (function_exists('cron_lauf_hinweis') && has_role('admin')) echo '<div class="bx-panel" style="padding:10px 16px;margin-bottom:12px;font-size:13px">' . cron_lauf_hinweis() . ' · Einrichtung: Einkauf → Bestellt → „Automatische Erinnerungen (Cron) einrichten“.</div>';   // 13.11.2026
 if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 ?>
 <div class="settabs">

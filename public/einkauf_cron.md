@@ -8,3 +8,5 @@ Den Token zeigt die „Bestellt"-Liste (`?p=einkauf`) im Admin-Aufklappkasten; e
 Ruft `einkauf_erinnerungen_cron()` (`core/schema.php`) auf: erinnert alle **überfälligen, unbestätigten Portal-Bestellungen** (`bestellung_ueberfaellig()`), je Bestellung höchstens **1×/24 h** (`bestellung.erinnert_am`). Antwort JSON `{ok, gesendet, geprueft}`. Mailversand über Dashboard-SMTP (`mail_lieferant_erinnerung()`), nicht `mail()`.
 
 **Seit 11.11.2026 (Block D)** prüft derselbe Cron zusätzlich bald ablaufende Preise (Rohstoff, Zukauf, Fremdfertigung; `pg_bald_pruefen`, einmal am Tag) und kennzeichnet Auto-EKs aus abgelaufenen Preisen (`pg_ek_abgelaufen_pruefen`). Antwort zusätzlich `preise_bald` und `ek_abgelaufen`.
+
+**13.11.2026 (Paket Teil 4):** Gemeinsamer täglicher Einstieg. Zusätzlich `etikett_erinnerungen_cron()` (Etikett fehlt → Kunde erinnern, max. 1 Mail je Kunde und Tag) und `cron_lauf_merken()` (app_meta `cron_letzter_lauf`). Die Antwort enthält jetzt auch `etikett_erinnerung_kunden`, `etikett_erinnerung_auftraege` und `etikett_fehler`.

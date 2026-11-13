@@ -53,3 +53,5 @@ Firma: Feld „Produktions- bzw. Lieferadresse“ (firma_prod_adresse) = „Ship
 **Gewichte (13.11.2026, Fable-3 T1.2):** Gewichts- und Wiegefelder lesen über `gewicht_lesen()` (core/gewicht.php): Punkt und Komma sind Dezimaltrenner („25.125“ kg = 25,125; „6.482“ g = 6,482; „25,000“ = 25), nur wenn beide vorkommen, gilt das letzte. Vorbelegungen ohne Tausenderpunkt (`gewicht_feld()`). Stückzahlen bleiben bei der Mengen-Lesart („12.000“ Stk = 12000). Hier: Schwund-Grenze beim Wiegen (kg).
 
 **Zahlenfelder des Browsers (13.11.2026, Fable-3 T1.3):** Felder mit `type="number"` senden immer den Punkt als Dezimaltrenner. Sie werden mit `(float)` gelesen, nie mit dem deutschen Mengen-Parser (sonst würde „2,125“ zu 2125). Hier: Gummi-Gewicht (mg).
+
+**13.11.2026:** Oben steht (Admin) „Täglicher Lauf (Cron): zuletzt …“ (`cron_lauf_hinweis()`).

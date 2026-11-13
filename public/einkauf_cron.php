@@ -1,5 +1,6 @@
 <?php
-// Automatische Erinnerungen an überfällige, unbestätigte Portal-Bestellungen (B4).
+// Täglicher Lauf (gemeinsamer Cron-Einstieg): Erinnerungen an überfällige, unbestätigte Portal-Bestellungen (B4),
+// bald ablaufende Preise und seit 13.11.2026 die Etikett-Erinnerung an Kunden. Merker „letzter Lauf“: app_meta cron_letzter_lauf.
 // KEIN Login, token-gesichert. Aufruf per Server-Cron, z. B. 1x täglich:
 //   <host>/einkauf_cron.php?token=<einkauf_cron_token>
 // Den Token zeigt die Einkauf-Liste (Admin) an bzw. legt ihn beim ersten Aufruf von einkauf_cron_token() an.
@@ -29,4 +30,9 @@ $r = einkauf_erinnerungen_cron($tage, 24);
 require_once __DIR__ . '/../core/preis_gueltig.php';
 $bald = 0; $ekAbg = 0;
 try { $bald = pg_bald_pruefen(); $ekAbg = pg_ek_abgelaufen_pruefen(); } catch (\Throwable $e) {}
-ec_out(200, ['ok' => true, 'gesendet' => (int)$r['gesendet'], 'geprueft' => (int)$r['geprueft'], 'preise_bald' => $bald, 'ek_abgelaufen' => $ekAbg]);
+// 13.11.2026 (Paket Teil 4): Etikett fehlt -> Kunde täglich erinnern (höchstens eine Mail je Kunde und Tag).
+$et = ['kunden' => 0, 'auftraege' => 0, 'fehler' => []];
+try { $et = etikett_erinnerungen_cron(); } catch (\Throwable $e) { $et['fehler'][] = $e->getMessage(); }
+cron_lauf_merken('Bestell-Erinnerungen ' . (int)$r['gesendet'] . ', Etikett-Erinnerungen ' . (int)$et['kunden'] . ' Kunden/' . (int)$et['auftraege'] . ' Aufträge' . ($et['fehler'] ? ', Hinweise: ' . count($et['fehler']) : ''));
+ec_out(200, ['ok' => true, 'gesendet' => (int)$r['gesendet'], 'geprueft' => (int)$r['geprueft'], 'preise_bald' => $bald, 'ek_abgelaufen' => $ekAbg,
+             'etikett_erinnerung_kunden' => (int)$et['kunden'], 'etikett_erinnerung_auftraege' => (int)$et['auftraege'], 'etikett_fehler' => $et['fehler']]);

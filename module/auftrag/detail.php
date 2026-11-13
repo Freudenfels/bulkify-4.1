@@ -374,6 +374,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') ===
 
 // Etikett (Team/Admin): Datei hochladen/ersetzen (z. B. Last-Minute-Änderung des Kunden), Freigabe im
 // Namen des Kunden bestätigen, Datei entfernen. Nur Admin/Vertrieb.
+// 13.11.2026 (Paket Teil 4.4): Etikett-Erinnerung an den Kunden pausieren / wieder aktivieren.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && ($_POST['aktion'] ?? '') === 'etikett_erinnerung_pause') {
+    etikett_erinnerung_pause($id, !empty($_POST['pause']), (string)(current_user()['name'] ?? ''));
+    header('Location: ?p=auftrag&id=' . $id . '&ok=1'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $id && in_array(($_POST['aktion'] ?? ''), ['etikett_upload_team','etikett_freigeben_team','etikett_del_team'], true)) {
     if (!(has_role('admin') || has_role('sales'))) { header('Location: ?p=auftrag&id=' . $id . '&expressfehler=' . urlencode('Keine Berechtigung.')); exit; }
     $akt = (string)$_POST['aktion'];
@@ -1206,6 +1211,13 @@ if (has_role('admin') || has_role('sales')):
       </form>
       <?php endif; ?>
       <div class="muted" style="font-size:12px">Das Design gehört zum Produkt (Kundenetikett, neue Version bei Freigabe eines neuen Designs); die Freigabe gilt für diesen Auftrag.</div>
+      <?php $etE = etikett_erinnerung_stand((int)$id); if (!$etDokA || $etE['anzahl'] > 0): // 13.11.2026: tägliche Erinnerung an den Kunden ?>
+      <form method="post" class="bx-row" style="gap:10px;align-items:center;margin:0;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--line)">
+        <input type="hidden" name="aktion" value="etikett_erinnerung_pause"><input type="hidden" name="pause" value="<?= $etE['pause'] ? '0' : '1' ?>">
+        <span style="font-size:13px">Etikett-Erinnerung: <?= $etE['anzahl'] > 0 ? $etE['anzahl'] . ' × gesendet, zuletzt ' . h(fmt_zeit($etE['zuletzt'], 'd.m.Y')) : 'noch keine gesendet' ?><?= $etE['pause'] ? ' · <b style="font-weight:600">pausiert</b>' : '' ?></span>
+        <button class="btn btn-ghost btn-sm" type="submit"><?= $etE['pause'] ? 'Erinnerung wieder aktivieren' : 'Erinnerung pausieren' ?></button>
+      </form>
+      <?php endif; ?>
     </div>
   </dialog>
   <?php endif; ?>

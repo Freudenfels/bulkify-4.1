@@ -154,6 +154,7 @@ function pib_mail_kunde(int $aid, bool $erste = true): string {
     $fehltEtikett = function_exists('auftrag_braucht_etikett') && function_exists('etikett_vorhanden') && auftrag_braucht_etikett($aid) && !etikett_vorhanden($aid);
     $link = function_exists('mail_link_kundenportal') ? mail_link_kundenportal((int)$k['id'], 'bestellung&aid=' . $aid) : '';
     $en = pib_kunde_sprache((int)$k['id']) === 'en';
+    if (!function_exists('beleg_firma')) require_once __DIR__ . '/pdf_beleg.php';
     $fa = beleg_firma();
     $anrede = function_exists('mail_kunde_anrede') ? mail_kunde_anrede($k) : (string)$k['firma'];
     if ($en) {

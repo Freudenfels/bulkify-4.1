@@ -32,3 +32,5 @@ Bestellnummer und Auftrag (AB) je Zeile sind anklickbar (neue Spalte „Auftrag�
 Kennzeichen „Unterlagen fehlen“ an offenen Bestellungen (Link auf die Liste an der Bestellung).
 
 **Storno aus der Liste (13.11.2026, Fable-3 T2.8):** läuft über `bestellung_stornieren()`; ohne Grund kommt die Meldung „Bitte einen Grund für die Stornierung angeben.“
+
+**13.11.2026:** Über der Cron-Einrichtung steht „Täglicher Lauf (Cron): zuletzt …“ (`cron_lauf_hinweis()`); der Text nennt jetzt auch Preise und Etikett-Erinnerung.

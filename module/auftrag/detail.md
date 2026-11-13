@@ -386,3 +386,5 @@ Express-Bestellung (fehlende Rohstoffe) und Express-Zukauf (Bulk und Fertigware/
 **Zahlen-Lesart (13.11.2026, Fable-3 T2.9):** Betragsfelder lesen mit `betrag_lesen()`, Preise/Prozente/Kurse mit `zahl_lesen()`, Mengen mit `zahl_lesen(…, true)` – alle aus core/zahl_lesen.php (eine Regel mit dem Dashboard). „21.687,75“, „21687,75“ und „21687.75“ ergeben 21687,75.
 
 **Alter Einlager-Weg (13.11.2026, Fable-3 T4.2):** „Einlagern nachholen“ nur Admin mit Grund; nie während eine Unter-Charge läuft.
+
+**Etikett-Erinnerung (13.11.2026, Paket Teil 4.4):** Im Pop-up Etikett steht „Etikett-Erinnerung: n × gesendet, zuletzt …“ und der Knopf „Erinnerung pausieren“ (`aktion=etikett_erinnerung_pause`).
