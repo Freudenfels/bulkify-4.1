@@ -7940,6 +7940,9 @@ function bestellung_stornieren(int $bestellung_id, string $wer = 'Team', string 
     if (!$b) return ['ok'=>false, 'msg'=>'Bestellung nicht gefunden.'];
     if ((string)$b['status'] === 'storniert') return ['ok'=>false, 'msg'=>'Bestellung ist bereits storniert.'];
     if ((string)$b['status'] === 'geliefert' || !empty($b['angekommen_am'])) return ['ok'=>false, 'msg'=>'Bereits (teil)geliefert – nicht stornierbar.'];
+    // Fable-6 P11: teilgeliefert (Chargen eingebucht) -> nur „Rest stornieren“ mit Grund, nie die ganze Bestellung.
+    if ((float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [$bestellung_id]) > 0.0005)
+        return ['ok'=>false, 'msg'=>'Es ist schon Ware eingegangen. Bitte „Rest stornieren“ (mit Grund) statt die ganze Bestellung zu stornieren.'];
     $grund = trim($grund);
     if ($grund === '') return ['ok'=>false, 'msg'=>'Bitte einen Grund für die Stornierung angeben.'];   // Fable-3 T2.8: Grund ist auf jedem Weg Pflicht
     $wer = trim($wer) ?: 'Team';
@@ -10844,9 +10847,13 @@ function einkauf_rechnung_anhaengen(int $bestellung_id, string $field): int {
 // Überweisungsbestätigung (Datei-Feld). Vorerst NUR an der Bestellung – keine Buchhaltungs-/OP-Verknüpfung.
 // Der Beleg wird als dokument (typ='zahlungsbeleg') mit lieferant_id abgelegt, damit ihn der Lieferant im Portal sieht.
 function bestellung_bezahlt_markieren(int $bestellung_id, string $datum, string $zahlungsweg, string $fileField = ''): array {
-    $b = one("SELECT id, nummer, lieferant_id FROM bestellung WHERE id=?", [$bestellung_id]);
+    $b = one("SELECT id, nummer, lieferant_id, status, bezahlt_am FROM bestellung WHERE id=?", [$bestellung_id]);
     if (!$b) return ['ok'=>false, 'msg'=>'Bestellung nicht gefunden.'];
-    $d = trim($datum) !== '' && strtotime($datum) ? date('Y-m-d', strtotime($datum)) : date('Y-m-d');
+    // Fable-6 P11: nur einmal, nicht an stornierten Bestellungen, nicht in der Zukunft.
+    if ((string)$b['status'] === 'storniert') return ['ok'=>false, 'msg'=>'Die Bestellung ist storniert.'];
+    if (!empty($b['bezahlt_am'])) return ['ok'=>false, 'msg'=>'Schon als bezahlt markiert.'];
+    $d = trim($datum) !== '' && strtotime($datum) ? date('Y-m-d', strtotime($datum)) : heute_ort();
+    if ($d > heute_ort()) return ['ok'=>false, 'msg'=>'„bezahlt am“ darf nicht in der Zukunft liegen.'];
     q("UPDATE bestellung SET bezahlt_am=?, zahlungsweg=? WHERE id=?",
       [$d, mb_substr(trim($zahlungsweg), 0, 120) ?: null, $bestellung_id]);
     $belegId = 0;

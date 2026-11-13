@@ -21,6 +21,33 @@ if (isset($_GET['la_pdf']) && ($laBg = one("SELECT * FROM bestellung WHERE id=?"
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aktion = $_POST['aktion'] ?? '';
     $lief = ($_POST['lieferant_id'] ?? '') !== '' ? (int)$_POST['lieferant_id'] : null;
+    // Fable-6 P11 (13.11.2026): Der Server prüft den Stand der Bestellung je Aktion (nicht nur die Oberfläche).
+    if (!$neu && $aktion !== '') {
+        $gB = one("SELECT status, angekommen_am, bezahlt_am FROM bestellung WHERE id=?", [(int)$id]);
+        $gGel = (float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]);
+        $gOffenRest = (int) scalar("SELECT COUNT(*) FROM bestellung_position WHERE bestellung_id=? AND menge>0 AND rest_storniert_am IS NULL AND COALESCE(geliefert_menge,0) < menge - 0.0001", [(int)$id]);
+        $gNein = '';
+        if ($gB && (string)$gB['status'] === 'storniert'
+            && (in_array($aktion, ['team_rechnung', 'bezahlt', 'lief_versand', 'lief_station', 'lief_bestaetigen', 'telefonisch_bestaetigt', 'eta_setzen', 'erinnern', 'bestellt', 'schon_bestellt', 'rest_storno', 'abgl_geliefert', 'liefern', 'aufteilen'], true)
+                || strncmp($aktion, 'bch_', 4) === 0 || strncmp($aktion, 'la_', 3) === 0))
+            $gNein = 'Die Bestellung ist storniert – diese Aktion ist nicht mehr möglich.';
+        elseif ($aktion === 'storno' && $gGel > 0.0005)
+            $gNein = 'Es ist schon Ware eingegangen. Bitte „Rest stornieren“ (mit Grund) statt die ganze Bestellung zu stornieren.';
+        elseif ($aktion === 'rest_storno' && !(has_role('admin') || has_role('einkauf')))
+            $gNein = '„Rest stornieren“ dürfen nur Einkauf und Admin.';
+        elseif ($aktion === 'rest_storno' && ($gGel <= 0.0005 || $gOffenRest === 0))
+            $gNein = '„Rest stornieren“ geht nur bei einer echten Teillieferung (schon etwas geliefert, Rest offen).';
+        elseif ($aktion === 'rest_storno' && trim((string)($_POST['grund'] ?? '')) === '')
+            $gNein = 'Bitte einen Grund für „Rest stornieren“ angeben.';
+        elseif ($aktion === 'bezahlt' && $gB && !empty($gB['bezahlt_am']))
+            $gNein = 'Die Bestellung ist schon als bezahlt markiert (' . date('d.m.Y', strtotime((string)$gB['bezahlt_am'])) . ').';
+        elseif ($aktion === 'bezahlt' && trim((string)($_POST['bezahlt_am'] ?? '')) !== '' && (string)$_POST['bezahlt_am'] > heute_ort())
+            $gNein = '„bezahlt am“ darf nicht in der Zukunft liegen.';
+        if ($gNein !== '') {
+            log_aktivitaet('bestellung', (int)$id, 'team', 'Abgelehnt (' . $aktion . '): ' . $gNein, 'notiz');
+            header('Location: ?p=bestellung&id=' . (int)$id . '&fehler=' . urlencode($gNein)); exit;
+        }
+    }
     // Einkauf gerade ziehen (Teil 1, 10.11.2026): „Wareneingang buchen" führt in den EINEN Wareneingang mit vorgewählter Position
     // (Charge, MHD, Menge echt erfasst) – kein pauschales Einbuchen „zu BE-…" mehr.
     if (strncmp($aktion, 'la_', 3) === 0 && !$neu) {   // Paket 12.11.2026 Teil 5: Gebindeaufkleber (Direkt-Bestellungen, Nachdruck)
@@ -71,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Teil 3: Rest einer Teillieferung stornieren – die Bestellung schließt, der Rest zählt nicht mehr als unterwegs.
     if ($aktion === 'rest_storno' && !$neu) {
         webe_rest_stornieren((int)$id, (string)(current_user()['name'] ?? ''));
-        log_aktivitaet('bestellung', (int)$id, 'team', 'Rest storniert – offene Restmengen zählen nicht mehr als unterwegs.', 'status');
+        log_aktivitaet('bestellung', (int)$id, 'team', 'Rest storniert – offene Restmengen zählen nicht mehr als unterwegs. Grund: ' . mb_substr(trim((string)($_POST['grund'] ?? '')), 0, 200), 'status');
         header('Location: ?p=bestellung&id=' . $id . '&ok=1'); exit;
     }
     // Ablauf beim Lieferanten – dieselben Aktionen nutzt spaeter das Lieferantenportal.
@@ -477,9 +504,11 @@ if (!$neu) {
     $bulkProdGrp = (int) scalar("SELECT COUNT(DISTINCT TRIM(SUBSTRING_INDEX(SUBSTRING(bezeichnung,7),' (',1))) FROM bestellung_position WHERE bestellung_id=? AND item_id IS NULL AND bezeichnung LIKE 'Bulk%'", [(int)$id]);
     if ($bulkProdGrp >= 2 && $offenBest)
         $menu[] = '<form method="post" onsubmit="return confirm(\'Diese Bestellung in ' . $bulkProdGrp . ' Einzelbestellungen je Produkt aufteilen? Die alte wird storniert und der Lieferant informiert.\');"><input type="hidden" name="aktion" value="aufteilen"><button class="bs-mi" type="submit">In Einzelbestellungen aufteilen</button></form>';
-    if ($bd['teil'] > 0 && $offenBest)
-        $menu[] = '<form method="post" onsubmit="return confirm(\'Rest stornieren? Die Bestellung wird geschlossen, die noch offene Menge zählt nicht mehr als unterwegs.\');"><input type="hidden" name="aktion" value="rest_storno"><button class="bs-mi" type="submit">Rest stornieren</button></form>';
-    if ($offenBest) $menu[] = '<button type="button" class="bs-mi bs-rot" onclick="bxPopup.open(\'dlgStorno\')">Stornieren</button>';
+    // Fable-6 P11: „Rest stornieren“ nur bei echter Teillieferung, mit Grund, nur Einkauf/Admin; „Stornieren“ nicht mehr nach Wareneingang.
+    $schonGeliefert = (float) scalar("SELECT COALESCE(SUM(geliefert_menge),0) FROM bestellung_position WHERE bestellung_id=?", [(int)$id]) > 0.0005;
+    if ($bd['teil'] > 0 && $offenBest && $schonGeliefert && (has_role('admin') || has_role('einkauf')))
+        $menu[] = '<button type="button" class="bs-mi" onclick="bxPopup.open(\'dlgRestStorno\')">Rest stornieren</button>';
+    if ($offenBest && !$schonGeliefert) $menu[] = '<button type="button" class="bs-mi bs-rot" onclick="bxPopup.open(\'dlgStorno\')">Stornieren</button>';
     $altlast = has_role('admin') && !in_array($st, ['storniert', 'offen'], true) && bestellung_abgleich_panel($b) !== '';
     if ($altlast) $menu[] = '<button type="button" class="bs-mi" onclick="document.getElementById(\'dlgAltlast' . (int)$id . '\').showModal()">Altlasten: ohne Einbuchen schließen</button>';
     $menuHtml = '<details class="bs-menu"><summary class="btn btn-ghost" aria-label="Weitere Aktionen" title="Weitere Aktionen">&#8943;</summary><div class="bs-menu-liste">' . implode('', $menu) . '</div></details>';
@@ -635,6 +664,11 @@ if (!$neu) {
            . '<input type="hidden" name="aktion" value="storno"><div class="bx-field"><label>Grund</label><input type="text" name="grund" required data-pflicht maxlength="180"></div>'
            . ($istPortal ? '<p class="muted" style="font-size:13px;margin:0">Der Lieferant wird informiert.</p>' : '')
            . '<div class="bx-pop-fuss"><button class="btn btn-primary" type="submit" style="background:#b3261e;border-color:#b3261e;color:#fff">Jetzt stornieren</button></div></form></dialog>';
+    if ($offenBest && $schonGeliefert && (has_role('admin') || has_role('einkauf')))   // Fable-6 P11
+        echo '<dialog id="dlgRestStorno" class="bx-dialog"><h2>Rest stornieren</h2><form method="post">'
+           . '<input type="hidden" name="aktion" value="rest_storno"><p class="muted" style="margin-top:0">Die Bestellung wird geschlossen, die noch offene Menge zählt nicht mehr als unterwegs. Die gelieferte Ware bleibt.</p>'
+           . '<div class="bx-field"><label>Grund</label><input type="text" name="grund" required data-pflicht data-pflicht-text="Grund fehlt" maxlength="180" placeholder="z. B. Lieferant liefert den Rest nicht mehr"></div>'
+           . '<div class="bx-pop-fuss"><button class="btn btn-primary" type="submit">Rest stornieren</button></div></form></dialog>';
     if ($altlast) echo bestellung_altlast_dialog((int)$id);
 }
 if (!$neu) echo '<dialog id="dlgBearbeiten" class="bx-dialog" style="max-width:980px"><h2>Bestellung bearbeiten</h2><div>';

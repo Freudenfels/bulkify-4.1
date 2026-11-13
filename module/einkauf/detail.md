@@ -150,3 +150,11 @@ Anlass BE-2956 („die Übersicht ist komplette Grütze“). Eine vorhandene Bes
 Doppeltes entfernt: Einbuchen nur Hauptknopf und je vorgemerkter Charge „einbuchen“; Stornieren nur im Menü; Positionen-Tabelle nur einmal; PDF-Knopf im Seitenkopf und der Block „Aktionen“ unten entfallen. Alle POST-Aktionen oben in der Datei unverändert.
 
 **Fable-6 P3 (13.11.2026):** Die Seite endet wieder mit `render_footer()`. Ohne den Seitenfuß fehlten Handy-Menü, Hell/Dunkel-Schalter und Doppelklick-Schutz.
+
+**Fable-6 P11 (13.11.2026) – Statusprüfung am Server je Aktion:**
+- An einer **stornierten** Bestellung lehnt der Server diese Aktionen ab und schreibt einen Verlaufseintrag:
+  - Rechnung, bezahlt, Versand, Station, Bestätigen, Termin, Erinnern, Bestellt, Rest stornieren, Altlasten schließen, Aufteilen
+  - alle `bch_*` (z. B. „Charge vormerken“) und `la_*` (Gebindeaufkleber)
+- **Stornieren** geht nicht mehr, sobald Ware eingegangen ist (auch in `bestellung_stornieren()`). Dann gibt es nur „Rest stornieren“.
+- **Rest stornieren** geht nur bei echter Teillieferung (schon geliefert, Rest offen), nur mit Grund (Pop-up `dlgRestStorno`) und nur für Einkauf und Admin.
+- **bezahlt** geht nur einmal und nie mit einem Datum in der Zukunft (auch in `bestellung_bezahlt_markieren()`).
