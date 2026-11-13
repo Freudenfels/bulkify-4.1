@@ -352,7 +352,7 @@ header('Content-Type: text/html; charset=utf-8');
       <div class="meta"><?= h(sprintf($T['wa_target'], menge_txt($pa['menge']))) ?><?= !empty($pa['kunde']) ? ' · ' . h((string)$pa['kunde']) : '' ?></div>
       <div class="meta"><?= $pa['geplant_am'] ? h(date('d.m.', strtotime((string)$pa['geplant_am']))) . ' · ' : '' ?><?= h((string)($pa['linie'] ?: $T['wa_line_open'])) ?><?= $pa['mitarbeiter'] ? ' · ' . h((string)$pa['mitarbeiter']) : '' ?></div>
       <span class="badge <?= $pa['_lauf'] ? 'b-lauf' : 'b-bereit' ?>"><?= $pa['_lauf'] ? h($T['in_production']) : ($grau ? h($T['wa_not_doable']) : ($m['stufe'] === 'bis_etikett' ? h($T['wa_until_label']) : h($T['producible']))) ?></span>
-      <?php $offenTxt = pa_noch_offen_text((int)$pa['id'], !empty($m['etikett_gesperrt']), $T['wa_still_open'], fn($s) => werk_station_label($s, $lang), $T['wa_label_only_until']); ?>
+      <?php $offenTxt = pa_noch_offen_text((int)$pa['id'], !empty($m['etikett_gesperrt']), $T['wa_noch_offen_zeile'], fn($s) => werk_station_label($s, $lang), $T['wa_label_only_until']); ?>
       <?php if ($offenTxt !== ''): ?><div class="meta" style="margin-top:6px;font-weight:600;color:var(--text)"><?= h($offenTxt) ?></div><?php endif; ?>
       <div class="prog"><div style="width:<?= (int)$proz ?>%"></div></div>
       <div class="meta" style="margin-top:6px"><?= h(sprintf($T['wa_produced_of'], menge_txt($pa['produziert']), menge_txt($pa['menge']))) ?></div>
