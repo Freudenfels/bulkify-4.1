@@ -3,6 +3,7 @@
 // nur was in der Whitelist steht, laesst sich aufrufen.
 require_once __DIR__ . '/../../crm/core/config.php';
 require_once __DIR__ . '/../../crm/core/db.php';
+require_once __DIR__ . '/../../core/einmal.php'; einmal_pruefen();   // Fable-6 T2.6: doppelt abgeschickte Formulare ablehnen
 require_once __DIR__ . '/../../crm/core/schema.php';
 require_once __DIR__ . '/../../crm/core/auth.php';
 require_once __DIR__ . '/../../crm/core/layout.php';

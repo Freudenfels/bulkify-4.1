@@ -254,8 +254,48 @@
   document.addEventListener('mouseover', function (e) { var el = lauffaehig(e.target); if (el === aktiv) return; if (aktiv) stopp(aktiv); aktiv = el; if (el) lauf(el); });
   document.addEventListener('touchstart', function (e) { var el = lauffaehig(e.target); if (!el) { if (aktiv) { stopp(aktiv); aktiv = null; } return; } if (el.__lauf) { stopp(el); aktiv = null; } else { if (aktiv) stopp(aktiv); aktiv = el; lauf(el); } }, { passive: true });
 
+  // ---------------------------------------------------------------- Einmal-Kennung (Fable-6 T2.6, 13.11.2026)
+  // Jedes normal abgeschickte POST-Formular bekommt ein verstecktes Feld _einmal mit einer zufälligen Kennung. Der Server
+  // (core/einmal.php) nimmt jede Kennung nur einmal an – ein Doppelklick bucht nie doppelt. Läuft in der Bubble-Phase auf window,
+  // also nach allen anderen Prüfungen (confirm, Pflichtfelder): abgebrochene oder per JS (fetch) gesendete Formulare bekommen keine.
+  // Der Knopf wird nach dem ersten Klick gesperrt (wo nicht schon der Seitenfuß des Dashboards das tut); Rückfall nach 10 s.
+  function einmalId() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, ''); } catch (e) {}
+    return Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  }
+  window.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (!f || e.defaultPrevented || (f.getAttribute('method') || '').toLowerCase() !== 'post' || f.hasAttribute('data-kein-einmal')) return;
+    var b = e.submitter || null;
+    if ((b && b.getAttribute('formtarget') === '_blank') || f.getAttribute('target') === '_blank') return;
+    var i = f.querySelector('input[name="_einmal"]');
+    if (!i) { i = document.createElement('input'); i.type = 'hidden'; i.name = '_einmal'; f.appendChild(i); }
+    if (!i.value) i.value = einmalId();
+    if (b && !b.disabled && !b.dataset.busyOn) {
+      b.dataset.einmalAus = '1';
+      setTimeout(function () { b.disabled = true; }, 0);   // erst nach dem Absenden (sonst fehlt name/value des Knopfs)
+    }
+    setTimeout(function () { if (b && b.dataset.einmalAus) { b.disabled = false; delete b.dataset.einmalAus; } i.value = ''; }, 10000);   // z. B. Download ohne Seitenwechsel
+  }, false);
+  window.addEventListener('pageshow', function (ev) {
+    if (!ev.persisted) return;   // Zurück-Navigation: neue Kennungen, Knöpfe frei
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="_einmal"]'), function (i) { i.value = ''; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-einmal-aus]'), function (b) { b.disabled = false; delete b.dataset.einmalAus; });
+  });
+  function einmalHinweis() {
+    if (!/[?&]einmal=doppelt(&|$)/.test(location.search)) return;
+    var d = document.createElement('div');
+    d.setAttribute('role', 'status');
+    d.textContent = 'Schon abgeschickt – wurde nur einmal gebucht.';
+    d.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:9999;padding:10px 16px;border-radius:10px;background:var(--panel,#fff);color:var(--text,#10210f);border:1px solid var(--line,#ccc);box-shadow:0 4px 18px rgba(0,0,0,.18);font-size:14px;max-width:calc(100% - 32px)';
+    document.body.appendChild(d);
+    setTimeout(function () { d.remove(); }, 5000);
+    try { var u = new URL(location.href); u.searchParams.delete('einmal'); history.replaceState(null, '', u.toString()); } catch (e) {}
+  }
+
   // ---------------------------------------------------------------- Start + spätere Inhalte
   function start() {
+    einmalHinweis();
     // Auswahl mit Suche überall (Portale und Sub-Apps laden sie sonst nicht): einmal nachladen
     if (!window.bxRsComboInit && !document.querySelector('script[src*="bx-rscombo.js"]')) { var sc = document.createElement('script'); sc.src = '/assets/bx-rscombo.js'; document.head.appendChild(sc); }
     // Rückfrage bei mehrdeutigen Gewichten „1.250“ (Fable-4 T1.3): Felder mit data-gewicht.

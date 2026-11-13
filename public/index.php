@@ -9,6 +9,7 @@ require_once __DIR__ . '/../core/agb.php';
 require_once __DIR__ . '/../core/mail.php';
 require_once __DIR__ . '/../core/nachricht.php';   // Lieferanten-Chat + Nav-Zähler „Nachrichten" global verfügbar
 require_once __DIR__ . '/../core/auth.php';
+require_once __DIR__ . '/../core/einmal.php'; einmal_pruefen();   // Fable-6 T2.6: doppelt abgeschickte Formulare ablehnen
 require_once __DIR__ . '/../core/layout.php';
 require_once __DIR__ . '/../core/perf.php';
 // Am Ende jedes Requests eine Messzeile schreiben – nur wenn die Diagnose eingeschaltet ist.

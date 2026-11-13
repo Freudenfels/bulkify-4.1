@@ -3,6 +3,7 @@
 // laesst sich aufrufen. Der Code liegt ausserhalb von public/ in lager/.
 require_once __DIR__ . '/../../lager/core/config.php';
 require_once __DIR__ . '/../../lager/core/db.php';
+require_once __DIR__ . '/../../core/einmal.php'; einmal_pruefen();   // Fable-6 T2.6: doppelt abgeschickte Formulare ablehnen
 require_once __DIR__ . '/../../lager/core/schema.php';
 require_once __DIR__ . '/../../lager/core/auth.php';
 require_once __DIR__ . '/../../lager/core/layout.php';

@@ -26,3 +26,10 @@ Texte (Rückfrage bei ungespeicherten Eingaben, Schließen, Lädt, Fehler, Suchf
 
 ## Reiter (Bestellseite 13.11.2026)
 `.bs-reiter` mit `[data-bs-tab]`/`[data-bs-panel]`: Umschalten per Klick (am document, geht auch im nachgeladenen Pop-up), `window.bxReiter(k)`. Anker beim Laden und bei hashchange: #unterlagen/#wareneingang/#abgleich/#chargen → Wareneingang & Chargen, #versand, #zahlung/#rechnung/#bezahlt → Zahlung, #nachrichten/#rueckfragen, #verlauf; auch `&tab=`. #unterlagen, #rechnung, #bezahlt öffnen zusätzlich das Pop-up. Menü „⋯“ (`details.bs-menu`) schließt bei Klick daneben oder auf einen Eintrag.
+
+**Einmal-Kennung (Fable-6 T2.6, 13.11.2026):**
+- Jedes normal abgeschickte POST-Formular bekommt in der Bubble-Phase auf `window` das versteckte Feld `_einmal`. Abgebrochene oder per fetch gesendete Formulare bekommen es nicht.
+- Der Knopf wird nach dem ersten Klick gesperrt, wo nicht schon der Seitenfuß es tut. Nach 10 Sekunden ist er wieder frei, die Kennung wird dann neu.
+- Bei `pageshow` aus dem Zurück-Cache werden alle Kennungen geleert.
+- Bei `?einmal=doppelt` erscheint kurz der Hinweis „Schon abgeschickt – wurde nur einmal gebucht.“
+- Der Server dazu ist `core/einmal.php`.

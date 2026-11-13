@@ -3,6 +3,7 @@
 // erreichbar. Der Code liegt außerhalb von public/ in buchhaltung/. Muster wie /produktion/, /lager/.
 require_once __DIR__ . '/../../buchhaltung/core/config.php';
 require_once __DIR__ . '/../../buchhaltung/core/db.php';
+require_once __DIR__ . '/../../core/einmal.php'; einmal_pruefen();   // Fable-6 T2.6: doppelt abgeschickte Formulare ablehnen
 require_once __DIR__ . '/../../buchhaltung/core/schema.php';   // Finanz-DDL + finanz.php
 require_once __DIR__ . '/../../buchhaltung/core/auth.php';
 require_once __DIR__ . '/../../buchhaltung/core/layout.php';

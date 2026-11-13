@@ -3,6 +3,7 @@
 // erreichbar. Der Code liegt außerhalb von public/ in produktion/. Muster wie /lager/.
 require_once __DIR__ . '/../../produktion/core/config.php';
 require_once __DIR__ . '/../../produktion/core/db.php';
+require_once __DIR__ . '/../../core/einmal.php'; einmal_pruefen();   // Fable-6 T2.6: doppelt abgeschickte Formulare ablehnen
 require_once __DIR__ . '/../../produktion/core/schema.php';
 require_once __DIR__ . '/../../produktion/core/auth.php';
 require_once __DIR__ . '/../../produktion/core/layout.php';

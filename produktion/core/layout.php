@@ -32,7 +32,7 @@ function kopf(string $titel, string $aktiv = ''): void {
     echo '<!doctype html><html lang="de"><head><meta charset="utf-8">'
        . '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
        . '<title>' . h($titel !== '' ? $titel . ' – ' . BX_MARKE . ' ' . BX_TITEL : BX_MARKE . ' ' . BX_TITEL) . '</title>'
-       . '<link rel="stylesheet" href="/assets/app.css"><script src="/assets/bx-ui.js?v=20261113" defer></script>'
+       . '<link rel="stylesheet" href="/assets/app.css"><script src="/assets/bx-ui.js?v=20261114a" defer></script>'
        . '<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">'
        // Menü flach und groß (08.11.2026) – direkt hier, die Produktions-App hat keine eigene CSS-Datei (kein Cache-Problem).
        . '<style>.bx-side nav .pr-navflat a{justify-content:flex-start;gap:12px;font-size:16px;padding:12px var(--sp-5);line-height:1.25}'
