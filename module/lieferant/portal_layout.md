@@ -44,6 +44,8 @@ vorschau-bewusst (alle Portal-Guards greifen), die ROUTE-Sperre im Router nutzt 
 Admin nicht gefangen ist. Oben im Portal erscheint das Banner "Interne Vorschau … · Vorschau beenden" (`?p=lief_vorschau_stop`).
 
 ## lp_rohstoff_popup() (Stand 2026-10-08)
+
+Nachtrag 13.11.2026: Wirkstoffgehalte stehen oben (Gehalt in %). Hat der Link `data-mg` (Menge des Rohstoffs je Einheit aus der Rezeptur), zeigt das Pop-up zusätzlich „Menge in der Rezeptur“ und je Wirkstoff die mg je Einheit (Menge × Gehalt). Darunter „Weitere Angaben“. Eingebunden auf Rezeptur-Preise (`lieferant_rezepturpreise`) und Rezeptur ansehen.
 Gibt einen theme-tauglichen `<dialog id="lpRohDlg">` + JS aus, das an `a.lp-roh[data-iid]` bindet und `?p=lieferant_rohstoff_info&iid=…` (JSON) lädt → zeigt dem Lieferanten die Rohstoff-Infos (Identität + Beschaffenheit/DEV + Wirkstoff-Gehalte, OHNE Preise/Lieferanten). Einmal je Seite aufrufen (nach den Zutaten-Tabellen). Genutzt in `anfrage.php` + `rezeptur_ansicht.php`. Neuer i18n-Key `roh_info_titel`.
 
 ## Kategorie Leerkapseln (10.11.2026)

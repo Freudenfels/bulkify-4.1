@@ -222,4 +222,4 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
 })();
 
 </script>
-<?php lp_shell_ende(); lp_foot();
+<?php lp_rohstoff_popup(); lp_shell_ende(); lp_foot();

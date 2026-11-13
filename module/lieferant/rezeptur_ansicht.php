@@ -82,7 +82,7 @@ $mg = fn($x) => rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
     <thead><tr><th><?= h(lp_t('wirkstoff')) ?></th><th class="bx-num"><?= h(lp_t('pro_100g')) ?></th><th class="bx-num"><?= h(lp_t('mg_je_einheit')) ?></th></tr></thead>
     <tbody>
       <?php foreach ($zutaten as $z): ?>
-      <tr><td><?php if (!empty($z['item_id'])): ?><a class="lp-roh" data-iid="<?= (int)$z['item_id'] ?>" title="<?= h(lp_t('roh_info_titel')) ?>"><?= h((string)$z['name']) ?></a><?php else: ?><?= h((string)$z['name']) ?><?php endif; ?></td><td class="bx-num"><?= h($per100((float)$z['menge_mg'])) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h($mg($z['menge_mg'])) . ' mg' : '<span class="muted">–</span>' ?></td></tr>
+      <tr><td><?php if (!empty($z['item_id'])): ?><a class="lp-roh" data-iid="<?= (int)$z['item_id'] ?>" data-mg="<?= h((string)(float)$z['menge_mg']) ?>" title="<?= h(lp_t('roh_info_titel')) ?>"><?= h((string)$z['name']) ?></a><?php else: ?><?= h((string)$z['name']) ?><?php endif; ?></td><td class="bx-num"><?= h($per100((float)$z['menge_mg'])) ?></td><td class="bx-num"><?= (float)$z['menge_mg'] > 0 ? h($mg($z['menge_mg'])) . ' mg' : '<span class="muted">–</span>' ?></td></tr>
       <?php endforeach; ?>
       <?php if ($fuell > 0): ?>
       <tr><td><strong><?= h(lp_t('fuellgewicht')) ?></strong></td><td class="bx-num"><strong>100 g</strong></td><td class="bx-num"><strong><?= h($mg($fuell)) ?> mg</strong></td></tr>

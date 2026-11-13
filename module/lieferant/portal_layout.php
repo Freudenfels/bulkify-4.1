@@ -576,6 +576,13 @@ function lp_shell_ende(): void { echo '</main></div>'; }
 // Einmal je Seite ausgeben (nach den Tabellen). Theme-tauglich, ohne Preise/Lieferanten.
 function lp_rohstoff_popup(): void {
     $wlab = json_encode(h(lp_t('wirkstoff')));   // JS-sichere Beschriftung fuer den Wirkstoff-Abschnitt
+    // 13.11.2026: Wirkstoffgehalte stehen oben; kommt der Link aus einer Rezeptur (data-mg), zusaetzlich mg je Einheit.
+    $spr0 = lp_sprache();
+    $glab = json_encode(h(['de' => 'Wirkstoffgehalte', 'en' => 'Active contents', 'zh' => '有效成分含量'][$spr0] ?? 'Active contents'));
+    $elab = json_encode(h(['de' => 'je Einheit', 'en' => 'per unit', 'zh' => '每单位'][$spr0] ?? 'per unit'));
+    $mlab = json_encode(h(['de' => 'Menge in der Rezeptur', 'en' => 'Amount in formula', 'zh' => '配方用量'][$spr0] ?? 'Amount in formula'));
+    $rlab = json_encode(h(['de' => 'Weitere Angaben', 'en' => 'Further details', 'zh' => '其他信息'][$spr0] ?? 'Further details'));
+    $wkein = json_encode(h(['de' => 'Keine Wirkstoffgehalte hinterlegt.', 'en' => 'No active contents on file.', 'zh' => '暂无有效成分含量。'][$spr0] ?? 'No active contents on file.'));
     echo '<dialog id="lpRohDlg" class="lp-rohdlg">'
        . '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
        . '<h2 id="lpRohName" style="margin:0;font-size:18px"></h2>'
@@ -597,17 +604,24 @@ function lp_rohstoff_popup(): void {
        . 'var dlg=document.getElementById("lpRohDlg");if(!dlg)return;'
        . 'dlg.addEventListener("click",function(e){if(e.target===dlg)dlg.close();});'
        . 'function esc(s){var d=document.createElement("div");d.textContent=(s==null?"":String(s));return d.innerHTML;}'
+       . 'function zahl(x){return Number(x).toLocaleString("de-DE",{maximumFractionDigits:x<10?2:1});}'
        . 'function rows(arr){var h="";(arr||[]).forEach(function(r){h+="<tr><td class=\\"k\\">"+esc(r[0])+"</td><td>"+esc(r[1])+"</td></tr>";});return h;}'
        . 'document.querySelectorAll("a.lp-roh[data-iid]").forEach(function(a){a.addEventListener("click",function(e){'
-       . 'e.preventDefault();var iid=a.getAttribute("data-iid");if(!iid)return;'
+       . 'e.preventDefault();var iid=a.getAttribute("data-iid");if(!iid)return;var mg=parseFloat(a.getAttribute("data-mg")||"");'
        . 'document.getElementById("lpRohName").textContent=a.textContent||"";'
        . 'document.getElementById("lpRohBody").innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">…</div>";'
        . 'dlg.showModal();'
        . 'fetch("?p=lieferant_rohstoff_info&iid="+encodeURIComponent(iid)).then(function(r){return r.json();}).then(function(d){'
        . 'if(!d||!d.name){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:var(--muted,#8a8f98)\\">' . h(lp_t('keine_angaben')) . '</div>";return;}'
        . 'document.getElementById("lpRohName").textContent=d.name;'
-       . 'var h="";if(d.rows&&d.rows.length)h+="<table><tbody>"+rows(d.rows)+"</tbody></table>";'
-       . 'if(d.wirkstoffe&&d.wirkstoffe.length){h+="<h3>"+' . $wlab . '+"</h3><table><tbody>"+rows(d.wirkstoffe)+"</tbody></table>";}'
+       . 'var h="";'
+       . 'if(mg>0)h+="<table><tbody><tr><td class=\\"k\\">"+' . $mlab . '+"</td><td>"+zahl(mg)+" mg "+' . $elab . '+"</td></tr></tbody></table>";'
+       . 'h+="<h3 style=\\"margin-top:"+(mg>0?"16":"0")+"px\\">"+' . $glab . '+"</h3>";'
+       . 'if(d.wirkstoffe&&d.wirkstoffe.length){h+="<table><tbody>";d.wirkstoffe.forEach(function(w){'
+       . 'var je=(mg>0&&w[2]!=null)?"<span style=\\"color:var(--muted,#8a8f98)\\"> · "+zahl(mg*w[2]/100)+" mg "+' . $elab . '+"</span>":"";'
+       . 'h+="<tr><td class=\\"k\\">"+esc(w[0])+"</td><td><strong>"+esc(w[1])+"</strong>"+je+"</td></tr>";});h+="</tbody></table>";}'
+       . 'else h+="<div style=\\"color:var(--muted,#8a8f98)\\">"+' . $wkein . '+"</div>";'
+       . 'if(d.rows&&d.rows.length)h+="<h3>"+' . $rlab . '+"</h3><table><tbody>"+rows(d.rows)+"</tbody></table>";'
        . 'if(!h)h="<div style=\\"color:var(--muted,#8a8f98)\\">' . h(lp_t('keine_weiteren')) . '</div>";'
        . 'document.getElementById("lpRohBody").innerHTML=h;'
        . '}).catch(function(){document.getElementById("lpRohBody").innerHTML="<div style=\\"color:#8f231b\\">' . h(lp_t('laden_fehler')) . '</div>";});'

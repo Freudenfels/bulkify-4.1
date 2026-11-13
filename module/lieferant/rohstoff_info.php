@@ -46,7 +46,7 @@ foreach (all("SELECT n.name, iw.gehalt_prozent FROM item_wirkstoff iw
               JOIN naehrstoff n ON n.id = iw.naehrstoff_id
               WHERE iw.item_id = ? ORDER BY iw.sort, iw.id", [(int)$it['id']]) as $w) {
     $g = $w['gehalt_prozent'];
-    $wirk[] = [(string)$w['name'], ($g === null || $g === '') ? '' : (rtrim(rtrim(number_format((float)$g, 2, ',', '.'), '0'), ',') . ' %')];
+    $wirk[] = [(string)$w['name'], ($g === null || $g === '') ? '' : (rtrim(rtrim(number_format((float)$g, 2, ',', '.'), '0'), ',') . ' %'), ($g === null || $g === '') ? null : (float)$g];
 }
 foreach (item_kennwerte_relevant((int)$it['id']) as $kw) $add((string)$kw['parameter'], $kw['wert']);
 

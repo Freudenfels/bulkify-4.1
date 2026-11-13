@@ -55,14 +55,17 @@ function fertig_zusammensetzung_html(int $rezeptur_id, string $sprache = 'de'): 
           'sum' => ['de' => 'Füllgewicht', 'en' => 'Fill weight', 'zh' => '填充重量'],
           'kap' => ['de' => 'Kapselgröße', 'en' => 'Capsule size', 'zh' => '胶囊尺寸']];
     $s = in_array($sprache, ['de', 'en', 'zh'], true) ? $sprache : 'en';
-    $zut = all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name, z.menge_mg FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
+    $zut = all("SELECT COALESCE(NULLIF(z.bezeichnung,''), i.name) AS name, z.menge_mg, IF(i.kategorie='rohstoff', z.item_id, NULL) AS roh_id FROM rezeptur_zutat z LEFT JOIN item i ON i.id=z.item_id
                 WHERE z.rezeptur_id=? ORDER BY z.sort, z.id", [$rezeptur_id]);
     if (!$zut) return '';
     $mg = fn($x) => function_exists('lp_num') ? lp_num($x, 3) : rtrim(rtrim(number_format((float)$x, 3, ',', '.'), '0'), ',');
     $sum = array_sum(array_map(fn($z) => (float)$z['menge_mg'], $zut));
     $kg = function_exists('rezeptur_kapselgroesse') ? rezeptur_kapselgroesse($rezeptur_id) : null;
     $o = '<div style="font-size:12px;margin-top:6px"><div class="muted">' . h($T['zut'][$s]) . '</div><table style="border-collapse:collapse;margin-top:2px">';
-    foreach ($zut as $z) $o .= '<tr><td style="padding:1px 14px 1px 0">' . h((string)$z['name']) . '</td><td style="text-align:right;white-space:nowrap">' . h($mg($z['menge_mg'])) . ' mg</td></tr>';
+    // Rohstoff anklickbar (13.11.2026): Pop-up mit Wirkstoffgehalten (lp_rohstoff_popup im Lieferantenportal), data-mg = Menge je Einheit
+    $link = function_exists('lp_rohstoff_popup');
+    foreach ($zut as $z) $o .= '<tr><td style="padding:1px 14px 1px 0">'
+        . ($link && !empty($z['roh_id']) ? '<a class="lp-roh" href="#" data-iid="' . (int)$z['roh_id'] . '" data-mg="' . h((string)(float)$z['menge_mg']) . '">' . h((string)$z['name']) . '</a>' : h((string)$z['name'])) . '</td><td style="text-align:right;white-space:nowrap">' . h($mg($z['menge_mg'])) . ' mg</td></tr>';
     $o .= '<tr><td style="padding:3px 14px 1px 0" class="muted">' . h($T['sum'][$s]) . '</td><td style="text-align:right;white-space:nowrap" class="muted">' . h($mg($sum)) . ' mg</td></tr>';
     if ($kg) $o .= '<tr><td style="padding:1px 14px 1px 0" class="muted">' . h($T['kap'][$s]) . '</td><td style="text-align:right" class="muted">' . h((string)$kg['name']) . '</td></tr>';
     return $o . '</table></div>';
