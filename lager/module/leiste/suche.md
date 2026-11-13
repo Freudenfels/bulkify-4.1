@@ -6,3 +6,5 @@ Erkennt zusätzlich: (1) einen **QR-Code vom Etikett** (URL mit `…&id=<charge_
 
 ## 08.11.2026
 Jeder Treffer trägt `lager` (`L1`/`L2`) und `kunde` (Besitzer bei Lager 2). Nach den Lager-1-Treffern (`erp_chargen_suche`) folgen Lager-2-Treffer (`erp_chargen_suche_fremd`) – Lager 1 zuerst, damit die Sprachsuche weiter den ersten Treffer nimmt.
+
+**Felder `art` und `info_href` (13.11.2026):** Warenart (`erp_kategorie_label`) und Link zur Chargen-Detailseite je Treffer.

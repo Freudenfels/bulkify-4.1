@@ -6,7 +6,7 @@ $q = trim((string)($_GET['q'] ?? ''));
 $lagerFilter = in_array((string)($_GET['lager'] ?? ''), ['1', '2'], true) ? (string)$_GET['lager'] : '';   // l2_finden leitet mit lager=2 hierher
 
 kopf('Suche', 'finden');
-seitenkopf('Suche', 'Lager 1 und Lager 2 – tippen, sprechen oder Blinker-Code scannen. Treffer antippen, der Blinker blinkt.');
+seitenkopf('Suche', 'Lager 1 und Lager 2 – tippen, sprechen oder Blinker-Code scannen. Treffer antippen, der Blinker blinkt. „Infos“ zeigt, was es ist.');
 flash_zeigen();
 
 if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vorhanden.', 'warn'); fuss(); return; }
@@ -43,6 +43,12 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
   .fnd-item.lg-an::after{content:"● blinkt – zum Stoppen antippen";display:block;margin-top:6px;font-size:13px;font-weight:600;color:#10210f}
   .fnd-item.kein{opacity:.65;cursor:default}
   .fnd-item .lg-meldung{display:block;margin-top:6px;font-weight:600}
+  /* Treffer = Blinker-Knopf + Knopf „Infos“ zur Detailseite (13.11.2026) */
+  .fnd-zeile{display:flex;gap:8px;align-items:stretch}
+  .fnd-zeile .fnd-item{flex:1;min-width:0}
+  .fnd-info{display:flex;align-items:center;justify-content:center;min-width:92px;border-radius:14px;font-weight:600;text-decoration:none}
+  .fnd-item .a{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+  .fnd-item.lg-an .a{color:#10210f}
 </style>
 
 <script>
@@ -65,16 +71,19 @@ if (!tabelle_da('charge')) { hinweis('Es sind noch keine Chargen im Dashboard vo
       if(t.menge) teile.push(t.menge+(t.einheit?(' '+t.einheit):''));
       if(t.ort) teile.push(t.ort); else if(t.leiste) teile.push('Blinker '+t.leiste);
       var sub=teile.join(' · ');
+      var art=[t.art, t.artikelnummer].filter(Boolean).join(' · ');   // was ist das? z. B. „Rohstoff · R-2694“
+      var artH=art?'<span class="a">'+esc(art)+'</span>':'';
+      var info=t.info_href?'<a class="btn btn-ghost fnd-info" href="'+esc(t.info_href)+'" title="Infos zum Artikel und zur Charge">Infos</a>':'';
       if(t.href){   // Etikettenrolle o. Ä.: kein Blinker, sondern eine Detailseite öffnen
         return '<a class="fnd-item" href="'+esc(t.href)+'">'
              + '<span class="n">'+esc(t.name)+'</span><span class="s">'+esc(sub)+'</span></a>';
       }
       if(t.leiste_id){
-        return '<button type="button" class="fnd-item" data-klingeln="'+t.leiste_id+'" data-farbe="'+(t.lager==='L2'?'blau':'gruen')+'" data-sek="40">'
-             + '<span class="n">'+esc(t.name)+'</span><span class="s">'+esc(sub)+'</span></button>';
+        return '<div class="fnd-zeile"><button type="button" class="fnd-item" data-klingeln="'+t.leiste_id+'" data-farbe="'+(t.lager==='L2'?'blau':'gruen')+'" data-sek="40">'
+             + '<span class="n">'+esc(t.name)+'</span>'+artH+'<span class="s">'+esc(sub)+'</span></button>'+info+'</div>';
       }
-      return '<div class="fnd-item kein"><span class="n">'+esc(t.name)+'</span>'
-           + '<span class="s">'+esc(sub)+(sub?' · ':'')+'kein Blinker</span></div>';
+      return '<div class="fnd-zeile"><div class="fnd-item kein"><span class="n">'+esc(t.name)+'</span>'+artH
+           + '<span class="s">'+esc(sub)+(sub?' · ':'')+'kein Blinker</span></div>'+info+'</div>';
     }).join('');
   }
   // Sieht die Eingabe nach einem gescannten QR-Code vom Etikett aus? (URL mit id=…) -> sofort suchen.

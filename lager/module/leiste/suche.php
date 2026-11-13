@@ -9,14 +9,16 @@ $zeile = function (array $c): array {
     $b = blinker_fuer_charge((int)$c['id']);
     $l = $b['leiste'];
     // Wo liegt die Ware? Lager 1 (unser Bestand) oder Lager 2 (Fremdlager, gehört einem Kunden) – eine Suche für beide (08.11.2026).
-    $f = one("SELECT c.fremd_kunde_id, k.firma FROM charge c LEFT JOIN kunden k ON k.id=c.fremd_kunde_id WHERE c.id=?", [(int)$c['id']]) ?: [];
+    $f = one("SELECT c.fremd_kunde_id, k.firma, i.kategorie, i.form, i.artikelnummer FROM charge c LEFT JOIN kunden k ON k.id=c.fremd_kunde_id LEFT JOIN item i ON i.id=c.item_id WHERE c.id=?", [(int)$c['id']]) ?: [];
     $l2 = !empty($f['fremd_kunde_id']);
     return [
         'lager'        => $l2 ? 'L2' : 'L1',
         'kunde'        => $l2 ? (string)($f['firma'] ?? '') : '',
         'charge_id'    => (int)$c['id'],
         'name'         => (string)$c['item_name'],
-        'artikelnummer'=> (string)($c['artikelnummer'] ?? ''),
+        'artikelnummer'=> (string)($c['artikelnummer'] ?? $f['artikelnummer'] ?? ''),
+        'art'          => function_exists('erp_kategorie_label') ? erp_kategorie_label(['kategorie' => $f['kategorie'] ?? '', 'form' => $f['form'] ?? '']) : '',   // was ist das? (13.11.2026)
+        'info_href'    => '?p=charge&id=' . (int)$c['id'],   // Detailseite: Artikel, Charge, MHD, Lieferant, Bestand, Produkt-Infos
         'charge_nr'    => (string)($c['charge_nr'] ?? ''),
         'menge'        => rtrim(rtrim(number_format((float)($c['menge_verfuegbar'] ?? 0), 3, ',', '.'), '0'), ','),
         'einheit'      => (string)($c['einheit'] ?? ''),
