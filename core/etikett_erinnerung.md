@@ -12,3 +12,5 @@
 - **Merker letzter Lauf:** `cron_lauf_merken()` schreibt `app_meta cron_letzter_lauf` (UTC) und eine Kurzinfo. `cron_lauf_hinweis()` zeigt sie auf „Bestellt“ (Admin) und in den Einstellungen; ist der Lauf nie oder vor mehr als 36 h gewesen, ist der Hinweis rot.
 
 Seit 13.11.2026 verlinkt die Mail mit `&etikett=AID` – das Etikett-Pop-up öffnet sich direkt.
+
+**Fable-6 P2 (13.11.2026):** Keine Erinnerung an gesperrte Kunden und keine bei schon freigegebenem Etikett (`auftrag.etikett_freigegeben`). Auch eine Nachbestellung mit übernommenem, freigegebenem Design bekommt keine (`etikett_geerbt_freigabe_text()`, ohne Seiteneffekt geprüft).

@@ -7926,10 +7926,9 @@ function bestellung_erinnerung_senden(int $bestellung_id, bool $auto = false): s
     if (!bestellung_ist_portal($b)) return 'Kein Portal-Lieferant – bitte selbst nachfassen.';
     $f = function_exists('mail_bereit') && mail_bereit() && function_exists('mail_lieferant_erinnerung')
         ? mail_lieferant_erinnerung($bestellung_id) : 'Mailversand ist nicht eingerichtet.';
-    q("UPDATE bestellung SET erinnert_am=UTC_TIMESTAMP() WHERE id=?", [$bestellung_id]);
-    if ($b['lieferant_id']) log_aktivitaet('lieferant', (int)$b['lieferant_id'], 'team',
-        'Erinnerung an Bestellung ' . $b['nummer'] . ($auto ? ' (automatisch)' : '') . ' gesendet.', 'bestellung', 'bestellung', $bestellung_id);
-    return $f === '' ? '' : $f;
+    // Fable-6 P2: erinnert_am/Zähler nur bei erfolgreichem Versand (sonst blieb der Fehler unbemerkt und es kam nie eine Mail).
+    if ($f === '') { require_once __DIR__ . '/bestellung_erinnerung.php'; ber_vermerken($b, $auto); }
+    return $f;
 }
 // Bestellung stornieren (B4). Markiert storniert, informiert einen Portal-Lieferanten (Chat + Mail).
 // $lieferant_informieren (Nico 12.11.2026, Abgleich Maggi-Liste): false = KEINE Portal-Nachricht und KEINE Mail an den
@@ -8091,16 +8090,9 @@ function einkauf_cron_token(): string {
 // Cron (B4 „automatisch"): alle überfälligen, unbestätigten Portal-Bestellungen erinnern, die noch nicht
 // (bzw. länger als $minAbstandStd Stunden nicht) erinnert wurden. Rückgabe ['gesendet'=>, 'geprueft'=>].
 function einkauf_erinnerungen_cron(int $tage = 3, int $minAbstandStd = 24): array {
-    $cand = all("SELECT * FROM bestellung WHERE COALESCE(bestaetigt,0)=0 AND status NOT IN ('geliefert','storniert','offen')
-                 AND lieferant_id IS NOT NULL AND angekommen_am IS NULL");
-    $gesendet = 0; $geprueft = 0;
-    foreach ($cand as $b) {
-        if (!bestellung_ueberfaellig($b, $tage)) continue;
-        $geprueft++;
-        if (!empty($b['erinnert_am']) && (time() - strtotime((string)$b['erinnert_am'])) < $minAbstandStd * 3600) continue;
-        if (bestellung_erinnerung_senden((int)$b['id'], true) === '') $gesendet++;
-    }
-    return ['gesendet'=>$gesendet, 'geprueft'=>$geprueft];
+    // Fable-6 P2 (13.11.2026): Regeln in core/bestellung_erinnerung.php (je Lieferant und Tag, nur offener Rest, max. 3, gesperrte raus).
+    require_once __DIR__ . '/bestellung_erinnerung.php';
+    return ber_cron($tage);
 }
 
 // Versandarten (der Lieferant waehlt eine davon).

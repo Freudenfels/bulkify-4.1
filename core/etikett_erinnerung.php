@@ -36,15 +36,19 @@ function etikett_erinnerung_pause(int $aid, bool $pause, string $wer = ''): void
 function etikett_erinnerung_faellig(string $heute): array {
     etikett_erinnerung_schema();
     if (function_exists('pib_schema')) pib_schema();
+    // Fable-6 P2: gesperrte Kunden und schon freigegebene Etiketten nie erinnern.
     $rows = all("SELECT a.id, a.nummer, a.kunde_id, a.produkt_id, a.etikett_erinnert_am, COALESCE(NULLIF(a.produkt_bezeichnung,''), p.name) AS produkt
-                 FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id
+                 FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id JOIN kunden k ON k.id=a.kunde_id
                  WHERE a.status NOT IN ('versendet','storniert','erledigt') AND a.kunde_id IS NOT NULL AND a.pib_mail_am IS NOT NULL
+                   AND COALESCE(k.gesperrt,0)=0 AND COALESCE(a.etikett_freigegeben,0)=0
                    AND COALESCE(a.etikett_erinnerung_pause,0)=0 AND COALESCE(a.kategorie,'produkt') <> 'dienstleistung'
                  ORDER BY a.kunde_id, a.id");
     $out = [];
     foreach ($rows as $r) {
         $aid = (int)$r['id'];
         if (!function_exists('auftrag_braucht_etikett') || !auftrag_braucht_etikett($aid) || etikett_vorhanden($aid)) continue;
+        // Nachbestellung mit übernommenem, schon freigegebenem Design (geerbt) braucht keine Erinnerung (ohne Seiteneffekt geprüft).
+        if (function_exists('etikett_geerbt_freigabe_text') && etikett_geerbt_freigabe_text($aid) !== '') continue;
         $letzt = (string)$r['etikett_erinnert_am'];
         if ($letzt !== '' && (function_exists('fmt_zeit') ? fmt_zeit($letzt, 'Y-m-d') : substr($letzt, 0, 10)) >= $heute) continue;   // heute schon erinnert
         $out[] = $r;
