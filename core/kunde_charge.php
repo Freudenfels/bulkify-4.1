@@ -31,8 +31,9 @@ if (!function_exists('kunde_charge_anzeige')) {
     function kunde_charge_text(?string $t): string {
         $t = (string)$t;
         if ($t === '' || !preg_match('/\.[A-Za-z]{1,2}\b/', $t)) return $t;
-        return (string) preg_replace_callback('/(?<![\p{L}\p{N}.\-])([\p{L}\p{N}\-]*\d[\p{L}\p{N}\-]*)\.([A-Za-z]{1,2})(?![\p{L}\p{N}])/u',
-            fn($m) => kunde_charge_eigen($m[0]) ? $m[1] : $m[0], $t);
+        // Fable-4 T4.2: bei ungültigem UTF-8 liefert preg null -> Text unverändert, nie leer.
+        return preg_replace_callback('/(?<![\p{L}\p{N}.\-])([\p{L}\p{N}\-]*\d[\p{L}\p{N}\-]*)\.([A-Za-z]{1,2})(?![\p{L}\p{N}])/u',
+            fn($m) => kunde_charge_eigen($m[0]) ? $m[1] : $m[0], $t) ?? $t;
     }
     // Gehören zwei Chargen-Nummern beim Kunden zur selben Grundcharge?
     function kunde_charge_gleich(?string $a, ?string $b): bool {

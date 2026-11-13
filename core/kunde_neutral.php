@@ -191,20 +191,26 @@ function kunde_text_neutral(?string $t, string $ersatz = 'bulkify'): string {
     $t = (string)$t;
     if ($t === '') return $t;
     // Regel Nico 13.11.2026: Lieferantennummern (L-2841) stehen bewusst auf Dokumenten – nie ersetzen. Vor dem Ersetzen maskieren.
+    // Fable-4 T4.2 (13.11.2026): ungültiges UTF-8 (abgeschnittener Umlaut, Latin-1 aus Import/KI) lässt preg_* mit /u scheitern (null).
+    // Dann den Text unverändert weitergeben – nie leer (vorher leerer Betreff/Text in Kundenmails, leere Namen im CoA).
+    $orig = $t;
     $lnr = [];
-    $t = (string) preg_replace_callback('/(?<![\p{L}\p{N}])L-\d{3,6}(?![\p{N}])/u', function ($m) use (&$lnr) { $lnr[] = $m[0]; return "\x01" . (count($lnr) - 1) . "\x01"; }, $t);
+    $m1 = preg_replace_callback('/(?<![\p{L}\p{N}])L-\d{3,6}(?![\p{N}])/u', function ($m) use (&$lnr) { $lnr[] = $m[0]; return "\x01" . (count($lnr) - 1) . "\x01"; }, $t);
+    if ($m1 === null) return $orig;
+    $t = $m1;
     foreach (kunde_lieferanten_namen() as $name) {
         if (mb_stripos($t, $name) === false) continue;
-        $t = preg_replace('/(?<![\p{L}\p{N}])' . preg_quote($name, '/') . '(?![\p{L}\p{N}])/iu', $ersatz, $t);
+        $r = preg_replace('/(?<![\p{L}\p{N}])' . preg_quote($name, '/') . '(?![\p{L}\p{N}])/iu', $ersatz, $t);
+        if ($r !== null) $t = $r;
     }
-    if ($lnr) $t = (string) preg_replace_callback('/\x01(\d+)\x01/', fn($m) => $lnr[(int)$m[1]] ?? $m[0], $t);
+    if ($lnr) { $r = preg_replace_callback('/\x01(\d+)\x01/', fn($m) => $lnr[(int)$m[1]] ?? $m[0], $t); if ($r !== null) $t = $r; }
     return kunde_charge_text($t);   // Fable-3 T3.2: eigene Chargen nur als Grundcharge
 }
 // Positions-/Belegtext für den Kunden: Lieferantennamen ersetzen und interne Hinweise auf Zukauf entfernen
 // („Handelsware“ verrät, dass bulkify nicht selbst produziert).
 function kunde_position_text(?string $t): string {
     $t = kunde_text_neutral($t);
-    $t = preg_replace('/\s*·\s*Handelsware\b|\bHandelsware\s*·\s*|\bHandelsware\b/u', '', $t);
+    $t = preg_replace('/\s*·\s*Handelsware\b|\bHandelsware\s*·\s*|\bHandelsware\b/u', '', $t) ?? $t;   // Fable-4 T4.2: nie leer
     return trim($t);
 }
 // Ist die Mail-Adresse ein Kunde? Dann geht die Mail durch kunde_text_neutral. Seit 13.11.2026 JEDE Adresse, die zu einem Kunden
