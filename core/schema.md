@@ -742,3 +742,10 @@ Bindet `core/etikett_pruefung.php` ein (Etikett hochladen, prüfen, freigeben in
 
 ## 13.11.2026 Etikett-Maß bei der Freigabe
 `etikett_glas_endformat($behaelter_id)` (Endformat des Glases aus `etikett_final`), `etikett_plus_beschnitt($mass, $endformat)` (b, wenn Maß = Endformat + 2 × b, 1–6 mm). `etikett_mass_aus_pdf_setzen()`: enthält die TrimBox den Beschnitt (= Glas-Endformat + 2 × b), wird das Glas-Endformat als Maß gespeichert und die TrimBox als Druckmaß (`etikett_druck`).
+
+**Fable-6 Teil 1 (13.11.2026) – Etikettmaß fix durch die Verpackung:**
+- `etikett_mass_aus_pdf_setzen()` ist entfernt. Freigabe und neue Version ändern das Maß am Etikett-Artikel nie.
+- v1 bekommt das Maß der Verpackung des Auftrags (`kundenetikett_vorlage($pid, $vp)`), vN das Maß des Vorgängers (`kundenetikett_version_anlegen(…, $vorgaenger_id, $verpackung_id)`).
+- Hat ein Etikett-Artikel bei der Freigabe gar kein Maß, kommt es aus der Verpackung (`etikett_mass_auf_verpackung()`).
+- Einmaliges Zurücksetzen auf live: `dpf_etmass_einmal()`.
+- Siehe `core/etikett_mass.md`. Die älteren Absätze zum „Maß aus dem Endformat der PDF“ gelten nicht mehr.

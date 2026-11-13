@@ -1102,7 +1102,8 @@ function init_schema(): void {
     ensure_column('item', 'gesperrt_durch_rezeptur', "INT NULL");          // Block C: mit der Rezeptur gesperrter Bulk-/Premix-Artikel
     ensure_column('item', 'ek_abgelaufen_seit', "DATE NULL");              // Block D: Auto-EK stammt aus einem inzwischen abgelaufenen Preis
     require_once __DIR__ . '/datenpflege_1211.php'; dpf_1211_einmal();
-    require_once __DIR__ . '/datenpflege_1311.php'; dpf_1311_einmal();   // Paket 13.11.2026 Teil 6.6: BE-2890 je Position aufteilen (Freigabe Nico, ohne Nachricht)
+    require_once __DIR__ . '/datenpflege_1311.php'; dpf_1311_einmal();
+    require_once __DIR__ . '/etikett_mass.php'; dpf_etmass_einmal();   // Fable-6 Teil 1: Etikett-Maße aus dem Protokoll auf die Verpackung zurück (einmalig)   // Paket 13.11.2026 Teil 6.6: BE-2890 je Position aufteilen (Freigabe Nico, ohne Nachricht)
     require_once __DIR__ . '/datenpflege_wellgreen.php'; dpf_wg_einmal();   // Abgleich Maggi-Liste (Freigabe Nico 12.11.2026): einmalig, ohne Nachricht an Wellgreen
     require_once __DIR__ . '/lief_aufkleber.php'; la_schema();   // Paket 12.11. Teil 5: Gebindeaufkleber (Tabelle lief_aufkleber, herstell_datum, aufkleber_lagerung)   // Paket 12.11. Teil 1: einmalige Datenpflege live (Freigabe Nico 11.11.2026)
     rezeptur_testdaten_inaktiv_einmal();   // Block C Teil 2: RZ-4023, RZ-4033, RZ-4034 einmalig inaktiv (von Nico ausdrücklich erlaubt)
@@ -11446,13 +11447,16 @@ function kundenetikett_datei_sig(string $datei): string {
 // NICHT der rohe produkt.verpackung_id. Sonst übernimmt v1 das Maß eines anderen Glases (z. B. das
 // 200-ml-Endformat „67 x 188", obwohl der Auftrag ein 150-ml-Glas „60 x 172" nutzt). Gleiche Quelle wie
 // produkt_etikettmass()/erp_produkt_etikettmass(), damit Lager und Etikett-Artikel dasselbe Maß sehen.
-function kundenetikett_vorlage(int $produkt_id): array {
-    $vp = (int) (produkt_behaelter_id($produkt_id) ?? 0);
+// Fable-6 Teil 1 (13.11.2026): mit $verpackung_id (Behälter des Auftrags) gilt dieser Behälter; ohne generisches Etikett am
+// Behälter das Endformat des Behälters selbst (etikett_mass_von_verpackung, core/etikett_mass.php).
+function kundenetikett_vorlage(int $produkt_id, int $verpackung_id = 0): array {
+    require_once __DIR__ . '/etikett_mass.php';
+    if ($verpackung_id > 0) { $n = verpackung_neutrale_basis($verpackung_id); if ($n > 0) $verpackung_id = $n; }
+    $vp = $verpackung_id > 0 ? $verpackung_id : (int) (produkt_behaelter_id($produkt_id) ?? 0);
     if ($vp <= 0) return [];
-    $tid = (int) (etikett_id_fuer_behaelter($vp) ?? 0);
-    if ($tid <= 0) return ['_vorlage' => null];
-    $t = one("SELECT breite_mm,hoehe_mm,etikett_format,etikett_final,etikett_druck FROM item WHERE id=?", [$tid]) ?: [];
-    $t['_vorlage'] = $tid;
+    $t = etikett_mass_von_verpackung($vp);
+    if (!$t) return ['_vorlage' => null];
+    if (!array_key_exists('_vorlage', $t)) $t['_vorlage'] = null;
     return $t;
 }
 // Aktuellen (nicht gesperrten) Kundenetikett-Artikel eines Produkts holen (0 = keiner).
@@ -11477,10 +11481,16 @@ function kundenetikett_aktuell(int $produkt_id, ?int $kunde_id = null): int {
 // Der Produkt-Slot produkt.etikett_id wird nur noch belegt, wenn das Produkt DIESEM Kunden gehört (exklusiv)
 // oder ohne Kundenbezug aufgerufen wird – bei Katalogprodukten mit mehreren Kunden wäre ein einzelner Slot
 // falsch (er würde das Etikett des zuletzt freigebenden Kunden für alle anderen vortäuschen).
-function kundenetikett_version_anlegen(int $produkt_id, int $version, ?int $dokument_id, string $datei_sig, ?int $kunde_id = null): int {
+// Fable-6 Teil 1: das Maß kommt vom Vorgänger ($vorgaenger_id) bzw. von der Verpackung ($verpackung_id), nie aus der Datei.
+function kundenetikett_version_anlegen(int $produkt_id, int $version, ?int $dokument_id, string $datei_sig, ?int $kunde_id = null, int $vorgaenger_id = 0, int $verpackung_id = 0): int {
     $p = one("SELECT p.name, p.kundenname, p.kunde_id, k.firma FROM produkt p LEFT JOIN kunden k ON k.id=p.kunde_id WHERE p.id=?", [$produkt_id]);
     if (!$p) return 0;
-    $m = kundenetikett_vorlage($produkt_id);
+    $m = [];
+    if ($vorgaenger_id > 0) {
+        $m = one("SELECT breite_mm,hoehe_mm,etikett_format,etikett_final,etikett_druck,etikett_vorlage_id AS _vorlage FROM item WHERE id=?", [$vorgaenger_id]) ?: [];
+        if (empty($m['breite_mm']) || empty($m['hoehe_mm'])) $m = [];
+    }
+    if (!$m) $m = kundenetikett_vorlage($produkt_id, $verpackung_id);
     $pname = trim((string)($p['kundenname'] ?: $p['name'])) ?: ('Produkt ' . $produkt_id);
     $kname = trim((string)($p['firma'] ?? ''));
     if ($kunde_id) $kname = trim((string) scalar("SELECT firma FROM kunden WHERE id=?", [$kunde_id])) ?: $kname;
@@ -11512,7 +11522,7 @@ function kundenetikett_sicherstellen(int $produkt_id, ?int $kunde_id = null, int
         return $cur;
     }
     // Neue Kette für diesen Kunden beginnt mit v1 (Versionen zählen je Produkt+Kunde).
-    return kundenetikett_version_anlegen($produkt_id, 1, null, '', $kunde_id);
+    return kundenetikett_version_anlegen($produkt_id, 1, null, '', $kunde_id, 0, $verpackung_id);
 }
 
 // Bedruckter, KUNDENSPEZIFISCHER Behälter – spiegelbildlich zum Kundenetikett (Blocker 1): Das Produkt ist
@@ -11656,16 +11666,16 @@ function kundenetikett_nach_freigabe(int $auftrag_id): void {
     $curSig = (string) scalar("SELECT COALESCE(etikett_datei_sig,'') FROM item WHERE id=?", [$cur]);
     if ($curSig === '') {                       // v1 hat noch kein Design -> dieses übernehmen (kein Bump)
         q("UPDATE item SET etikett_datei_sig=?, etikett_dokument_id=? WHERE id=?", [$sig, (int)$dok['id'], $cur]);
-        $use = $cur;
-        etikett_mass_aus_pdf_setzen($use, $dok);   // Maß aus dem Endformat (TrimBox) des neuen Designs
+        $use = $cur;   // Fable-6 Teil 1: das Maß bleibt (kommt von der Verpackung), die Datei ändert es nie
     } elseif ($curSig === $sig) {               // gleiches Design (Nachbestellung/Re-Freigabe) -> kein Bump
         $use = $cur;
     } else {                                    // NEUES Design freigegeben -> neue Version (nur in der Kette dieses Kunden)
         $ver = (int) scalar("SELECT COALESCE(etikett_version,1) FROM item WHERE id=?", [$cur]) + 1;
         q("UPDATE item SET gesperrt=1 WHERE id=?", [$cur]);
-        $use = kundenetikett_version_anlegen($pid, $ver, (int)$dok['id'], $sig, $kid ?: null);
-        if ($use > 0) etikett_mass_aus_pdf_setzen($use, $dok);
+        $use = kundenetikett_version_anlegen($pid, $ver, (int)$dok['id'], $sig, $kid ?: null, $cur, (int)($au['vp'] ?? 0));   // Maß vom Vorgänger
     }
+    // Fable-6 Teil 1: Etikett-Artikel ohne Maß bekommt das Maß der Verpackung (nie aus der Datei).
+    if ($use > 0 && (float) scalar("SELECT COALESCE(breite_mm,0)*COALESCE(hoehe_mm,0) FROM item WHERE id=?", [$use]) <= 0) { require_once __DIR__ . '/etikett_mass.php'; etikett_mass_auf_verpackung($use, 'Freigabe, Etikett hatte kein Maß'); }
     if ($use > 0) q("UPDATE auftrag SET etikett_item_id=? WHERE id=?", [$use, $auftrag_id]);
     // Bedarf/Einkauf/Bereitschaft hängen am gebundenen Etikett-Artikel -> Cache neu rechnen (sonst meldet die
     // Bereitschaft nach dem Wechsel auf v2 weiter „Etikett vorrätig" mit den alten v1-Etiketten).
@@ -11867,35 +11877,8 @@ function etikett_plus_beschnitt(array $mass, array $endformat): ?float {
     if ($b < 1 || $b > 6 || max(abs($a[0] - 2 * $b - $e[0]), abs($a[1] - 2 * $b - $e[1])) > 1) return null;
     return round($b * 2) / 2;
 }
-function etikett_mass_aus_pdf_setzen(int $item_id, array $dok): bool {
-    if ($item_id <= 0 || empty($dok['datei'])) return false;
-    $pfad = BX_UPLOADS . '/' . basename((string)$dok['datei']);
-    $em = pdf_etikett_mass($pfad);
-    if (!$em) return false;
-    $vor = one("SELECT * FROM item WHERE id=? AND verpackung_rolle='etikett'", [$item_id]);
-    if (!$vor) return false;
-    $w = round((float)$em['w'], 1); $h = round((float)$em['h'], 1);
-    // Sofortfix 13.11.2026 (AB-3223): enthält die TrimBox den Beschnitt (= Glas-Endformat + 2 × b), gilt das Glas-Endformat;
-    // die TrimBox ist dann das Druckmaß inklusive Beschnitt.
-    $glasPid = (int)($vor['produkt_id'] ?? 0);
-    $glas = $glasPid > 0 ? etikett_glas_endformat((int) scalar("SELECT COALESCE(verpackung_id,0) FROM produkt WHERE id=?", [$glasPid])) : null;
-    $druckTrim = null;
-    if ($glas && etikett_plus_beschnitt([$w, $h], $glas) !== null) { $druckTrim = [$w, $h]; [$w, $h] = ($w >= $h) === ($glas[0] >= $glas[1]) ? $glas : [$glas[1], $glas[0]]; }
-    $ab = (float)($vor['breite_mm'] ?? 0); $ah = (float)($vor['hoehe_mm'] ?? 0);
-    if ($ab > 0 && $ah > 0 && (($ab < $ah) !== ($w < $h))) [$w, $h] = [$h, $w];
-    $z = fn($x) => rtrim(rtrim(number_format($x, 1, '.', ''), '0'), '.');
-    $druck = $vor['etikett_druck'] ?? null;
-    if ($druckTrim) { [$dw, $dh] = $druckTrim; if (($w < $h) !== ($dw < $dh)) [$dw, $dh] = [$dh, $dw]; $druck = $z($dw) . ' x ' . $z($dh); }
-    elseif ($em['quelle'] !== 'MediaBox') {
-        $mb = pdf_boxen($pfad)['MediaBox'] ?? null;
-        if ($mb) { [$dw, $dh] = [round($mb[0], 1), round($mb[1], 1)]; if (($w < $h) !== ($dw < $dh)) [$dw, $dh] = [$dh, $dw]; $druck = $z($dw) . ' x ' . $z($dh); }
-    }
-    q("UPDATE item SET breite_mm=?, hoehe_mm=?, etikett_format=?, etikett_final=?, etikett_druck=? WHERE id=?",
-      [$w, $h, $z($w) . ' x ' . $z($h) . ' mm', $z($w) . ' x ' . $z($h), $druck, $item_id]);
-    $nach = one("SELECT * FROM item WHERE id=?", [$item_id]);
-    if (function_exists('aenderung_protokollieren') && $nach) aenderung_protokollieren('item', $item_id, $vor, $nach, 'etikett_pdf_' . strtolower($em['quelle']));
-    return true;
-}
+// etikett_mass_aus_pdf_setzen() entfernt (Fable-6 Teil 1, 13.11.2026): Die Etikettgröße ist fest durch die Verpackung,
+// eine Kundendatei ändert sie nie. Zurücksetzen: etikett_mass_auf_verpackung() in core/etikett_mass.php.
 // Liest die Maße einer Druckdatei. PDF → Endformat (TrimBox, sonst ArtBox, sonst MediaBox) in mm ('172 × 57 mm');
 // Bild → Pixel. Sonst null.
 function pdf_masse(string $pfad): ?array {

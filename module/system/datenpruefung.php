@@ -1214,10 +1214,30 @@ UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftra
         'fix'   => ['tabelle' => 'auftrag', 'typ' => 'auftrag',
                     'aktion' => fn(array $r) => pulver_auftrag_fuellmenge_korrigieren((int)$r['_id'], (int)$r['stueck_jetzt'], (int)$r['fuellmenge_g'], 'datenpruefung')],
     ],
+    'etikett_mass_zurueck_1311' => [
+        'titel' => 'Etikett: Maß aus der Datei zurück auf die Verpackung (einmalig 13.11.2026, nur Bericht)',
+        'info'  => 'Etikett-Artikel, deren Maß früher über eine Kundendatei geändert wurde (Änderungsprotokoll etikett_pdf_*). Beim ersten Aufruf nach dem Deploy wurden die Werte von vorher '
+                 . 'aus dem Protokoll zurückgeschrieben („zurückgesetzt“). „bitte Nico prüfen“ = kein Wert von vorher oder seitdem anders geändert – dort wurde nichts geändert. Freigaben wurden nicht angefasst.',
+        'sql'   => "SELECT 1 AS _x",
+        'zeilen' => function (array $rows): array {
+            $j = json_decode((string) meta_get('dpf_etmass_ergebnis', ''), true) ?: [];
+            $out = [];
+            foreach ((array)($j['zeilen'] ?? []) as $z) {
+                $au = (array)($z['auftraege'] ?? []);
+                $out[] = ['_id' => (int)$z['item_id'], '_link' => '?p=verpackung&id=' . (int)$z['item_id'], 'etikett' => $z['artikelnummer'] . ' ' . $z['name'],
+                          'auftrag' => implode(', ', array_slice($au, 0, 6)) . (count($au) > 6 ? ' …' : ''),
+                          '_link_auftrag' => $au ? '?p=auftrag&id=' . (int) array_key_last($au) : '',
+                          'mass_falsch' => $z['mass_falsch'], 'mass_zurueckgesetzt' => $z['mass_zurueck'], 'status' => $z['status'], 'grund' => $z['grund'],
+                          'geaendert_utc' => $z['geaendert'], 'quelle' => $z['quelle']];
+            }
+            if (!$out && !empty($j['fehler'])) $out[] = ['_id' => 0, 'etikett' => 'Fehler beim Lauf', 'grund' => (string)$j['fehler']];
+            return $out;
+        },
+    ],
     'etikett_mass_abweichung' => [
         'titel' => 'Etikett: Maß weicht vom Behälter-Endformat ab',
         'info'  => 'Aktive Kundenetikett-Artikel, deren gespeichertes Maß (breite_mm/hoehe_mm bzw. etikett_final) um MEHR ALS 5 mm vom Endformat des TATSÄCHLICHEN Produkt-Behälters abweicht (Behälter = jüngster Auftrags-Behälter mit Vorrang, sonst Produkt-Behälter). 2 bis 5 mm sind normal (Sicherheitsmaß, Nico 11.11.2026) und erscheinen nicht. '
-                 . 'Beheben setzt das Maß aus der TrimBox (sonst ArtBox/MediaBox) des hinterlegten Etikett-Designs – also das echte Etikett-Endformat, nicht das Glasmaß (Sofortfix 11.11.2026). Ohne Design-PDF gibt es keinen Knopf.',
+                 . 'Beheben setzt das Maß auf die Verpackung zurück (Etikett des Behälters bzw. dessen Endformat). Regel Nico 13.11.2026: Die Etikettgröße ist fest durch die Verpackung, eine Kundendatei ändert sie nie.',
         'sql'   => "SELECT i.id AS _id, i.produkt_id AS _pid, CONCAT('?p=verpackung&id=', i.id) AS _link, i.artikelnummer, i.name AS etikett,
                            i.breite_mm AS _breite_mm, i.hoehe_mm AS _hoehe_mm, i.etikett_final AS _etikett_final, i.etikett_vorlage_id AS _vorlage_alt,
                            p.nummer AS produkt_nr, p.name AS produkt, CONCAT('?p=produkt&id=', p.id) AS _link_produkt, k.firma AS kunde,
@@ -1248,20 +1268,21 @@ UPDATE produktionsauftrag SET stueck = <fuellmenge_g> WHERE auftrag_id = <Auftra
                 $r['etikett_mass']        = $eigenN ? ((float)$eigenN[0] . ' x ' . (float)$eigenN[1] . ' mm') : 'kein Maß';
                 $r['behaelter_endformat'] = (float)$beh[0] . ' x ' . (float)$beh[1] . ' mm';
                 $r['abweichung_mm']       = $eigenN ? round((float)$abw, 1) : null;
-                $r['_fixbar']             = $em !== null;
-                $r['aenderung']           = $em ? ('Maß -> ' . $em['label'] . ' (' . $em['quelle'] . ' des Designs)') : 'kein Design-PDF: Maß von Hand prüfen (kein Knopf)';
+                $soll = etikett_mass_von_verpackung(etikett_behaelter_fuer_item((int)$r['_id']));
+                $r['laut_design']         = $em ? $em['label'] . ' (' . $em['quelle'] . ')' : '–';
+                $r['_fixbar']             = !empty($soll['breite_mm']) && !empty($soll['hoehe_mm']);
+                $r['aenderung']           = $r['_fixbar'] ? ('Maß -> ' . ($soll['etikett_final'] ?? '') . ' (Verpackung)') : 'Verpackung ohne Etikett-Maß: dort zuerst eintragen (kein Knopf)';
                 $out[] = $r;
             }
             return $out;
         },
-        'korrektur' => "-- je angehaktem Etikett: Maß aus der TrimBox des Designs (etikett_mass_aus_pdf_setzen)\nUPDATE item SET breite_mm=<B>, hoehe_mm=<H>, etikett_format='<B> x <H> mm', etikett_final='<B> x <H>', etikett_druck=<MediaBox> WHERE id=<Etikett>;",
-        'ohne_fix'  => 'Ändert nur die Maß-Felder des Etikett-Artikels (aus dem eigenen Design-PDF), nicht das Design und keine Aufträge. Zeilen ohne Design-PDF sind nicht anwählbar. Weicht das Design-Maß trotzdem stark vom Glas ab, ist eher der Behälter am Produkt/Auftrag falsch – dort korrigieren.',
+        'korrektur' => "-- je angehaktem Etikett: Maß auf die Verpackung zurücksetzen (etikett_mass_auf_verpackung)\nUPDATE item SET breite_mm=<B>, hoehe_mm=<H>, etikett_format='<B> x <H> mm', etikett_final='<B> x <H>', etikett_druck=<Druckmaß der Verpackung> WHERE id=<Etikett>;",
+        'ohne_fix'  => 'Ändert nur die Maß-Felder des Etikett-Artikels (aus der Verpackung), nicht das Design und keine Aufträge. Zeilen ohne Etikett-Maß an der Verpackung sind nicht anwählbar. Weicht die Verpackung selbst falsch ab, dort (nur Admin, mit Grund) korrigieren.',
         'fix'   => ['tabelle' => 'item', 'typ' => 'item',
                     'waehlbar' => fn(array $r) => !empty($r['_fixbar']),
                     'aktion' => function (array $r): int {
-                        // Sofortfix 11.11.2026: Maß aus der TrimBox des eigenen Designs (gleiche Funktion wie bei der Freigabe).
-                        $dok = !empty($r['_dok_id']) ? one("SELECT * FROM dokument WHERE id=?", [(int)$r['_dok_id']]) : null;
-                        return $dok && etikett_mass_aus_pdf_setzen((int)$r['_id'], $dok) ? 1 : 0;
+                        // Fable-6 Teil 1 (13.11.2026): Maß auf die Verpackung zurücksetzen (nie mehr aus der Datei).
+                        return etikett_mass_auf_verpackung((int)$r['_id'], 'Datenprüfung') ? 1 : 0;
                     }],
     ],
     // Sofort-Fix Etikett-Format (08.11.2026): Maß laut Druckdatei (TrimBox, sonst ArtBox, sonst MediaBox) gegen das am
@@ -1440,6 +1461,7 @@ function dp_nur_offen(array $rows): array {
         return true;
     }));
 }
+require_once BX_ROOT . '/core/etikett_mass.php';   // Fable-6 Teil 1
 function dp_laden(array $c): array {
     try { $rows = all($c['sql']); return ['rows' => isset($c['zeilen']) ? ($c['zeilen'])($rows) : $rows, 'fehler' => '']; }
     catch (\Throwable $e) { return ['rows' => [], 'fehler' => $e->getMessage()]; }

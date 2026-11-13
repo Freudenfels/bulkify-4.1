@@ -185,3 +185,7 @@ Die Prüfung „voll produziert, Schritte offen“ rechnet „produziert“ mit 
 
 ## Nachbesserung Fable-5 (13.11.2026, Design)
 Übersicht und Prüf-Tabellen als `bx-karten-handy`; Prüfungs-Titel brechen um; lange Werte mit Lauftext (220 px).
+
+**Fable-6 Teil 1 (13.11.2026):**
+- **etikett_mass_abweichung:** „Beheben“ setzt das Maß jetzt auf die **Verpackung** zurück (`etikett_mass_auf_verpackung()`), nie mehr aus dem Design-PDF. Die Spalte „laut_design“ zeigt das Maß der Datei nur zur Info.
+- **etikett_mass_zurueck_1311:** Neu ist ein reiner Bericht über das einmalige Zurücksetzen auf live (app_meta `dpf_etmass_ergebnis`). Er zeigt je Etikett-Artikel Auftrag, falsches Maß, zurückgesetztes Maß und Status („zurückgesetzt“ / „bitte Nico prüfen“ mit Grund).

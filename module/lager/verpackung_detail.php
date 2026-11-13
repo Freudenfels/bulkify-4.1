@@ -137,6 +137,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         // VK-Aufschlag: Verkauf-Reiter ist bei Produktionsrolle ausgeblendet -> vorhandenen Wert behalten
         if (!darf_verkauf() && !$neu) $vals[array_search('vk_aufschlag_prozent', $felder)] = scalar("SELECT vk_aufschlag_prozent FROM item WHERE id=?", [$id]);
+        // Fable-6 Teil 1 (13.11.2026): Etikett-Maße (am Etikett-Artikel und das Endformat am Behälter) ändert nur ein Admin, mit Grund.
+        $massFelder = ['breite_mm','hoehe_mm','etikett_format','etikett_final','etikett_druck'];
+        $massGrund = trim((string)($_POST['mass_grund'] ?? ''));
+        $massVor = null;
+        if (!$neu) {
+            $alt = one("SELECT * FROM item WHERE id=?", [(int)$id]) ?: [];
+            $istEt = ($alt['verpackung_rolle'] ?? '') === 'etikett' || trim((string)($alt['etikett_final'] ?? '')) !== '';
+            $geaendert = false;
+            foreach ($massFelder as $mf) {
+                $nv = $vals[array_search($mf, $felder)]; $av = $alt[$mf] ?? null;
+                $gl = (($nv === null || $nv === '') && ($av === null || $av === '')) || (is_numeric($nv) && is_numeric($av) ? abs((float)$nv - (float)$av) < 0.05 : trim((string)$nv) === trim((string)$av));
+                if (!$gl) $geaendert = true;
+            }
+            if ($istEt && $geaendert) {
+                if (!has_role('admin') || $massGrund === '') {
+                    foreach ($massFelder as $mf) $vals[array_search($mf, $felder)] = $alt[$mf] ?? null;   // Maß bleibt
+                    $massHinweis = has_role('admin') ? 'Etikett-Maß nicht geändert: bitte einen Grund angeben.' : 'Etikett-Maß nicht geändert: das darf nur ein Admin (mit Grund).';
+                } else {
+                    $massVor = $alt;
+                }
+            }
+        }
         if ($neu) {
             if (trim($vals[array_search('artikelnummer', $felder)]) === '') $vals[array_search('artikelnummer', $felder)] = naechste_nummer('VP');
             $ph = implode(',', array_fill(0, count($felder), '?'));
@@ -147,8 +169,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $set = implode(',', array_map(fn($c) => "$c=?", $felder));
             $vals[] = (int)$id;
             q("UPDATE item SET $set WHERE id=?", $vals);
+            if ($massVor) {
+                aenderung_protokollieren('item', (int)$id, array_intersect_key($massVor, array_flip($massFelder)), array_intersect_key(one("SELECT * FROM item WHERE id=?", [(int)$id]) ?: [], array_flip($massFelder)), 'etikett_mass_admin');
+                log_aktivitaet('item', (int)$id, 'team', 'Etikett-Maß geändert (Admin), Grund: ' . $massGrund, 'notiz');
+            }
         }
-        header('Location: ?p=verpackung&id=' . $id . '&gespeichert=1'); exit;
+        header('Location: ?p=verpackung&id=' . $id . '&gespeichert=1' . (!empty($massHinweis) ? '&masshinweis=' . urlencode($massHinweis) : '')); exit;
     }
 }
 
@@ -194,6 +220,7 @@ bx_head($neu ? 'Neue Verpackung' : $v('name'),
         $neu ? 'Verpackung anlegen' : trim(($v('artikelnummer') ? $v('artikelnummer').' · ' : '') . ($VART[$it['verpackungsart']] ?? $it['verpackungsart'])),
         bx_btn('Zurück zur Liste', '?p=verpackungen', 'ghost'));
 
+if (!empty($_GET['masshinweis'])) echo '<div class="bx-panel badge-warn" style="padding:12px 16px">' . h((string)$_GET['masshinweis']) . '</div>';   // Fable-6 Teil 1
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if ($fehler) echo '<div class="bx-panel" style="border-color:#e6c4c0;color:#8f231b">' . h($fehler) . '</div>';
 
@@ -246,6 +273,13 @@ if (!$neu) {
       <div class="bx-field"><label>Leergewicht (g) <?= bx_hint('Gewicht der leeren Verpackung – Basis für die PPWR-Meldung') ?></label><input type="number" step="0.01" name="gewicht_g" value="<?= $v('gewicht_g') ?>"></div>
       <div class="bx-field" data-only="primaer"><label>Etikett – Endformat (B×H mm) <?= bx_hint('finales Etikettenmaß für dieses Gebinde, z. B. 56 x 143') ?></label><input type="text" name="etikett_final" value="<?= $v('etikett_final') ?>" placeholder="z. B. 56 x 143"></div>
       <div class="bx-field" data-only="primaer"><label>Etikett – Druckdatei (B×H mm) <?= bx_hint('Druckdatei-Maß = Endformat + 3 mm rundum, z. B. 62 x 149') ?></label><input type="text" name="etikett_druck" value="<?= $v('etikett_druck') ?>" placeholder="z. B. 62 x 149"></div>
+      <?php if (!$neu && (($it['verpackung_rolle'] ?? '') === 'etikett' || trim((string)($it['etikett_final'] ?? '')) !== '')): ?>
+      <?php if (has_role('admin')): ?>
+      <div class="bx-field"><label>Grund für eine Änderung des Etikett-Maßes <?= bx_hint('Die Etikettgröße ist fest durch die Verpackung (Regel 13.11.2026). Ändern nur Admin, mit Grund; wird protokolliert.') ?></label><input type="text" name="mass_grund" placeholder="nur nötig, wenn Sie Breite/Höhe/Format/Endformat/Druckmaß ändern"></div>
+      <?php else: ?>
+      <div class="bx-field"><span class="muted" style="font-size:12px">Etikett-Maße (Breite, Höhe, Format, Endformat, Druckmaß) ändert nur ein Admin mit Grund. Änderungen hier werden nicht übernommen.</span></div>
+      <?php endif; ?>
+      <?php endif; ?>
       <div class="bx-field"><label>Verpackung sperren</label>
         <div class="bx-check" style="padding-top:8px">
           <input type="checkbox" name="gesperrt" id="f_gesperrt" value="1" <?= $gesperrt?'checked':'' ?>>

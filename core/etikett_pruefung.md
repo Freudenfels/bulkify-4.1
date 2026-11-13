@@ -43,3 +43,5 @@ Ab 300 dpi grün, darunter immer gelb – nie rot, auch unter 150 dpi. Text kurz
 
 ## 13.11.2026: Etikett-Check durch bulkify raus (Nico: keine rechtliche Beratung)
 Der Link „Ausführlichen Etikett-Check durch bulkify buchen“ samt Rückfrage, Texten (`buchen`, `buchen_frage`, `buchen_ok`) und Anfrage-Anlage (`portal_anfrage` mit `dienstleistung_typ='etikettcheck'`, Aktion `a=buchen`) ist entfernt – in Kunden- und Team-Ansicht. Der KI-Hinweis („kann Fehler machen, ersetzt keine fachliche oder rechtliche Prüfung“) bleibt. Der Baustein `etikettcheck` in `core/dienstleistung.php` bleibt im Code, wird aber nirgends angeboten.
+
+**Fable-6 Teil 1 (13.11.2026):** Das Soll-Maß kommt vom Etikett-Artikel, dessen Maß von der Verpackung. „Trotzdem verwenden“ ändert nichts am Artikel. Es speichert den Vermerk und legt die dringende Aufgabe „Etikett AB-…: Format passt nicht, trotzdem freigegeben“ ans Team an.

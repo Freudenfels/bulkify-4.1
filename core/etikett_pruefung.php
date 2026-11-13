@@ -952,6 +952,17 @@ function etp_freigeben(int $aid, string $name, string $akteur, array $o, string 
     $kid = (int) scalar("SELECT kunde_id FROM auftrag WHERE id=?", [$aid]);
     log_aktivitaet('kunde', $kid, $akteur === 'team' ? 'team' : 'kunde', 'Etikett-Haftungshinweis bei der Freigabe bestätigt'
         . ($akteur === 'team' ? ' (im Namen des Kunden, Grund: ' . trim((string)$o['grund']) . ')' : '') . (!empty($o['trotzdem']) ? ' – Format passt nicht, „trotzdem verwenden“ bestätigt' : '') . '.', 'auftrag', 'auftrag', $aid);
+    // Fable-6 Teil 1: „trotzdem verwenden“ ändert nie das Maß am Etikett-Artikel (das kommt von der Verpackung). Es bleibt beim
+    // Vermerk (etikett_pruefung.trotzdem) und einer Aufgabe ans Team, damit jemand Datei und Verpackung prüft.
+    if (!empty($o['trotzdem']) && function_exists('aufgabe_neu')) {
+        $nr = (string) scalar("SELECT nummer FROM auftrag WHERE id=?", [$aid]);
+        $so = etp_soll($aid);
+        $ist = $p && $p['ist_w'] !== null ? round((float)$p['ist_w'], 1) . ' x ' . round((float)$p['ist_h'], 1) . ' mm' : 'unbekannt';
+        aufgabe_neu('Etikett ' . $nr . ': Format passt nicht, trotzdem freigegeben',
+            'Die Datei (' . $ist . ') passt nicht zum Etikett-Maß der Verpackung' . (!empty($so['w']) ? ' (' . (float)$so['w'] . ' x ' . (float)$so['h'] . ' mm)' : '') . '. '
+            . ($akteur === 'team' ? 'Das Team' : 'Der Kunde') . ' hat „trotzdem verwenden“ bestätigt. Das Maß am Etikett-Artikel bleibt unverändert. Bitte Datei und Verpackung prüfen, bevor gedruckt wird.',
+            1, null, null, null, 'auftrag', $aid, '?p=auftrag&id=' . $aid);
+    }
     return ['ok' => true];
 }
 

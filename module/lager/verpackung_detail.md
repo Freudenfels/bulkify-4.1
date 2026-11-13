@@ -42,3 +42,5 @@ EK- und VK-Staffel: Textfeld mit Auswahl „je Stk“ / „je 1.000 Stk“ (`pre
 
 ## Druckvorlage für bedruckte Beutel (13.11.2026)
 Reiter „Druckvorlage“ (nur Verpackungsart Beutel): Gesamtformat, Beschnitt, Sicherheitsabstand, Flächen (Name, Lage in mm von oben links, Haken „auf dem Kopf“ = 180°), Siegelnähte und Zipper (Zonen ohne Text), optional Stanzkontur-PDF. Speichern über `etp_vorlage_aus_post()` (core/etikett_pruefung.php) in `item.beutel_vorlage`; die Aufgabe „Vorlage für … fehlt“ wird dabei erledigt. Das Etikett-Pop-up zeigt damit die Flächen beschriftet, Siegel/Zipper schraffiert, prüft Text in diesen Zonen und schickt jede Fläche einzeln (gedrehte richtig herum) an die KI.
+
+**Fable-6 Teil 1 (13.11.2026):** Die Etikett-Maße (Breite, Höhe, Format, Endformat, Druckmaß) an Etikett-Artikeln und Behältern ändert nur ein Admin, und nur mit Grund (Feld „Grund für eine Änderung des Etikett-Maßes“). Die Änderung steht im Protokoll (route `etikett_mass_admin`) und im Verlauf. Andere Rollen sehen einen Hinweis; ihre Maß-Änderung wird nicht übernommen.
