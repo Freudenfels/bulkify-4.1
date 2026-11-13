@@ -136,3 +136,5 @@ Anlass: Beim „Vorsorglich bestellen“ bei Wellgreen kam „keinen aktiven Acc
   - „heute bestellt“ öffnet ein Pop-up: Lieferant, Menge, Preis je Einheit (optional, `el_preis`), Erwartet am, Notiz. Gespeichert wird über den Direkt-Weg: bestellt und bestätigt, keine Mail.
   - „über Portal senden“ geht in den Lieferanten-Account (nur mit Account und Preis).
 - **Online-Sammelweg** (alles in einer Bestellung): aus der Oberfläche entfernt.
+
+**Entwurf - Unterlagen fehlen (Fable-4 T3.1, 13.11.2026):** Über den Reitern steht ein eigener Block mit allen Sperr-Entwürfen (Bestellung, Artikel, Menge, Lieferant, Auftrag, was fehlt, Link). Sie zählen nicht als unterwegs, der Bedarf bleibt in „Zu bestellen“. Die Erfolgsmeldung zählt Sperr-Entwürfe nicht als gesendet/direkt bestellt.

@@ -118,7 +118,39 @@ function lu_bestellen_pruefen(int $bestellung_id, string $ausnahme_grund = '', s
         lu_ausnahme_setzen($bestellung_id, $ausnahme_grund, $wer !== '' ? $wer : (string)(function_exists('current_user') ? (current_user()['name'] ?? 'Admin') : 'Admin'));
         return '';
     }
+    lu_entwurf_markieren($bestellung_id);   // Fable-4 T3.1: bleibt Entwurf -> zählt nicht als unterwegs
     return $s;
+}
+
+// Sperr-Entwurf (Fable-4 T3.1, 13.11.2026): Ein Entwurf (status offen), der wegen fehlender Unterlagen nicht gesendet werden durfte,
+// trägt bestellung.unterlagen_wartet = 1. Er zählt nicht als unterwegs (bp_rest_sql), steht in „Zu bestellen“ als eigene Zeile
+// „Entwurf - Unterlagen fehlen“ und der Kunde sieht kein „Rohstoff bestellt“. Sind die Unterlagen da (oder Admin-Ausnahme) bzw. ist die
+// Bestellung kein Entwurf mehr, wird das Kennzeichen gelöscht. Beim ersten Setzen ein Vermerk an den betroffenen Aufträgen.
+function lu_entwurf_markieren(int $bestellung_id): void {
+    try {
+        $b = one("SELECT id, nummer, status, COALESCE(unterlagen_wartet,0) AS w FROM bestellung WHERE id=?", [$bestellung_id]);
+        if (!$b) return;
+        $neu = ((string)$b['status'] === 'offen' && lu_bestellen_sperre($bestellung_id) !== '') ? 1 : 0;
+        if ($neu === (int)$b['w']) return;
+        q("UPDATE bestellung SET unterlagen_wartet=? WHERE id=?", [$neu, $bestellung_id]);
+        if ($neu === 1 && function_exists('log_aktivitaet'))
+            foreach (all("SELECT DISTINCT auftrag_id FROM bestellung_position WHERE bestellung_id=? AND auftrag_id IS NOT NULL AND auftrag_id>0", [$bestellung_id]) as $r)
+                log_aktivitaet('auftrag', (int)$r['auftrag_id'], 'team', 'Bestellung ' . $b['nummer'] . ' ist nur ein Entwurf (Unterlagen des Lieferanten fehlen) – noch nicht bestellt.', 'bestellung', 'bestellung', $bestellung_id);
+    } catch (\Throwable $e) { /* Spalte fehlt noch: nichts tun */ }
+}
+// Alle Sperr-Entwürfe neu prüfen (Einkaufsliste, Liste „Bestellt“): Unterlagen nachgereicht oder Bestellung inzwischen gesendet.
+function lu_entwuerfe_pruefen(): void {
+    try { foreach (all("SELECT id FROM bestellung WHERE unterlagen_wartet=1") as $r) lu_entwurf_markieren((int)$r['id']); } catch (\Throwable $e) {}
+}
+// Sperr-Entwürfe mit Positionen für „Zu bestellen“ (Einkaufsliste).
+function lu_sperr_entwuerfe(): array {
+    try {
+        return all("SELECT b.id, b.nummer, b.lieferant_id, COALESCE(l.firma,'') AS lieferant, bp.id AS pos_id, COALESCE(NULLIF(bp.bezeichnung,''), i.name, '') AS artikel,
+                           bp.menge, COALESCE(NULLIF(bp.einheit,''), i.einheit, '') AS einheit, bp.auftrag_id, a.nummer AS auftrag_nr
+                    FROM bestellung b JOIN bestellung_position bp ON bp.bestellung_id=b.id LEFT JOIN item i ON i.id=bp.item_id
+                    LEFT JOIN lieferanten l ON l.id=b.lieferant_id LEFT JOIN auftrag a ON a.id=bp.auftrag_id
+                    WHERE b.status='offen' AND b.unterlagen_wartet=1 AND bp.rest_storniert_am IS NULL ORDER BY b.id DESC, bp.sort, bp.id");
+    } catch (\Throwable $e) { return []; }
 }
 
 function lu_braucht_text(string $b, string $sprache = 'de'): string {

@@ -1092,7 +1092,8 @@ function init_schema(): void {
     // die Stationen; "versendet" verlangt Versandanbieter, Versandart und Sendungsnummer.
     ensure_column('bestellung', 'bestaetigt', "TINYINT(1) NOT NULL DEFAULT 0");
     ensure_column('bestellung', 'hinweis_lieferant', "TEXT NULL");
-    ensure_column('bestellung', 'unterlagen_ausnahme', "VARCHAR(255) NULL");   // Paket 12.11. Teil 4: Admin bestellt trotz fehlender Unterlagen (Grund)   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
+    ensure_column('bestellung', 'unterlagen_ausnahme', "VARCHAR(255) NULL");
+    ensure_column('bestellung', 'unterlagen_wartet', "TINYINT(1) NOT NULL DEFAULT 0");   // Fable-4 T3.1: Entwurf, weil Unterlagen des Lieferanten fehlen (zählt nicht als unterwegs)   // Paket 12.11. Teil 4: Admin bestellt trotz fehlender Unterlagen (Grund)   // Sofortfix 11.11.2026: einziges Textfeld, das der Lieferant im Portal sieht (notiz = intern)
     ensure_column('rezeptur', 'status_vor_inaktiv', "VARCHAR(20) NULL");   // Block C 11.11.2026: Status vor „inaktiv" (für Wieder aktivieren)
     ensure_column('item', 'gesperrt_durch_rezeptur', "INT NULL");          // Block C: mit der Rezeptur gesperrter Bulk-/Premix-Artikel
     ensure_column('item', 'ek_abgelaufen_seit', "DATE NULL");              // Block D: Auto-EK stammt aus einem inzwischen abgelaufenen Preis
@@ -4632,7 +4633,12 @@ function wareneingang_buchen(int $item_id, float $menge, string $charge_nr, ?str
 // Bestellung als angekommen/geliefert markieren OHNE Chargen anzulegen (die Ware wurde schon eingebucht, z. B. über die
 // Wareneingangs-Maske mit Bestellbezug). Gleiche Wirkung wie erp_bestellung_angekommen() in der Lager-App (S-06/St-12).
 // Teillieferung (Nacht 1c): „unterwegs" = bestellte Menge MINUS schon gelieferte (bestellung_position.geliefert_menge).
-function bp_rest_sql(string $a = 'bp'): string { return "IF($a.rest_storniert_am IS NULL, GREATEST($a.menge - COALESCE($a.geliefert_menge,0), 0), 0)"; }
+// Fable-4 T3.1 (13.11.2026): $b = Alias der Bestellung – ein Entwurf, der wegen fehlender Unterlagen nicht gesendet werden durfte
+// (status offen + unterlagen_wartet), zählt nicht als unterwegs: bestellt hat ihn niemand. $b = '' lässt ihn mitzählen (Doppel-Hinweis).
+function bp_rest_sql(string $a = 'bp', string $b = 'b'): string {
+    $r = "IF($a.rest_storniert_am IS NULL, GREATEST($a.menge - COALESCE($a.geliefert_menge,0), 0), 0)";
+    return $b === '' ? $r : "IF($b.status='offen' AND COALESCE($b.unterlagen_wartet,0)=1, 0, $r)";
+}
 // Mengen-Umrechnung zwischen Charge und Bestellposition (g<->kg, ml<->l), sonst 1.
 function einheit_faktor(string $von, string $nach): float {
     $v = mb_strtolower(trim($von)); $n = mb_strtolower(trim($nach));
@@ -6259,7 +6265,7 @@ function auftrag_rohstoffe_beschafft(int $aid): ?string {
     foreach ($roh as $iid => $fehlt) {
         $bp = one("SELECT COALESCE(SUM(" . bp_rest_sql() . "),0) menge, COALESCE(MIN(b.bestelldatum), MIN(b.angelegt)) d
                    FROM bestellung_position bp JOIN bestellung b ON b.id=bp.bestellung_id
-                   WHERE bp.item_id=? AND b.status NOT IN ('geliefert','storniert') AND b.angekommen_am IS NULL", [$iid]);
+                   WHERE bp.item_id=? AND b.status IN ('gesendet','bestellt') AND b.angekommen_am IS NULL", [$iid]);   // Fable-4 T3.1: Kunde sieht „Rohstoff bestellt“ erst ab gesendet/bestellt, nie bei Entwurf
         $ordered = (float)($bp['menge'] ?? 0);
         if ($fehlt > 1e-6) {
             if ($ordered + 1e-6 < $fehlt) return null;          // Fehlbestand NICHT durch Bestellung gedeckt
@@ -7847,6 +7853,9 @@ function bestellung_direkt_abschliessen(int $bestellung_id, ?string $datum = nul
 function bestellung_als_entwurf(int $bestellung_id, string $notiz = ''): void {
     q("UPDATE bestellung SET bestellart='lieferant', status='offen', bestelldatum=NULL, notiz=CONCAT_WS(' · ', NULLIF(TRIM(notiz),''), NULLIF(?,'')) WHERE id=? AND status IN ('offen','gesendet','bestellt') AND COALESCE(bestaetigt,0)=0",
       [trim($notiz), $bestellung_id]);
+    // Fable-4 T3.1: fehlen Unterlagen des Lieferanten, bekommt der Entwurf das Kennzeichen unterlagen_wartet (zählt nicht als unterwegs).
+    require_once __DIR__ . '/lieferant_unterlagen.php';
+    lu_entwurf_markieren($bestellung_id);
     if (function_exists('bedarf_bump')) bedarf_bump();
 }
 // „Als bestellt markieren“ (Bestellseite, Einkauf mobil) – EIN Weg mit der zentralen Unterlagen-Sperre (13.11.2026).

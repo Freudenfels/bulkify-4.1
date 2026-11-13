@@ -218,9 +218,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aktion'] ?? '') === 'beste
         $preisEin = betrag_lesen(preg_replace('/[^0-9.,]/', '', (string)($_POST['el_preis'] ?? '')));
         if ($direkt && $preisEin > 0 && count($alleBids) === 1) q("UPDATE bestellung_position SET ek_preis=? WHERE bestellung_id=?", [$preisEin, $alleBids[0]]);
     }
+    $n = max(0, $n - count($luEntwurf));   // Fable-4 T3.1: Sperr-Entwürfe sind nicht gesendet/bestellt – sie zählen in der Meldung nicht mit
     header('Location: ?p=einkaufsliste' . (($_GET['typ'] ?? '') ? '&typ=' . $_GET['typ'] : '') . '&bestellt=' . $n . ($online ? '&online=1' : '') . ($direkt ? '&direkt=1' : '') . ($skipPortal ? '&skip=' . $skipPortal . ($skipGruende ? '&skipgr=' . urlencode(implode(' ', array_keys($skipGruende))) : '') : '') . ($luEntwurf ? '&lu_entwurf=' . implode(',', $luEntwurf) : '')); exit;
 }
 
+require_once BX_ROOT . '/core/lieferant_unterlagen.php';
+lu_entwuerfe_pruefen();   // Fable-4 T3.1: Unterlagen nachgereicht -> Entwurf zählt wieder normal
+$sperrEntwuerfe = lu_sperr_entwuerfe();
 $aggAlle = bedarf_aggregiert(false);
 $aggBedarf = array_values(array_filter($aggAlle, fn($a) => $a['zu_bestellen'] > 1e-6));
 // Gesperrt = Etikett bzw. bedruckter Beutel ohne Kunden-Freigabe: nicht bestellbar -> nicht unter „Zu bestellen",
@@ -401,6 +405,26 @@ if ($ohneFestlegung): ?>
           <td class="bx-num"><?= $mfmt($qa['stock']) ?> <?= h($qa['einheit']) ?></td>
           <td class="bx-num"><strong><?= $mfmt($qa['quarantaene']) ?> <?= h($qa['einheit']) ?></strong></td>
           <td style="text-align:right"><a class="btn btn-primary btn-sm" href="<?= h(quarantaene_freigabe_url((int)$qa['item_id'])) ?>">Freigeben</a></td></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table></div>
+  </div>
+  <?php endif; ?>
+  <?php if ($sperrEntwuerfe): // Fable-4 T3.1: Entwürfe, die wegen fehlender Unterlagen nicht gesendet werden durften – noch nicht bestellt ?>
+  <div class="bx-panel" style="margin:12px 0 4px;border-color:#C9A227;background:rgba(201,162,39,.08);padding:12px 16px">
+    <div style="font-weight:600;margin-bottom:6px">Entwurf - Unterlagen fehlen (<?= count(array_unique(array_column($sperrEntwuerfe, 'id'))) ?>)</div>
+    <div class="muted" style="font-size:13px;margin-bottom:8px">Diese Bestellungen sind nur Entwürfe: Die Unterlagen des Lieferanten fehlen, deshalb wurde nichts gesendet. Sie zählen nicht als unterwegs. Unterlagen an der Bestellung hochladen, dann bestellen.</div>
+    <div class="bx-tablewrap"><table class="bx-table">
+      <thead><tr><th>Bestellung</th><th>Artikel</th><th class="bx-num">Menge</th><th>Lieferant</th><th>Auftrag</th><th>Es fehlt</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($sperrEntwuerfe as $se): ?>
+        <tr><td><a href="?p=bestellung&id=<?= (int)$se['id'] ?>#unterlagen"><?= h((string)$se['nummer']) ?></a></td>
+          <td class="bx-lauf"><?= h((string)$se['artikel']) ?></td>
+          <td class="bx-num"><?= $mfmt($se['menge']) ?> <?= h((string)$se['einheit']) ?></td>
+          <td><?= h((string)$se['lieferant']) ?></td>
+          <td><?= $se['auftrag_id'] ? '<a href="?p=auftrag&id=' . (int)$se['auftrag_id'] . '">' . h((string)$se['auftrag_nr']) . '</a>' : '–' ?></td>
+          <td class="muted" style="font-size:12px;white-space:normal"><?= h(lu_liste_text(lu_bestellung_fehlt((int)$se['id']))) ?></td>
+          <td style="text-align:right"><a class="btn btn-primary btn-sm" href="?p=bestellung&id=<?= (int)$se['id'] ?>#unterlagen">Entwurf öffnen</a></td></tr>
       <?php endforeach; ?>
       </tbody>
     </table></div>
