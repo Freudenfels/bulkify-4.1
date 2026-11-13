@@ -700,7 +700,7 @@ $a = $id ? one("SELECT a.*, k.firma AS kunde_firma, p.name AS produkt_name, pkn.
                 WHERE a.id=?", [$id]) : null;
 if (!$a) { render_header('auftraege','Auftrag'); bx_head('Auftrag nicht gefunden','', bx_btn('Zurück','?p=auftraege','ghost')); render_footer(); exit; }
 
-$rechnung = one("SELECT id, nummer, brutto, status FROM beleg WHERE auftrag_id=? AND typ='rechnung' LIMIT 1", [$id]);
+$rechnung = one("SELECT id, nummer, brutto, status FROM beleg WHERE auftrag_id=? AND typ='rechnung' ORDER BY (status='storniert'), id DESC LIMIT 1", [$id]);   // 13.11.2026: gültige vor stornierter
 $rechnungZs = $rechnung ? beleg_zahlstatus($rechnung) : null;   // abgeleiteter Zahlstatus (bezahlt/teilbezahlt/offen + Rest)
 // Hochgeladene Alt-Rechnungen (Altsystem) zu diesem Auftrag.
 $altRechnungen = all("SELECT id, datei, datei_orig, dok_datum FROM dokument WHERE objekt_typ='auftrag' AND objekt_id=? AND typ='rechnung' ORDER BY id DESC", [$id]);
@@ -873,6 +873,9 @@ $kopfProdukt = trim((string)($a['produkt_bezeichnung'] ?? '')) ?: (string)($a['p
 bx_head($a['nummer'] . ($kopfProdukt !== '' ? ' · ' . $kopfProdukt : ''), 'Auftragsbestätigung',
     pdf_btn('?p=auftrag_pdf&id=' . (int)$a['id'], 'PDF / Drucken', false, 'Auftragsbestätigung als PDF öffnen/drucken')
     . ($pa ? ' ' . bx_btn('Zum Produktionsauftrag ' . (string)$pa['nummer'], '?p=produktionsauftrag&id=' . (int)$pa['id'], 'ghost') : '')
+    // Direkt zur Rechnung (Nico 13.11.2026): Rechnung in der Buchhaltung öffnen, ohne Reiter „Preise & Rechnung“
+    . ($rechnung ? ' ' . bx_btn('Rechnung ' . (string)$rechnung['nummer'], '/buchhaltung/?p=rechnung&id=' . (int)$rechnung['id'], 'ghost')
+                 : (($a['status'] ?? '') !== 'storniert' ? ' ' . bx_btn('Rechnung erstellen', '/buchhaltung/?p=rechnung_neu&auftrag=' . (int)$id, 'ghost') : ''))
     . ' ' . bx_btn('Zurück zur Liste', '?p=auftraege', 'ghost'));
 if (isset($_GET['gespeichert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Gespeichert.</div>';
 if (isset($_GET['importiert'])) echo '<div class="bx-panel badge-ok" style="padding:12px 16px">Auftrag aus Angebot importiert – Rezeptur/Produkt angelegt (falls neu), Angebot/Rechnung angehängt. Bitte Werte gegenprüfen.</div>';

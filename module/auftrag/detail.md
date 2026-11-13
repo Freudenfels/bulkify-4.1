@@ -405,3 +405,6 @@ Beschaffungsweg „Direkt bestellt“: keine Unterlagen-Sperre mehr; fehlende Un
 - Der alte Dialog `dlgEtikett` ist ersetzt. Im Pop-up: Team-Upload (nur PDF), Druck-Check, KI-Etikettencheck, Versionen, Freigabe im Namen des Kunden nur mit Pflicht-Grund (Admin/Vertrieb). Unten der Team-Zusatz `#etpTeamExtra`: Herunterladen für die Druckerei, Design entfernen, Etikett-Erinnerung pausieren.
 - Endpunkt `?p=auftrag&id=…&etp=1&a=…` (`etp_ajax`, wer=team); `&etikett=ID` öffnet das Pop-up direkt (Ziel der Aufgaben „KI meldet Abweichung zum PIB“).
 - Die Etikett-Vorschau auf der Seite und der Link „Selbst hochladen“ öffnen ebenfalls das Pop-up.
+
+## Direkt zur Rechnung (13.11.2026)
+Im Seitenkopf steht neben „PDF / Drucken“ der Knopf „Rechnung RE-…“ (öffnet die Rechnung in der Buchhaltung). Ohne Rechnung: „Rechnung erstellen“ (nicht bei storniertem Auftrag). Gibt es mehrere Rechnungen, zählt die neueste nicht stornierte.
