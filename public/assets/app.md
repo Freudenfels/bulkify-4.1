@@ -11,3 +11,5 @@ Block am Ende von `app.css`:
 
 ## Etikett-Pop-up (13.11.2026)
 Block `.bx-et-*` am Ende: Schrittanzeige, Ablagefläche, Vorschau mit Zoom, Legende, Ampel-Zeilen (SVG-Symbole, grün/gelb/rot/info), KI-Hinweis, Freigabe-Haken, lime Hauptknopf, Danke-Haken, Auswahl-Liste; am Handy einspaltig, Vorschau oben.
+
+Schließen-X aller Pop-ups (`.bx-dialog .bx-pop-x`) am Handy 44 × 44 px (Etikett-Pop-up Teil 4, 13.11.2026).
