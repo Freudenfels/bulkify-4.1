@@ -73,3 +73,5 @@ Unter „Dokumente“ stehen zuerst CoA und Spezifikation aus der Bestellpositio
 Die Eingabe läuft über `erp_menge_parse()` wie alle Mengenfelder der Lager-App: „12.5“ = 12,5, „0.5“ = 0,5, „12.500“ = 12.500, „1.234,5“ = 1.234,5.
 
 **Ist-Gewicht bei Rückgabe aus der Produktion (Fable-4 T1.4, 13.11.2026):** gelesen über `erp_menge_einheit_lesen()` in der Einheit der Charge; Feld mit `data-gewicht`; Hinweis, wenn mehr zurückkommt als vor der Ausgabe da war.
+
+**Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Mengen-/Preisfelder werden mit `zahl_feld()` (Komma, kein Tausenderpunkt) vorbelegt, damit Speichern ohne Änderung den Wert nicht verändert.

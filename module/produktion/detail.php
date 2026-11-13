@@ -564,7 +564,7 @@ if ($istFuellGewicht && has_role('admin')):
     <form method="post" class="bx-row" style="gap:10px;align-items:flex-end;margin:0;flex-wrap:wrap">
       <input type="hidden" name="aktion" value="pulver_fuellmenge">
       <label style="display:flex;flex-direction:column;gap:3px;font-size:12px" class="muted">Füllmenge je Packung (g)
-        <input type="text" inputmode="decimal" name="fuellmenge_g" value="<?= number_format($einhProP, 0, ',', '.') ?>" style="min-width:140px"></label>
+        <input type="text" inputmode="decimal" name="fuellmenge_g" value="<?= number_format($einhProP, 0, ',', '') ?>" style="min-width:140px"></label>
       <button class="btn btn-primary btn-sm" type="submit">Füllmenge setzen</button>
     </form>
   </div>

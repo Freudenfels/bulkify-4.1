@@ -48,3 +48,5 @@ Kennzeichen „Unterlagen fehlen“ am Fertigprodukt-Preis (Rohstoff-Unterlagen 
 
 ## 6 Stellen (13.11.2026)
 Preisfelder werden mit bis zu 6 Nachkommastellen vorbelegt, damit Sub-Cent-Preise beim erneuten Speichern erhalten bleiben.
+
+**Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Mengen-/Preisfelder werden mit `zahl_feld()` (Komma, kein Tausenderpunkt) vorbelegt, damit Speichern ohne Änderung den Wert nicht verändert.

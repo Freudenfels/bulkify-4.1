@@ -11,3 +11,5 @@ nur in Lager 2 beim Kunden (`fremd_kunde_id`, `standort='lager2'`, gleiche Charg
 Besitzer = Kunde des Auftrags (auch über den Produktionsauftrag), sonst der Kunde am Produkt. Gibt es keinen, fragt die Karte nach
 dem Fulfillment-Kunden (nie raten). Kunden ohne Fulfillment sind gesperrt (Hinweis). Etiketten und anderes Material laufen
 unverändert über „Kundenware einbuchen“ (`?p=l2_eingang`).
+
+**Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Mengen-/Preisfelder werden mit `zahl_feld()` (Komma, kein Tausenderpunkt) vorbelegt, damit Speichern ohne Änderung den Wert nicht verändert.

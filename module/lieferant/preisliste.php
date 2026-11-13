@@ -201,7 +201,7 @@ if (isset($_GET['fehler']))  echo '<div class="bx-panel" style="border-color:#e6
         <td class="bx-num">
           <form method="post" class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
             <input type="hidden" name="aktion" value="preis_save"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-            <input type="text" name="eur_kg" value="<?= h($num($r['eur_kg'])) ?>" style="width:90px;text-align:right" inputmode="decimal">
+            <input type="text" name="eur_kg" value="<?= h(zahl_feld($r['eur_kg'], 6)) ?>" style="width:90px;text-align:right" inputmode="decimal">
             <span class="muted">€ / <?= h(lp_einheit($r['einheit'] ?: 'kg', 1)) ?></span>
             <button class="btn btn-ghost btn-sm" type="submit"><?= h(lp_t('aktualisieren')) ?></button>
           </form>

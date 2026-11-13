@@ -188,8 +188,8 @@ if (isset($_GET['vorschlag'])) echo '<div class="bx-panel" style="padding:12px 1
         <td><?= h(anfrage_art_label('', (string)$r['form'], $spr) ?: lp_einheit($formEinheit($r['form']), 2)) ?></td>
         <td class="bx-num">
           <div class="bx-row" style="gap:6px;justify-content:flex-end;align-items:center;flex-wrap:nowrap;margin:0">
-            <input type="hidden" form="rpForm" name="vorher[<?= (int)$r['id'] ?>]" value="<?= h($num($r['preis'])) ?>">
-            <input type="text" form="rpForm" class="rp-preis" name="preis[<?= (int)$r['id'] ?>]" value="<?= h($num($r['preis'])) ?>" style="width:90px;text-align:right" inputmode="decimal">
+            <input type="hidden" form="rpForm" name="vorher[<?= (int)$r['id'] ?>]" value="<?= h(zahl_feld($r['preis'], 6)) ?>">
+            <input type="text" form="rpForm" class="rp-preis" name="preis[<?= (int)$r['id'] ?>]" value="<?= h(zahl_feld($r['preis'], 6)) ?>" style="width:90px;text-align:right" inputmode="decimal">
             <span class="muted">€ / <?= h(lp_einheit($r['einheit'] ?: $formEinheit($r['form']), 1)) ?></span>
             <button class="btn btn-ghost btn-sm" type="submit" form="rpForm"><?= h(lp_t('aktualisieren')) ?></button>
           </div>

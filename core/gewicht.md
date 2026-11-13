@@ -14,3 +14,5 @@ Eine Regel für Gewichte (Nachbesserung Fable-Prüfung 3, 13.11.2026). Ohne Abh�
 Stückzahlen lesen weiter `erp_menge_parse()` / `pr_menge_parse()` / `la_zahl(…, true)` / `zahl_lesen(…, true)` („12.000“ Stk = 12000).
 
 **Mehrdeutige Gewichte (Fable-4 T1.3, 13.11.2026):** `gewicht_mehrdeutig($roh)` = genau „1-3 Ziffern, Punkt, 3 Ziffern“ („1.250“). Gewichtsfelder tragen `data-gewicht`, `public/assets/bx-gewicht.js` fragt vor dem Absenden nach. `menge_in_einheit_lesen($roh, $einheit)`: kg/g/l = `gewicht_lesen()`, sonst Stückzahl mit Tausenderpunkt (`zahl_lesen(…, true)`) – genutzt bei „Material zuordnen“ am Auftrag.
+
+**Zahl im Eingabefeld (Fable-4 T2.4, 13.11.2026):** `zahl_feld($wert, $stellen)` – wie `gewicht_feld()`, für alle Mengen- und Preisfelder (Komma, kein Tausenderpunkt).

@@ -201,3 +201,5 @@ Die alten Teilmenge-Boxen (Dashboard „Teilmenge einbuchen“, Produktions-App,
 **Teilmenge nachtragen (13.11.2026, Fable-3 T1.4):** Das Formular ruft nur noch `pa_nachtrag_buchen()` (core/pa_ablauf.php). Ein Nachtrag für gestern, während heute eine Unter-Charge läuft, legt eine eigene Unter-Charge mit dem gewählten Tag an und schließt die laufende nicht. Schlägt die Buchung fehl, bleibt nichts zurück (kein Buchstabe verbraucht).
 
 **Produktion per KI melden (13.11.2026, Werk-App Teil 4):** Feld „Produktion melden (KI)“ über dem Ablauf (PA vorgegeben). „Teilmenge nachtragen“ nimmt zusätzlich `umfang` (komplett / bis vor dem Etikettieren) und – von der KI-Karte – `ki_text`/`ki_von`: nach erfolgreicher Buchung Vermerk „per KI gemeldet von …, bestätigt von …: „Originaltext““ im Chargenprotokoll und Auftragsverlauf.
+
+**Vorbelegung ohne Tausenderpunkt (Fable-4 T2.4, 13.11.2026):** Mengen-/Preisfelder werden mit `zahl_feld()` (Komma, kein Tausenderpunkt) vorbelegt, damit Speichern ohne Änderung den Wert nicht verändert.

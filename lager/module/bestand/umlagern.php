@@ -70,7 +70,7 @@ flash_zeigen();
       </div>
       <?php if (!$nichtFf): ?>
       <div class="ul-menge">
-        <input type="text" inputmode="decimal" name="menge[<?= $cid ?>]" class="ul-m" value="<?= h($nf($c['menge_verfuegbar'])) ?>" aria-label="Menge umlagern"> <span><?= h((string)$c['einheit']) ?></span>
+        <input type="text" inputmode="decimal" name="menge[<?= $cid ?>]" class="ul-m" value="<?= h(zahl_feld($c['menge_verfuegbar'])) ?>" aria-label="Menge umlagern"> <span><?= h((string)$c['einheit']) ?></span>
         <?php if ($offen): ?>
         <select name="kunde[<?= $cid ?>]" class="ul-k"><option value="">Kunde wählen …</option><?php foreach ($ffKunden as $kid => $fn): ?><option value="<?= $kid ?>"><?= h($fn) ?></option><?php endforeach; ?></select>
         <?php endif; ?>

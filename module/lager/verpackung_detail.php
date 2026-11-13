@@ -357,7 +357,7 @@ if (!$neu) {
                 <input type="hidden" name="aktion" value="charge_bestand_korr">
                 <input type="hidden" name="charge_id" value="<?= (int)$c['id'] ?>">
                 <div style="display:flex;gap:4px;align-items:center">
-                  <input type="text" name="menge" value="<?= h($vpZ($c['menge_verfuegbar'])) ?>" style="width:100px;padding:4px 6px;text-align:right" inputmode="decimal" title="Neue verfügbare Menge">
+                  <input type="text" name="menge" value="<?= h(zahl_feld($c['menge_verfuegbar'])) ?>" style="width:100px;padding:4px 6px;text-align:right" inputmode="decimal" title="Neue verfügbare Menge">
                   <span class="muted" style="font-size:11px"><?= h((string)($c['einheit'] ?: 'Stk')) ?></span>
                 </div>
                 <select name="korr_was" data-norscombo style="width:200px;padding:4px 6px"><option value="verfuegbar">nur verfügbar (Schwund, Bruch)</option><option value="ursprung">Ursprung falsch eingebucht</option></select>

@@ -74,3 +74,9 @@ if (!function_exists('menge_in_einheit_lesen')) {
         return zahl_lesen($roh, true);
     }
 }
+
+// Zahl für ein Eingabefeld vorbelegen (Fable-4 T2.4, 13.11.2026): deutsch mit Komma, OHNE Tausenderpunkt – liest jeder Parser
+// richtig (zahl_lesen in Preis- und Mengen-Lesart, gewicht_lesen, erp_menge_parse). Gleiche Regel wie gewicht_feld().
+if (!function_exists('zahl_feld')) {
+    function zahl_feld($wert, int $stellen = 3): string { return gewicht_feld($wert, $stellen); }
+}

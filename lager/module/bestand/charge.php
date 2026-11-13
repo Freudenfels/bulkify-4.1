@@ -225,7 +225,7 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
     <form method="post" class="lg-eform" enctype="multipart/form-data" hidden>
       <input type="hidden" name="aktion" value="menge_korr">
       <select name="korr_was" data-norscombo><option value="verfuegbar">verfügbar (Schwund, Bruch)</option><option value="ursprung">Ursprung (falsch eingebucht)</option></select>
-      <input type="text" inputmode="decimal" name="korr_menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>" required>
+      <input type="text" inputmode="decimal" name="korr_menge" value="<?= h(zahl_feld($c['menge_verfuegbar'])) ?>" required>
       <span class="muted" style="font-size:12px"><?= h((string)$c['einheit']) ?> (Einheit fest)</span>
       <select name="korr_grund" required data-norscombo><option value="">Grund wählen</option><option value="einbuchfehler">Einbuchfehler</option><option value="lieferschein">Lieferschein abweichend</option><option value="schwund">Schwund</option><option value="bruch">Bruch</option><option value="sonstiges">Sonstiges</option></select>
       <input type="text" name="korr_notiz" placeholder="Notiz">
@@ -377,7 +377,7 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
       <form method="post">
         <input type="hidden" name="aktion" value="umbuchen"><input type="hidden" name="kunde_id" value="0">
         <div class="bx-field"><label>Menge <span class="muted">(von <?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?>)</span></label>
-          <input type="text" inputmode="decimal" name="menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>" autofocus>
+          <input type="text" inputmode="decimal" name="menge" value="<?= h(zahl_feld($c['menge_verfuegbar'])) ?>" autofocus>
           <div class="muted" style="font-size:12px;margin-top:4px">Weniger = Teilmenge; der Rest bleibt in Lager 2.</div></div>
         <div class="bx-row" style="justify-content:flex-end;gap:var(--sp-2)">
           <button type="button" class="btn btn-ghost" data-umb-close>Abbrechen</button>
@@ -398,7 +398,7 @@ $warenartLabel = (function_exists('erp_warenart_defs') ? (erp_warenart_defs()[$a
             <?php foreach ($umb_kunden as $k): ?><option value="<?= (int)$k['id'] ?>" <?= $umb_vorschlag === (int)$k['id'] ? 'selected' : '' ?>><?= h((string)$k['firma']) ?></option><?php endforeach; ?>
           </select></div>
         <div class="bx-field"><label>Menge <span class="muted">(von <?= h(menge_txt($c['menge_verfuegbar'])) ?> <?= h((string)$c['einheit']) ?>)</span></label>
-          <input type="text" inputmode="decimal" name="menge" value="<?= h(menge_txt($c['menge_verfuegbar'])) ?>">
+          <input type="text" inputmode="decimal" name="menge" value="<?= h(zahl_feld($c['menge_verfuegbar'])) ?>">
           <div class="muted" style="font-size:12px;margin-top:4px">Weniger als verfügbar = Teilmenge; der Rest bleibt in Lager 1.</div></div>
         <div class="bx-row" style="justify-content:flex-end;gap:var(--sp-2)">
           <button type="button" class="btn btn-ghost" data-umb-close>Abbrechen</button>

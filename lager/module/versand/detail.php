@@ -263,7 +263,7 @@ flash_zeigen();
               <form method="post" class="bx-row" style="gap:6px;margin:0;justify-content:flex-end">
                 <input type="hidden" name="aktion" value="pos_add"><input type="hidden" name="id" value="<?= $id ?>">
                 <input type="hidden" name="charge_id" value="<?= (int)$t['id'] ?>"><input type="hidden" name="q" value="<?= h($q) ?>">
-                <input type="text" name="menge" inputmode="decimal" value="<?= h(menge_txt($t['menge_verfuegbar'])) ?>" style="max-width:110px">
+                <input type="text" name="menge" inputmode="decimal" value="<?= h(zahl_feld($t['menge_verfuegbar'])) ?>" style="max-width:110px">
                 <button class="btn btn-ghost btn-sm" type="submit">Hinzufügen</button>
               </form>
             </td>
