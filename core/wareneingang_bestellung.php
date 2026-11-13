@@ -184,6 +184,9 @@ function webe_charge_verknuepfen(int $charge_id, int $bp_id, bool $melden = true
         if ($altB && $altB !== (int)$bp['bestellung_id']) webe_bestellung_stand($altB);
     }
     webe_bestellung_stand((int)$bp['bestellung_id'], $melden, $quelle);
+    // Fable-6 P6: nach dem Verknüpfen (Lieferant ggf. neu an der Charge) die Unterlagen neu prüfen -> ggf. Quarantäne.
+    if (function_exists('lu_charge_nach_eingang')) { try { lu_charge_nach_eingang($charge_id); } catch (\Throwable $e) {} }
+    elseif (is_file(__DIR__ . '/lieferant_unterlagen.php')) { require_once __DIR__ . '/lieferant_unterlagen.php'; try { lu_charge_nach_eingang($charge_id); } catch (\Throwable $e) {} }
     return (int)$bp['bestellung_id'];
 }
 

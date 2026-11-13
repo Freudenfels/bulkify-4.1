@@ -24,6 +24,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($weGrund, ['alt_bestellung', 'muster', 'sonstiges'], true)) $weFehler = ['feld' => 'we_grund', 'msg' => 'Bestellung wählen – oder „Ohne Bestellung“ mit Grund: Grund fehlt'];
         elseif ($weGrund === 'alt_bestellung' && $liefG <= 0) $weFehler = ['feld' => 'lieferant_id', 'msg' => 'Lieferant fehlt (bei „Alte Bestellung“ Pflicht)'];
         elseif ($weGrund !== 'alt_bestellung' && $weGrundNotiz === '') $weFehler = ['feld' => 'we_grund_notiz', 'msg' => 'Notiz fehlt (bei Muster/Sonstiges Pflicht)'];
+        // Fable-6 P6 (13.11.2026): ohne Bestellung ist der Lieferant bei Rohstoff, Bulk und Fertigware Pflicht (sonst keine Unterlagen-Prüfung).
+        elseif ($liefG <= 0) {
+            $katG = $aktion === 'zukauf_buchen' ? 'fertig' : (string) scalar("SELECT kategorie FROM item WHERE id=?", [(int)($_POST['item_id'] ?? 0)]);
+            if (in_array($katG, ['rohstoff', 'fertig', 'verkaufsfertig'], true)) $weFehler = ['feld' => 'lieferant_id', 'msg' => 'Lieferant fehlt (bei Rohstoff, Bulk und Fertigware Pflicht)'];
+        }
     }
     // Immer Pflicht: Artikel (bzw. Auftrag beim Zukauf), Menge, Charge, MHD – vorher prüfen, nie halb buchen.
     if (!$weFehler && in_array($aktion, ['buchen', 'zukauf_buchen'], true)) {
@@ -318,7 +323,7 @@ endif; ?>
       </div>
       <div class="bx-field"><label>Charge (Lieferant) <?= bx_hint('Chargennummer laut Lieferant/CoA') ?></label><input type="text" name="charge_nr" data-pflicht data-pflicht-text="Charge fehlt"<?= $weFx('charge_nr') ?>></div>
       <div class="bx-field"><label>MHD</label><input type="date" name="mhd" data-pflicht data-pflicht-text="MHD fehlt"<?= $weFx('mhd') ?>></div>
-      <div class="bx-field"><label>Lieferant</label>
+      <div class="bx-field"><label>Lieferant <?= bx_hint('Ohne Bestellung bei Rohstoff, Bulk und Fertigware Pflicht (Unterlagen-Prüfung). Fehlt er, bleibt die Charge in Quarantäne.') ?></label>
         <select name="lieferant_id" data-pflicht="#weGrund=alt_bestellung" data-pflicht-text="Lieferant fehlt"<?= $weFx('lieferant_id') ?>>
           <option value="">– keiner –</option>
           <?php foreach ($lieferanten as $lf): ?><option value="<?= $lf['id'] ?>"><?= h($lf['firma']) ?></option><?php endforeach; ?>

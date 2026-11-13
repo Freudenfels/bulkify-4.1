@@ -193,10 +193,21 @@ function lu_sperr_entwuerfe(): array {
 
 // --- Quarantäne-Sperre beim Wareneingang (13.11.2026) ---
 // Fehlende Unterlagen für eine Charge (Lieferant der Charge + Artikel). Eigene Fertigware (pa_id) und Ware ohne Lieferant: nichts.
+// Fable-6 P6 (13.11.2026): Rohstoff/Bulk/Fertigware OHNE Lieferant (Wareneingang ohne Bestellung) gilt ebenfalls als „fehlt“ –
+// die Charge bleibt in Quarantäne, bis ein Lieferant (z. B. über das Verknüpfen mit der Bestellung) und dessen Unterlagen da sind.
+// Kundenware (fremd_kunde_id) und eigene Fertigware (pa_id) brauchen keinen Lieferanten.
 function lu_charge_fehlt(int $charge_id): array {
-    $c = one("SELECT item_id, lieferant_id, pa_id FROM charge WHERE id=?", [$charge_id]);
-    if (!$c || (int)($c['lieferant_id'] ?? 0) <= 0 || !empty($c['pa_id'])) return [];
+    $c = one("SELECT c.item_id, c.lieferant_id, c.pa_id, c.fremd_kunde_id, i.kategorie, i.name FROM charge c LEFT JOIN item i ON i.id=c.item_id WHERE c.id=?", [$charge_id]);
+    if (!$c || !empty($c['pa_id']) || !empty($c['fremd_kunde_id'])) return [];
+    if ((int)($c['lieferant_id'] ?? 0) <= 0) {
+        return in_array((string)$c['kategorie'], ['rohstoff', 'fertig', 'verkaufsfertig'], true) && lu_item_pflichtig_oder_fertig((int)$c['item_id'])
+            ? [['art' => 'lieferant', 'item_id' => (int)$c['item_id'], 'rezeptur_id' => 0, 'name' => (string)$c['name'], 'braucht' => 'lieferant']] : [];
+    }
     return lu_fehlt((int)$c['lieferant_id'], (int)$c['item_id']);
+}
+// Verkaufsfertige Ware ist für Unterlagen nicht pflichtig, braucht aber einen Lieferanten. „kein Dokument nötig“ am Artikel nimmt ihn aus.
+function lu_item_pflichtig_oder_fertig(int $item_id): bool {
+    try { return (int) scalar("SELECT COALESCE(kein_dokument,0) FROM item WHERE id=?", [$item_id]) !== 1; } catch (\Throwable $e) { return true; }
 }
 // Nach jedem Wareneingang (wareneingang_buchen im Dashboard, erp_wareneingang_buchen in der Lager-App): fehlen Unterlagen, geht die
 // Charge IMMER in Quarantäne (auch wenn sie sonst frei wäre) und trägt charge.unterlagen_fehlt=1. Rückgabe true = gesperrt.
@@ -334,6 +345,7 @@ function lu_kein_dokument_dialog(): string {
 
 function lu_braucht_text(string $b, string $sprache = 'de'): string {
     $t = ['coa_spec' => ['de' => 'CoA oder Spezifikation', 'en' => 'CoA or specification', 'zh' => 'CoA 或规格书'],
+          'lieferant' => ['de' => 'Lieferant fehlt an der Charge', 'en' => 'supplier missing on the batch', 'zh' => '批次缺少供应商'],
           'spec'     => ['de' => 'Spezifikation des Gesamtprodukts', 'en' => 'specification of the finished product', 'zh' => '成品规格书']];
     return $t[$b][$sprache] ?? $t[$b]['en'];
 }

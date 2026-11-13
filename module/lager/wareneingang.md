@@ -79,3 +79,5 @@ Beim Buchen mit „Zur Bestellung“ setzt `bestellung_lieferung_erfassen()` an 
 Regel Nico: Unterlagen fehlen = Ware bleibt in Quarantäne. Bestellen und Einbuchen gehen immer. Artikel ohne Unterlagenpflicht: „kein Dokument nötig“ (Details `core/lieferant_unterlagen.md`).
 
 Nach dem Buchen: fehlt die CoA/Spec des Lieferanten, ist die Charge in Quarantäne (Meldung `luq`). Quarantäne-Liste: Grund unter dem Status, Freigabe gesperrt mit Knopf „Unterlage hochladen“ (Pop-up) bzw. Admin „trotzdem freigeben“ (aktionen `lu_upload`, `q_frei_admin`).
+
+**Fable-6 P6 (13.11.2026):** Ohne Bestellung ist der Lieferant bei Rohstoff, Bulk und Fertigware Pflicht (Server-Prüfung; die Seite kommt mit allen Eingaben zurück). Fehlt er doch, etwa bei einem Altweg, bleibt die Charge in Quarantäne.

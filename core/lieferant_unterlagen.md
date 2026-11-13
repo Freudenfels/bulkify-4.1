@@ -40,3 +40,5 @@ Historisch: `lu_bestellen_pruefen($bid, $ausnahme_grund, $wer)`: eine Prüfung f
 `lu_panel()` ohne rohe Datei-Felder: oben „Noch N offen“ und Filter nach Art (Rohstoff CoA/Spec, Gesamtprodukt Spec), gruppiert nach der ersten Quelle (Anfrage/Bestellung/Preis, mit Link), je Unterlage eine Zeile (am Handy Karte) mit Knopf „Hochladen“. Der Knopf öffnet EIN Pop-up je Liste (bx-dialog): Art, Datei, „Gültig bis“ (-> `dokument.dok_datum`), Bemerkung (-> `dokument.bemerkung`, Spalte wird bei Bedarf angelegt). Gilt für Portal, Anfrage und die internen Seiten.
 
 13.11.2026: Pop-up „Unterlage hochladen“ – Formular ohne festes margin:0, damit der Pop-up-Baustein den Innenabstand setzt (vorher klebte der Inhalt am Rand und lief rechts über).
+
+**Fable-6 P6 (13.11.2026):** `lu_charge_fehlt()` meldet bei Rohstoff, Bulk (fertig) und verkaufsfertiger Ware **ohne Lieferant** den Punkt „Lieferant fehlt an der Charge“ (braucht `lieferant`). Damit kommt die Charge beim Wareneingang in Quarantäne, und die Freigabe geht erst mit einem Lieferanten und dessen Unterlagen. Ausgenommen sind Kundenware (`fremd_kunde_id`), eigene Fertigware (`pa_id`) und Artikel mit „kein Dokument nötig“.
