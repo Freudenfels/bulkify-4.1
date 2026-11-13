@@ -18,3 +18,5 @@
 - Die Liste zeigt nur **offene** Aufgaben (Zähler im Menü zählt nur offene). „Wieder öffnen“ gibt es nicht mehr; die POST-Aktion `offen` bucht nichts.
 - Nach **Erledigt** geht es zurück zur offenen Liste mit der kurzen Meldung „Aufgabe erledigt.“ (`?p=aufgaben&erledigt=1`).
 - **Archiv** (`?p=aufgaben&zeige=archiv`, alter Link `zeige=erledigt` landet auch hier): nur lesen, schlichte Tabelle Titel (Link zur Detailseite mit `von=archiv`) · Bezug (`aufgabe_bezug()`, Auftrag/PA/Bestellung/Artikel als Link) · erstellt am · erledigt am · erledigt von. Neueste oben, Suchfeld (Titel, Text, erledigt von), höchstens 500 Zeilen.
+
+**13.11.2026 (Paket Teil 2):** Dringlichkeit dringend/normal/später (Auswahl „Dringlichkeit“), Sortierung dringend → normal → später, darin älteste zuerst. Knopf „Öffnen“ führt direkt zum Ziel (`aufgabe_ziel()`). Route für alle Team-Rollen (`*`).

@@ -141,9 +141,9 @@ function pdf_btn(string $href, string $label = 'PDF', bool $stopRow = false, str
 // Prioritäts-Badge (1=Hoch, 2=Normal, 3=Niedrig)
 function prio_badge(int $p): string {
     return match ($p) {
-        1 => bx_badge('Hoch', 'err'),
-        3 => bx_badge('Niedrig'),
-        default => bx_badge('Normal', 'info'),
+        1 => bx_badge('dringend', 'err'),
+        3 => bx_badge('später'),
+        default => bx_badge('normal', 'info'),
     };
 }
 

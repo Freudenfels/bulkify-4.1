@@ -7,3 +7,4 @@ Route `?p=aufgabe&id=…`. Voller Text, Zugewiesen, Fällig, Erstellt, bei offen
 - Erledigt → direkt zurück zur offenen Liste mit Meldung „Aufgabe erledigt.“.
 - Eine erledigte Aufgabe zeigt oben „erledigt am … von …“ und **keine Knöpfe** (kein „Wieder öffnen“ mehr).
 - Neue Zeile **Bezug** (Link zu PA, Auftrag, Bestellung, Artikel …) aus `aufgabe_bezug()` (core/schema.php).
+- Knopf „Zum Ziel – hier erledigen“ (13.11.2026) führt zu `aufgabe_ziel()`.

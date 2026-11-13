@@ -23,7 +23,7 @@ function route_rollen_map(): array {
         'apps'               => ['*'],   // Apps öffnen/installieren (13.11.2026); die Karten zeigen je Rolle nur das Passende
         'app'                => ['*'],   // Anleitung: bulkify aufs Handy legen - fuer jeden
         'werk'               => ['production', 'labor', 'fulfillment'],
-        'aufgaben'           => ['production', 'labor', 'fulfillment'],
+        'aufgaben'           => ['*'],   // 13.11.2026: Aufgaben ganz oben im Menü für alle Team-Rollen (Tabea übersah sie)
         'aufgabe'            => ['production', 'labor', 'fulfillment'],
         'kalender'           => ['production', 'labor', 'fulfillment'],
         'produktion_planung' => ['production'],   // Terminplanung – Admin (immer) + Produktionsleitung

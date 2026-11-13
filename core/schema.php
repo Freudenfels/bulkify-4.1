@@ -823,6 +823,7 @@ function init_schema(): void {
     ensure_column('produktionsauftrag', 'karton_menge', "INT NULL");
     ensure_column('produktionsauftrag', 'karton_charge', "VARCHAR(40) NULL");
     ensure_column('produktionsauftrag', 'karton_mhd', "DATE NULL");
+    ensure_column('aufgabe', 'ziel', "VARCHAR(255) NULL");   // 13.11.2026: Link dorthin, wo man die Aufgabe erledigt (sonst aus ref_typ/ref_id)
     ensure_column('aufgabe', 'menge', "INT NULL");          // Soll-Kette 4b: Anweisung „Teilmenge produzieren“ (offene Pkg)
     ensure_column('aufgabe', 'umfang', "VARCHAR(12) NULL");  // komplett | vor_etikett   // Soll-Kette 4: bis vor dem Etikettieren produziert (kumuliert, Pkg)   // Soll-Kette 1: kapsel|premix|rohstoffe (am Auftrag festgelegt)        // nur bei Zukauf (fremd): bulk = Bulk/Pulver zukaufen + selbst abfüllen (Verpackung zählt); fertig = fertige Ware zukaufen (Verpackung enthalten)
     // Eigen/Fremd wird im Backend FESTGELEGT, bevor der Auftrag in die Produktion geht. NULL = noch offen
@@ -14616,15 +14617,31 @@ function seed_umkarton_250ml_if_empty(): void {
 }
 
 // --- Aufgaben (Werk) ---
-function prio_liste(): array { return [1 => 'Hoch', 2 => 'Normal', 3 => 'Niedrig']; }
+// Dringlichkeit (Nico 13.11.2026): dringend / normal / später – gespeichert in aufgabe.prio (1/2/3).
+function prio_liste(): array { return [1 => 'dringend', 2 => 'normal', 3 => 'später']; }
+// Ziel einer Aufgabe = Stelle, an der man sie erledigt: aufgabe.ziel, sonst der Bezug (aufgabe_bezug), sonst die Aufgabe selbst.
+function aufgabe_ziel(array $a): string {
+    if (trim((string)($a['ziel'] ?? '')) !== '') return (string)$a['ziel'];
+    $b = function_exists('aufgabe_bezug') ? aufgabe_bezug((string)($a['ref_typ'] ?? ''), (int)($a['ref_id'] ?? 0)) : null;
+    return $b ? $b['href'] : '?p=aufgabe&id=' . (int)($a['id'] ?? 0);
+}
+// Offene dringende Aufgaben, die dieser Nutzer sieht (ihm zugewiesen oder Team) – für das rote Band oben.
+function aufgaben_dringend(int $uid): array {
+    try {
+        return all("SELECT id, titel, ziel, ref_typ, ref_id FROM aufgabe WHERE status='offen' AND prio=1 AND (zugewiesen_an=? OR zugewiesen_an IS NULL)
+                    ORDER BY angelegt ASC, id ASC LIMIT 20", [$uid]);
+    } catch (Throwable $e) { return []; }
+}
 
 // Aufgabe anlegen. $zugewiesen_an NULL = Team.
-function aufgabe_neu(string $titel, string $beschreibung, int $prio, ?int $zugewiesen_an, ?string $faellig, ?int $erstellt_von, string $ref_typ = '', int $ref_id = 0): int {
+function aufgabe_neu(string $titel, string $beschreibung, int $prio, ?int $zugewiesen_an, ?string $faellig, ?int $erstellt_von, string $ref_typ = '', int $ref_id = 0, string $ziel = ''): int {
     q("INSERT INTO aufgabe (titel,beschreibung,prio,zugewiesen_an,erstellt_von,faellig,ref_typ,ref_id,angelegt)
        VALUES (?,?,?,?,?,?,?,?,?)",
       [$titel, $beschreibung ?: null, max(1, min(3, $prio)), $zugewiesen_an, $erstellt_von, $faellig ?: null,
        $ref_typ ?: null, $ref_id ?: null, gmdate('Y-m-d H:i:s')]);
-    return (int) insert_id();
+    $id = (int) insert_id();
+    if ($ziel !== '') { try { q("UPDATE aufgabe SET ziel=? WHERE id=?", [mb_substr($ziel, 0, 255), $id]); } catch (Throwable $e) {} }
+    return $id;
 }
 // Offene Aufgaben für einen Benutzer: ihm zugewiesen ODER Team (NULL). Sortiert nach Prio, dann Fälligkeit.
 function aufgaben_fuer_benutzer(int $uid, string $status = 'offen'): array {

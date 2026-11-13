@@ -71,7 +71,7 @@ $aufgaben = all("SELECT a.*, u.name AS zuw_name, e.name AS ersteller_name
                  LEFT JOIN benutzer u ON u.id=a.zugewiesen_an
                  LEFT JOIN benutzer e ON e.id=a.erstellt_von
                  WHERE a.status='offen'
-                 ORDER BY a.prio ASC, (a.faellig IS NULL), a.faellig ASC, a.angelegt DESC");
+                 ORDER BY a.prio ASC, a.angelegt ASC, a.id ASC");   // 13.11.2026: dringend, normal, später – darin nach Alter (älteste zuerst)
 $offenGesamt = count($aufgaben);
 $mitarbeiter = all("SELECT id, name FROM benutzer WHERE aktiv=1 AND lieferant_id IS NULL ORDER BY name");
 
@@ -111,7 +111,7 @@ if (isset($_GET['erledigt'])) echo '<div id="bxToast" class="badge-ok" style="po
     <div class="bx-grid">
       <div class="bx-field" style="grid-column:1/-1"><label>Aufgabe</label><input type="text" name="titel" required placeholder="Was ist zu tun?" autofocus></div>
       <div class="bx-field" style="grid-column:1/-1"><label>Details (optional)</label><textarea name="beschreibung" placeholder="Genauere Beschreibung, Hinweise …"></textarea></div>
-      <div class="bx-field"><label>Priorität</label>
+      <div class="bx-field"><label>Dringlichkeit</label>
         <select name="prio"><?php foreach (prio_liste() as $k=>$lbl): ?><option value="<?= $k ?>" <?= $k===2?'selected':'' ?>><?= $lbl ?></option><?php endforeach; ?></select>
       </div>
       <div class="bx-field"><label>Zuweisen an</label>
@@ -134,7 +134,8 @@ if (isset($_GET['erledigt'])) echo '<div id="bxToast" class="badge-ok" style="po
       $besch = trim(preg_replace('/\s+/', ' ', (string)$a['beschreibung'])); ?>
     <?php // Fastaction-Aufgaben oeffnen direkt die volle Notiz (alle Infos + Aktionen); sonst die Aufgaben-Detailseite.
       $ziel = (($a['ref_typ'] ?? '') === 'fastaction' && (int)($a['ref_id'] ?? 0) > 0)
-            ? '?p=fastaction&notiz=' . (int)$a['ref_id'] : '?p=aufgabe&id=' . (int)$a['id']; ?>
+            ? '?p=fastaction&notiz=' . (int)$a['ref_id'] : '?p=aufgabe&id=' . (int)$a['id'];
+      $zielErl = aufgabe_ziel($a);   // 13.11.2026: direkt dorthin, wo man die Aufgabe erledigt ?>
     <div class="auf-item prio<?= (int)$a['prio'] ?>">
       <a class="auf-main" href="<?= $ziel ?>">
         <div class="auf-t"><?= h($a['titel']) ?></div>
@@ -146,6 +147,7 @@ if (isset($_GET['erledigt'])) echo '<div id="bxToast" class="badge-ok" style="po
         </div>
       </a>
       <div class="auf-act">
+        <?php if ($zielErl !== $ziel && strpos($zielErl, '?p=aufgabe&') !== 0): ?><a class="btn btn-ghost btn-sm" href="<?= h($zielErl) ?>">Öffnen</a><?php endif; ?>
         <?php if ($a['zugewiesen_an'] === null && $uid): ?><form method="post" style="margin:0"><input type="hidden" name="aktion" value="uebernehmen"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><button class="btn btn-ghost btn-sm" type="submit">Übernehmen</button></form><?php endif; ?>
         <form method="post" style="margin:0"><input type="hidden" name="aktion" value="erledigt"><input type="hidden" name="id" value="<?= (int)$a['id'] ?>"><button class="btn btn-primary btn-sm" type="submit">Erledigt</button></form>
       </div>

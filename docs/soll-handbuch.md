@@ -396,6 +396,12 @@ Regeln: Eine Aufgabe verschwindet, sobald die Ursache behoben ist (automatisch) 
 
 ---
 
+**Stand 13.11.2026 (Nico, Tabea übersah Aufgaben):**
+- **Dringlichkeit** je Aufgabe: dringend, normal, später (`aufgabe.prio` 1/2/3, `prio_liste()`). Beim Anlegen wählbar; System-Aufgaben setzt das System (z. B. „PIB prüfen“ = dringend). Liste: dringend, normal, später, darin älteste zuerst.
+- **Menü:** „Aufgaben“ steht ganz oben (über allem, auch über der Suche), mit **roter Zahl** der offenen – in „Einfach“ und „Ausführlich“, für alle Team-Rollen.
+- **Rotes Band:** Solange mindestens eine dringende Aufgabe offen ist, steht auf jeder Dashboard-Seite ganz oben ein schmaler roter Streifen („2 dringende Aufgaben: …“), jede Aufgabe als Link zu ihrem Ziel. Kein Schließen-X; es verschwindet erst, wenn die dringenden Aufgaben erledigt sind. Nicht im Kunden-/Lieferantenportal.
+- **Ziel:** jede Aufgabe führt dorthin, wo man sie erledigt (`aufgabe.ziel`, sonst der Bezug aus `ref_typ`/`ref_id`, `aufgabe_ziel()`).
+
 ## 7. Lager-Sicht
 
 - **Lieferant auf allem im Lager nur als Nummer (Regel Nico 13.11.2026):** Etiketten, Aufkleber, Chargenprotokoll und Produktionsbericht zeigen die Lieferantennummer (L-xxxx), nie den Namen (siehe Regel 10a).

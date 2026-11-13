@@ -433,3 +433,12 @@ html[data-side="zu"] .bx-brand .bx-glocke{margin-left:0}
 .bx-card .k{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .bx-lauf{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 td.bx-lauf,th.bx-lauf{display:table-cell;max-width:260px}
+
+/* Aufgaben ganz oben im Menü mit roter Zahl, rotes Band bei dringenden Aufgaben (13.11.2026) */
+.bx-navtop{border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:6px;padding-bottom:4px}
+.bx-navbadge.bx-navbadge-rot,.bx-side nav a.on .bx-navbadge.bx-navbadge-rot{background:#d64545;color:#fff}
+.bx-dringend{position:sticky;top:0;z-index:40;margin:calc(-1 * var(--sp-6)) calc(-1 * var(--sp-6)) var(--sp-4);padding:7px var(--sp-6);background:#c0392b;color:#fff;font-size:14px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bx-dringend a{color:#fff;text-decoration:underline;text-underline-offset:2px}
+.bx-dringend a.bx-dringend-n{font-weight:600;text-decoration:none}
+.bx-dringend-sep{opacity:.7;margin:0 4px}
+@media (max-width:860px){.bx-dringend{margin:0 0 var(--sp-4);border-radius:8px;white-space:normal}}

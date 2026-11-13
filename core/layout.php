@@ -255,6 +255,14 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
        . ".bx-navflat .bx-navbadge.bx-navbadge-ico{position:absolute;top:-9px;left:4px;min-width:18px;height:18px;line-height:18px;font-size:10px;padding:0 3px}"
        . "@media (max-width:860px){.bx-side nav .bx-navflat a{font-size:16px;padding:12px var(--sp-5)}}</style>";
     $darf = function_exists('route_erlaubt');   // Auth aktiv?
+    // 13.11.2026 (Nico): „Aufgaben“ steht ganz oben im Menü (über allem, auch über der Suche), mit roter Zahl der offenen.
+    // Gilt in „Einfach“ und „Ausführlich“; im Werk-Menü bleibt es unter „Start“.
+    if (!$istWerk && function_exists('current_user') && ($cuA = current_user()) && (!$darf || route_erlaubt('aufgaben'))) {
+        $nA = function_exists('aufgabe_offen_zahl') ? aufgabe_offen_zahl((int)$cuA['id']) : 0;
+        echo '<div class="bx-navflat bx-navtop"><a href="?p=aufgaben"' . (in_array($aktiv, ['aufgaben', 'aufgabe'], true) ? ' class="on"' : '') . '>'
+           . bx_nav_icon('aufgaben') . '<span class="bx-navlbl">Aufgaben</span>'
+           . ($nA > 0 ? '<span class="bx-navbadge bx-navbadge-rot" title="' . $nA . ' offene Aufgaben">' . ($nA > 99 ? '99+' : $nA) . '</span>' : '') . '</a></div>';
+    }
     // Globale Suche (nur Admin): ein Feld ganz oben, sucht über alle Bereiche.
     if (function_exists('has_role') && has_role('admin')) {
         $sq = $aktiv === 'suche' ? h((string)($_GET['q'] ?? '')) : '';
@@ -314,6 +322,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
         $sichtbar = [];
         foreach ($seiten as $key => $val) {
             if ($key === 'benachrichtigungen') continue;   // 13.11.2026: steht als Glocke im Menü-Kopf, nicht doppelt im Menü
+            if ($key === 'aufgaben' && !$istWerk) continue;   // 13.11.2026: steht ganz oben im Menü
             $route = is_array($val) ? $val['route'] : $key;
             if (is_array($val) && !empty($val['extern'])) { $sichtbar[$key] = $val; continue; }   // Unterprogramm (Rolle schon geprüft)
             if (!$darf || route_erlaubt($route)) { $sichtbar[$key] = $val; continue; }
@@ -409,7 +418,7 @@ function render_header(string $aktiv = 'dashboard', string $titel = ''): void {
     echo "<button type=\"button\" class=\"bx-sideauf\" title=\"Menü aufklappen\">Menü</button>";
     // Hauptbereich
     echo bx_menue_scrim();
-    echo "<main class=\"bx-main\">" . bx_mobilbar($glocke);
+    echo "<main class=\"bx-main\">" . bx_mobilbar($glocke) . ($istWerk ? '' : bx_dringend_band());
     // Pop-up „Es gibt schon eine offene Bestellung" (Sofortfix 11.11.2026), einmalig nach dem Bestellversuch.
     if (!empty($_SESSION['bx_doppelt'])) { require_once __DIR__ . '/bestellung_doppelt.php'; echo bestellung_doppelt_dialog(); }
 }
@@ -444,6 +453,19 @@ function bx_mobilbar(string $rechts = ''): string {
 }
 // Glocke mit Zahl der ungelesenen Benachrichtigungen (13.11.2026) – im Menü-Kopf und in der Handy-Kopfleiste. Nur wer die Seite
 // Benachrichtigungen sehen darf. Klick öffnet ?p=benachrichtigungen.
+// Rotes Band (Nico 13.11.2026): solange mindestens eine dringende Aufgabe offen ist, steht ganz oben auf jeder Seite
+// (über dem Seitenkopf) ein schmaler roter Streifen mit den Aufgaben als Links zum Ziel. Kein Schließen-X – es
+// verschwindet erst, wenn die dringenden Aufgaben erledigt sind. Nur im Team-Dashboard, nicht in den Portalen.
+function bx_dringend_band(): string {
+    if (!function_exists('current_user') || !($u = current_user()) || !function_exists('aufgaben_dringend')) return '';
+    if (function_exists('route_erlaubt') && !route_erlaubt('aufgaben')) return '';
+    $liste = aufgaben_dringend((int)$u['id']);
+    if (!$liste) return '';
+    $n = count($liste);
+    $links = array_map(fn($a) => '<a href="' . h(aufgabe_ziel($a)) . '">' . h((string)$a['titel']) . '</a>', array_slice($liste, 0, 4));
+    return '<div class="bx-dringend" role="alert"><a class="bx-dringend-n" href="?p=aufgaben">' . $n . ' dringende Aufgabe' . ($n === 1 ? '' : 'n') . ':</a> '
+         . implode(' <span class="bx-dringend-sep">·</span> ', $links) . ($n > 4 ? ' <a href="?p=aufgaben">… und ' . ($n - 4) . ' weitere</a>' : '') . '</div>';
+}
 function bx_glocke(): string {
     if (!function_exists('current_user') || !($u = current_user()) || !function_exists('route_erlaubt') || !route_erlaubt('benachrichtigungen')) return '';
     $n = function_exists('benachrichtigungen_ungelesen_count') ? benachrichtigungen_ungelesen_count((int)$u['id']) : 0;

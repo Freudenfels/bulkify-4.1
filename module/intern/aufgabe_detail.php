@@ -61,6 +61,9 @@ $bezug = aufgabe_bezug((string)($a['ref_typ'] ?? ''), (int)($a['ref_id'] ?? 0));
     <?php if (($a['ref_typ'] ?? '') === 'fastaction' && (int)($a['ref_id'] ?? 0) > 0): ?>
       <a class="btn btn-primary" href="?p=fastaction&notiz=<?= (int)$a['ref_id'] ?>">Im Notepad ansehen &amp; abarbeiten</a>
     <?php endif; ?>
+    <?php $zielErl = aufgabe_ziel($a); if (strpos($zielErl, '?p=aufgabe&') !== 0 && ($a['ref_typ'] ?? '') !== 'fastaction'): ?>
+      <a class="btn btn-primary" href="<?= h($zielErl) ?>">Zum Ziel – hier erledigen</a>
+    <?php endif; ?>
     <?php if ($a['zugewiesen_an'] === null && $uid): ?>
       <form method="post" style="margin:0"><input type="hidden" name="aktion" value="uebernehmen"><button class="btn btn-ghost" type="submit">Übernehmen</button></form>
     <?php endif; ?>
