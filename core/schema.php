@@ -10026,6 +10026,27 @@ function auftrag_fertigware_cached(int $auftrag_id): array {
 // Freie Bulkware im Lager für einen Auftrag (Nico 04.11.2026: „Ware kommt an = eingebucht = da“, Zuordnen ist ein eigener
 // Schritt im Reiter Material): Chargen des Rezeptur-Bulk-Artikels, die noch KEINEM Auftrag zugeordnet sind, abzüglich
 // Reservierungen anderer Aufträge. Dem Auftrag zugeordnete Chargen zählen separat (auftrag_fertigware_cached). Einheit wie Charge.
+// Mehr bestellt als gebraucht (Paket 13.11.2026, Teil 7): Beim Wareneingang wird die ganze Bulk-Charge an den Auftrag gebunden
+// (charge.auftrag_id). Was über den Restbedarf dieses Auftrags hinausgeht, ist freier Bestand – z. B. 150.000 Kapseln geliefert,
+// 120.000 gebraucht -> 30.000 frei. Ist der Auftrag fertig/versendet/storniert, ist der ganze Rest frei.
+// Nur Stück-Formen (Charge in Stk), damit Einheiten nicht gemischt werden. $ohne = Aufträge, deren Chargen schon anders zählen.
+function bulk_rest_bedarf_auftrag(int $auftrag_id): float {
+    $a = one("SELECT a.status, COALESCE(NULLIF(p.einheiten_pro_packung,0), a.stueck, 0) AS ep FROM auftrag a LEFT JOIN produkt p ON p.id=a.produkt_id WHERE a.id=?", [$auftrag_id]);
+    if (!$a || in_array((string)$a['status'], ['versendet', 'storniert', 'erledigt'], true)) return 0.0;
+    $pa = one("SELECT id FROM produktionsauftrag WHERE auftrag_id=? AND status IN ('offen','laufend','vorbereitung') ORDER BY id DESC LIMIT 1", [$auftrag_id]);
+    if (!$pa) return 0.0;
+    return max(0.0, produktion_rest((int)$pa['id'])) * (float)$a['ep'];
+}
+function bulk_ueberschuss_anderer(int $item_id, array $ohne = []): float {
+    if ($item_id <= 0) return 0.0;
+    $ohne = array_map('intval', $ohne); $s = 0.0;
+    foreach (all("SELECT auftrag_id, SUM(menge_verfuegbar) AS frei FROM charge WHERE item_id=? AND status='frei' AND auftrag_id IS NOT NULL
+                  AND fremd_kunde_id IS NULL AND COALESCE(einheit,'Stk') IN ('Stk','Stück','stk') GROUP BY auftrag_id", [$item_id]) as $r) {
+        if (in_array((int)$r['auftrag_id'], $ohne, true)) continue;
+        $s += max(0.0, (float)$r['frei'] - bulk_rest_bedarf_auftrag((int)$r['auftrag_id']));
+    }
+    return $s;
+}
 function auftrag_bulk_lager_frei(int $auftrag_id): float {
     $ck = 'bl:' . $auftrag_id;
     if (isset($GLOBALS['bx_stock_cache']) && array_key_exists($ck, $GLOBALS['bx_stock_cache'])) return $GLOBALS['bx_stock_cache'][$ck];
@@ -10033,6 +10054,7 @@ function auftrag_bulk_lager_frei(int $auftrag_id): float {
     $v = 0.0;
     if ($item) {
         $frei = (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei' AND auftrag_id IS NULL AND fremd_kunde_id IS NULL", [$item]);
+        $frei += bulk_ueberschuss_anderer($item, [$auftrag_id]);   // 13.11.2026 (Teil 7): Überbestellung anderer Aufträge ist frei
         $v = max(0.0, $frei - item_reserviert_andere($item, $auftrag_id));
     }
     if (isset($GLOBALS['bx_stock_cache'])) $GLOBALS['bx_stock_cache'][$ck] = $v;
@@ -11979,6 +12001,7 @@ function bedarf_bulk(bool $nur_gemeldet = false): array {
             $stock += (float) scalar("SELECT COALESCE(SUM(c.menge_verfuegbar),0) FROM charge c JOIN item i ON i.id=c.item_id
                                       WHERE c.auftrag_id IN ($in) AND i.kategorie='fertig' AND c.status='frei'");
             $bItem = auftrag_bulk_item((int)$aids[0]);
+            if ($bItem) $stock += bulk_ueberschuss_anderer($bItem, $aids);   // 13.11.2026 (Teil 7): Überschuss an Aufträge außerhalb dieser Gruppe gebundener Chargen
             if ($bItem) $stock += max(0.0, (float) scalar("SELECT COALESCE(SUM(menge_verfuegbar),0) FROM charge WHERE item_id=? AND status='frei' AND auftrag_id IS NULL AND fremd_kunde_id IS NULL", [$bItem])
                                         - (float) scalar("SELECT COALESCE(SUM(menge),0) FROM reservierung WHERE item_id=? AND status='aktiv' AND (auftrag_id IS NULL OR auftrag_id NOT IN ($in))", [$bItem]));
         }

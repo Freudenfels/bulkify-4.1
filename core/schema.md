@@ -712,3 +712,7 @@ Ist die volle Menge (Ziel bzw. `fortschritt_ziel`) als Fertigware-Chargen eingeg
 **Aufgaben (13.11.2026):** `aufgabe_wieder_offen()` ist eine leere Hülle (bucht nichts, „Wieder öffnen“ entfällt). `aufgabe_bezug($ref_typ, $ref_id)` liefert den Bezug als Link (`text`, `href`) für Archiv und Detailseite: produktion/produktionsauftrag/einlagern/teilmenge → PA, auftrag, bestellung, item → Rohstoff, produkt, rezeptur, charge, fastaction.
 
 **Dringlichkeit und Ziel (13.11.2026):** `prio_liste()` = dringend/normal/später. Spalte `aufgabe.ziel` (Link), `aufgabe_neu(..., $ziel)` (9. Parameter), `aufgabe_ziel($a)`, `aufgaben_dringend($uid)` (offen, prio 1, zugewiesen oder Team).
+
+**Mehr bestellt als gebraucht (13.11.2026, Paket Teil 7):** Beim Wareneingang wird eine Bulk-Charge ganz an den Auftrag gebunden (`charge.auftrag_id`). `bulk_ueberschuss_anderer($bulk_item, $ohne_auftraege)` zählt den Teil als frei, der über den Restbedarf des gebundenen Auftrags hinausgeht (`bulk_rest_bedarf_auftrag()`: offener Produktionsrest × Stück je Packung; ist der Auftrag fertig, versendet oder storniert, ist der ganze Rest frei). Das gilt nur für Stück-Chargen.
+- Genutzt in `bedarf_bulk()` (Bestellliste, für Aufträge außerhalb der Gruppe) und in `auftrag_bulk_lager_frei()` (je Auftrag: Material, Bereitschaft).
+- Beispiel: A braucht 120.000, geliefert werden 150.000 → 30.000 sind frei. Auftrag B mit 60.000 bestellt nur 30.000 nach – auch dann, wenn A schon versendet ist (vorher galten die 30.000 als an A gebunden, und B bestellte voll).
