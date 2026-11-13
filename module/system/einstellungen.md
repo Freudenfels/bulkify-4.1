@@ -55,3 +55,5 @@ Firma: Feld „Produktions- bzw. Lieferadresse“ (firma_prod_adresse) = „Ship
 **Zahlenfelder des Browsers (13.11.2026, Fable-3 T1.3):** Felder mit `type="number"` senden immer den Punkt als Dezimaltrenner. Sie werden mit `(float)` gelesen, nie mit dem deutschen Mengen-Parser (sonst würde „2,125“ zu 2125). Hier: Gummi-Gewicht (mg).
 
 **13.11.2026:** Oben steht (Admin) „Täglicher Lauf (Cron): zuletzt …“ (`cron_lauf_hinweis()`).
+
+**Kunden-Filter (Fable-4 T4.1, 13.11.2026):** Reiter Firma, Block „Lieferantennamen für Kunden ersetzen“: Liste allgemeiner Wörter (Speichern `kunde_filter_save`) und Tabelle je Lieferant, ob der Name ersetzt wird und warum nicht.

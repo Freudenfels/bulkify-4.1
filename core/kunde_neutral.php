@@ -94,16 +94,63 @@ function kn_spalte_da(string $t, string $col): bool {
     static $c = []; $k = $t . '.' . $col; if (isset($c[$k])) return $c[$k];
     try { return $c[$k] = (int) scalar("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?", [$t, $col]) > 0; } catch (\Throwable $e) { return $c[$k] = false; }
 }
-// Paketdienste/Spediteure nennen wir dem Kunden offen (Versand per DHL) – nie ersetzen (Fable-3 T3.4).
+// Paketdienste nennen wir dem Kunden offen (Versand per DHL) – nie ersetzen (Fable-3 T3.4). Fable-4 T4.1 (13.11.2026): nur ECHTE
+// Paketdienste (DHL, UPS, DPD, GLS, Hermes, FedEx, TNT): der Name beginnt mit einem davon und enthält sonst nur Versand-Wörter
+// („DHL Express Germany GmbH“, „Hermes Germany“) – „Hermes Arzneimittel GmbH“ ist kein Paketdienst und wird ersetzt.
 function kunde_filter_paketdienst(string $name): bool {
-    return (bool) preg_match('/(?<![\p{L}])(dhl|ups|dpd|gls|fedex|tnt|hermes|deutsche post|post ag|schenker|dachser|kühne|kuehne|rhenus|trans-o-flex|go!\s*express|db schenker|raben|geodis)(?![\p{L}])/iu', $name);
+    $n = mb_strtolower(trim((string) preg_replace(kunde_filter_rechtsform_muster(), '', trim($name))));
+    if (!preg_match('/^(dhl|ups|dpd|gls|hermes|fedex|tnt)(?![\p{L}])/u', $n)) return false;
+    $rest = preg_split('/[\s,.\-\/&]+/u', $n, -1, PREG_SPLIT_NO_EMPTY);
+    array_shift($rest);
+    $erlaubt = ['express', 'paket', 'pakete', 'parcel', 'parcels', 'germany', 'deutschland', 'de', 'logistics', 'logistik', 'international',
+                'worldwide', 'service', 'services', 'supply', 'chain', 'freight', 'ecommerce', 'e', 'commerce', 'versand', 'shipping', 'austria', 'schweiz', 'co'];
+    foreach ($rest as $w) if (!in_array($w, $erlaubt, true)) return false;
+    return true;
+}
+function kunde_filter_rechtsform_muster(): string {
+    return '/[\s,]+(gmbh(\s*&\s*co\.?\s*kg)?|ag|kg|ohg|ug|gbr|e\.?\s?k\.?|ltd\.?|limited|llc|inc\.?|co\.?,?\s*ltd\.?|s\.?r\.?l\.?|b\.?v\.?|sp\.?\s*z\s*o\.?\s*o\.?|s\.?a\.?|corp\.?|company)\.?$/iu';
+}
+// Allgemeine Wörter (Fable-4 T4.1): ein Lieferant, der nur so heißt, wird NICHT ersetzt (sonst stünde „bulkify“ statt „Natur“ im Text).
+// Pflegbar in den Einstellungen (Reiter Firma, app_meta kunde_filter_woerter, Komma getrennt).
+function kunde_filter_woerter_standard(): string {
+    return 'Natur, Natural, Nature, Vital, Vitality, Pharma, Health, Healthy, Nutrition, Organic, Organics, Bio, Paket, Express, Logistik, Logistics, '
+         . 'Vitamin, Vitamine, Supplement, Supplements, Premium, Quality, Service, Services, Trading, Handel, International, Global, Sport, Sports, '
+         . 'Beauty, Wellness, Herbal, Herbs, Kapsel, Kapseln, Pulver, Lieferant, Extern, Unbekannt, Test';
+}
+function kunde_filter_woerter(): array {
+    static $w = null;
+    if ($w !== null) return $w;
+    $roh = '';
+    try { $roh = (string) scalar("SELECT v FROM app_meta WHERE k='kunde_filter_woerter'"); } catch (\Throwable $e) {}
+    if (trim($roh) === '') $roh = kunde_filter_woerter_standard();
+    $w = [];
+    foreach (explode(',', $roh) as $x) { $x = mb_strtolower(trim($x)); if ($x !== '') $w[$x] = true; }
+    return $w;
+}
+// EINE Regel (Fable-4 T4.1): wird der Firmenname dieses Lieferanten für Kunden ersetzt? '' = ja, sonst der Grund, warum nicht.
+// Ersetzt wird der volle Firmenname ab 4 Zeichen, wenn er eine Rechtsform hat oder aus mindestens zwei Wörtern besteht, ODER ein
+// Ein-Wort-Name ab 6 Zeichen, der kein allgemeines Wort ist („Wellgreen“ ja, „Natur“ nein).
+function kunde_filter_name_grund(array $l, array $kundenNamen = []): string {
+    $f = trim((string)($l['firma'] ?? ''));
+    if ($f === '') return 'kein Name';
+    if (isset($kundenNamen[mb_strtolower($f)])) return 'heißt wie ein Kunde';
+    $kat = array_filter(array_map('trim', explode(',', (string)($l['kat'] ?? $l['kategorien'] ?? ''))));
+    if ($kat && !array_diff($kat, ['labor'])) return 'Labor (darf genannt werden)';
+    if (preg_match('/bulkify|maniso/i', $f)) return 'eigene Firma';
+    if (preg_match('/^L-\d+$/i', $f)) return 'Lieferantennummer';
+    if (kunde_filter_paketdienst($f)) return 'Paketdienst';
+    if (preg_match('/^(extern|externer lieferant|unbekannt|test|lieferant)$/i', $f)) return 'Platzhalter';
+    $ohneRf = trim((string) preg_replace(kunde_filter_rechtsform_muster(), '', $f));
+    if (mb_strlen($f) >= 4 && ($ohneRf !== $f || preg_match('/\S\s+\S/u', $f))) return '';
+    if (mb_strlen($f) < 6) return 'ein Wort, kürzer als 6 Zeichen';
+    if (isset(kunde_filter_woerter()[mb_strtolower($f)])) return 'allgemeines Wort';
+    return '';
 }
 function kunde_lieferanten_namen(): array {
     static $n = null;
     if ($n !== null) return $n;
     $n = [];
     if (!function_exists('scalar') || !kn_tabelle_da('lieferanten')) return $n;
-    $rechtsform = '/[\s,]+(gmbh(\s*&\s*co\.?\s*kg)?|ag|kg|ohg|ug|gbr|e\.?\s?k\.?|ltd\.?|limited|llc|inc\.?|co\.?,?\s*ltd\.?|s\.?r\.?l\.?|b\.?v\.?|sp\.?\s*z\s*o\.?\s*o\.?|s\.?a\.?|corp\.?|company)\.?$/iu';
     // Lieferanten, die zugleich Kunde sind (Partner, mit Kunde verknüpft oder gleicher Firmenname), nie ersetzen –
     // sonst stünde im Portal dieses Kunden „bulkify“ statt seines eigenen Namens.
     $kundenNamen = [];
@@ -112,24 +159,32 @@ function kunde_lieferanten_namen(): array {
                 . (kn_spalte_da('lieferanten', 'kunde_id') ? " AND kunde_id IS NULL" : '');
     $aliasSql = kn_spalte_da('lieferanten', 'kunden_alias') ? "COALESCE(kunden_alias,'')" : "''";
     foreach (all("SELECT firma, lieferantennummer, COALESCE(kategorien,'') AS kat, $aliasSql AS alias FROM lieferanten WHERE firma IS NOT NULL AND firma<>''" . $partnerSql) as $l) {
-        if (isset($kundenNamen[mb_strtolower(trim((string)$l['firma']))])) continue;
-        $kat = array_filter(array_map('trim', explode(',', (string)$l['kat'])));
-        if ($kat && !array_diff($kat, ['labor'])) continue;   // Labore dürfen genannt werden
-        $f = trim((string)$l['firma']);
-        if (preg_match('/bulkify|maniso/i', $f)) continue;
-        if (preg_match('/^L-\d+$/i', $f)) continue;   // eine Lieferantennummer ist nie ein Name zum Ersetzen (13.11.2026)
-        // Fable-3 T3.4 (13.11.2026): nur der VOLLE Firmenname oder ein ausdrücklich gepflegter Alias (lieferanten.kunden_alias),
-        // nie ein einzelnes Wort daraus („Vita GmbH“ ersetzt „Vita GmbH“, nicht „Vita“). Paketdienste werden nie ersetzt.
-        if (kunde_filter_paketdienst($f)) continue;
-        $ohneRf = trim((string) preg_replace($rechtsform, '', $f));
-        $mitRechtsform = $ohneRf !== $f;
-        if (mb_strlen($f) >= 4 && ($mitRechtsform || preg_match('/\S\s+\S/u', $f)) && !preg_match('/^(extern|externer lieferant|unbekannt|test|lieferant)$/i', $f)) $n[] = $f;
+        // Fable-3 T3.4 / Fable-4 T4.1: der volle Firmenname (Regel kunde_filter_name_grund) oder ein ausdrücklich gepflegter Alias.
+        $grund = kunde_filter_name_grund($l, $kundenNamen);
+        if ($grund === '') $n[] = trim((string)$l['firma']);
+        if (in_array($grund, ['heißt wie ein Kunde', 'Labor (darf genannt werden)', 'eigene Firma'], true)) continue;
         foreach (array_filter(array_map('trim', explode(',', (string)($l['alias'] ?? '')))) as $al)
             if (mb_strlen($al) >= 3 && !kunde_filter_paketdienst($al)) $n[] = $al;
     }
     $n = array_values(array_unique($n));
     usort($n, fn($a, $b) => mb_strlen($b) <=> mb_strlen($a));
     return $n;
+}
+// Bericht für die Einstellungen (Fable-4 T4.1): je Lieferant, ob der Name für Kunden ersetzt wird, und warum nicht.
+function kunde_filter_bericht(): array {
+    $out = [];
+    if (!function_exists('all') || !kn_tabelle_da('lieferanten')) return $out;
+    $kundenNamen = [];
+    try { foreach (all("SELECT LOWER(TRIM(firma)) AS f FROM kunden WHERE firma IS NOT NULL AND firma<>''") as $kk) $kundenNamen[(string)$kk['f']] = true; } catch (\Throwable $e) {}
+    $partner = kn_spalte_da('lieferanten', 'ist_partner') ? "COALESCE(ist_partner,0)" : "0";
+    $kid = kn_spalte_da('lieferanten', 'kunde_id') ? "kunde_id" : "NULL";
+    $aliasSql = kn_spalte_da('lieferanten', 'kunden_alias') ? "COALESCE(kunden_alias,'')" : "''";
+    foreach (all("SELECT id, firma, lieferantennummer, COALESCE(kategorien,'') AS kat, $aliasSql AS alias, $partner AS partner, $kid AS kid FROM lieferanten WHERE firma IS NOT NULL AND firma<>'' ORDER BY firma") as $l) {
+        $g = ((int)$l['partner'] === 1 || !empty($l['kid'])) ? 'Partner / zugleich Kunde' : kunde_filter_name_grund($l, $kundenNamen);
+        $out[] = ['id' => (int)$l['id'], 'nr' => (string)$l['lieferantennummer'], 'firma' => (string)$l['firma'], 'alias' => (string)$l['alias'],
+                  'ersetzt' => $g === '', 'grund' => $g, 'ein_wort' => !preg_match('/\S\s+\S/u', trim((string)$l['firma']))];
+    }
+    return $out;
 }
 // Lieferantennamen in Freitext ersetzen (ganze Wörter, ohne Groß-/Kleinschreibung).
 function kunde_text_neutral(?string $t, string $ersatz = 'bulkify'): string {

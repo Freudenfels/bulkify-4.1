@@ -459,7 +459,7 @@ if (!$neu) {
         </select>
       </div>
       <div class="bx-field"><label>Webseite</label><input type="text" name="webseite" value="<?= $v('webseite') ?>" placeholder="https://…"></div>
-      <div class="bx-field"><label>Weitere Namen (für Kunden ersetzt) <?= bx_hint('Kurz- oder Markennamen dieses Lieferanten, die in Mails, Belegen und im Portal nie beim Kunden erscheinen dürfen (Komma getrennt). Der volle Firmenname wird immer ersetzt, einzelne Wörter daraus nicht.') ?></label><input type="text" name="kunden_alias" value="<?= $v('kunden_alias') ?>" placeholder="z. B. GS Capsules, GSC"></div>
+      <div class="bx-field"><label>Weitere Namen (für Kunden ersetzt) <?= bx_hint('Kurz- oder Markennamen dieses Lieferanten, die in Mails, Belegen und im Portal nie beim Kunden erscheinen dürfen (Komma getrennt). Automatisch ersetzt wird der volle Firmenname, wenn er eine Rechtsform hat oder aus mindestens zwei Wörtern besteht, und ein Ein-Wort-Name ab 6 Zeichen, der kein allgemeines Wort ist (Liste in den Einstellungen, Reiter Firma). Einzelne Wörter aus einem längeren Namen (z. B. „Wellgreen“ aus „Wellgreen Technology Co., Ltd.“) werden nur ersetzt, wenn sie hier stehen.') ?></label><input type="text" name="kunden_alias" value="<?= $v('kunden_alias') ?>" placeholder="z. B. GS Capsules, GSC"></div>
       <div class="bx-field"><label>Lieferant sperren <?= bx_hint('gesperrte Lieferanten werden bei Preisanfragen/Bestellungen nicht mehr vorgeschlagen') ?></label>
         <div class="bx-check" style="padding-top:8px">
           <input type="checkbox" name="gesperrt" id="f_gesperrt" value="1" <?= $gesperrt?'checked':'' ?>>

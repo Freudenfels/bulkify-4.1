@@ -64,6 +64,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'zertifikat_sichtbar') 
 }
 
 // --- Firma speichern ---
+// Kunden-Filter (Fable-4 T4.1, 13.11.2026): Liste allgemeiner Wörter – ein Lieferant, der nur so heißt, wird für Kunden nicht ersetzt.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'kunde_filter_save') {
+    $wl = implode(', ', array_values(array_unique(array_filter(array_map('trim', preg_split('/[,\n;]+/', (string)($_POST['kunde_filter_woerter'] ?? '')))))));
+    meta_set('kunde_filter_woerter', $wl);
+    header('Location: ?p=einstellungen&tab=firma&kfok=1#kundenfilter'); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $aktion === 'firma_save') {
     foreach (['firma_name','firma_strasse','firma_hausnr','firma_plz','firma_ort','firma_land','firma_ustid','firma_eori','firma_email','firma_tel','firma_gf','firma_web','firma_prod_adresse',
               'bank_de_name','bank_de_iban','bank_de_bic','bank_int_name','bank_int_iban','bank_int_bic'] as $k)
@@ -378,6 +384,27 @@ if (isset($_GET['ok'])) echo '<div class="bx-panel badge-ok" style="padding:12px
 
     <div style="margin-top:12px"><button class="btn btn-primary" type="submit">Speichern</button></div>
   </form>
+</div>
+
+<?php require_once BX_ROOT . '/core/kunde_neutral.php'; $kfBericht = kunde_filter_bericht(); ?>
+<div class="bx-panel" id="kundenfilter">
+  <h2 style="margin-top:0">Lieferantennamen für Kunden ersetzen <?= bx_hint('In Mails, Belegen, Dokumenten und im Portal ersetzt das System Lieferantennamen durch „bulkify“. Ersetzt wird der volle Firmenname (mit Rechtsform oder aus mindestens zwei Wörtern) und ein Ein-Wort-Name ab 6 Zeichen – außer er steht unten in der Liste allgemeiner Wörter. Zusätzlich jeder „Weitere Name“ am Lieferanten. Paketdienste (DHL, UPS, DPD, GLS, Hermes, FedEx, TNT) werden genannt.') ?></h2>
+  <?php if (isset($_GET['kfok'])): ?><div class="badge-ok" style="padding:6px 10px;border-radius:8px;margin-bottom:10px;display:inline-block">Gespeichert.</div><?php endif; ?>
+  <form method="post">
+    <input type="hidden" name="aktion" value="kunde_filter_save">
+    <div class="bx-field"><label>Allgemeine Wörter (nie ersetzen, wenn der Lieferant nur so heißt; Komma getrennt)</label>
+      <textarea name="kunde_filter_woerter" rows="3" style="width:100%"><?= h((string)(meta_get('kunde_filter_woerter', '') ?: kunde_filter_woerter_standard())) ?></textarea></div>
+    <div style="margin-top:10px"><button class="btn btn-primary" type="submit">Speichern</button></div>
+  </form>
+  <details style="margin-top:14px"<?= isset($_GET['kfok']) ? ' open' : '' ?>>
+    <summary style="cursor:pointer">Welche Lieferanten werden ersetzt? (<?= count(array_filter($kfBericht, fn($x) => $x['ersetzt'])) ?> von <?= count($kfBericht) ?>)</summary>
+    <div class="bx-tablewrap" style="margin-top:8px"><table class="bx-table"><thead><tr><th>Lieferant</th><th>Nummer</th><th>Weitere Namen</th><th>Für Kunden</th></tr></thead><tbody>
+    <?php foreach ($kfBericht as $kf): ?>
+      <tr><td class="bx-lauf"><a href="?p=lieferant&id=<?= (int)$kf['id'] ?>"><?= h($kf['firma']) ?></a></td><td><?= h($kf['nr']) ?></td><td class="bx-lauf"><?= h($kf['alias']) ?: '<span class="muted">–</span>' ?></td>
+        <td><?= $kf['ersetzt'] ? bx_badge('wird ersetzt', 'ok') : '<span class="muted">nicht ersetzt: ' . h($kf['grund']) . '</span>' ?></td></tr>
+    <?php endforeach; ?>
+    </tbody></table></div>
+  </details>
 </div>
 
 <div class="bx-panel" id="ansprechpartner">
